@@ -1,0 +1,14 @@
+include:
+  - local: '/global/abstracts/default-image.yaml'
+  - local: '/python/stages/10-code-check/pdm.yaml'
+  - local: '/python/stages/20-security/pdm.yaml'
+  - local: '/python/stages/30-tests/pdm.yaml'
+  - local: '/python/stages/35-management/pdm.yaml'
+  - local: '/python/stages/40-delivery/pdm-library.yaml'
+
+stages:
+  - 'code check (style/quality)'
+  - 'security (sca/sast)'
+  - 'tests'
+  - 'management'
+  - 'delivery'

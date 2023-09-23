@@ -1,0 +1,37 @@
+variables:
+  SEMGREP_LANG: 'java'
+
+include:
+  - local: '/global/abstracts/default-variables.yaml'
+  - local: '/global/stages/20-security/docker.yaml'
+
+sca:dependency-check:
+  extends: '.dependency-check'
+  stage: 'security (sca/sast)'
+  script:
+    - mkdir -p '.owasp'
+    - export OWASP_PATH="$(pwd)/.owasp" # the Dependency Check data path must be absolute
+    - gradle dependencyCheckAnalyze
+  artifacts:
+    when: 'always'
+    paths:
+      - "$PREFIX$REPORT_PATH/dependency-check-report.html"
+    reports:
+      dependency_scanning:
+        - "$PREFIX$REPORT_PATH/dependency-check-report.xml"
+  allow_failure: true
+
+# TODO: check this https://gitlab.com/gitlab-org/gitlab/-/issues/299363
+#sast:spotbugs:
+#  extends: '.gradle'
+#  stage: 'security (sca/sast)'
+#  script:
+#    - gradle spotbugsMain
+#    - gradle spotbugsTest
+#  artifacts:
+#    when: 'always'
+#    reports:
+#      sast:
+#        - "$REPORT_PATH/spotbugs/main.xml"
+#        - "$REPORT_PATH/spotbugs/test.xml"
+#  allow_failure: true

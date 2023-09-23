@@ -1,0 +1,15 @@
+include:
+  - local: '/global/abstracts/default-image.yaml'
+  - local: '/javascript/stages/20-security/yarn.yaml'
+  - local: '/javascript/stages/30-tests/yarn.yaml'
+  - local: '/javascript/stages/35-management/npm-yarn.yaml'
+  - local: '/javascript/stages/36-packaging/docker.yaml'
+  - local: '/global/stages/40-delivery/docker.yaml'
+
+stages:
+  - 'code check (style/quality)'
+  - 'security (sca/sast)'
+  - 'tests'
+  - 'management'
+  - 'packaging'
+  - 'delivery'

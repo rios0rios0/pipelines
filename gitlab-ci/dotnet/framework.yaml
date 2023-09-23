@@ -1,0 +1,9 @@
+include:
+  - local: '/dotnet/stages/30-tests/msbuild.yaml'
+
+stages:
+  - 'code check (style/quality)'
+  - 'security (sca/sast)'
+  - 'tests'
+  - 'management'
+  - 'delivery'

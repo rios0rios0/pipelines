@@ -1,0 +1,20 @@
+{
+  "horusecCliCustomRulesPath": "",
+  "horusecCliDisableDocker": false,
+  "horusecCliEnableCommitAuthor": false,
+  "horusecCliEnableGitHistoryAnalysis": false,
+  "horusecCliEnableInformationSeverity": true,
+  "horusecCliEnableOwaspDependencyCheck": false,
+  "horusecCliEnableShellcheck": true,
+  "horusecCliFilesOrPathsToIgnore": [
+    "**/*.gitleaks.toml"
+  ],
+  "horusecCliPrintOutputType": "json",
+  "horusecCliReturnErrorIfFoundVulnerability": true,
+  "horusecCliSeveritiesToIgnore": [
+    "INFO"
+  ],
+  "horusecCliShowVulnerabilitiesTypes": [
+    "Vulnerability"
+  ]
+}

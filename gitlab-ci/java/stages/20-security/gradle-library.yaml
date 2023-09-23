@@ -1,0 +1,17 @@
+include:
+  - local: '/java/abstracts/gradle-library.yaml'
+  - local: '/java/stages/20-security/gradle.yaml'
+
+variables:
+  PREFIX: 'lib/'
+
+.dependency-check:
+  extends: '.gradle-library'
+  cache:
+    paths:
+      - '.gradle'
+      - '.gradle-home/caches'
+      - '.gradle-home/notifications'
+      - '.owasp'
+      - 'build'
+      - 'lib/build'

@@ -1,0 +1,8 @@
+include:
+  - local: '/global/abstracts/scripts-repo.yaml'
+
+.scripts-repo-debian:
+  extends: '.scripts-repo'
+  before_script:
+    - apt update && apt install -y --no-install-recommends git jq
+    - !reference [ .scripts-repo, before_script ]

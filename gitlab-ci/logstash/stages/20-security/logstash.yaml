@@ -1,0 +1,5 @@
+variables:
+  SEMGREP_LANG: 'kubernetes'
+
+include:
+  - local: '/global/stages/20-security/docker.yaml'

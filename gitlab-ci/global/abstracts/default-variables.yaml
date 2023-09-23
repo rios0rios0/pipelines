@@ -1,0 +1,2 @@
+variables:
+  REPORT_PATH: 'build/reports'

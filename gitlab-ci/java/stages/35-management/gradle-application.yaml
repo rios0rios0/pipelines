@@ -1,0 +1,21 @@
+include:
+  - local: '/java/abstracts/gradle-application.yaml'
+  - local: '/java/stages/35-management/gradle.yaml'
+
+variables:
+  PREFIX: ''
+
+.report:sonarqube:
+  extends: '.gradle-application'
+  cache:
+    paths:
+      - '.gradle'
+      - '.gradle-home/caches'
+      - '.gradle-home/notifications'
+      - '.sonar/cache'
+      - 'build'
+      - 'buildSrc/.gradle'
+      - 'buildSrc/build'
+
+.report:dependency-track:
+  extends: '.gradle-application'

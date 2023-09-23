@@ -1,0 +1,12 @@
+include:
+  - local: '/java/abstracts/gradle.yaml'
+
+.gradle-library:
+  extends: '.gradle'
+  cache:
+    paths:
+      - '.gradle'
+      - '.gradle-home/caches'
+      - '.gradle-home/notifications'
+      - 'build'
+      - 'lib/build'

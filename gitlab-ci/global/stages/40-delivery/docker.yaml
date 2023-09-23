@@ -1,0 +1,21 @@
+include:
+  - local: '/global/abstracts/docker-login-push.yaml'
+
+delivery:qa:
+  extends: '.docker-login-push'
+  stage: 'delivery'
+  variables:
+    TAG: 'latest'
+  # TODO: this 'cache' section should be optional
+  cache: !reference [ .delivery, cache ]
+  script:
+    - !reference [ .delivery, script ]
+  rules:
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+
+delivery:prod:
+  extends: 'delivery:qa'
+  variables:
+    TAG: "$CI_COMMIT_TAG"
+  rules:
+    - if: "$CI_COMMIT_TAG"

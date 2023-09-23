@@ -1,0 +1,10 @@
+.docker-login-push:
+  services:
+    - 'docker:dind'
+  variables:
+    REGISTRY_PATH: "$CI_REGISTRY_IMAGE"
+    IMAGE_SUFFIX: ''
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  after_script:
+    - docker push -a "$REGISTRY_PATH$IMAGE_SUFFIX"

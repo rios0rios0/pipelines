@@ -1,0 +1,17 @@
+style:spotless:
+  extends: '.code-check'
+  stage: 'code check (style/quality)'
+  script:
+    - gradle spotlessCheck
+
+style:checkstyle:
+  extends: '.code-check'
+  stage: 'code check (style/quality)'
+  script:
+    - gradle checkstyle
+
+quality:pmd:
+  extends: '.code-check'
+  stage: 'code check (style/quality)'
+  script:
+    - gradle pmd

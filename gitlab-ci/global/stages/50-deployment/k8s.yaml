@@ -1,0 +1,18 @@
+deployment:qa:
+  image: 'bitnami/kubectl'
+  stage: 'deployment'
+  environment:
+    name: 'qa'
+  script:
+    - kubectl get pods
+  tags:
+    - 'dev-gitlab-runner-onprem'
+  rules:
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+
+deployment:prod:
+  extends: 'deployment:qa'
+  environment:
+    name: 'prod'
+  rules:
+    - if: "$CI_COMMIT_TAG"

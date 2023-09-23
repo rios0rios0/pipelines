@@ -1,0 +1,16 @@
+include:
+  - local: '/global/abstracts/default-image.yaml'
+  - local: '/java/stages/10-code-check/gradle-application.yaml'
+  - local: '/java/stages/20-security/gradle-application.yaml'
+  - local: '/java/stages/30-tests/gradle-application.yaml'
+  - local: '/java/stages/35-management/gradle-application.yaml'
+  - local: '/global/stages/40-delivery/docker.yaml'
+  #- local: '/global/stages/50-deployment/k8s.yaml'
+
+stages:
+  - 'code check (style/quality)'
+  - 'security (sca/sast)'
+  - 'tests'
+  - 'management'
+  - 'delivery'
+  - 'deployment'

@@ -1,0 +1,21 @@
+{
+  "linters": {
+    "enable-all": true,
+    "disable": [
+      "interfacer",
+      "deadcode",
+      "depguard",
+      "ifshort",
+      "nosnakecase",
+      "scopelint",
+      "exhaustivestruct",
+      "maligned",
+      "structcheck",
+      "golint",
+      "varcheck",
+      "rowserrcheck",
+      "sqlclosecheck",
+      "wastedassign"
+    ]
+  }
+}

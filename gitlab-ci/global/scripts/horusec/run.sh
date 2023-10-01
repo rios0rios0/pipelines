@@ -5,11 +5,11 @@
 export CONTAINER_PATH="/opt/src"
 fileName="$CONTAINER_PATH/$REPORT_PATH/horusec.json"
 
-if ! ls "$(pwd)"/horusec*.json 1>/dev/null 2>&1; then
+if ! ls "$(pwd)"/horusec*.json 1> /dev/null 2>&1; then
   exit 101
 fi
 
-jq -s "add" "$SCRIPTS_DIR/global/scripts/horusec/global.json" "$(pwd)"/horusec*.json >"$(pwd)/custom.json"
+jq -s "add" "$SCRIPTS_DIR/global/scripts/horusec/global.json" "$(pwd)"/horusec*.json > "$(pwd)/custom.json"
 docker run \
   -v "$(pwd):$CONTAINER_PATH" \
   -v /var/run/docker.sock:/var/run/docker.sock \

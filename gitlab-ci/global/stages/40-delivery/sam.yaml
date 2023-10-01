@@ -1,0 +1,29 @@
+include:
+  - local: '/global/abstracts/aws-scripts.yaml'
+
+delivery:qa:
+  image: !reference [.delivery, image]
+  stage: 'delivery'
+  environment:
+    name: 'qa'
+  script:
+    - !reference [.delivery, script]
+    - sam build
+    - !reference [.aws-assume-role, script]
+    - export REGION=`stoml samconfig.toml $CI_ENVIRONMENT_SLUG.deploy.parameters.region` # this is a workaround because the bucket isn't really needed
+    - export S3_BUCKET=`stoml samconfig.toml $CI_ENVIRONMENT_SLUG.deploy.parameters.s3_bucket` # this is a workaround because the bucket isn't really needed
+    - export S3_PREFIX=`stoml samconfig.toml $CI_ENVIRONMENT_SLUG.deploy.parameters.s3_prefix` # this is a workaround because the bucket isn't really needed
+    - sam package --config-env "$CI_ENVIRONMENT_SLUG" --output-template-file "packaged-$CI_ENVIRONMENT_SLUG.yaml"
+        --region "$REGION" --s3-bucket "$S3_BUCKET" --s3-prefix "$S3_PREFIX"
+  artifacts:
+    paths:
+      - "packaged-$CI_ENVIRONMENT_SLUG.yaml"
+  rules:
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+
+delivery:prod:
+  extends: 'delivery:qa'
+  environment:
+    name: 'prod'
+  rules:
+    - if: "$CI_COMMIT_TAG"

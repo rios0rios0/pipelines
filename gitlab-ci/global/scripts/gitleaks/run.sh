@@ -35,10 +35,10 @@ if [ -z "$EXIT_CODE" ]; then
   rm $ENTRYPOINT_FILE .gitleaks.toml
 fi
 
-if ls "$REPORT_PATH"/*.json 1>/dev/null 2>&1; then
-  jq -s "add" "$REPORT_PATH"/*.json >"$fileName"
+if ls "$REPORT_PATH"/*.json 1> /dev/null 2>&1; then
+  jq -s "add" "$REPORT_PATH"/*.json > "$fileName"
 else
-  echo "OK" >"$fileName"
+  echo "OK" > "$fileName"
 fi
 
 exit $EXIT_CODE

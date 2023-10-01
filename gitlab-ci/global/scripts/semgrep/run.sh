@@ -2,14 +2,14 @@
 
 . "$SCRIPTS_DIR/global/scripts/shared/check-report-path.sh"
 
-chmod -R 777 "$REPORT_PATH"  # DinD approach needs this line
+chmod -R 777 "$REPORT_PATH" # DinD approach needs this line
 export CONTAINER_PATH="/src" # for this tool, it must be this value
 fileName="$CONTAINER_PATH/$REPORT_PATH/semgrep.json"
 
 customFile=".semgrepignore"
 defaultFile="$SCRIPTS_DIR/global/scripts/semgrep/.semgrepignore"
 if [ -f "$customFile" ]; then
-  cat "$defaultFile" >>"$customFile"
+  cat "$defaultFile" >> "$customFile"
 else
   cp "$defaultFile" .
 fi
@@ -28,8 +28,8 @@ docker run \
   --enable-version-check --force-color \
   --error --json --output "$fileName" || EXIT_CODE=$?
 
-if ! ls "$REPORT_PATH"/*.json 1>/dev/null 2>&1; then
-  echo "OK" >"$fileName"
+if ! ls "$REPORT_PATH"/*.json 1> /dev/null 2>&1; then
+  echo "OK" > "$fileName"
 fi
 
 rm .semgrepignore

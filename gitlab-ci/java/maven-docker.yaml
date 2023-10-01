@@ -1,0 +1,4 @@
+include:
+  - local: '/global/abstracts/default-image.yaml'
+  - local: '/java/stages/2-security/maven.yaml'
+  - local: '/java/stages/3-tests/maven.yaml'

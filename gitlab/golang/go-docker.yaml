@@ -1,9 +1,9 @@
 include:
-  - local: '/gitlab/global/abstracts/default-image.yaml'
-  - local: '/gitlab/golang/stages/10-code-check/go.yaml'
-  - local: '/gitlab/golang/stages/20-security/go.yaml'
-  - local: '/gitlab/golang/stages/30-tests/go.yaml'
-  - local: '/gitlab/golang/stages/40-delivery/docker.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/global/abstracts/default-image.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/golang/stages/10-code-check/go.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/golang/stages/20-security/go.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/golang/stages/30-tests/go.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/golang/stages/40-delivery/docker.yaml'
 
 stages:
   - 'code check (style/quality)'

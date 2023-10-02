@@ -2,9 +2,9 @@ variables:
   SEMGREP_LANG: 'java'
 
 include:
-  - local: '/gitlab/global/abstracts/default-variables.yaml'
-  - local: '/gitlab/global/stages/2-security.yaml'
-  - local: '/gitlab/java/abstracts/maven.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/global/stages/2-security.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/java/abstracts/maven.yaml'
 
 sca:dependency-check:
   extends: '.maven'

@@ -1,0 +1,11 @@
+include:
+  - local: '/gitlab/global/abstracts/scripts-repo-debian.yaml'
+  - local: '/gitlab/golang/abstracts/go.yaml'
+
+style:golangci-lint:
+  extends: '.scripts-repo-debian'
+  image: !reference [.go, image]
+  stage: 'code check (style/quality)'
+  script:
+    - $SCRIPTS_DIR/golang/scripts/golangci-lint/run.sh
+  allow_failure: true

@@ -1,0 +1,10 @@
+include:
+  - local: '/gitlab/global/abstracts/scripts-repo.yaml'
+
+.scripts-repo-alpine-docker:
+  extends: '.scripts-repo'
+  services:
+    - 'docker:dind'
+  before_script:
+    - apk add git jq
+    - !reference [ .scripts-repo, before_script ]

@@ -1,6 +1,0 @@
-variables:
-  SEMGREP_LANG: 'javascript'
-
-include:
-  - local: '/global/stages/20-security/docker.yaml'
-  #- local: '/javascript/abstracts/yarn.yaml' TODO: should be the security procedures for JS

@@ -1,2 +1,0 @@
-include:
-  - local: '/global/stages/50-deployment/sam.yaml'

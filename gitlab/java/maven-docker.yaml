@@ -1,0 +1,4 @@
+include:
+  - local: '/gitlab/global/abstracts/default-image.yaml'
+  - local: '/gitlab/java/stages/2-security/maven.yaml'
+  - local: '/gitlab/java/stages/3-tests/maven.yaml'

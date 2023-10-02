@@ -1,0 +1,10 @@
+include:
+  - local: '/gitlab/dotnet/stages/30-tests/msbuild.yaml'
+  - local: '/gitlab/global/stages/40-delivery/release.yaml'
+
+stages:
+  - 'code check (style/quality)'
+  - 'security (sca/sast)'
+  - 'tests'
+  - 'management'
+  - 'delivery'

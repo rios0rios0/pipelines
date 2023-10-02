@@ -1,0 +1,16 @@
+include:
+  - local: '/gitlab/global/abstracts/default-image.yaml'
+  - local: '/gitlab/python/stages/10-code-check/pdm.yaml'
+  - local: '/gitlab/python/stages/20-security/pdm.yaml'
+  - local: '/gitlab/python/stages/30-tests/pdm.yaml'
+  - local: '/gitlab/python/stages/35-management/pdm.yaml'
+  - local: '/gitlab/global/stages/40-delivery/docker.yaml'
+  - local: '/gitlab/global/stages/40-delivery/release.yaml'
+  #- local: '/gitlab/python/stages/5-deployment/k8s.yaml'
+
+stages:
+  - 'code check (style/quality)'
+  - 'security (sca/sast)'
+  - 'tests'
+  - 'management'
+  - 'delivery'

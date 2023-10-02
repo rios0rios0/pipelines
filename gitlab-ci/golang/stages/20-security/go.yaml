@@ -1,5 +1,0 @@
-variables:
-  SEMGREP_LANG: 'golang'
-
-include:
-  - local: '/global/stages/20-security/docker.yaml'

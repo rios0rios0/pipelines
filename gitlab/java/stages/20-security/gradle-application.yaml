@@ -1,0 +1,18 @@
+include:
+  - local: '/gitlab/java/abstracts/gradle-application.yaml'
+  - local: '/gitlab/java/stages/20-security/gradle.yaml'
+
+variables:
+  PREFIX: ''
+
+.dependency-check:
+  extends: '.gradle-application'
+  cache:
+    paths:
+      - '.gradle'
+      - '.gradle-home/caches'
+      - '.gradle-home/notifications'
+      - '.owasp'
+      - 'build'
+      - 'buildSrc/.gradle'
+      - 'buildSrc/build'

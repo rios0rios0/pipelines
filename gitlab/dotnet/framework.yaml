@@ -1,6 +1,6 @@
 include:
-  - local: '/gitlab/dotnet/stages/30-tests/msbuild.yaml'
-  - local: '/gitlab/global/stages/40-delivery/release.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/dotnet/stages/30-tests/msbuild.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/global/stages/40-delivery/release.yaml'
 
 stages:
   - 'code check (style/quality)'

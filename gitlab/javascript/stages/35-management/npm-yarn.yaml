@@ -1,8 +1,8 @@
 include:
-  - local: '/gitlab/global/abstracts/default-variables.yaml'
-  - local: '/gitlab/global/stages/35-management/abstracts.yaml'
-  - local: '/gitlab/javascript/abstracts/npm.yaml'
-  - local: '/gitlab/javascript/abstracts/yarn-newest.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/global/stages/35-management/abstracts.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/javascript/abstracts/npm.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/javascript/abstracts/yarn-newest.yaml'
 
 report:sonarqube:
   extends: '.yarn-newest'

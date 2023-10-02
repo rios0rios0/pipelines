@@ -1,5 +1,5 @@
 include:
-  - local: '/gitlab/global/abstracts/aws-scripts.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/global/abstracts/aws-scripts.yaml'
 
 delivery:qa:
   image: !reference [.delivery, image]

@@ -1,5 +1,5 @@
 include:
-  - local: '/gitlab/global/abstracts/docker-login-push.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/global/abstracts/docker-login-push.yaml'
 
 build:artifact:
   extends: '.docker-login-push'

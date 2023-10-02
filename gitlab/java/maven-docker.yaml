@@ -1,4 +1,4 @@
 include:
-  - local: '/gitlab/global/abstracts/default-image.yaml'
-  - local: '/gitlab/java/stages/2-security/maven.yaml'
-  - local: '/gitlab/java/stages/3-tests/maven.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/global/abstracts/default-image.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/java/stages/2-security/maven.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/fix/test/gitlab/java/stages/3-tests/maven.yaml'

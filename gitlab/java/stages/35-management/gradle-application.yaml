@@ -1,6 +1,6 @@
 include:
-  - local: '/gitlab/java/abstracts/gradle-application.yaml'
-  - local: '/gitlab/java/stages/35-management/gradle.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/java/abstracts/gradle-application.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/java/stages/35-management/gradle.yaml'
 
 variables:
   PREFIX: ''

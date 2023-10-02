@@ -1,11 +1,11 @@
 include:
-  - local: '/gitlab/global/abstracts/default-image.yaml'
-  - local: '/gitlab/javascript/stages/20-security/yarn.yaml'
-  - local: '/gitlab/javascript/stages/30-tests/yarn.yaml'
-  - local: '/gitlab/javascript/stages/35-management/npm-yarn.yaml'
-  - local: '/gitlab/javascript/stages/36-packaging/docker.yaml'
-  - local: '/gitlab/global/stages/40-delivery/docker.yaml'
-  - local: '/gitlab/global/stages/40-delivery/release.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-image.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/javascript/stages/20-security/yarn.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/javascript/stages/30-tests/yarn.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/javascript/stages/35-management/npm-yarn.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/javascript/stages/36-packaging/docker.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/40-delivery/docker.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/40-delivery/release.yaml'
 
 stages:
   - 'code check (style/quality)'

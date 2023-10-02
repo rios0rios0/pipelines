@@ -1,5 +1,5 @@
 include:
-  - local: '/gitlab/global/abstracts/scripts-repo.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
 
 .scripts-repo-alpine-docker:
   extends: '.scripts-repo'

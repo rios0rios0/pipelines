@@ -1,2 +1,2 @@
 include:
-  - local: '/gitlab/global/stages/40-delivery/docker.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/40-delivery/docker.yaml'

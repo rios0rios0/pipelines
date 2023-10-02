@@ -2,8 +2,8 @@ variables:
   SEMGREP_LANG: 'java'
 
 include:
-  - local: '/gitlab/global/abstracts/default-variables.yaml'
-  - local: '/gitlab/global/stages/20-security/docker.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/docker.yaml'
 
 sca:dependency-check:
   extends: '.dependency-check'

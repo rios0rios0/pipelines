@@ -1,5 +1,5 @@
 include:
-  - local: '/gitlab/python/abstracts/pdm.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/python/abstracts/pdm.yaml'
 
 publish:qa:
   extends: '.pdm'

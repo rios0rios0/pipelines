@@ -1,2 +1,2 @@
 include:
-  - local: '/gitlab/global/stages/50-deployment/sam.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/50-deployment/sam.yaml'

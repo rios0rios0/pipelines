@@ -7,5 +7,5 @@ style:golangci-lint:
   image: !reference [.go, image]
   stage: 'code check (style/quality)'
   script:
-    - $SCRIPTS_DIR/golang/scripts/golangci-lint/run.sh
+    - $SCRIPTS_DIR/gitlab/golang/scripts/golangci-lint/run.sh
   allow_failure: true

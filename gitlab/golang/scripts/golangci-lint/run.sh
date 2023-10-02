@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
 customJsonFile="custom.json"
-defaultJsonFile="$SCRIPTS_DIR/golang/scripts/golangci-lint/.golangci.json"
+defaultJsonFile="$SCRIPTS_DIR/gitlab/golang/scripts/golangci-lint/.golangci.json"
 
 if [ -f ".golangci.json" ]; then
   jq -s '.[0] * .[1]' "$defaultJsonFile" ".golangci.json" > $customJsonFile

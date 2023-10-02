@@ -1,5 +1,0 @@
-include:
-  - local: '/global/stages/35-management/abstracts.yaml'
-
-report:sonarqube:
-  extends: [ '.sonarqube' ]

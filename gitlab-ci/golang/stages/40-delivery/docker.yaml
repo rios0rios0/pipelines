@@ -1,2 +1,0 @@
-include:
-  - local: '/global/stages/40-delivery/docker.yaml'

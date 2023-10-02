@@ -1,0 +1,30 @@
+include:
+  - local: '/gitlab/global/abstracts/default-variables.yaml'
+  - local: '/gitlab/python/abstracts/pdm.yaml'
+
+test:all:
+  extends: '.pdm'
+  stage: 'tests'
+  script:
+    - pdm run test
+    - export COVERAGE_DECIMAL=$(grep -oP 'line-rate=+?("\d+.\d+")' "$REPORT_PATH/coverage.xml" | head -n 1 | tr -d 'line-rate="-')
+    - echo "COVERAGE_PERCENT=$(echo "$COVERAGE_DECIMAL" | awk '{printf "%.2f", $0*100}')%"
+  coverage: '/COVERAGE_PERCENT=([\d\.]+)%/'
+  artifacts:
+    when: 'always'
+    paths:
+      - "$REPORT_PATH/coverage.xml"
+
+test:build:
+  extends: '.pdm'
+  stage: 'tests'
+  script:
+    - pdm build
+  artifacts:
+    paths:
+      - '.venv' # TODO: this should be removed, because the cache is going to handle this
+      - 'dist'
+  rules: # TODO: this should be removed, because the pipeline should not depends of the cache
+    - if: "$CI_MERGE_REQUEST_IID"
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+    - if: "$CI_COMMIT_TAG"

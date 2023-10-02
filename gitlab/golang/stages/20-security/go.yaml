@@ -1,0 +1,5 @@
+variables:
+  SEMGREP_LANG: 'golang'
+
+include:
+  - local: '/gitlab/global/stages/20-security/docker.yaml'

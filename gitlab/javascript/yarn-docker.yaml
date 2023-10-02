@@ -1,0 +1,16 @@
+include:
+  - local: '/gitlab/global/abstracts/default-image.yaml'
+  - local: '/gitlab/javascript/stages/20-security/yarn.yaml'
+  - local: '/gitlab/javascript/stages/30-tests/yarn.yaml'
+  - local: '/gitlab/javascript/stages/35-management/npm-yarn.yaml'
+  - local: '/gitlab/javascript/stages/36-packaging/docker.yaml'
+  - local: '/gitlab/global/stages/40-delivery/docker.yaml'
+  - local: '/gitlab/global/stages/40-delivery/release.yaml'
+
+stages:
+  - 'code check (style/quality)'
+  - 'security (sca/sast)'
+  - 'tests'
+  - 'management'
+  - 'packaging'
+  - 'delivery'

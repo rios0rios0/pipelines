@@ -1,0 +1,24 @@
+variables:
+  SEMGREP_LANG: 'java'
+
+include:
+  - local: '/gitlab/global/abstracts/default-variables.yaml'
+  - local: '/gitlab/global/stages/2-security.yaml'
+  - local: '/gitlab/java/abstracts/maven.yaml'
+
+sca:dependency-check:
+  extends: '.maven'
+  stage: 'security (sca)'
+  cache:
+    paths: # this list can't be merged. It's not how YAML works (https://github.com/yaml/yaml/issues/48)
+      - '.m2'
+      - '.owasp'
+  script:
+    - mkdir -p '.owasp'
+    - export MAVEN_OPTS="$MAVEN_OPTS -DdependencyCheck.dataDirectory=$(pwd)/.owasp" # the Dependency Check data path must be absolute
+    - mvn dependency-check:check
+  artifacts:
+    when: 'always'
+    paths:
+      - "$REPORT_PATH/dependency-check-report.html"
+  allow_failure: true

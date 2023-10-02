@@ -1,0 +1,19 @@
+include:
+  - local: '/gitlab/java/abstracts/gradle-library.yaml'
+  - local: '/gitlab/java/stages/35-management/gradle.yaml'
+
+variables:
+  PREFIX: 'lib/'
+
+.report:sonarqube:
+  extends: '.gradle-library'
+  cache:
+    paths:
+      - '.gradle'
+      - '.gradle-home/caches'
+      - '.gradle-home/notifications'
+      - '.sonar/cache'
+      - 'lib/build'
+
+.report:dependency-track:
+  extends: '.gradle-library'

@@ -1,0 +1,31 @@
+include:
+  - local: '/gitlab/global/abstracts/default-variables.yaml'
+  - local: '/gitlab/global/stages/35-management/abstracts.yaml'
+  - local: '/gitlab/javascript/abstracts/npm.yaml'
+  - local: '/gitlab/javascript/abstracts/yarn-newest.yaml'
+
+report:sonarqube:
+  extends: '.yarn-newest'
+  stage: 'management'
+  variables:
+    GIT_DEPTH: '0' # tells git fetching all the branches of the project, required by the analysis task
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar" # defines the location of the analysis task cache
+  cache:
+    paths:
+      - '.sonar/cache'
+      - 'node_modules'
+  script:
+    - 'sed -i "s/\"extends\": \"\.\.\/\.\.\/tsconfig\.json\",/ /g" tsconfig.json'
+    - yarn sonar
+  tags:
+    - 'dev-gitlab-runner-onprem'
+  allow_failure: true
+  rules: # TODO: this could be not duplicated using !reference
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+
+report:dependency-track:
+  extends: [ '.npm', '.dependency-track' ]
+  script:
+    - npm run sbom
+    - apt update && apt install -y --no-install-recommends curl jq
+    - !reference [ .dependency-track, script ]

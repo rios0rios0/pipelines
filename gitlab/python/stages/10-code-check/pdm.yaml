@@ -1,0 +1,27 @@
+include:
+  - local: '/gitlab/python/abstracts/pdm.yaml'
+
+style:isort:
+  extends: '.pdm'
+  stage: 'code check (style/quality)'
+  script:
+    - pdm run isort --check-only .
+
+style:black:
+  extends: '.pdm'
+  stage: 'code check (style/quality)'
+  script:
+    - pdm run black --check .
+
+quality:flake8:
+  extends: '.pdm'
+  stage: 'code check (style/quality)'
+  script:
+    - pdm run flake8 .
+
+quality:mypy:
+  extends: '.pdm'
+  stage: 'code check (style/quality)'
+  script:
+    - pdm run type-check
+  allow_failure: true

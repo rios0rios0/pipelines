@@ -1,0 +1,12 @@
+variables:
+  SEMGREP_LANG: 'python'
+
+include:
+  - local: '/gitlab/global/stages/20-security/docker.yaml'
+  - local: '/gitlab/python/abstracts/pdm.yaml'
+
+sca:safety:
+  extends: '.pdm'
+  stage: 'security (sca/sast)'
+  script:
+    - pdm run safety-check

@@ -1,0 +1,25 @@
+include:
+  - local: '/gitlab/global/abstracts/default-variables.yaml'
+  - local: '/gitlab/global/stages/35-management/abstracts.yaml'
+  - local: '/gitlab/python/abstracts/pdm.yaml'
+
+report:sonarqube:
+  extends: '.sonarqube'
+  script:
+    # Find __init__.py in a root-level folder, excluding "tests" directory
+    - file=$(find . -maxdepth 2 -type f -name "__init__.py" ! -path "./tests/*")
+    - 'if [ -z "$file" ]; then echo "Couldn''t find the __init__.py file in a root-level folder"; exit 1; fi'
+    # Read version from the found __init__.py
+    - version=$(grep "^__version__\s*=\s*['\"]" "$file" | cut -d'"' -f 2)
+    - 'if [ -z "$version" ]; then echo "Couldn''t find the version string in $file"; exit 1; fi'
+    # Update sonar-project.properties
+    - echo "sonar.projectVersion=$version" >> sonar-project.properties
+    - echo "Updated sonar.projectVersion to $version"
+    - !reference [ .sonarqube, script ]
+
+report:dependency-track:
+  extends: [ '.pdm', '.dependency-track' ]
+  script:
+    - pdm run sbom
+    - apt update && apt install -y --no-install-recommends curl jq
+    - !reference [ .dependency-track, script ]

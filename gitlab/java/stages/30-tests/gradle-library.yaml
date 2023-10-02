@@ -1,0 +1,9 @@
+include:
+  - local: '/gitlab/java/abstracts/gradle-library.yaml'
+  - local: '/gitlab/java/stages/30-tests/gradle.yaml'
+
+variables:
+  PREFIX: 'lib/'
+
+.test:all:
+  extends: '.gradle-library'

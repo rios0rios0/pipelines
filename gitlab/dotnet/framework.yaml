@@ -1,5 +1,6 @@
 include:
   - local: '/dotnet/stages/30-tests/msbuild.yaml'
+  - local: '/global/stages/40-delivery/release.yaml'
 
 stages:
   - 'code check (style/quality)'

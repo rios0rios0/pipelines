@@ -5,6 +5,7 @@ include:
   - local: '/javascript/stages/35-management/npm-yarn.yaml'
   - local: '/javascript/stages/36-packaging/docker.yaml'
   - local: '/global/stages/40-delivery/docker.yaml'
+  - local: '/global/stages/40-delivery/release.yaml'
 
 stages:
   - 'code check (style/quality)'

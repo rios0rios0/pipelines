@@ -3,6 +3,7 @@ include:
   - local: '/logstash/stages/20-security/logstash.yaml'
   - local: '/logstash/stages/35-management/logstash.yaml'
   - local: '/global/stages/40-delivery/docker.yaml'
+  - local: '/global/stages/40-delivery/release.yaml'
 
 stages:
   - 'security (sca/sast)'

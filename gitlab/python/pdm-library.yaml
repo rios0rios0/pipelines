@@ -4,8 +4,8 @@ include:
   - local: '/python/stages/20-security/pdm.yaml'
   - local: '/python/stages/30-tests/pdm.yaml'
   - local: '/python/stages/35-management/pdm.yaml'
-  - local: '/global/stages/40-delivery/docker.yaml'
-  #- local: '/python/stages/5-deployment/k8s.yaml'
+  - local: '/python/stages/40-delivery/pdm-library.yaml'
+  - local: '/global/stages/40-delivery/release.yaml'
 
 stages:
   - 'code check (style/quality)'

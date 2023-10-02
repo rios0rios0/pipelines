@@ -5,6 +5,7 @@ include:
   - local: '/java/stages/30-tests/gradle-library.yaml'
   - local: '/java/stages/35-management/gradle-library.yaml'
   - local: '/java/stages/40-delivery/gradle-library.yaml'
+  - local: '/global/stages/40-delivery/release.yaml'
 
 stages:
   - 'code check (style/quality)'

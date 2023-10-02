@@ -1,6 +1,6 @@
 include:
-  - local: '/global/abstracts/default-variables.yaml'
-  - local: '/python/abstracts/pdm.yaml'
+  - local: '/gitlab/global/abstracts/default-variables.yaml'
+  - local: '/gitlab/python/abstracts/pdm.yaml'
 
 test:all:
   extends: '.pdm'

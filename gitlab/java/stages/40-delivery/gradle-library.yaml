@@ -1,5 +1,5 @@
 include:
-  - local: '/java/abstracts/gradle-library.yaml'
+  - local: '/gitlab/java/abstracts/gradle-library.yaml'
 
 publish:qa:
   extends: '.gradle-library'

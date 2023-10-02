@@ -1,9 +1,9 @@
 include:
-  - local: '/global/abstracts/default-image.yaml'
-  - local: '/logstash/stages/20-security/logstash.yaml'
-  - local: '/logstash/stages/35-management/logstash.yaml'
-  - local: '/global/stages/40-delivery/docker.yaml'
-  - local: '/global/stages/40-delivery/release.yaml'
+  - local: '/gitlab/global/abstracts/default-image.yaml'
+  - local: '/gitlab/logstash/stages/20-security/logstash.yaml'
+  - local: '/gitlab/logstash/stages/35-management/logstash.yaml'
+  - local: '/gitlab/global/stages/40-delivery/docker.yaml'
+  - local: '/gitlab/global/stages/40-delivery/release.yaml'
 
 stages:
   - 'security (sca/sast)'

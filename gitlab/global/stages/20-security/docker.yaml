@@ -1,6 +1,6 @@
 include:
-  - local: '/global/abstracts/default-variables.yaml'
-  - local: '/global/abstracts/scripts-repo-alpine-docker.yaml'
+  - local: '/gitlab/global/abstracts/default-variables.yaml'
+  - local: '/gitlab/global/abstracts/scripts-repo-alpine-docker.yaml'
 
 sast:horusec: # TODO: change the false positive acceptance way (https://github.com/ZupIT/horusec/issues/699)
   extends: '.scripts-repo-alpine-docker'

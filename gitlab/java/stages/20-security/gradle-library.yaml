@@ -1,6 +1,6 @@
 include:
-  - local: '/java/abstracts/gradle-library.yaml'
-  - local: '/java/stages/20-security/gradle.yaml'
+  - local: '/gitlab/java/abstracts/gradle-library.yaml'
+  - local: '/gitlab/java/stages/20-security/gradle.yaml'
 
 variables:
   PREFIX: 'lib/'

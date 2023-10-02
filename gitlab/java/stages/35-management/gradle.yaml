@@ -1,6 +1,6 @@
 include:
-  - local: '/global/abstracts/default-variables.yaml'
-  - local: '/global/stages/35-management/abstracts.yaml'
+  - local: '/gitlab/global/abstracts/default-variables.yaml'
+  - local: '/gitlab/global/stages/35-management/abstracts.yaml'
 
 report:sonarqube:
   extends: '.report:sonarqube'

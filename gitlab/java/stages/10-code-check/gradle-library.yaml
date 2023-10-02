@@ -1,6 +1,6 @@
 include:
-  - local: '/java/abstracts/gradle-library.yaml'
-  - local: '/java/stages/10-code-check/gradle.yaml'
+  - local: '/gitlab/java/abstracts/gradle-library.yaml'
+  - local: '/gitlab/java/stages/10-code-check/gradle.yaml'
 
 .code-check:
   extends: '.gradle-library'

@@ -1,8 +1,8 @@
 include:
-  - local: '/global/abstracts/default-variables.yaml'
-  - local: '/global/stages/35-management/abstracts.yaml'
-  - local: '/javascript/abstracts/npm.yaml'
-  - local: '/javascript/abstracts/yarn-newest.yaml'
+  - local: '/gitlab/global/abstracts/default-variables.yaml'
+  - local: '/gitlab/global/stages/35-management/abstracts.yaml'
+  - local: '/gitlab/javascript/abstracts/npm.yaml'
+  - local: '/gitlab/javascript/abstracts/yarn-newest.yaml'
 
 report:sonarqube:
   extends: '.yarn-newest'

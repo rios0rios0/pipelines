@@ -1,5 +1,5 @@
 include:
-  - local: '/global/abstracts/default-variables.yaml'
+  - local: '/gitlab/global/abstracts/default-variables.yaml'
 
 test:all:
   extends: '.test:all'

@@ -1,6 +1,6 @@
 include:
-  - local: '/global/abstracts/default-variables.yaml'
-  - local: '/java/abstracts/maven.yaml'
+  - local: '/gitlab/global/abstracts/default-variables.yaml'
+  - local: '/gitlab/java/abstracts/maven.yaml'
 
 test:all:
   extends: '.maven'

@@ -1,2 +1,2 @@
 include:
-  - local: '/global/stages/40-delivery/docker.yaml'
+  - local: '/gitlab/global/stages/40-delivery/docker.yaml'

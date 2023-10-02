@@ -2,8 +2,8 @@ variables:
   SEMGREP_LANG: 'python'
 
 include:
-  - local: '/global/stages/20-security/docker.yaml'
-  - local: '/python/abstracts/pdm.yaml'
+  - local: '/gitlab/global/stages/20-security/docker.yaml'
+  - local: '/gitlab/python/abstracts/pdm.yaml'
 
 sca:safety:
   extends: '.pdm'

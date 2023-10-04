@@ -1,0 +1,10 @@
+#.scripts-repo:
+#  rules:
+#    - if: "$CI_MERGE_REQUEST_IID"
+#    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+
+steps:
+  - script: |
+      export SCRIPTS_REPO="https://github.com/rios0rios0/pipelines.git"
+      export SCRIPTS_DIR=$(mktemp -d)
+      git clone -q --depth 1 "$SCRIPTS_REPO" "$SCRIPTS_DIR"

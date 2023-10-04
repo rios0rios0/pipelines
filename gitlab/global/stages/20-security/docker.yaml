@@ -6,7 +6,7 @@ sast:horusec: # TODO: change the false positive acceptance way (https://github.c
   extends: '.scripts-repo-alpine-docker'
   stage: 'security (sca/sast)'
   script:
-    - $SCRIPTS_DIR/gitlab/global/scripts/horusec/run.sh # TODO: needs to receive the requirements.txt
+    - $SCRIPTS_DIR/global/scripts/horusec/run.sh # TODO: needs to receive the requirements.txt
   artifacts:
     when: 'always'
     reports:
@@ -19,7 +19,7 @@ sast:semgrep:
   extends: '.scripts-repo-alpine-docker'
   stage: 'security (sca/sast)'
   script:
-    - $SCRIPTS_DIR/gitlab/global/scripts/semgrep/run.sh $SEMGREP_LANG # it takes the first param as the main language
+    - $SCRIPTS_DIR/global/scripts/semgrep/run.sh $SEMGREP_LANG # it takes the first param as the main language
   artifacts:
     when: 'always'
     reports:
@@ -29,7 +29,7 @@ sast:gitleaks:
   extends: '.scripts-repo-alpine-docker'
   stage: 'security (sca/sast)'
   script:
-    - $SCRIPTS_DIR/gitlab/global/scripts/gitleaks/run.sh
+    - $SCRIPTS_DIR/global/scripts/gitleaks/run.sh
   artifacts:
     when: 'always'
     reports:

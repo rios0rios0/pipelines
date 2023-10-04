@@ -1,0 +1,14 @@
+#  allow_failure: true
+
+stages:
+  - stage: 'code_check'
+    displayName: 'code check (style/quality)'
+    jobs:
+      - job: 'style_golangci_lint'
+        displayName: 'style:golangci-lint'
+        steps:
+          - task: 'GoTool@0'
+            inputs:
+              version: '1.20'
+          - template: '../../../global/abstracts/scripts-repo.yaml'
+          - script: $SCRIPTS_DIR/global/scripts/golangci-lint/run.sh

@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-. "$SCRIPTS_DIR/gitlab/global/scripts/shared/check-report-path.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/check-report-path.sh"
 
 chmod -R 777 "$REPORT_PATH" # DinD approach needs this line
 export CONTAINER_PATH="/opt/src"
@@ -25,7 +25,7 @@ docker run \
 
 if [ -z "$EXIT_CODE" ]; then
   # GitLab customized configuration file
-  cp "$SCRIPTS_DIR/gitlab/global/scripts/gitleaks/.gitleaks.toml" .
+  cp "$SCRIPTS_DIR/global/scripts/gitleaks/.gitleaks.toml" .
   docker run \
     -v "$(pwd):$CONTAINER_PATH" \
     --env REPORT_NUMBER="02" \

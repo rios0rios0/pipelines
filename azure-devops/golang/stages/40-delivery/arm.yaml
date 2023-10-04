@@ -49,3 +49,5 @@ stages:
               azureSubscription: '$(serviceConnection)'
               package: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
               deployMethod: 'zipDeploy'
+        condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
+      - template: '../../../global/stages/40-delivery/release.yaml'

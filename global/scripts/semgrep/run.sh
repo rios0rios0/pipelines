@@ -1,13 +1,13 @@
 #!/usr/bin/env sh
 
-. "$SCRIPTS_DIR/gitlab/global/scripts/shared/check-report-path.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/check-report-path.sh"
 
 chmod -R 777 "$REPORT_PATH" # DinD approach needs this line
 export CONTAINER_PATH="/src" # for this tool, it must be this value
 fileName="$CONTAINER_PATH/$REPORT_PATH/semgrep.json"
 
 customFile=".semgrepignore"
-defaultFile="$SCRIPTS_DIR/gitlab/global/scripts/semgrep/.semgrepignore"
+defaultFile="$SCRIPTS_DIR/global/scripts/semgrep/.semgrepignore"
 if [ -f "$customFile" ]; then
   cat "$defaultFile" >> "$customFile"
 else

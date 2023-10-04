@@ -1,5 +1,5 @@
 TAG := latest
-ROOT := shared/containers
+ROOT := global/containers
 CONTAINER_REGISTRY = ghcr.io/rios0rios0/pipelines
 
 build-and-push:

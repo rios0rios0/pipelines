@@ -1,0 +1,39 @@
+trigger:
+  branches:
+    include:
+      - 'main'
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+jobs:
+  - job: 'release'
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), contains(variables['Build.SourceVersionMessage'], 'origin/chore/bump-'))
+    steps:
+      - script: |
+          set -eux
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+          if echo -n "$COMMIT_MESSAGE" | grep -Eq "^Merge (remote-tracking )?branch '(origin\/)?chore/bump-([0-9]+\.[0-9]+\.[0-9]+)'$"; then
+            VERSION=$(echo "$COMMIT_MESSAGE" | sed -n -E "s/^Merge (remote-tracking )?branch '(origin\/)?chore\/bump-([^']*)'( into '[^']*')?$/\3/p")
+
+            RELEASE_NOTES=""
+            if [ -f CHANGELOG.md ]; then
+                RELEASE_NOTES=$(awk '/## \[Unreleased\]/ {skip=1; next} skip && /## \[.*\]/ {found=1; skip=0; next} found && /## \[.*\]/ {exit} found {print}' CHANGELOG.md)
+                RELEASE_NOTES=$(echo "$RELEASE_NOTES" | jq --raw-input --slurp .)
+            fi
+
+            DATA="{
+              \"name\": \"$VERSION\",
+              \"taggedObject\": {
+                \"objectId\": \"$(Build.SourceVersion)\"
+              },
+              \"message\": $RELEASE_NOTES
+            }"
+
+            curl -X POST "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_apis/git/repositories/$(Build.Repository.ID)/annotatedtags?api-version=7.1-preview.1" \
+                 --header "Authorization: Bearer $(System.AccessToken)" \
+                 --header "Content-Type: application/json" \
+                 --data "$DATA"
+          else
+              echo 'Commit is not a bump, not creating a release'
+          fi

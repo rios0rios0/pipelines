@@ -1,0 +1,51 @@
+stages:
+  - stage: 'delivery'
+    displayName: 'delivery'
+    jobs:
+      - job: 'delivery_qa'
+        displayName: 'delivery:qa'
+        steps:
+          - task: 'GoTool@0'
+            inputs:
+              version: '1.20'
+              architecture: 'amd64'
+              goArguments: 'mod tidy'
+          - script: mkdir -p bin
+          - script: '[[ -f config.sh ]] && ./config.sh'
+          - script: export BUILD_FLAGS="-ldflags='-w -s'"
+          - task: 'Go@0'
+            inputs:
+              command: 'build'
+              arguments: '-o ./bin -v ./...'
+              workingDirectory: '$(Build.SourcesDirectory)'
+          - task: 'CopyFiles@2'
+            inputs:
+              Contents: |
+                api/function.json
+                host.json
+              TargetFolder: '$(Build.SourcesDirectory)/bin'
+          - task: 'ArchiveFiles@2'
+            inputs:
+              archiveType: 'zip'
+              rootFolderOrFile: '$(Build.SourcesDirectory)/bin'
+              archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+              includeRootFolder: false
+              replaceExistingArchive: true
+          # TODO: this should be the deployment stage
+          - task: 'AzureResourceGroupDeployment@2'
+            inputs:
+              location: '$(location)'
+              action: 'Create Or Update Resource Group'
+              azureSubscription: '$(serviceConnection)'
+              resourceGroupName: '$(functionAppName)'
+              csmFile: 'azuredeploy.json'
+              overrideParameters: '-location $(location) -functionAppName $(functionAppName) -inboundAllowedIps $(inboundAllowedIps)'
+              templateLocation: 'Linked artifact'
+              deploymentMode: 'Incremental'
+          - task: 'AzureFunctionApp@1'
+            inputs:
+              appName: '$(functionAppName)'
+              appType: 'functionAppLinux'
+              azureSubscription: '$(serviceConnection)'
+              package: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+              deployMethod: 'zipDeploy'

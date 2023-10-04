@@ -1,14 +1,5 @@
-trigger:
-  branches:
-    include:
-      - 'main'
-
-pool:
-  vmImage: 'ubuntu-latest'
-
 jobs:
   - job: 'release'
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), contains(variables['Build.SourceVersionMessage'], 'origin/chore/bump-'))
     steps:
       - script: |
           set -eux
@@ -37,3 +28,4 @@ jobs:
           else
               echo 'Commit is not a bump, not creating a release'
           fi
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), contains(variables['Build.SourceVersionMessage'], 'origin/chore/bump-'))

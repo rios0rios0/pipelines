@@ -5,17 +5,17 @@ stages:
       - job: 'sast_horusec'
         displayName: 'sast:horusec'
         steps:
-          - template: '../abstracts/scripts-repo.yaml'
+          - template: '../../abstracts/scripts-repo.yaml'
           - script: $SCRIPTS_DIR/global/scripts/horusec/run.sh # TODO: needs to receive the requirements.txt
 
       - job: 'sast_semgrep'
         displayName: 'sast:semgrep'
         steps:
-          - template: '../abstracts/scripts-repo.yaml'
+          - template: '../../abstracts/scripts-repo.yaml'
           - script: $SCRIPTS_DIR/global/scripts/semgrep/run.sh $SEMGREP_LANG # it takes the first param as the main language
 
       - job: 'sast_gitleaks'
         displayName: 'sast:gitleaks'
         steps:
-          - template: '../abstracts/scripts-repo.yaml'
+          - template: '../../abstracts/scripts-repo.yaml'
           - script: $SCRIPTS_DIR/gitlab/global/scripts/gitleaks/run.sh

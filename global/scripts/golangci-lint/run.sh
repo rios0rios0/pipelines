@@ -1,5 +1,7 @@
 #!/usr/bin/env sh
 
+export SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 customJsonFile="custom.json"
 defaultJsonFile="$SCRIPTS_DIR/global/scripts/golangci-lint/.golangci.json"
 

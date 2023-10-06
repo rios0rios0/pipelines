@@ -1,6 +1,8 @@
 #!/usr/bin/env sh
 
-export SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -z "$SCRIPTS_DIR" ]; then
+  export SCRIPTS_DIR="$(echo $(dirname "$(realpath "$0")") | sed 's|\(.*pipelines\).*|\1|')"
+fi
 . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
 
 export CONTAINER_PATH="/opt/src"

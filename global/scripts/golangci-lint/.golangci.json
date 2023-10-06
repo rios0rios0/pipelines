@@ -2,19 +2,19 @@
   "linters": {
     "enable-all": true,
     "disable": [
-      "interfacer",
       "deadcode",
       "depguard",
-      "ifshort",
-      "nosnakecase",
-      "scopelint",
       "exhaustivestruct",
-      "maligned",
-      "structcheck",
       "golint",
-      "varcheck",
+      "ifshort",
+      "interfacer",
+      "maligned",
+      "nosnakecase",
       "rowserrcheck",
+      "scopelint",
       "sqlclosecheck",
+      "structcheck",
+      "varcheck",
       "wastedassign"
     ]
   }

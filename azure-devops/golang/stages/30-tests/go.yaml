@@ -9,7 +9,8 @@ stages:
             inputs:
               version: '1.20'
           # TODO: this should be a share script between the vendors
-          - script: '[[ -f config.sh ]] && ./config.sh'
+          - script: |
+              [[ -f config.sh ]] && ./config.sh
           - script: touch coverage.xml
           - script: |
               go test -v -tags test,unit,integration

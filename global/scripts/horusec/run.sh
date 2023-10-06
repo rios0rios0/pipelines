@@ -1,6 +1,7 @@
 #!/usr/bin/env sh
 
-. "$SCRIPTS_DIR/global/scripts/shared/check-report-path.sh"
+export SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
 
 export CONTAINER_PATH="/opt/src"
 fileName="$CONTAINER_PATH/$REPORT_PATH/horusec.json"

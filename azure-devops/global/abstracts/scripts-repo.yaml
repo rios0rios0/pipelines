@@ -1,5 +1,7 @@
 steps:
   - script: |
-      export SCRIPTS_REPO="https://github.com/rios0rios0/pipelines.git"
       export SCRIPTS_DIR=$(mktemp -d)
-      git clone -q --depth 1 "$SCRIPTS_REPO" "$SCRIPTS_DIR"
+      export SCRIPTS_REPO="https://github.com/rios0rios0/pipelines.git"
+      git clone --depth 1 "$SCRIPTS_REPO" "$SCRIPTS_DIR"
+      echo "##vso[task.setvariable variable=Directory;isOutput=true]$SCRIPTS_DIR"
+    name: 'Scripts'

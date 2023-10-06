@@ -1,8 +1,8 @@
 include:
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/javascript/abstracts/yarn.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/javascript/abstracts/yarn-without-image.yaml'
 
 test:all:
-  extends: '.yarn'
+  extends: '.yarn-without-image'
   stage: 'tests'
   script:
     - !reference [ .test:all, script ]

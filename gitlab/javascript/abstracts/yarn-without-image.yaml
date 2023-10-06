@@ -1,5 +1,5 @@
-.yarn:
-  #image: TODO: find a good image for yarn
+.yarn-without-image:
+  image: !reference [ .yarn, image ]
   cache: # relative to the project directory ($CI_PROJECT_DIR)
     key: "$CI_JOB_NAME"
     paths:

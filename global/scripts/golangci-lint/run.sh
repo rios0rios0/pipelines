@@ -8,7 +8,12 @@ customJsonFile="custom.json"
 defaultJsonFile="$SCRIPTS_DIR/global/scripts/golangci-lint/.golangci.json"
 
 if [ -f ".golangci.json" ]; then
-  jq -s '.[0] * .[1]' "$defaultJsonFile" ".golangci.json" > $customJsonFile
+  disableDefault=$(jq -r '.linters.disable' $defaultJsonFile)
+  disableSpecific=$(jq -r '.linters.disable' .golangci.json)
+  mergedDisable=$(echo "$disableDefault $disableSpecific" | jq -s 'add | unique')
+  mergedLinters=$(jq -s '.[0].linters + .[1].linters | del(.disable)' $defaultJsonFile .golangci.json)
+  result=$(jq --argjson disable "$mergedDisable" --argjson linters "$mergedLinters" -n '$linters * {"disable": $disable}')
+  echo "{\"linters\": $result}" > $customJsonFile
 else
   cp "$defaultJsonFile" $customJsonFile
 fi

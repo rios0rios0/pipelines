@@ -11,7 +11,8 @@ stages:
               architecture: 'amd64'
               goArguments: 'mod tidy'
           - script: mkdir -p bin
-          - script: '[[ -f config.sh ]] && ./config.sh'
+          - script: |
+              [[ -f config.sh ]] && ./config.sh
           - script: export BUILD_FLAGS="-ldflags='-w -s'"
           - task: 'Go@0'
             inputs:

@@ -10,9 +10,11 @@ stages:
               version: '1.20'
               architecture: 'amd64'
               goArguments: 'mod tidy'
-          - script: mkdir -p bin
+          # TODO: this should be a share script between the vendors
           - script: |
-              [[ -f config.sh ]] && ./config.sh
+              export INIT_SCRIPT="config.sh"
+              [[ -f $INIT_SCRIPT ]] && ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
+          - script: mkdir -p bin
           - script: export BUILD_FLAGS="-ldflags='-w -s'"
           - task: 'Go@0'
             inputs:

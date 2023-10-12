@@ -14,9 +14,9 @@ stages:
               [[ -f $INIT_SCRIPT ]] && ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
           - script: touch coverage.xml
           - script: |
-              go test -v -tags test,unit,integration
-                -coverpkg ./main/...
-                -covermode=count ./main/...
+              go test -v -tags test,unit,integration \
+                -coverpkg ./main/... \
+                -covermode=count ./main/... \
                 -coverprofile=coverage.txt
           - script: go tool cover -func coverage.txt
           - script: go install github.com/boumenot/gocover-cobertura@latest

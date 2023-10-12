@@ -4,7 +4,7 @@ include:
 
 style:golangci-lint:
   extends: '.scripts-repo-debian'
-  image: !reference [.go, image]
+  image: !reference [ .go, image ]
   stage: 'code check (style/quality)'
   script:
     - $SCRIPTS_DIR/global/scripts/golangci-lint/run.sh

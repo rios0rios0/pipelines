@@ -5,7 +5,9 @@ test:all:
   extends: '.go'
   stage: 'tests'
   script:
-    - '[[ -f config.sh ]] && ./config.sh'
+    # TODO: this should be a share script between the vendors
+    - export INIT_SCRIPT="config.sh"
+    - "[[ -f $INIT_SCRIPT ]] && ./$INIT_SCRIPT || echo \"The '$INIT_SCRIPT' file is not found, skipping...\""
     - touch coverage.xml
     - go test -v -tags test,unit,integration
         -coverpkg ./main/...

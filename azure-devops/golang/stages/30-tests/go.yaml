@@ -9,6 +9,8 @@ stages:
             inputs:
               version: '1.20'
           # TODO: this should be a share script between the vendors
+          - script: export GOPATH="$(pwd)/.go" # the GOPATH must be absolute
+          - script: export PATH="$PATH:$GOPATH/bin" # this is a workaround to detect the new GOPATH
           - script: |
               export INIT_SCRIPT="config.sh"
               [[ -f $INIT_SCRIPT ]] && ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."

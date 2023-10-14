@@ -8,18 +8,5 @@ stages:
           - task: 'GoTool@0'
             inputs:
               version: '1.20'
-          # TODO: this should be a share script between the vendors
-          - script: export GOPATH="$(pwd)/.go" # the GOPATH must be absolute
-          - script: export PATH="$PATH:$GOPATH/bin" # this is a workaround to detect the new GOPATH
-          - script: |
-              export INIT_SCRIPT="config.sh"
-              [[ -f $INIT_SCRIPT ]] && ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
-          - script: touch coverage.xml
-          - script: |
-              go test -v -tags test,unit,integration \
-                -coverpkg ./main/... \
-                -covermode=count ./main/... \
-                -coverprofile=coverage.txt
-          - script: go tool cover -func coverage.txt
-          - script: go install github.com/boumenot/gocover-cobertura@latest
-          - script: $GOPATH/bin/gocover-cobertura < coverage.txt > coverage.xml
+          - template: '../../../global/abstracts/scripts-repo.yaml'
+          - script: $(Scripts.Directory)/global/scripts/golang/test/run.sh

@@ -5,17 +5,8 @@ test:all:
   extends: '.go'
   stage: 'tests'
   script:
-    # TODO: this should be a share script between the vendors
-    - export INIT_SCRIPT="config.sh"
-    - "[[ -f $INIT_SCRIPT ]] && ./$INIT_SCRIPT || echo \"The '$INIT_SCRIPT' file is not found, skipping...\""
-    - touch coverage.xml
-    - go test -v -tags test,unit,integration
-        -coverpkg ./main/...
-        -covermode=count ./main/...
-        -coverprofile=coverage.txt
-    - go tool cover -func coverage.txt
-    - go install github.com/boumenot/gocover-cobertura@latest
-    - gocover-cobertura < coverage.txt > coverage.xml
+    - !reference [ .scripts-repo, before_script ]
+    - $SCRIPTS_DIR/global/scripts/golang/test/run.sh
   coverage: '/total.*?([0-9]{1,3}[.][0-9]{0,2})%/'
   artifacts:
     when: 'always'

@@ -22,4 +22,4 @@ stages:
                 -coverprofile=coverage.txt
           - script: go tool cover -func coverage.txt
           - script: go install github.com/boumenot/gocover-cobertura@latest
-          - script: gocover-cobertura < coverage.txt > coverage.xml
+          - script: $GOPATH/bin/gocover-cobertura < coverage.txt > coverage.xml

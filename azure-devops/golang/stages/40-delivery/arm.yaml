@@ -5,6 +5,7 @@ stages:
       - job: 'delivery_qa'
         displayName: 'delivery:qa'
         steps:
+          # TODO: could we consider the use of Makefile?
           - task: 'GoTool@0'
             inputs:
               version: '1.20'
@@ -25,12 +26,13 @@ stages:
             inputs:
               Contents: |
                 api/function.json
+                bin/main
                 host.json
-              TargetFolder: '$(Build.SourcesDirectory)/bin'
+              TargetFolder: '$(Build.SourcesDirectory)/$(Build.BuildId)'
           - task: 'ArchiveFiles@2'
             inputs:
               archiveType: 'zip'
-              rootFolderOrFile: '$(Build.SourcesDirectory)/bin'
+              rootFolderOrFile: '$(Build.SourcesDirectory)/$(Build.BuildId)'
               archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
               includeRootFolder: false
               replaceExistingArchive: true

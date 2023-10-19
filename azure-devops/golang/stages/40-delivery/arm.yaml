@@ -16,13 +16,10 @@ stages:
               export INIT_SCRIPT="config.sh"
               [[ -f $INIT_SCRIPT ]] && ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
           - script: mkdir -p bin
-          - script: export CGO_ENABLED=0
-          - script: export BUILD_FLAGS="-ldflags='-w -s'"
-          - task: 'Go@0'
-            inputs:
-              command: 'build'
-              arguments: '-o ./bin -v ./...'
-              workingDirectory: '$(Build.SourcesDirectory)'
+          - script: |
+              export CGO_ENABLED=0
+              export BUILD_FLAGS="-ldflags='-w -s'"
+              go build -o ./bin -v ./...
           - task: 'CopyFiles@2'
             inputs:
               Contents: |

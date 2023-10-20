@@ -1,0 +1,36 @@
+stages:
+  - stage: 'delivery'
+    condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
+    displayName: 'delivery'
+    jobs:
+      - job: 'delivery'
+        displayName: 'delivery'
+        steps:
+          - template: .ci/clone-and-move-plugin-steps.yml
+            parameters:
+              TAG_NAME: '2.9.0'
+              PLUGIN_NAME: 'app'
+              COMMANDS: 'yarn osd bootstrap && yarn build'
+              ARTIFACT_NAME: 'build'
+              ARTIFACT_PATH: 'build'
+          - task: DownloadBuildArtifacts@0
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'build'
+              downloadPath: '.'
+          - task: Docker@2
+            displayName: Login
+            inputs:
+              command: login
+              containerRegistry: '$(dockerRegistryEndpoint)'
+          - script: |
+              docker buildx create --use
+
+          - script: |
+              docker buildx build --platform linux/amd64,linux/arm64 -t $(dockerRegistryServer)/opensearch-dashboards:latest --push .
+
+          - script: |
+              docker buildx build --platform linux/amd64,linux/arm64 -t $(dockerRegistryServer)/opensearch-dashboards:$(Build.SourceBranchName) --push .
+            condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/')
+      - template: '../../../global/stages/40-delivery/release.yaml'

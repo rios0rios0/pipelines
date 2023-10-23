@@ -1,0 +1,42 @@
+parameters:
+  - name: TAG_NAME
+    type: string
+  - name: PLUGIN_NAME
+    type: string
+  - name: COMMANDS
+    type: string
+  - name: ARTIFACT_NAME
+    type: string
+    default: ''
+  - name: ARTIFACT_PATH
+    type: string
+    default: ''
+
+steps:
+  - task: NodeTool@0
+    inputs:
+      versionSpec: '16.20.0'
+
+  - script: npm install --global yarn
+
+  - script: |
+      git clone --depth 1 --branch ${{ parameters.TAG_NAME }} https://github.com/opensearch-project/OpenSearch-Dashboards.git $(Agent.TempDirectory)/OpenSearch-Dashboards
+    displayName: 'Clone OpenSearch Dashboards repository'
+
+  - task: CopyFiles@2
+    inputs:
+      SourceFolder: '$(Build.Repository.LocalPath)'
+      Contents: '**'
+      TargetFolder: '$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}'
+    displayName: 'Copy Plugin to Plugins folder'
+
+  - script: |
+      cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
+      ${{ parameters.COMMANDS }}
+
+  - task: PublishBuildArtifacts@1
+    inputs:
+      PathtoPublish: '$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/${{ parameters.ARTIFACT_PATH }}'
+      ArtifactName: '${{ parameters.ARTIFACT_NAME }}'
+      publishLocation: 'Container'
+    condition: ne('${{ parameters.ARTIFACT_NAME }}', '')

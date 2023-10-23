@@ -6,7 +6,7 @@ stages:
       - job: 'test_all'
         displayName: 'test:all'
         steps:
-          - template: .ci/clone-and-move-plugin-steps.yml
+          - template: '../../../global/abstracts/clone-and-move-plugin-steps.yml'
             parameters:
               TAG_NAME: '2.9.0'
               PLUGIN_NAME: 'app'

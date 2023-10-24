@@ -18,6 +18,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
+- added the goreleaser pipelines
 - added the exposure for the coverage in Python projects
 - added SonarQube for Java and Python projects
 - added Maven support for Java projects

@@ -1,5 +1,6 @@
 stages:
   - stage: 'delivery'
+    condition: or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main'))
     displayName: 'delivery'
     jobs:
       - job: 'delivery_qa'

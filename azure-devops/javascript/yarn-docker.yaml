@@ -1,0 +1,5 @@
+stages:
+  - template: 'stages/10-code-check/yarn.yaml'
+  - template: 'stages/20-security/yarn.yaml'
+  - template: 'stages/30-tests/yarn.yaml'
+  - template: 'stages/40-delivery/docker.yaml'

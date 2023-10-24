@@ -1,0 +1,13 @@
+stages:
+  - stage: 'code_check'
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    displayName: 'code check (style/quality)'
+    jobs:
+      - job: 'style_eslint'
+        displayName: 'style:eslint'
+        steps:
+          - template: '../../../global/abstracts/clone-and-move-plugin-steps.yml'
+            parameters:
+              TAG_NAME: '2.9.0'
+              PLUGIN_NAME: 'app'
+              COMMANDS: 'yarn osd bootstrap && yarn lint'

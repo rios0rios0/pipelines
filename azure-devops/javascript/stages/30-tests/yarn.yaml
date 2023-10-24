@@ -1,0 +1,15 @@
+stages:
+  - stage: 'tests'
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    displayName: 'tests'
+    jobs:
+      - job: 'test_all'
+        displayName: 'test:all'
+        steps:
+          - template: '../../../global/abstracts/clone-and-move-plugin-steps.yml'
+            parameters:
+              TAG_NAME: '2.9.0'
+              PLUGIN_NAME: 'app'
+              COMMANDS: 'yarn osd bootstrap && yarn test:coverage'
+              ARTIFACT_NAME: 'coverage'
+              ARTIFACT_PATH: 'coverage'

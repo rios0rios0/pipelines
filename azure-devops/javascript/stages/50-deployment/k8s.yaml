@@ -1,0 +1,65 @@
+stages:
+  - stage: 'deployment'
+    condition: or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main'))
+    displayName: 'deployment'
+    jobs:
+      - job: 'deployment'
+        displayName: 'deployment'
+        steps:
+          - task: KubernetesManifest@0
+            inputs:
+              action: 'createSecret'
+              secretType: 'dockerRegistry'
+              secretName: '$(k8sImagePullSecret)'
+              dockerRegistryEndpoint: '$(dockerRegistryEndpoint)'
+              kubernetesServiceConnection: '$(k8sEndpoint)'
+              namespace: '$(k8sNamespace)'
+          - task: Kubernetes@1
+            inputs:
+              connectionType: 'Kubernetes Service Connection'
+              kubernetesServiceEndpoint: '$(k8sEndpoint)'
+              namespace: '$(k8sNamespace)'
+              configMapName: '$(k8sConfigmapName)'
+              forceUpdateConfigMap: true
+              configMapArguments: '--from-file=.ci/config/opensearch_dashboards.yml'
+          - task: KubernetesManifest@0
+            inputs:
+              action: 'patch'
+              kind: 'deployment'
+              name: '$(k8sDeploymentName)'
+              mergeStrategy: 'strategic'
+              patch: '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"$(k8sImagePullSecret)"}]}}}}'
+              kubernetesServiceConnection: '$(k8sEndpoint)'
+              namespace: '$(k8sNamespace)'
+          - task: KubernetesManifest@0
+            inputs:
+              action: 'patch'
+              kind: 'deployment'
+              name: '$(k8sDeploymentName)'
+              mergeStrategy: 'strategic'
+              patch: '{"spec":{"template":{"spec":{"volumes":[{"name":"$(k8sDeploymentName)","configMap":{"name":"$(k8sConfigmapName)"}}]}}}}'
+              kubernetesServiceConnection: '$(k8sEndpoint)'
+              namespace: '$(k8sNamespace)'
+          - task: KubernetesManifest@0
+            inputs:
+              action: 'patch'
+              kind: 'deployment'
+              name: '$(k8sDeploymentName)'
+              mergeStrategy: 'strategic'
+              patch: '{"spec":{"template":{"spec":{"containers":[{"name":"$(k8sContainerName)","volumeMounts":[{"name":"$(k8sDeploymentName)","mountPath": "/usr/share/opensearch-dashboards/config/opensearch_dashboards.yml","subPath":"opensearch_dashboards.yml"}]}]}}}}'
+              kubernetesServiceConnection: '$(k8sEndpoint)'
+              namespace: '$(k8sNamespace)'
+          - task: Kubernetes@1
+            inputs:
+              connectionType: 'Kubernetes Service Connection'
+              kubernetesServiceEndpoint: '$(k8sEndpoint)'
+              namespace: '$(k8sNamespace)'
+              command: 'set'
+              arguments: 'image deployment/$(k8sDeploymentName) $(k8sContainerName)=$(k8sImageTag)'
+          - task: Kubernetes@1
+            inputs:
+              connectionType: 'Kubernetes Service Connection'
+              kubernetesServiceEndpoint: '$(k8sEndpoint)'
+              namespace: '$(k8sNamespace)'
+              command: 'rollout'
+              arguments: 'restart deployment/$(k8sDeploymentName)'

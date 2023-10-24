@@ -1,5 +1,6 @@
 stages:
   - stage: 'code_check'
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     displayName: 'code check (style/quality)'
     jobs:
       - job: 'style_golangci_lint'

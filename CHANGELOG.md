@@ -22,6 +22,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added the exposure for the coverage in Python projects
 - added SonarQube for Java and Python projects
 - added Maven support for Java projects
+- added Azure Devops support for JavaScript
+- added option to override a Semgrep rule
 
 ### Changed
 

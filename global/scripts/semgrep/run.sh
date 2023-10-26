@@ -12,24 +12,7 @@ fileName="$CONTAINER_PATH/$REPORT_PATH/semgrep.json"
 defaultFile="$SCRIPTS_DIR/global/scripts/semgrep/.semgrepignore"
 cp "$defaultFile" .
 
-if [ -f ".semgrep.yaml" ]; then
-  docker run \
-  -v "$(pwd):$CONTAINER_PATH" \
-  --workdir "$CONTAINER_PATH" \
-  returntocorp/semgrep:latest \
-  semgrep \
-  --metrics=off \
-  --config "p/$1" \
-  --config "p/docker" \
-  --config "p/dockerfile" \
-  --config "p/secrets" \
-  --config "p/owasp-top-ten" \
-  --config "p/r2c-best-practices" \
-  --config ".semgrep.yaml" \
-  --enable-version-check --force-color \
-  --error --json --output "$fileName" || EXIT_CODE=$?
-else
-  docker run \
+dockerRun="docker run \
   -v "$(pwd):$CONTAINER_PATH" \
   --workdir "$CONTAINER_PATH" \
   returntocorp/semgrep:latest \
@@ -42,8 +25,23 @@ else
   --config "p/owasp-top-ten" \
   --config "p/r2c-best-practices" \
   --enable-version-check --force-color \
-  --error --json --output "$fileName" || EXIT_CODE=$?
+  --error --json --output "$fileName"" 
+
+if [ -f ".semgrepexcluderules" ]; then # check if you have rules to exclude
+  semgrepExcludeRules=""
+  IFS='
+  '
+  for line in $(cat ".semgrepexcluderules"); do
+    semgrepExcludeRules="$semgrepExcludeRules --exclude-rule $line"
+  done
+  dockerRun="$dockerRun$semgrepExcludeRules"
 fi
+
+if [ -f ".semgrep.yaml" ]; then # check if you have custom rules to add
+  dockerRun="$dockerRun --config ".semgrep.yaml""
+fi
+
+eval "$dockerRun" || EXIT_CODE=$?
 
 if ! ls "$REPORT_PATH"/*.json 1> /dev/null 2>&1; then
   echo "OK" > "$fileName"

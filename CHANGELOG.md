@@ -40,6 +40,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 -
 
+### Fixed
+
+- fixed the regex matching the merge commit messages
+
 ## [1.0.0] - 2023-01-02
 
 ### Added

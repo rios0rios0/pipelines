@@ -35,6 +35,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added the JS rules to test, monitor and deploy
 - corrected Semgrep to add the capability to merge the ignore files
 - changed the version of the container `GoLang` to `1.19`
+- changed `release` code in every step to have a regex more flexible to catch in any merge case
 
 ### Removed
 

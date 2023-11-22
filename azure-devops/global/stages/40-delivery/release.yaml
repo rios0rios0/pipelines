@@ -1,11 +1,12 @@
 jobs:
   - job: 'release'
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), contains(variables['Build.SourceVersionMessage'], 'origin/chore/bump-'))
     steps:
       - script: |
           set -eux
-          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
-          if echo -n "$COMMIT_MESSAGE" | grep -Eq "^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)' into '\w+'$"; then
-            VERSION=$(echo "$CI_COMMIT_MESSAGE" | sed -n -E "s/^Merge.*branch '(origin\/)?chore\/bump-([^']+)' into '.*'$/\2/p")
+          COMMIT_MESSAGE="$(git log -1 --pretty=%B)"
+          if echo -n "$COMMIT_MESSAGE" | grep -Eq "^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)'.*$"; then
+            VERSION=$(echo "$COMMIT_MESSAGE" | sed -En "s/^Merge.*branch '(origin\/)?chore\/bump-([^']+)'.*$/\2/p")
 
             RELEASE_NOTES=""
             if [ -f CHANGELOG.md ]; then
@@ -28,4 +29,3 @@ jobs:
           else
               echo 'Commit is not a bump, not creating a release'
           fi
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), contains(variables['Build.SourceVersionMessage'], 'origin/chore/bump-'))

@@ -9,8 +9,14 @@ chmod -R 777 "$REPORT_PATH" # DinD approach needs this line
 export CONTAINER_PATH="/src" # for this tool, it must be this value
 fileName="$CONTAINER_PATH/$REPORT_PATH/semgrep.json"
 
-defaultFile="$SCRIPTS_DIR/global/scripts/semgrep/.semgrepignore"
-cp "$defaultFile" .
+# TODO: Should we merge files?
+ignoreFileExists=true
+
+if [ ! -f ".semgrepignore" ]; then
+  ignoreFileExists=false
+  defaultFile="$SCRIPTS_DIR/global/scripts/semgrep/.semgrepignore"
+  cp "$defaultFile" .
+fi
 
 dockerRun="docker run \
   -v "$(pwd):$CONTAINER_PATH" \
@@ -47,5 +53,7 @@ if ! ls "$REPORT_PATH"/*.json 1> /dev/null 2>&1; then
   echo "OK" > "$fileName"
 fi
 
-rm .semgrepignore
+if [ ! $ignoreFileExists ]; then
+  rm .semgrepignore
+fi
 exit $EXIT_CODE

@@ -36,6 +36,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - corrected Semgrep to add the capability to merge the ignore files
 - changed the version of the container `GoLang` to `1.19`
 - changed `release` code in every step to have a regex more flexible to catch in any merge case
+- changed `semgrep` to only use default `.semgrepignore` file if custom is not available
 
 ### Removed
 

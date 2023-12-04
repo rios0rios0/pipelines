@@ -1,12 +1,14 @@
 jobs:
   - job: 'release'
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), contains(variables['Build.SourceVersionMessage'], 'origin/chore/bump-'))
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), or(contains(variables['Build.SourceVersionMessage'], 'origin/chore/bump-'), contains(variables['Build.SourceVersionMessage'], 'chore(bump)')))
     steps:
       - script: |
           set -eux
           COMMIT_MESSAGE="$(git log -1 --pretty=%B)"
-          if echo -n "$COMMIT_MESSAGE" | grep -Eq "^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)'.*$"; then
-            VERSION=$(echo "$COMMIT_MESSAGE" | sed -En "s/^Merge.*branch '(origin\/)?chore\/bump-([^']+)'.*$/\2/p")
+          REGEX="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)'.*|.*chore\(bump\) *.* to ([0-9]+\.[0-9]+\.[0-9]+)$"
+
+          if echo -n "$COMMIT_MESSAGE" | grep -Eq "$REGEX"; then
+            VERSION=$(echo "$COMMIT_MESSAGE" | sed -En "s/$REGEX/\3\4/p")
 
             RELEASE_NOTES=""
             if [ -f CHANGELOG.md ]; then

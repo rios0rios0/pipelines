@@ -48,7 +48,7 @@ stages:
               deploymentMode: 'Incremental'
           - task: 'AzureFunctionApp@1'
             inputs:
-              appName: '$(environment)-fa-$(functionAppName)-$(location)'
+              appName: '$(environment)-fn-$(functionAppName)-$(location)'
               appType: 'functionAppLinux'
               azureSubscription: '$(serviceConnection)'
               package: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'

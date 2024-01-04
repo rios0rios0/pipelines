@@ -1,12 +1,12 @@
 .pdm:
-  image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
+  image: 'ghcr.io/fnk0c/pipelines/python:3.10-pdm-bullseye-2'
   cache: # relative to the project directory ($CI_PROJECT_DIR)
     key: "$CI_JOB_NAME"
     paths:
       - '.venv'
     when: 'always'
   before_script:
-    - pdm install
+    - pdm install -v
   tags:
     - 'dev-gitlab-runner-onprem'
   rules:

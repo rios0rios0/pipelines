@@ -24,6 +24,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added Maven support for Java projects
 - added Azure Devops support for JavaScript
 - added option to override a Semgrep rule
+- added step to run migrations in Azure Pipelines
 
 ### Changed
 

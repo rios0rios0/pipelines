@@ -25,6 +25,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added Azure Devops support for JavaScript
 - added option to override a Semgrep rule
 - added step to run migrations in Azure Pipelines
+- added step to create and delete firewall rule to run migrations
 
 ### Changed
 

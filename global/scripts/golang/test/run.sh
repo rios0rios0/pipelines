@@ -11,8 +11,13 @@ export INIT_SCRIPT="config.sh"
 [[ -f $INIT_SCRIPT ]] && ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
 
 touch coverage.xml
-go test -v -tags test,unit,integration -coverpkg ./main/... -covermode=count ./main/... -coverprofile=coverage.txt
 
+# determine the directory to use
+dir="cmd"
+[ -d "$(pwd)/main" ] && dir="main"
+
+# run the tests
+go test -v -tags test,unit,integration -coverpkg ./$dir/... -covermode=count ./$dir/... -coverprofile=coverage.txt
 go tool cover -func coverage.txt
 go install github.com/boumenot/gocover-cobertura@latest
 gocover-cobertura < coverage.txt > coverage.xml

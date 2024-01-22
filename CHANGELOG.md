@@ -40,6 +40,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed `release` code in every step to have a regex more flexible to catch in any merge case
 - changed `semgrep` to only use default `.semgrepignore` file if custom is not available
 - changed the GoLang code to have multiple standards to run testing
+- refactor firewall rules for migrations in delivery stage
 
 ### Removed
 

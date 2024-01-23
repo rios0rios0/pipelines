@@ -8,6 +8,6 @@ stages:
         steps:
           - template: '../../../global/abstracts/clone-and-move-plugin-steps.yml'
             parameters:
-              TAG_NAME: '2.11.0'
+              TAG_NAME: '2.11.1'
               PLUGIN_NAME: 'app'
               COMMANDS: 'yarn osd bootstrap && yarn lint'

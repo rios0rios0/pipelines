@@ -18,7 +18,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added the goreleaser pipelines
+- added the `goreleaser` pipelines
 - added the exposure for the coverage in Python projects
 - added SonarQube for Java and Python projects
 - added Maven support for Java projects
@@ -26,6 +26,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added option to override a Semgrep rule
 - added step to run migrations in Azure Pipelines
 - added step to create and delete firewall rule to run migrations
+- added the missing configuration to Azure DevOps deployment with JS
 
 ### Changed
 
@@ -41,6 +42,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed `semgrep` to only use default `.semgrepignore` file if custom is not available
 - changed the GoLang code to have multiple standards to run testing
 - refactor firewall rules for migrations in delivery stage
+- corrected the way the delivery and deployment steps are skipped or not in Azure DevOps
 
 ### Removed
 

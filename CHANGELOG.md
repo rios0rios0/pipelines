@@ -44,6 +44,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - refactor firewall rules for migrations in delivery stage
 - corrected the way the delivery and deployment steps are skipped or not in Azure DevOps
 - corrected GoLang delivery and deployment to have the default image and the proper format
+- changed Javascript deployment to continue tasks with error
 
 ### Removed
 

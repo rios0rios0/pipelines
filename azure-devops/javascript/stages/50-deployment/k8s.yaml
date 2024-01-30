@@ -31,6 +31,7 @@ stages:
               patch: '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"$(k8sImagePullSecret)"}]}}}}'
               kubernetesServiceConnection: '$(k8sEndpoint)'
               namespace: '$(k8sNamespace)'
+            continueOnError: true
           - task: KubernetesManifest@0
             inputs:
               action: 'patch'
@@ -40,6 +41,7 @@ stages:
               patch: '{"spec":{"template":{"spec":{"volumes":[{"name":"$(k8sDeploymentName)","configMap":{"name":"$(k8sConfigmapName)"}}]}}}}'
               kubernetesServiceConnection: '$(k8sEndpoint)'
               namespace: '$(k8sNamespace)'
+            continueOnError: true
           - task: KubernetesManifest@0
             inputs:
               action: 'patch'
@@ -49,6 +51,7 @@ stages:
               patch: '{"spec":{"template":{"spec":{"containers":[{"name":"$(k8sContainerName)","volumeMounts":[{"name":"$(k8sDeploymentName)","mountPath": "/usr/share/opensearch-dashboards/config/opensearch_dashboards.yml","subPath":"opensearch_dashboards.yml"}]}]}}}}'
               kubernetesServiceConnection: '$(k8sEndpoint)'
               namespace: '$(k8sNamespace)'
+            continueOnError: true
           - task: Kubernetes@1
             inputs:
               connectionType: 'Kubernetes Service Connection'

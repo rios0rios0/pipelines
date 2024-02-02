@@ -27,6 +27,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added step to run migrations in Azure Pipelines
 - added step to create and delete firewall rule to run migrations
 - added the missing configuration to Azure DevOps deployment with JS
+- added a new step to replace the environment variables contained inside the `yaml` file
 
 ### Changed
 

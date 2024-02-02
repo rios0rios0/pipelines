@@ -14,6 +14,13 @@ stages:
               dockerRegistryEndpoint: '$(dockerRegistryEndpoint)'
               kubernetesServiceConnection: '$(k8sEndpoint)'
               namespace: '$(k8sNamespace)'
+          - script: |
+              for var in $(compgen -e); do
+                escaped_value=$(printf '%s\n' "${!var}" | sed 's:[\/&]:\\&:g;$!s/$/\\/')
+                sed -i "s/\$($var)/$escaped_value/g" .ci/config/opensearch_dashboards.yml
+                sed -i "s/\${$var}/$escaped_value/g" .ci/config/opensearch_dashboards.yml
+              done
+            displayName: 'Replace Environment Variables'
           - task: Kubernetes@1
             inputs:
               connectionType: 'Kubernetes Service Connection'

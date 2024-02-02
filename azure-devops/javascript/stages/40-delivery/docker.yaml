@@ -23,14 +23,16 @@ stages:
             displayName: Login
             inputs:
               command: login
-              containerRegistry: '$(dockerRegistryEndpoint)'
+              containerRegistry: '$(DOCKER_REGISTRY_ENDPOINT)'
           - script: |
               docker buildx create --use
-
+          # DOCKER_CONTAINER_IMAGE = registry + image name + tag (for dev, always latest)
           - script: |
-              docker buildx build --platform linux/amd64,linux/arm64 -t $(dockerRegistryServer)/opensearch-dashboards:latest --push .
-
+              docker buildx build --platform linux/amd64,linux/arm64 -t $(DOCKER_CONTAINER_IMAGE) --push .
+            condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+          # DOCKER_CONTAINER_IMAGE = registry + image name + tag (for prod, the semver + latest)
           - script: |
-              docker buildx build --platform linux/amd64,linux/arm64 -t $(dockerRegistryServer)/opensearch-dashboards:$(Build.SourceBranchName) --push .
+              imageName=$(echo $(DOCKER_CONTAINER_IMAGE) | cut -d':' -f1)
+              docker buildx build --platform linux/amd64,linux/arm64 -t $(DOCKER_CONTAINER_IMAGE) -t $imageName:latest --push .
             condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/')
       - template: '../../../global/stages/40-delivery/release.yaml'

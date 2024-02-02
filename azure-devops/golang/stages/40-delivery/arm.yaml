@@ -38,19 +38,19 @@ stages:
           # TODO: this should be the deployment stage
           - task: 'AzureResourceGroupDeployment@2'
             inputs:
-              location: '$(location)'
+              location: '$(AZM_LOCATION)'
               action: 'Create Or Update Resource Group'
-              azureSubscription: '$(serviceConnection)'
-              resourceGroupName: '$(environment)-rg-$(functionAppName)-$(location)'
+              azureSubscription: '$(AZM_SERVICE_CONNECTION)'
+              resourceGroupName: '$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)'
               csmFile: 'azuredeploy.json'
-              overrideParameters: '-location $(location) -environment $(environment) -functionAppName $(functionAppName) -inboundAllowedIps $(inboundAllowedIps)'
+              overrideParameters: '-location $(AZM_LOCATION) -environment $(ENVIRONMENT) -functionAppName $(AZM_FUNCTION_NAME) -inboundAllowedIps $(INBOUND_ALLOWED_IPS)'
               templateLocation: 'Linked artifact'
               deploymentMode: 'Incremental'
               deploymentOutputs: 'OUTPUTS'
           - task: AzureCLI@2
             displayName: Migrations
             inputs:
-              azureSubscription: '$(serviceConnection)'
+              azureSubscription: '$(AZM_SERVICE_CONNECTION)'
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
@@ -58,10 +58,10 @@ stages:
                 if grep -r 'goose' db/*.sql; then
                   PIPELINE_IP=$(curl -s ifconfig.me/ip)
                   PIPELINE_FIREWALL_NAME="PipelineFirewall_$(date +"%Y%m%d%H%M%S")"
-                  RESOURCE_GROUP_NAME=$(environment)-rg-$(functionAppName)-$(location)
+                  RESOURCE_GROUP_NAME=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
                   DATABASE_SERVER_NAME=$(OUTPUTS.databaseServername.value)
 
-                # TODO: create firewall for others databases 
+                # TODO: create firewall for others databases
                 # TODO: this command is here because, without it, the code wasn't authorized, need to investigate the reason
                   az --version
                   az postgres flexible-server firewall-rule create \
@@ -91,9 +91,9 @@ stages:
                 fi
           - task: 'AzureFunctionApp@1'
             inputs:
-              appName: '$(environment)-fn-$(functionAppName)-$(location)'
+              appName: '$(ENVIRONMENT)-fn-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)'
               appType: 'functionAppLinux'
-              azureSubscription: '$(serviceConnection)'
+              azureSubscription: '$(AZM_SERVICE_CONNECTION)'
               package: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
               deployMethod: 'zipDeploy'
       - template: '../../../global/stages/40-delivery/release.yaml'

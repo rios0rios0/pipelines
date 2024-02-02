@@ -10,10 +10,10 @@ stages:
             inputs:
               action: 'createSecret'
               secretType: 'dockerRegistry'
-              secretName: '$(k8sImagePullSecret)'
-              dockerRegistryEndpoint: '$(dockerRegistryEndpoint)'
-              kubernetesServiceConnection: '$(k8sEndpoint)'
-              namespace: '$(k8sNamespace)'
+              secretName: '$(K8S_IMAGE_PULL_SECRET_NAME)'
+              dockerRegistryEndpoint: '$(DOCKER_REGISTRY_ENDPOINT)'
+              kubernetesServiceConnection: '$(K8S_ENDPOINT)'
+              namespace: '$(K8S_NAMESPACE)'
           - script: |
               for var in $(compgen -e); do
                 escaped_value=$(printf '%s\n' "${!var}" | sed 's:[\/&]:\\&:g;$!s/$/\\/')
@@ -24,52 +24,53 @@ stages:
           - task: Kubernetes@1
             inputs:
               connectionType: 'Kubernetes Service Connection'
-              kubernetesServiceEndpoint: '$(k8sEndpoint)'
-              namespace: '$(k8sNamespace)'
-              configMapName: '$(k8sConfigmapName)'
+              kubernetesServiceEndpoint: '$(K8S_ENDPOINT)'
+              namespace: '$(K8S_NAMESPACE)'
+              configMapName: '$(K8S_CONFIGMAP_NAME)'
               forceUpdateConfigMap: true
               configMapArguments: '--from-file=.ci/config/opensearch_dashboards.yml'
           - task: KubernetesManifest@0
             inputs:
               action: 'patch'
               kind: 'deployment'
-              name: '$(k8sDeploymentName)'
+              name: '$(K8S_DEPLOYMENT_NAME)'
               mergeStrategy: 'strategic'
-              patch: '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"$(k8sImagePullSecret)"}]}}}}'
-              kubernetesServiceConnection: '$(k8sEndpoint)'
-              namespace: '$(k8sNamespace)'
+              patch: '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"$(K8S_IMAGE_PULL_SECRET_NAME)"}]}}}}'
+              kubernetesServiceConnection: '$(K8S_ENDPOINT)'
+              namespace: '$(K8S_NAMESPACE)'
             continueOnError: true
           - task: KubernetesManifest@0
             inputs:
               action: 'patch'
               kind: 'deployment'
-              name: '$(k8sDeploymentName)'
+              name: '$(K8S_DEPLOYMENT_NAME)'
               mergeStrategy: 'strategic'
-              patch: '{"spec":{"template":{"spec":{"volumes":[{"name":"$(k8sDeploymentName)","configMap":{"name":"$(k8sConfigmapName)"}}]}}}}'
-              kubernetesServiceConnection: '$(k8sEndpoint)'
-              namespace: '$(k8sNamespace)'
+              patch: '{"spec":{"template":{"spec":{"volumes":[{"name":"$(K8S_DEPLOYMENT_NAME)","configMap":{"name":"$(K8S_CONFIGMAP_NAME)"}}]}}}}'
+              kubernetesServiceConnection: '$(K8S_ENDPOINT)'
+              namespace: '$(K8S_NAMESPACE)'
             continueOnError: true
           - task: KubernetesManifest@0
             inputs:
               action: 'patch'
               kind: 'deployment'
-              name: '$(k8sDeploymentName)'
+              name: '$(K8S_DEPLOYMENT_NAME)'
               mergeStrategy: 'strategic'
-              patch: '{"spec":{"template":{"spec":{"containers":[{"name":"$(k8sContainerName)","volumeMounts":[{"name":"$(k8sDeploymentName)","mountPath": "/usr/share/opensearch-dashboards/config/opensearch_dashboards.yml","subPath":"opensearch_dashboards.yml"}]}]}}}}'
-              kubernetesServiceConnection: '$(k8sEndpoint)'
-              namespace: '$(k8sNamespace)'
+              patch: '{"spec":{"template":{"spec":{"containers":[{"name":"$(K8S_CONTAINER_NAME)","volumeMounts":[{"name":"$(K8S_DEPLOYMENT_NAME)","mountPath": "/usr/share/opensearch-dashboards/config/opensearch_dashboards.yml","subPath":"opensearch_dashboards.yml"}]}]}}}}'
+              kubernetesServiceConnection: '$(K8S_ENDPOINT)'
+              namespace: '$(K8S_NAMESPACE)'
             continueOnError: true
           - task: Kubernetes@1
             inputs:
               connectionType: 'Kubernetes Service Connection'
-              kubernetesServiceEndpoint: '$(k8sEndpoint)'
-              namespace: '$(k8sNamespace)'
+              kubernetesServiceEndpoint: '$(K8S_ENDPOINT)'
+              namespace: '$(K8S_NAMESPACE)'
               command: 'set'
-              arguments: 'image deployment/$(k8sDeploymentName) $(k8sContainerName)=$(k8sImageTag)'
+              # DOCKER_CONTAINER_IMAGE = registry + image name + tag
+              arguments: 'image deployment/$(K8S_DEPLOYMENT_NAME) $(K8S_CONTAINER_NAME)=$(DOCKER_CONTAINER_IMAGE)'
           - task: Kubernetes@1
             inputs:
               connectionType: 'Kubernetes Service Connection'
-              kubernetesServiceEndpoint: '$(k8sEndpoint)'
-              namespace: '$(k8sNamespace)'
+              kubernetesServiceEndpoint: '$(K8S_ENDPOINT)'
+              namespace: '$(K8S_NAMESPACE)'
               command: 'rollout'
-              arguments: 'restart deployment/$(k8sDeploymentName)'
+              arguments: 'restart deployment/$(K8S_DEPLOYMENT_NAME)'

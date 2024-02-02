@@ -14,6 +14,12 @@ stages:
               dockerRegistryEndpoint: '$(dockerRegistryEndpoint)'
               kubernetesServiceConnection: '$(k8sEndpoint)'
               namespace: '$(k8sNamespace)'
+          - script: |
+              sed -i "s/\$(OPENSEARCH_USERNAME)/$OPENSEARCH_USERNAME/g" $(System.DefaultWorkingDirectory)/.ci/config/opensearch_dashboards.yml
+              sed -i "s/\$(OPENSEARCH_PASSWORD)/$OPENSEARCH_PASSWORD/g" $(System.DefaultWorkingDirectory)/.ci/config/opensearch_dashboards.yml
+              sed -i "s/\$(OPENID_CLIENT_ID)/$OPENID_CLIENT_ID/g" $(System.DefaultWorkingDirectory)/.ci/config/opensearch_dashboards.yml
+              sed -i "s/\$(OPENID_CLIENT_SECRET)/$OPENID_CLIENT_SECRET/g" $(System.DefaultWorkingDirectory)/.ci/config/opensearch_dashboards.yml
+            displayName: 'Replace Environment Variables'
           - task: Kubernetes@1
             inputs:
               connectionType: 'Kubernetes Service Connection'

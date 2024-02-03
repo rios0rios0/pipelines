@@ -20,7 +20,7 @@ stages:
               artifactName: 'build'
               downloadPath: '.'
           - task: Docker@2
-            displayName: 'Login'
+            displayName: 'Docker Login'
             inputs:
               command: 'login'
               containerRegistry: '$(DOCKER_REGISTRY_ENDPOINT)'

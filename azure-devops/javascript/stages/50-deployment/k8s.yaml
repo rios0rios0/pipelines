@@ -59,13 +59,16 @@ stages:
               kubernetesServiceConnection: '$(K8S_ENDPOINT)'
               namespace: '$(K8S_NAMESPACE)'
             continueOnError: true
+          # TODO: this command below should wait for the deployment to be ready
           - task: Kubernetes@1
             inputs:
               connectionType: 'Kubernetes Service Connection'
               kubernetesServiceEndpoint: '$(K8S_ENDPOINT)'
               namespace: '$(K8S_NAMESPACE)'
               command: 'set'
-              arguments: 'image deployment/$(K8S_DEPLOYMENT_NAME) $(K8S_CONTAINER_NAME)=$(DOCKER_CONTAINER_IMAGE):$(delivery.build.DOCKER_CONTAINER_TAG)'
+              # TODO: this output is not being parsed correctly
+              arguments: "image deployment/$(K8S_DEPLOYMENT_NAME) $(K8S_CONTAINER_NAME)=$(DOCKER_CONTAINER_IMAGE):$(stageDependencies.delivery.delivery.outputs['build.DOCKER_CONTAINER_TAG'])"
+          # TODO: this command below should wait for the deployment to be ready
           - task: Kubernetes@1
             inputs:
               connectionType: 'Kubernetes Service Connection'

@@ -65,8 +65,7 @@ stages:
               kubernetesServiceEndpoint: '$(K8S_ENDPOINT)'
               namespace: '$(K8S_NAMESPACE)'
               command: 'set'
-              # DOCKER_CONTAINER_IMAGE = registry + image name + tag
-              arguments: 'image deployment/$(K8S_DEPLOYMENT_NAME) $(K8S_CONTAINER_NAME)=$(DOCKER_CONTAINER_IMAGE)'
+              arguments: 'image deployment/$(K8S_DEPLOYMENT_NAME) $(K8S_CONTAINER_NAME)=$(DOCKER_CONTAINER_IMAGE):$(delivery.build.DOCKER_CONTAINER_TAG)'
           - task: Kubernetes@1
             inputs:
               connectionType: 'Kubernetes Service Connection'

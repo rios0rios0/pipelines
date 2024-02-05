@@ -2,6 +2,9 @@ stages:
   - stage: 'deployment'
     condition: or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     displayName: 'deployment'
+    dependsOn: 'delivery'
+    variables:
+      dockerContainerTag: $[stageDependencies.delivery.delivery.outputs['build.DOCKER_CONTAINER_TAG']]
     jobs:
       - job: 'deployment'
         displayName: 'deployment'
@@ -66,8 +69,7 @@ stages:
               kubernetesServiceEndpoint: '$(K8S_ENDPOINT)'
               namespace: '$(K8S_NAMESPACE)'
               command: 'set'
-              # TODO: this output is not being parsed correctly
-              arguments: "image deployment/$(K8S_DEPLOYMENT_NAME) $(K8S_CONTAINER_NAME)=$(DOCKER_CONTAINER_IMAGE):$(stageDependencies.delivery.delivery.outputs['build.DOCKER_CONTAINER_TAG'])"
+              arguments: "image deployment/$(K8S_DEPLOYMENT_NAME) $(K8S_CONTAINER_NAME)=$(DOCKER_CONTAINER_IMAGE):$(dockerContainerTag)"
           # TODO: this command below should wait for the deployment to be ready
           - task: Kubernetes@1
             inputs:

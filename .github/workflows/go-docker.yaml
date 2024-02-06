@@ -1,0 +1,84 @@
+# see the bottom of the file for more information¹
+# the parent workflow is responsible for setting up the call events²
+on:
+  workflow_call:
+
+# it wasn't needed to set up anything for GoLang because 'ubuntu-latest' has all dependencies
+jobs:
+  # first stage
+  code_check-style_golangci_lint:
+    name: 'code-check > style:golangci-lint'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/golang/stages/10-code-check/golangci-lint@feat/#19'
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
+  # second stage
+  security-sast_horusec:
+    name: 'security > sast:horusec'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-horusec@feat/#19'
+    needs: [ 'code_check-style_golangci_lint' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sast_semgrep:
+    name: 'security > sast:semgrep'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-semgrep@feat/#19'
+        with:
+          semgrep_lang: 'golang'
+    needs: [ 'code_check-style_golangci_lint' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sast_gitleaks:
+    name: 'security > sast:gitleaks'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-gitleaks@feat/#19'
+    needs: [ 'code_check-style_golangci_lint' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
+  # third stage
+  tests-test_all:
+    name: 'tests > test:all'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/golang/stages/30-tests/all@feat/#19'
+    needs: [ 'security-sast_horusec', 'security-sast_semgrep', 'security-sast_gitleaks' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
+  # fourth stage
+  delivery-docker:
+    name: 'delivery > docker'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/docker@feat/#19'
+    needs: [ 'tests-test_all' ]
+    if: "(github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/')"
+
+  delivery-release:
+    name: 'delivery > release'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@feat/#19'
+    needs: [ 'tests-test_all' ]
+    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.workflow_run.head_commit.message, 'origin/chore/bump-') && contains(github.event.workflow_run.head_commit.message, 'chore(bump)'))"
+
+
+# 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations
+# 2- the recommended events to trigger this work flow are:
+#on:
+#  push:
+#    branches:
+#      - 'main'
+#    tags:
+#      - '*'
+#  pull_request:
+#    branches:
+#      - 'main'
+#  workflow_dispatch:

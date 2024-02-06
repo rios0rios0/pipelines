@@ -1,0 +1,18 @@
+on:
+  workflow_call:
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: 'actions/checkout@v3'
+    - uses: 'docker/login-action@v3'
+      with:
+        registry: 'ghcr.io'
+        username: '${{ github.actor }}'
+        password: '${{ secrets.GITHUB_TOKEN }}'
+    - uses: 'docker/build-push-action@v5'
+      with:
+        file: '.ci/40-delivery/Dockerfile'
+        context: '.'
+        push: true
+        tags: "ghcr.io/${{ github.repository }}:latest,ghcr.io/${{ github.repository }}:${{ github.ref_type == 'tag' && github.ref[10:] || 'latest' }}"

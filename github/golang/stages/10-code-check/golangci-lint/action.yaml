@@ -1,0 +1,53 @@
+on:
+  workflow_call:
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: 'actions/checkout@v3'
+    - uses: 'rios0rios0/pipelines/github/golang/abstracts/scripts-repo@feat/#19'
+    - id: 'get-pr-details'
+      uses: 'actions/github-script@v7'
+      with:
+        script: |
+          const { data: pr } = await github.rest.pulls.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: ${{ github.event.number }}
+          });
+          return pr.head.sha;
+        result-encoding: 'string'
+    - id: 'create-check-run'
+      uses: 'actions/github-script@v7'
+      with:
+        script: |
+          const { data: checkRun } = await github.rest.checks.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            name: 'custom-check',
+            head_sha: ${{ steps.get-pr-details.outputs.result }},
+            status: 'in_progress',
+            output: {
+              title: 'Custom Check',
+              summary: 'The check is in progress...'
+            }
+          });
+          return checkRun.id;
+        result-encoding: 'string'
+    #- id: 'golangci_lint'
+    #  run: $SCRIPTS_DIR/global/scripts/golangci-lint/run.sh || echo "EXIT_CODE=$?" >> $GITHUB_ENV && exit $EXIT_CODE
+    #  shell: 'bash'
+    #  continue-on-error: true
+    - uses: 'actions/github-script@v7'
+      with:
+        script: |
+          await github.rest.checks.update({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            check_run_id: ${{ steps.create-check-run.outputs.result }},
+            conclusion: 'success',
+            output: {
+              title: 'Custom Check',
+              summary: "golangci-lint had detected issues in the code ($EXIT_CODE) :x:"
+            }
+          });

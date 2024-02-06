@@ -1,0 +1,15 @@
+on:
+  workflow_call:
+
+inputs:
+  semgrep_lang:
+    description: 'Sempgrep language to be used as default source'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: 'actions/checkout@v3'
+    - uses: 'rios0rios0/pipelines/github/golang/abstracts/scripts-repo@feat/#19'
+    - run: $SCRIPTS_DIR/global/scripts/semgrep/run.sh "${{ inputs.semgrep_lang }}"
+      shell: 'bash'

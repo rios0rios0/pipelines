@@ -89,9 +89,13 @@ stages:
                 else
                   echo "No Goose migration files found. Skipping Goose installation and migration."
                 fi
+          - script: |
+              siteName=$(echo $(OUTPUTS.siteName.value) | tr -d '"')
+              echo "##vso[task.setvariable variable=siteName]$siteName"
+            displayName: 'Getting siteName Variable'
           - task: 'AzureFunctionApp@1'
             inputs:
-              appName: '$(ENVIRONMENT)-fn-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)'
+              appName: '$(siteName)'
               appType: 'functionAppLinux'
               azureSubscription: '$(AZM_SERVICE_CONNECTION)'
               package: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'

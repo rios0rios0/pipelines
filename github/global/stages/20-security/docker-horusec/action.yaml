@@ -8,4 +8,3 @@ runs:
     - uses: 'rios0rios0/pipelines/github/golang/abstracts/scripts-repo@feat/#19'
     - run: $SCRIPTS_DIR/global/scripts/horusec/run.sh
       shell: 'bash'
-      continue-on-error: true # TODO: this is a temporary fix, remove it after the issue is fixed

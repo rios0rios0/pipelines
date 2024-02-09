@@ -30,6 +30,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added a new step to replace the environment variables contained inside the `yaml` file
 - added a script into the Golang `delivery` to get the new `siteName` variable
 - added the code check step for GoLang inside the GitHub Actions provider - [#19](https://github.com/rios0rios0/pipelines/issues/19)
+- added the binary release feature for GoLang pipelines
 
 ### Changed
 

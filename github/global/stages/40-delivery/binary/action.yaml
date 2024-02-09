@@ -1,7 +1,38 @@
 on:
   workflow_call:
 
+inputs:
+  binary_name:
+    description: 'Binary name to be used as default source'
+    required: true
+
 runs:
   using: 'composite'
+  env:
+    PACKAGE_NAME: '${{ inputs.binary_name }}-${{ github.ref[10:] }}'
+    DEBIAN_FRONTEND: 'noninteractive'
   steps:
-    # TODO: it should be finished with: "https://github.com/rios0rios0/autobump/blob/main/.github/workflows/release.yml#L68"
+    - run: |
+        make build
+        strip -s bin/${{ inputs.binary_name }}
+      shell: 'bash'
+    - run: |
+        cd bin
+        zip -9 ${{ env.PACKAGE_NAME }}.zip ${{ inputs.binary_name }}
+      shell: 'bash'
+    - uses: 'actions/upload-artifact@v2'
+      with:
+        name: '${{ inputs.binary_name }}'
+        path: 'bin/${{ env.PACKAGE_NAME }}.zip'
+    - uses: 'actions/download-artifact@v2'
+      with:
+        name: '${{ inputs.binary_name }}'
+    - uses: 'actions/upload-release-asset@v1'
+      # TODO: is this really necessary?
+      #env:
+      #  GITHUB_TOKEN: '${{ github.token }}'
+      with:
+        upload_url: '${{ steps.create_release.outputs.upload_url }}'
+        asset_path: '${{ env.PACKAGE_NAME }}.zip'
+        asset_name: '${{ env.PACKAGE_NAME }}.zip'
+        asset_content_type: 'application/zip'

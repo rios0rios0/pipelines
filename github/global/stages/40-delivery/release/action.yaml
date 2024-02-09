@@ -4,7 +4,7 @@ on:
 runs:
   using: 'composite'
   outputs:
-    upload_url: ${{ steps.create_release.outputs.upload_url }}
+    upload_url: '${{ steps.create_release.outputs.upload_url }}'
   steps:
     - id: 'create_release'
       uses: 'softprops/action-gh-release@v1'

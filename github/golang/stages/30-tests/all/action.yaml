@@ -1,0 +1,10 @@
+on:
+  workflow_call:
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: 'actions/checkout@v3'
+    - uses: 'rios0rios0/pipelines/github/golang/abstracts/scripts-repo@main'
+    - run: $SCRIPTS_DIR/global/scripts/golang/test/run.sh
+      shell: 'bash'

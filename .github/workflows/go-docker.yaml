@@ -1,0 +1,23 @@
+on:
+  workflow_call:
+
+jobs:
+  go:
+    uses: 'rios0rios0/pipelines/.github/workflows/go.yaml@main'
+
+  # fourth stage
+  delivery-docker:
+    name: 'delivery > docker'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/docker@main'
+    needs: [ 'go' ]
+    if: "(github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/')"
+
+  delivery-release:
+    name: 'delivery > release'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
+    needs: [ 'go' ]
+    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.workflow_run.head_commit.message, 'origin/chore/bump-') && contains(github.event.workflow_run.head_commit.message, 'chore(bump)'))"

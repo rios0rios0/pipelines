@@ -16,6 +16,10 @@ on:
       - 'main'
   workflow_dispatch:
 
+permissions:
+  checks: 'write' # code_check-style_golangci_lint
+  contents: 'write' # delivery-release
+
 jobs:
   default:
     uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'

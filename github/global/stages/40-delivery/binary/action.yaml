@@ -1,0 +1,7 @@
+on:
+  workflow_call:
+
+runs:
+  using: 'composite'
+  steps:
+    # TODO: it should be finished with: "https://github.com/rios0rios0/autobump/blob/main/.github/workflows/release.yml#L68"

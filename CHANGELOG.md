@@ -50,6 +50,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - corrected GoLang delivery and deployment to have the default image and the proper format
 - changed Javascript deployment to continue tasks with error
 - corrected use of `stageDependencies` in the deployment stage
+- changed GoLang pipeline to match with the GitHub merge commit message
 
 ### Removed
 

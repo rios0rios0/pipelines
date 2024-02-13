@@ -40,7 +40,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - corrected the coverage artifact to be uploaded with the XML report
 - corrected typos in the shell script
 - added the JS rules to test, monitor and deploy
-- corrected Semgrep to add the capability to merge the ignore files
+- corrected Semgrep to add the ability to merge the ignored rules files
 - changed the version of the container `GoLang` to `1.19`
 - changed `release` code in every step to have a regex more flexible to catch in any merge case
 - changed `semgrep` to only use default `.semgrepignore` file if custom is not available
@@ -59,6 +59,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Fixed
 
 - fixed the regex matching the merge commit messages
+- fixed the JS pipeline to output the right tag in the delivery step
 
 ## [1.0.0] - 2023-01-02
 

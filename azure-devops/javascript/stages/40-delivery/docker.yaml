@@ -28,7 +28,7 @@ stages:
               docker buildx create --use
 
               TAGS="$(DOCKER_CONTAINER_IMAGE):latest"
-              if [ "$(Build.SourceBranch)" == "refs/tags/"* ]; then
+              if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
                 TAGS="$TAGS,$(DOCKER_CONTAINER_IMAGE):$(Build.SourceBranchName)"
                 echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]$(Build.SourceBranchName)"
               else

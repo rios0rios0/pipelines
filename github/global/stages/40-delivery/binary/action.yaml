@@ -3,22 +3,24 @@ on:
 
 inputs:
   binary_name:
+    type: 'string'
     description: 'Binary name to be used as default source'
     required: true
 
 runs:
   using: 'composite'
-  env:
-    PACKAGE_NAME: '${{ inputs.binary_name }}-${{ github.ref[10:] }}'
-    DEBIAN_FRONTEND: 'noninteractive'
   steps:
+    - uses: 'actions/checkout@v3'
+    - run: |
+        echo "PACKAGE_NAME=$(echo '${{ inputs.binary_name }}-${{ github.ref }}' | sed 's/refs\/tags\///')" >> $GITHUB_ENV
+      shell: 'bash'
     - run: |
         make build
         strip -s bin/${{ inputs.binary_name }}
       shell: 'bash'
     - run: |
         cd bin
-        zip -9 ${{ env.PACKAGE_NAME }}.zip ${{ inputs.binary_name }}
+        zip -9 $PACKAGE_NAME.zip ${{ inputs.binary_name }}
       shell: 'bash'
     - uses: 'actions/upload-artifact@v2'
       with:
@@ -28,9 +30,6 @@ runs:
       with:
         name: '${{ inputs.binary_name }}'
     - uses: 'actions/upload-release-asset@v1'
-      # TODO: is this really necessary?
-      #env:
-      #  GITHUB_TOKEN: '${{ github.token }}'
       with:
         upload_url: '${{ steps.create_release.outputs.upload_url }}'
         asset_path: '${{ env.PACKAGE_NAME }}.zip'

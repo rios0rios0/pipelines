@@ -61,7 +61,7 @@ jobs:
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
     needs: [ 'tests-test_all' ]
-    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.workflow_run.head_commit.message, 'chore/bump-')"
+    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore/bump-')"
 
 
 # 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations

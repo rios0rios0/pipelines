@@ -51,6 +51,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed Javascript deployment to continue tasks with error
 - corrected use of `stageDependencies` in the deployment stage
 - changed GoLang pipeline to match with the GitHub merge commit message
+- simplified the patching mechanism in the `deployments` step for JS
 
 ### Removed
 

@@ -27,50 +27,54 @@ stages:
           - task: Kubernetes@1
             inputs:
               connectionType: 'Kubernetes Service Connection'
-              kubernetesServiceEndpoint: '$(K8S_ENDPOINT)'
-              namespace: '$(K8S_NAMESPACE)'
               configMapName: '$(K8S_CONFIGMAP_NAME)'
               forceUpdateConfigMap: true
               configMapArguments: '--from-file=.ci/config/opensearch_dashboards.yml'
-          - task: KubernetesManifest@0
-            inputs:
-              action: 'patch'
-              kind: 'deployment'
-              name: '$(K8S_DEPLOYMENT_NAME)'
-              mergeStrategy: 'strategic'
-              patch: '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"$(K8S_IMAGE_PULL_SECRET_NAME)"}]}}}}'
-              kubernetesServiceConnection: '$(K8S_ENDPOINT)'
-              namespace: '$(K8S_NAMESPACE)'
-            continueOnError: true
-          - task: KubernetesManifest@0
-            inputs:
-              action: 'patch'
-              kind: 'deployment'
-              name: '$(K8S_DEPLOYMENT_NAME)'
-              mergeStrategy: 'strategic'
-              patch: '{"spec":{"template":{"spec":{"volumes":[{"name":"$(K8S_DEPLOYMENT_NAME)","configMap":{"name":"$(K8S_CONFIGMAP_NAME)"}}]}}}}'
-              kubernetesServiceConnection: '$(K8S_ENDPOINT)'
-              namespace: '$(K8S_NAMESPACE)'
-            continueOnError: true
-          - task: KubernetesManifest@0
-            inputs:
-              action: 'patch'
-              kind: 'deployment'
-              name: '$(K8S_DEPLOYMENT_NAME)'
-              mergeStrategy: 'strategic'
-              patch: '{"spec":{"template":{"spec":{"containers":[{"name":"$(K8S_CONTAINER_NAME)","volumeMounts":[{"name":"$(K8S_DEPLOYMENT_NAME)","mountPath": "/usr/share/opensearch-dashboards/config/opensearch_dashboards.yml","subPath":"opensearch_dashboards.yml"}]}]}}}}'
-              kubernetesServiceConnection: '$(K8S_ENDPOINT)'
-              namespace: '$(K8S_NAMESPACE)'
-            continueOnError: true
-          # TODO: this command below should wait for the deployment to be ready
-          - task: Kubernetes@1
-            inputs:
-              connectionType: 'Kubernetes Service Connection'
               kubernetesServiceEndpoint: '$(K8S_ENDPOINT)'
               namespace: '$(K8S_NAMESPACE)'
-              command: 'set'
-              arguments: "image deployment/$(K8S_DEPLOYMENT_NAME) $(K8S_CONTAINER_NAME)=$(DOCKER_CONTAINER_IMAGE):$(dockerContainerTag)"
-          # TODO: this command below should wait for the deployment to be ready
+          - task: KubernetesManifest@0
+            inputs:
+              action: 'patch'
+              kind: 'deployment'
+              name: '$(K8S_DEPLOYMENT_NAME)'
+              mergeStrategy: 'strategic'
+              patch: |
+                {
+                  "spec": {
+                    "template": {
+                      "spec": {
+                        "imagePullSecrets": [
+                          {
+                            "name": "$(K8S_IMAGE_PULL_SECRET_NAME)"
+                          }
+                        ],
+                        "volumes": [
+                          {
+                            "name": "$(K8S_DEPLOYMENT_NAME)",
+                            "configMap": {
+                              "name": "$(K8S_CONFIGMAP_NAME)"
+                            }
+                          }
+                        ],
+                        "containers": [
+                          {
+                            "name": "$(K8S_CONTAINER_NAME)",
+                            "volumeMounts": [
+                              {
+                                "name": "$(K8S_DEPLOYMENT_NAME)",
+                                "mountPath": "/usr/share/opensearch-dashboards/config/opensearch_dashboards.yml",
+                                "subPath": "opensearch_dashboards.yml"
+                              }
+                            ],
+                            "image": "$(DOCKER_CONTAINER_IMAGE):$(dockerContainerTag)"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              kubernetesServiceConnection: '$(K8S_ENDPOINT)'
+              namespace: '$(K8S_NAMESPACE)'
           - task: Kubernetes@1
             inputs:
               connectionType: 'Kubernetes Service Connection'

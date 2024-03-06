@@ -55,7 +55,7 @@ stages:
               scriptLocation: 'inlineScript'
               inlineScript: |
                 # TODO: move this "IF" to a file and (or) use an Azure resource to create a condition
-                if grep -r 'goose' db/*.sql; then
+                if grep -r 'goose' db/migrations/*.sql; then
                   PIPELINE_IP=$(curl -s ifconfig.me/ip)
                   PIPELINE_FIREWALL_NAME="PipelineFirewall_$(date +"%Y%m%d%H%M%S")"
                   RESOURCE_GROUP_NAME=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
@@ -80,15 +80,31 @@ stages:
                   SSL=$(OUTPUTS.databaseServerSSL.value)
                   CONNECTION_STRING="host=$HOST port=$PORT user=$USER password=$PASSWORD dbname=$DBNAME sslmode=$SSL"
 
-                  $(go env GOPATH)/bin/goose -dir db postgres "$CONNECTION_STRING" up
+                  $(go env GOPATH)/bin/goose -dir db/migrations postgres "$CONNECTION_STRING" up
 
-                  az postgres flexible-server firewall-rule delete --yes \
-                    --resource-group "$RESOURCE_GROUP_NAME" \
-                    --name "$DATABASE_SERVER_NAME" \
-                    --rule-name "$PIPELINE_FIREWALL_NAME"
                 else
                   echo "No Goose migration files found. Skipping Goose installation and migration."
                 fi
+
+                if grep -r 'goose' db/seeders/*.sql; then
+                  for dir in "" "dev" "prod"; do
+                      if [ -z "$dir" ] || [ "$ENVIRONMENT" == "$dir" ]; then
+                        dir_path="db/seeders/$dir"
+                        dir_path=${dir_path%/}
+                        if grep -q 'goose' $dir_path/*.sql; then
+                          $(go env GOPATH)/bin/goose -dir $dir_path postgres "$CONNECTION_STRING" up
+                        fi
+                      fi
+                  done
+                else
+                    echo "No Goose seed files found. Skipping seed"
+                fi
+
+                az postgres flexible-server firewall-rule delete --yes \
+                  --resource-group "$RESOURCE_GROUP_NAME" \
+                  --name "$DATABASE_SERVER_NAME" \
+                  --rule-name "$PIPELINE_FIREWALL_NAME"
+
           - script: |
               siteName=$(echo $(OUTPUTS.siteName.value) | tr -d '"')
               echo "##vso[task.setvariable variable=siteName]$siteName"

@@ -29,7 +29,7 @@ stages:
 
               TAGS="$(DOCKER_CONTAINER_IMAGE):latest"
               if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
-                TAGS="$TAGS,$(DOCKER_CONTAINER_IMAGE):$(Build.SourceBranchName)"
+                TAGS="$TAGS -t $(DOCKER_CONTAINER_IMAGE):$(Build.SourceBranchName)"
                 echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]$(Build.SourceBranchName)"
               else
                 echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]latest"
@@ -37,4 +37,5 @@ stages:
 
               docker buildx build --platform linux/amd64,linux/arm64 -t $TAGS --push .
             name: 'build'
+        continueOnError: false
       - template: '../../../global/stages/40-delivery/release.yaml'

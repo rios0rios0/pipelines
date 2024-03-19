@@ -1,10 +1,14 @@
+variables:
+  KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: 'dev-gitlab-runner'
+  KUBERNETES_SERVICE_ACCOUNT_OVERWRITE_ALLOWED: '^[a-z]+-gitlab-runner$'
+
 deployment:qa:
   image: 'bitnami/kubectl'
   stage: 'deployment'
   environment:
     name: 'qa'
   script:
-    - kubectl get pods
+    - kubectl rollout restart deployment/$K8S_DEPLOYMENT_NAME --namespace=$K8S_NAMESPACE
   tags:
     - 'dev-gitlab-runner-onprem'
   rules:

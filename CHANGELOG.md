@@ -31,7 +31,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added a script into the Golang `delivery` to get the new `siteName` variable
 - added the code check step for GoLang inside the GitHub Actions provider - [#19](https://github.com/rios0rios0/pipelines/issues/19)
 - added the binary release feature for GoLang pipelines
-- added a script into the Golang `delivery` to seed the database using `Goose` 
+- added a script into the Golang `delivery` to seed the database using `Goose`
 
 ### Changed
 
@@ -54,6 +54,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed GoLang pipeline to match with the GitHub merge commit message
 - simplified the patching mechanism in the `deployments` step for JS
 - changed directory of migrations into Golang `delivery`
+- changed the Java projects to have deployment using Kubernetes environments
 
 ### Removed
 

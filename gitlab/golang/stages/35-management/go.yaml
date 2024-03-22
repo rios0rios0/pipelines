@@ -1,0 +1,26 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/35-management/abstracts.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/golang/abstracts/go.yaml'
+
+report:sonarqube:
+  extends: '.sonarqube'
+  script:
+    # Get the latest tag as the current project version
+    - version=$(git describe --tags --abbrev=0)
+    - 'if [ -z "$version" ]; then echo "Could not find the version tag in the repository"; exit 1; fi'
+    # Update sonar-project.properties
+    - echo "sonar.projectVersion=$version" >> sonar-project.properties
+    - echo "Updated sonar.projectVersion to $version"
+    - !reference [ .sonarqube, script ]
+
+report:dependency-track:
+  extends: [ '.go', '.dependency-track' ]
+  script:
+    - go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
+    # Determine the directory to use
+    - dir="cmd"
+    - '[ -d "$(pwd)/main" ] && dir="main"'
+    - cyclonedx-gomod app -json -output "$PREFIX$REPORT_PATH/bom.json" -packages -files -licenses -main $dir
+    - apt update && apt install -y --no-install-recommends curl jq
+    - !reference [ .dependency-track, script ]

@@ -19,8 +19,8 @@ report:dependency-track:
   script:
     - go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
     # Determine the directory to use
-    - dir="cmd"
-    - '[ -d "$(pwd)/main" ] && dir="main"'
-    - cyclonedx-gomod app -json -output "$PREFIX$REPORT_PATH/bom.json" -packages -files -licenses -main $dir
+    - folder="cmd"
+    - '[ -d "$(pwd)/main" ] && folder="main"'
+    - cyclonedx-gomod app -json -output "$PREFIX$REPORT_PATH/bom.json" -packages -files -licenses -main $folder
     - apt update && apt install -y --no-install-recommends curl jq
     - !reference [ .dependency-track, script ]

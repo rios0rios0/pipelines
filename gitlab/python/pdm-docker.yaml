@@ -6,7 +6,7 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/python/stages/35-management/pdm.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/40-delivery/docker.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/40-delivery/release.yaml'
-  #- remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/python/stages/5-deployment/k8s.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/50-deployment/k8s.yaml'
 
 stages:
   - 'code check (style/quality)'
@@ -14,3 +14,4 @@ stages:
   - 'tests'
   - 'management'
   - 'delivery'
+  - 'deployment'

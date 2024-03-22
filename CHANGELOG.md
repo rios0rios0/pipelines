@@ -32,6 +32,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added the code check step for GoLang inside the GitHub Actions provider - [#19](https://github.com/rios0rios0/pipelines/issues/19)
 - added the binary release feature for GoLang pipelines
 - added a script into the Golang `delivery` to seed the database using `Goose`
+- added Dependency Track and SonarQube for GoLang projects
+- added K8s deployment for all languages in GitLab CI
 
 ### Changed
 

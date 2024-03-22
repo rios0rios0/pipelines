@@ -12,11 +12,11 @@ deployment:qa:
   tags:
     - 'dev-gitlab-runner-onprem'
   rules:
-    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $K8S_DEPLOYMENT_NAME"
 
 deployment:prod:
   extends: 'deployment:qa'
   environment:
     name: 'prod'
   rules:
-    - if: "$CI_COMMIT_TAG"
+    - if: "$CI_COMMIT_TAG && $K8S_DEPLOYMENT_NAME"

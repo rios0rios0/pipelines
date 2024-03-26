@@ -1,12 +1,15 @@
-.yarn-without-image:
-  image: !reference [ .yarn, image ]
+.yarn:
+  image:
+    name: 'node:18.7.0-bullseye'
+    docker:
+      user: 'node'
   cache: # relative to the project directory ($CI_PROJECT_DIR)
     key: "$CI_JOB_NAME"
     paths:
       - 'node_modules'
     when: 'always'
+  before_script:
+    - yarn --frozen-lockfile
   rules:
     - if: "$CI_MERGE_REQUEST_IID"
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
-
-# TODO: those lines could be merged in a single job extended

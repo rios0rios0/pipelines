@@ -1,11 +1,13 @@
 include:
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/javascript/abstracts/yarn-without-image.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/javascript/abstracts/yarn.yaml'
 
 test:all:
-  extends: '.yarn-without-image'
+  extends: '.yarn'
   stage: 'tests'
   script:
-    - !reference [ .test:all, script ]
+    - !reference [ .test:all, before_script ]
+    - yarn test:ci
+    - !reference [ .test:all, after_script ]
   coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
   artifacts:
     when: 'always'

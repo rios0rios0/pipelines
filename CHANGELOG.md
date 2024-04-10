@@ -57,6 +57,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - simplified the patching mechanism in the `deployments` step for JS
 - changed directory of migrations into Golang `delivery`
 - changed the Java projects to have deployment using Kubernetes environments
+- changed the GoLang pipeline to remove the redundant make command
 
 ### Removed
 

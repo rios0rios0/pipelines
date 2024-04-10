@@ -6,7 +6,6 @@ delivery:go-releaser:
   stage: 'delivery'
   image: 'golang:latest'
   script:
-    - make compile
     - curl -sL 'https://github.com/goreleaser/goreleaser/releases/download/v1.21.2/goreleaser_1.21.2_amd64.deb' -o /tmp/goreleaser.deb
     - dpkg -i /tmp/goreleaser.deb
     - curl --silent "https://gitlab.com/gitlab-org/incubation-engineering/mobile-devops/download-secure-files/-/raw/main/installer" | bash

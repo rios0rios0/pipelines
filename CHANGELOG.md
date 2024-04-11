@@ -18,6 +18,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
+- added `musl-tools` in the goreleaser pipeline to support building with musl
 - added the `goreleaser` pipelines
 - added the exposure for the coverage in Python projects
 - added SonarQube for Java and Python projects

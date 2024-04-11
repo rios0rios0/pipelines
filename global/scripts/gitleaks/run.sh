@@ -26,6 +26,7 @@ docker run \
   --entrypoint "$CONTAINER_PATH/$ENTRYPOINT_FILE" \
   zricethezav/gitleaks:latest || EXIT_CODE=$?
 
+# TODO: create a way to have customized .gitleaks.toml
 if [ -z "$EXIT_CODE" ]; then
   # GitLab customized configuration file
   cp "$SCRIPTS_DIR/global/scripts/gitleaks/.gitleaks.toml" .

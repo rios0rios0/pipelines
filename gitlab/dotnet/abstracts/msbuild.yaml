@@ -1,17 +1,20 @@
 .msbuild:
-  image: 'mcr.microsoft.com/dotnet/framework/sdk:4.7.2'
+  image: 'mcr.microsoft.com/dotnet/framework/sdk:4.8' # TODO: GitLab doesn't support Windows containers yet
   cache: # relative to the project directory ($CI_PROJECT_DIR)
     key: "$CI_JOB_NAME_SLUG"
     paths:
       - 'packages'
+      - 'tools'
     when: 'always'
   before_script:
-    - $env:PATH = "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin;" + $env:PATH; # adding MSBuild to PATH
-    - $slnFile = (Get-ChildItem -Path .\ -Filter *.sln).FullName;
-    - (Get-Content $slnFile) | ForEach-Object { if ($_ -match '.vdproj') { "#$_" } else { $_ } } | Set-Content $slnFile;
-    - nuget restore $slnFile;
-    - dotnet restore $slnFile;
-    - msbuild /p:Configuration=Release;
+    - $env:PATH = "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin;" + $env:PATH # GitLab workaround (msbuild)
+    - $slnFile = (Get-ChildItem -Path .\ -Filter *.sln).FullName
+    - '(Get-Content $slnFile) | ForEach-Object { if ($_ -match ".vdproj") { "#$_" } else { $_ } } | Set-Content $slnFile'
+    - nuget restore -PackagesDirectory .\packages $slnFile
+    - dotnet restore --packages .\packages $slnFile
+    - Get-ChildItem -Path .\ -Filter *.csproj -Recurse | ForEach-Object { $projDir = Split-Path $_.FullName; $packagesConfig = Join-Path $projDir 'packages.config';
+        if (Test-Path $packagesConfig) { nuget restore -PackagesDirectory .\packages $packagesConfig } }
+    - msbuild /p:Configuration=Release
   tags:
     - 'shared-windows'
   rules:

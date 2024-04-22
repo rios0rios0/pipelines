@@ -5,17 +5,22 @@ test:all:
   extends: '.msbuild'
   stage: 'tests'
   script:
-    - nuget install OpenCover -Version 4.7.922 -OutputDirectory tools
-    - nuget install ReportGenerator -Version 4.8.12 -OutputDirectory tools
-    - tools\OpenCover.4.7.922\tools\OpenCover.Console.exe -register:user
-        -target:"C:\Program Files (x86)\Microsoft Visual Studio\2019\TestAgent\Common7\IDE\CommonExtensions\Microsoft\TestWindow\vstest.console.exe"
-        -targetargs:"/InIsolation /Platform:x86 /Logger:trx /Framework:Framework40 /EnableCodeCoverage Tests\bin\Release\Tests.dll" -output:TestResults\coverage.xml
-    - tools\ReportGenerator.4.8.12\tools\net47\ReportGenerator.exe -reports:TestResults\coverage.xml -targetdir:TestResults -reporttypes:HtmlInline_AzurePipelines
-    - "[xml]$coverageData = Get-Content TestResults\\index.html"
-    - $totalCoverage = ($coverageData.html.body.div.div.table.tbody.tr.Get(5).td - 0.001) / ($coverageData.html.body.div.div.table.tbody.tr.Get(7).td - 1) * 100
-    - Write-Host "COVERAGE_PERCENT=$totalCoverage%"
+    - nuget install Microsoft.TestPlatform -Version 17.9.0 -OutputDirectory tools # TODO: GitLab doesn't support Windows containers yet
+    - nuget install Microsoft.CodeCoverage -Version 17.9.0 -OutputDirectory tools # TODO: it'll be deprecated soon
+    - nuget install ReportGenerator -Version 5.2.5 -OutputDirectory tools
+    - tools\Microsoft.TestPlatform.17.9.0\tools\net462\Common7\IDE\Extensions\TestPlatform\vstest.console.exe /InIsolation /Platform:x86 /Logger:trx /Framework:Framework40 /EnableCodeCoverage Tests\bin\Release\Tests.dll
+    - $coverageFile = (Get-ChildItem -Path TestResults -Filter *.coverage -Recurse -File | Select-Object -First 1).FullName.Replace((Resolve-Path .\).Path + "\", "")
+    - tools\Microsoft.CodeCoverage.17.9.0\build\netstandard2.0\CodeCoverage\CodeCoverage.exe analyze /output:TestResults/coverage.xml $coverageFile
+    - tools\ReportGenerator.5.2.5\tools\net47\ReportGenerator.exe -reports:TestResults\coverage.xml -targetdir:TestResults -reporttypes:Cobertura
+    - "[xml]$coverageXml = Get-Content TestResults\\Cobertura.xml"
+    - '$coverageTotal = [math]::Round([float]$coverageXml.coverage."line-rate" * 100, 2)'
+    - Write-Host "COVERAGE_PERCENT=$coverageTotal%"
   coverage: '/COVERAGE_PERCENT=([\d\.]+)%/'
   artifacts:
     when: 'always'
     paths:
       - 'TestResults'
+    reports:
+      coverage_report:
+        coverage_format: 'cobertura'
+        path: 'TestResults/Cobertura.xml'

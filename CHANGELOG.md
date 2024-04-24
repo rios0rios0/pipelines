@@ -38,6 +38,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added `Alibaba AccessKey ID` regex to `allowlist`
 - added task in `golang` stage `delivery` to replace the value of Azure function settings variables by library variables
 - added skeleton for .NET project pipelines with basic steps
+- added `python` steps for security and code-check in `azure-devops`
 
 ### Changed
 

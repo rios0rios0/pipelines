@@ -60,6 +60,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed directory of migrations into Golang `delivery`
 - changed the Java projects to have deployment using Kubernetes environments
 - changed the GoLang pipeline to remove the redundant make command
+- changed the Python pipeline to fix the dependancy track stage by making sure the required packages are installed before executing the script
 
 ### Removed
 

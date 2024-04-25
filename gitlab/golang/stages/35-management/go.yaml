@@ -6,11 +6,9 @@ include:
 report:sonarqube:
   extends: '.sonarqube'
   script:
-    # Get the latest tag as the current project version
-    - version=$(git describe --tags --abbrev=0)
+    - version=$(git describe --tags --abbrev=0) # get the latest tag as the current project version
     - 'if [ -z "$version" ]; then echo "Could not find the version tag in the repository"; exit 1; fi'
-    # Update sonar-project.properties
-    - echo "sonar.projectVersion=$version" >> sonar-project.properties
+    - echo "sonar.projectVersion=$version" >> sonar-project.properties # update sonar-project.properties
     - echo "Updated sonar.projectVersion to $version"
     - !reference [ .sonarqube, script ]
 
@@ -18,9 +16,7 @@ report:dependency-track:
   extends: [ '.go', '.dependency-track' ]
   script:
     - go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
-    # Determine the directory to use
-    - folder="cmd"
-    - '[ -d "$(pwd)/main" ] && folder="main"'
+    - 'folder="cmd"; [ -d "$(pwd)/main" ] && folder="main"' # determine the directory to use
     - cyclonedx-gomod app -json -output "$PREFIX$REPORT_PATH/bom.json" -packages -files -licenses -main $folder
     - apt update && apt install -y --no-install-recommends curl jq
     - !reference [ .dependency-track, script ]

@@ -1,6 +1,7 @@
 include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dotnet/abstracts/msbuild.yaml'
 
+# TODO: this could be executed with dotnet sdk
 test:all:
   extends: '.msbuild'
   stage: 'tests'
@@ -8,7 +9,8 @@ test:all:
     - nuget install Microsoft.TestPlatform -Version 17.9.0 -OutputDirectory tools # TODO: GitLab doesn't support Windows containers yet
     - nuget install Microsoft.CodeCoverage -Version 17.9.0 -OutputDirectory tools # TODO: it'll be deprecated soon
     - nuget install ReportGenerator -Version 5.2.5 -OutputDirectory tools
-    - tools\Microsoft.TestPlatform.17.9.0\tools\net462\Common7\IDE\Extensions\TestPlatform\vstest.console.exe /InIsolation /Platform:x86 /Logger:trx /Framework:Framework40 /EnableCodeCoverage Tests\bin\Release\Tests.dll
+    - $testsDll = (Get-ChildItem -Path .\Tests\bin -Filter Tests.dll -Recurse -File | Select-Object -First 1).FullName
+    - tools\Microsoft.TestPlatform.17.9.0\tools\net462\Common7\IDE\Extensions\TestPlatform\vstest.console.exe /InIsolation /Platform:x86 /Logger:trx /Framework:Framework40 /EnableCodeCoverage $testsDll
     - $coverageFile = (Get-ChildItem -Path TestResults -Filter *.coverage -Recurse -File | Select-Object -First 1).FullName.Replace((Resolve-Path .\).Path + "\", "")
     - tools\Microsoft.CodeCoverage.17.9.0\build\netstandard2.0\CodeCoverage\CodeCoverage.exe analyze /output:TestResults/coverage.xml $coverageFile
     - tools\ReportGenerator.5.2.5\tools\net47\ReportGenerator.exe -reports:TestResults\coverage.xml -targetdir:TestResults -reporttypes:Cobertura

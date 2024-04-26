@@ -56,4 +56,5 @@ fi
 if [ ! $ignoreFileExists ]; then
   rm .semgrepignore
 fi
+
 exit $EXIT_CODE

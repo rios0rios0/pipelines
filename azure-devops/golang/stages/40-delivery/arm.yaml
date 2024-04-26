@@ -69,7 +69,7 @@ stages:
                       echo "Warning: $var isn't defined"
                     else
                       setting_name=${var#REPLACE_}
-                      SETTINGS+="\"$setting_name=${!var}\"" "
+                      SETTINGS+="$setting_name=${!var} "
                     fi
                   fi
                 done
@@ -79,10 +79,14 @@ stages:
                 else
                   pip install -Iv azure-cli==2.56.0 --extra-index-url https://azurecliprod.blob.core.windows.net/edge
                   az --version
-                  az functionapp config appsettings set \
-                    --name "$(siteName)" \
-                    --resource-group "$(resourceGroupName)" \
-                    --settings "$SETTINGS"
+                  # TODO: change this part to do only one call in the command az functionapp
+                  IFS=' ' read -ra ADDR <<< "$SETTINGS"
+                  for i in "${ADDR[@]}"; do
+                    az functionapp config appsettings set \
+                      --name "$(siteName)" \
+                      --resource-group "$(resourceGroupName)" \
+                      --settings "$i"
+                  done
                 fi
           - task: AzureCLI@2
             displayName: Migrations

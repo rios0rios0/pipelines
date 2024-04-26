@@ -1,0 +1,19 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dotnet/abstracts/sdk.yaml'
+
+#style:stylecop:
+
+#style:fxcop:
+
+quality:resharper:
+  extends: '.sdk'
+  stage: 'code check (style/quality)'
+  script:
+    - dotnet tool install --global JetBrains.ReSharper.GlobalTools
+    - jb inspectcode $SLN_FILE --output=report.html
+    - jb cleanupcode $SLN_FILE && git diff --exit-code # this will fail the pipeline
+  artifacts:
+    paths:
+      - 'report.html'
+
+#quality:roslyn:

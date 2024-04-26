@@ -8,7 +8,6 @@
   before_script:
     - export PATH="$PATH:/root/.dotnet/tools"
     - export SLN_FILE=$(find . -name "*.sln" -print -quit)
-    - sed -i '/.vdproj/ s/^/#/' "$SLN_FILE"
     - dotnet restore --packages packages $SLN_FILE
   rules:
     - if: "$CI_MERGE_REQUEST_IID"

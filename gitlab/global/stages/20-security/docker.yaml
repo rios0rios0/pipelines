@@ -12,6 +12,7 @@ sast:horusec: # TODO: change the false positive acceptance way (https://github.c
     reports:
       sast: "$REPORT_PATH/horusec.json"
   allow_failure: true
+  dependencies: [] # prevent from fetching artifacts
 
 # TODO: try to add huskyci
 
@@ -24,6 +25,7 @@ sast:semgrep:
     when: 'always'
     reports:
       sast: "$REPORT_PATH/semgrep.json"
+  dependencies: [] # prevent from fetching artifacts
 
 sast:gitleaks:
   extends: '.scripts-repo-alpine-docker'
@@ -34,3 +36,4 @@ sast:gitleaks:
     when: 'always'
     reports:
       secret_detection: "$REPORT_PATH/gitleaks.json"
+  dependencies: [] # prevent from fetching artifacts

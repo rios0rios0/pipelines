@@ -10,8 +10,9 @@ quality:resharper:
   stage: 'code check (style/quality)'
   script:
     - dotnet tool install --global JetBrains.ReSharper.GlobalTools
-    - jb inspectcode $SLN_FILE --output=report.html
-    - jb cleanupcode $SLN_FILE && git diff --exit-code # this will fail the pipeline
+    - jb cleanupcode --caches-home=packages/cache $SLN_FILE
+    - jb inspectcode --caches-home=packages/cache --format=Html --output=report.html $SLN_FILE
+    - git diff --exit-code # this will fail the pipeline
   artifacts:
     paths:
       - 'report.html'

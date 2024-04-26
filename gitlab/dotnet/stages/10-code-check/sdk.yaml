@@ -15,6 +15,6 @@ quality:resharper:
     - git diff --exit-code # this will fail the pipeline
   artifacts:
     paths:
-      - 'report.html'
+      - 'report.json'
 
 #quality:roslyn:

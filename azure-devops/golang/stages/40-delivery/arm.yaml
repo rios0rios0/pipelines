@@ -48,6 +48,39 @@ stages:
               deploymentMode: 'Incremental'
               deploymentOutputs: 'OUTPUTS'
           - task: AzureCLI@2
+            displayName: Replace Azure Function Variables
+            inputs:
+              azureSubscription: '$(AZM_SERVICE_CONNECTION)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                RESOURCE_GROUP_NAME=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
+                FUNCTION_NAME=$(OUTPUTS.siteName.value)
+
+                SETTINGS=""
+
+                for var in $(compgen -e); do
+                  if [[ $var == REPLACE_* ]]; then
+                    if [[ -z ${!var} ]]; then
+                      echo "Warning: $var isn't defined"
+                    else
+                      setting_name=${var#REPLACE_}
+                      SETTINGS+="$setting_name=${!var} "
+                    fi
+                  fi
+                done
+
+                if [[ -z $SETTINGS ]]; then
+                  echo "Warning: There are no environment variables to update"
+                else
+                  pip install -Iv azure-cli==2.56.0 --extra-index-url https://azurecliprod.blob.core.windows.net/edge
+                  az --version
+                  az functionapp config appsettings set \
+                    --name "$FUNCTION_NAME" \
+                    --resource-group "$RESOURCE_GROUP_NAME" \
+                    --settings "$SETTINGS"
+                fi
+          - task: AzureCLI@2
             displayName: Migrations
             inputs:
               azureSubscription: '$(AZM_SERVICE_CONNECTION)'

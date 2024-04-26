@@ -36,6 +36,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added Dependency Track and SonarQube for GoLang projects
 - added K8s deployment for all languages in GitLab CI
 - added `Alibaba AccessKey ID` regex to `allowlist`
+- added task in `golang` stage `delivery` to replace the value of Azure function settings variables by library variables
 
 ### Changed
 

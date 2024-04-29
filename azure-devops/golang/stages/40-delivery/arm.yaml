@@ -47,6 +47,13 @@ stages:
               templateLocation: 'Linked artifact'
               deploymentMode: 'Incremental'
               deploymentOutputs: 'OUTPUTS'
+          - script: |
+              siteName=$(echo $(OUTPUTS.siteName.value) | tr -d '"')
+              echo "##vso[task.setvariable variable=siteName]$siteName"
+
+              resourceGroupName=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
+              echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
+            displayName: 'Getting Pipeline Variables'
           - task: AzureCLI@2
             displayName: Replace Azure Function Variables
             inputs:
@@ -54,9 +61,6 @@ stages:
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
-                RESOURCE_GROUP_NAME=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
-                FUNCTION_NAME=$(OUTPUTS.siteName.value)
-
                 SETTINGS=""
 
                 for var in $(compgen -e); do
@@ -76,8 +80,8 @@ stages:
                   pip install -Iv azure-cli==2.56.0 --extra-index-url https://azurecliprod.blob.core.windows.net/edge
                   az --version
                   az functionapp config appsettings set \
-                    --name "$FUNCTION_NAME" \
-                    --resource-group "$RESOURCE_GROUP_NAME" \
+                    --name "$(siteName)" \
+                    --resource-group "$(resourceGroupName)" \
                     --settings "$SETTINGS"
                 fi
           - task: AzureCLI@2
@@ -91,14 +95,13 @@ stages:
                 if grep -r 'goose' db/migrations/*.sql; then
                   PIPELINE_IP=$(curl -s ifconfig.me/ip)
                   PIPELINE_FIREWALL_NAME="PipelineFirewall_$(date +"%Y%m%d%H%M%S")"
-                  RESOURCE_GROUP_NAME=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
                   DATABASE_SERVER_NAME=$(OUTPUTS.databaseServername.value)
 
                 # TODO: create firewall for others databases
                 # TODO: this command is here because, without it, the code wasn't authorized, need to investigate the reason
                   az --version
                   az postgres flexible-server firewall-rule create \
-                    --resource-group "$RESOURCE_GROUP_NAME" \
+                    --resource-group "$(resourceGroupName)" \
                     --name "$DATABASE_SERVER_NAME" \
                     --rule-name "$PIPELINE_FIREWALL_NAME" \
                     --start-ip-address "$PIPELINE_IP"
@@ -134,19 +137,19 @@ stages:
                 fi
 
                 az postgres flexible-server firewall-rule delete --yes \
-                  --resource-group "$RESOURCE_GROUP_NAME" \
+                  --resource-group "$(resourceGroupName)" \
                   --name "$DATABASE_SERVER_NAME" \
                   --rule-name "$PIPELINE_FIREWALL_NAME"
 
-          - script: |
-              siteName=$(echo $(OUTPUTS.siteName.value) | tr -d '"')
-              echo "##vso[task.setvariable variable=siteName]$siteName"
-            displayName: 'Getting siteName Variable'
-          - task: 'AzureFunctionApp@1'
+          - task: AzureCLI@2
+            displayName: Publish Function
             inputs:
-              appName: '$(siteName)'
-              appType: 'functionAppLinux'
               azureSubscription: '$(AZM_SERVICE_CONNECTION)'
-              package: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
-              deployMethod: 'zipDeploy'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                pip install -Iv azure-cli==2.56.0 --extra-index-url https://azurecliprod.blob.core.windows.net/edge
+                az --version
+                az functionapp deployment source config-zip --resource-group "$(resourceGroupName)"  \
+                  --name "$(siteName)" --src "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
       - template: '../../../global/stages/40-delivery/release.yaml'

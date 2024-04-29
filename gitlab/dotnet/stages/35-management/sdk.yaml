@@ -12,6 +12,8 @@ report:sonarqube:
         /d:sonar.host.url="$SONAR_HOST_URL" /d:sonar.token="$SONAR_TOKEN"
         /d:sonar.qualitygate.wait="true" /d:sonar.coverage.exclusions="Tests/**"
     - dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
+  rules: # TODO: this could be not duplicated using !reference
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
 
 report:dependency-track:
   extends: [ '.sdk', '.dependency-track' ]

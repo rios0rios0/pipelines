@@ -8,7 +8,7 @@ stages:
         steps:
           - task: 'GoTool@0'
             inputs:
-              version: '1.20'
+              version: '1.22'
           - template: '../../../global/abstracts/scripts-repo.yaml'
           - script: $(Scripts.Directory)/global/scripts/golangci-lint/run.sh
         continueOnError: true

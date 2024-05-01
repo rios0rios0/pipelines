@@ -20,6 +20,7 @@ report:sonarqube:
 report:dependency-track:
   extends: [ '.pdm', '.dependency-track' ]
   script:
+    - mkdir -p "$PREFIX$REPORT_PATH"
     - apt update && apt install -y --no-install-recommends curl jq
     - pdm run sbom
     - !reference [ .dependency-track, script ]

@@ -7,6 +7,9 @@ include:
 report:sonarqube:
   extends: [ '.sonarqube', '.sdk' ]
   script:
+    - apt-get update & apt-get install --no-install-recommends -y openjdk-11-jre-headless
+    - export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+    - export PATH=$JAVA_HOME/bin:$PATH
     - dotnet tool install --global dotnet-sonarscanner
     - dotnet sonarscanner begin /name:"$SONAR_PROJECT_NAME" /key:"$SONAR_PROJECT_KEY"
         /d:sonar.host.url="$SONAR_HOST_URL" /d:sonar.token="$SONAR_TOKEN"

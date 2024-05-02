@@ -40,6 +40,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added skeleton for .NET project pipelines with basic steps
 - added `python` steps for security and code-check in `azure-devops`
 - added tasks to publish all security reports as Azure artifact in `azure-devops`
+- added `java` support on .NET pipeline
 
 ### Changed
 

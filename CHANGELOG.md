@@ -81,6 +81,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - fixed the regex matching the merge commit messages
 - fixed the JS pipeline to output the right tag in the delivery step
+- fixed wrong java jre package
 
 ## [1.0.0] - 2023-01-02
 

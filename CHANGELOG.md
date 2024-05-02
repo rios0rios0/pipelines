@@ -39,6 +39,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added task in `golang` stage `delivery` to replace the value of Azure function settings variables by library variables
 - added skeleton for .NET project pipelines with basic steps
 - added `python` steps for security and code-check in `azure-devops`
+- added tasks to publish all security reports as Azure artifact in `azure-devops`
 
 ### Changed
 

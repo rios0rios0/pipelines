@@ -1,0 +1,39 @@
+stages:
+  - stage: delivery
+    condition: or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    jobs:
+      - job: deliver
+        displayName: 'Build and Push'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+          - script: |
+              python -m pip install pdm
+              pdm install 
+            displayName: 'Install Dependencies'
+          - script: |
+              pdm build 
+            displayName: 'Build Distribution'
+          - task: Docker@2
+            displayName: 'Docker Login'
+            inputs:
+              command: 'login'
+              containerRegistry: '$(DOCKER_REGISTRY_ENDPOINT)'
+          - script: |
+              echo 'Creating Docker Buildx instance'
+              docker buildx create --use
+              TAGS="$(DOCKER_CONTAINER_IMAGE):latest"
+              if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
+                TAGS="$TAGS -t $(DOCKER_CONTAINER_IMAGE):$(Build.SourceBranchName)"
+                echo "Setting Docker image tag to $(Build.SourceBranchName)"
+                echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]$(Build.SourceBranchName)"
+              else
+                echo 'Setting Docker image tag to latest'
+                echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]latest"
+              fi
+              echo 'Building Docker image'
+              docker buildx build --platform linux/amd64,linux/arm64 -t $TAGS --push .
+            name: 'build'
+        continueOnError: false
+      - template: '../../../global/stages/40-delivery/release.yaml'

@@ -41,6 +41,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added `python` steps for security and code-check in `azure-devops`
 - added tasks to publish all security reports as Azure artifact in `azure-devops`
 - added `java` support on .NET pipeline
+- added `python` steps for building and delivery via `PDM` in `azure-devops`
 
 ### Changed
 

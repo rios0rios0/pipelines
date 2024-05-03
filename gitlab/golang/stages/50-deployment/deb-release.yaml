@@ -6,9 +6,7 @@ deployment:deb-release:
   stage: 'deployment'
   image: 'registry.gitlab.com/gitlab-org/release-cli:latest'
   script:
-    - >
-      release-cli create --name "Release $CI_COMMIT_TAG" --tag-name $CI_COMMIT_TAG --assets-link "{\"name\":\"${DEB_BINARY}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${DEB_BINARY}\"}"
-  only:
-    - 'tags'
-  dependencies:
-    - 'delivery:go-releaser'
+    - release-cli update --tag-name $CI_COMMIT_TAG
+        --assets-link "{\"name\":\"${DEB_BINARY}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${DEB_BINARY}\"}"
+  rules:
+    - if: "$CI_COMMIT_TAG"

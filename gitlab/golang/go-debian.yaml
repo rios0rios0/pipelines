@@ -3,12 +3,15 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/golang/stages/10-code-check/go.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/golang/stages/20-security/go.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/golang/stages/30-tests/go.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/golang/stages/35-management/go.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/golang/stages/40-delivery/go-releaser.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/40-delivery/release.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/golang/stages/50-deployment/deb-release.yaml'
 
 stages:
   - 'code check (style/quality)'
   - 'security (sca/sast)'
   - 'tests'
+  - 'management'
   - 'delivery'
   - 'deployment'

@@ -15,8 +15,11 @@ report:sonarqube:
 report:dependency-track:
   extends: [ '.go', '.dependency-track' ]
   script:
-    - go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
-    - 'folder="cmd"; [ -d "$(pwd)/main" ] && folder="main"' # determine the directory to use
-    - cyclonedx-gomod app -json -output "$PREFIX$REPORT_PATH/bom.json" -packages -files -licenses -main $folder
+    - mkdir -p "$PREFIX$REPORT_PATH"
     - apt update && apt install -y --no-install-recommends curl jq
+
+    - go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
+    - 'folder=$(find cmd -name "*.go" -print | head -n 1 | xargs -n 1 dirname)' # find the directory containing Go files
+    - 'if [ -z "$folder" ]; then echo "Could not find a directory containing Go files"; exit 1; fi'
+    - cyclonedx-gomod app -json -output "$PREFIX$REPORT_PATH/bom.json" -packages -files -licenses -main $folder
     - !reference [ .dependency-track, script ]

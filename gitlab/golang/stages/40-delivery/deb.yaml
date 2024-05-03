@@ -1,0 +1,37 @@
+delivery:qa:
+  stage: 'delivery'
+  image: 'golang:latest'
+  variables:
+    TAG: 'latest'
+  script:
+    - apt-get update && apt-get install -y musl-tools
+    - curl -sL 'https://github.com/goreleaser/goreleaser/releases/download/v1.21.2/goreleaser_1.21.2_amd64.deb' -o /tmp/goreleaser.deb
+    - dpkg -i /tmp/goreleaser.deb
+    - curl --silent "https://gitlab.com/gitlab-org/incubation-engineering/mobile-devops/download-secure-files/-/raw/main/installer" | bash
+    - goreleaser --skip=publish --rm-dist
+    - export DEB_BINARY="${CI_PROJECT_NAME}_${TAG}_linux_amd64.deb"
+    - export PACKAGE_REGISTRY_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/${TAG}"
+    - 'curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file build/dist/*.deb ${PACKAGE_REGISTRY_URL}/${DEB_BINARY}'
+  artifacts:
+    paths:
+      - 'build/dist/*.deb'
+    expire_in: '1 week'
+  rules:
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+
+delivery:prod:
+  extends: 'delivery:qa'
+  variables:
+    TAG: "$CI_COMMIT_TAG"
+  rules:
+    - if: "$CI_COMMIT_TAG"
+
+# TODO: this could be a global abstract for all binary releases
+update-release:
+  extends: 'delivery:prod'
+  image: 'registry.gitlab.com/gitlab-org/release-cli:latest'
+  script:
+    - export DEB_BINARY="${CI_PROJECT_NAME}_${TAG}_linux_amd64.deb"
+    - export PACKAGE_REGISTRY_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/${TAG}"
+    - release-cli update --tag-name $CI_COMMIT_TAG
+      --assets-link "{\"name\":\"${DEB_BINARY}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${DEB_BINARY}\"}"

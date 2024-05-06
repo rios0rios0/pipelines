@@ -6,8 +6,8 @@ include:
 report:sonarqube:
   extends: '.sonarqube'
   script:
-    - version=$(git describe --tags --abbrev=0) # get the latest tag as the current project version
-    - 'if [ -z "$version" ]; then echo "Could not find the version tag in the repository"; exit 1; fi'
+    - version=$(git describe --tags --abbrev=0) || true # get the latest tag as the current project version
+    - 'if [ -z "$version" ]; then version="0.0.0"; echo "No version tag found in the repository, setting version to $version"; fi'
     - echo "sonar.projectVersion=$version" >> sonar-project.properties # update sonar-project.properties
     - echo "Updated sonar.projectVersion to $version"
     - !reference [ .sonarqube, script ]

@@ -1,5 +1,4 @@
 stages:
   - template: 'stages/10-code-check/pdm.yaml'
   - template: 'stages/20-security/pdm.yaml'
-  
-
+  - template: 'stages/40-delivery/docker.yaml'

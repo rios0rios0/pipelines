@@ -16,7 +16,7 @@
         if (Test-Path $packagesConfig) { nuget restore -PackagesDirectory .\packages $packagesConfig } }
     - msbuild /p:Configuration=Release
   tags:
-    - 'shared-windows'
+    - 'dev-gitlab-runner-onprem-windows'
   rules:
     - if: "$CI_MERGE_REQUEST_IID"
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"

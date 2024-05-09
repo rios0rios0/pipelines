@@ -1,0 +1,32 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dotnet/abstracts/msbuild.yaml'
+
+# TODO: this is not working for Windows specific features (like AD features)
+test:all:
+  extends: '.sdk'
+  stage: 'tests'
+  script:
+    - dotnet build --configuration Release
+    - dotnet add package Microsoft.TestPlatform --version 17.9.0
+    - dotnet add package Microsoft.CodeCoverage --version 17.9.0
+    - dotnet add package ReportGenerator --version 5.2.5
+    - apt update && apt install --yes --no-install-recommends mono-complete
+
+    - testsDll=$(find ./Tests/bin -name "Tests.dll" -print -quit)
+    - dotnet vstest $testsDll /InIsolation /Platform:x86 /Logger:trx /Framework:Framework40 /EnableCodeCoverage
+    - coverageFile=$(find ./TestResults -name "*.coverage" -print -quit)
+    - dotnet CodeCoverage analyze /output:TestResults/coverage.xml $coverageFile
+    - dotnet ReportGenerator -reports:TestResults/coverage.xml -targetdir:TestResults -reporttypes:Cobertura
+    - coverageXml=$(cat TestResults/Cobertura.xml)
+    - coverageTotal=$(echo "$coverageXml" | grep -oPm1 "(?<=line-rate=\")[^\"]+")
+    - coverageTotal=$(printf "%.2f" $(echo "$coverageTotal * 100" | bc -l))
+    - echo "COVERAGE_PERCENT=$coverageTotal%"
+  coverage: '/COVERAGE_PERCENT=([\d\.]+)%/'
+  artifacts:
+    when: 'always'
+    paths:
+      - 'TestResults'
+    reports:
+      coverage_report:
+        coverage_format: 'cobertura'
+        path: 'TestResults/Cobertura.xml'

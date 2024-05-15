@@ -14,7 +14,7 @@
     - dotnet restore --packages .\packages $slnFile
     - Get-ChildItem -Path .\ -Filter *.csproj -Recurse | ForEach-Object { $projDir = Split-Path $_.FullName; $packagesConfig = Join-Path $projDir 'packages.config';
         if (Test-Path $packagesConfig) { nuget restore -PackagesDirectory .\packages $packagesConfig } }
-    - msbuild /p:Configuration=Release
+    - msbuild /p:Configuration=Release /p:Platform=x64
   tags:
     - 'dev-gitlab-runner-onprem-windows'
   rules:

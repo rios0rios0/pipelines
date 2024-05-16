@@ -6,14 +6,14 @@ test:all:
   extends: '.msbuild'
   stage: 'tests'
   script:
-    - nuget install Microsoft.TestPlatform -Version 17.9.0 -OutputDirectory tools # TODO: GitLab doesn't support Windows containers yet
+    - nuget install Microsoft.TestPlatform -Version 17.9.0 -OutputDirectory tools
     - nuget install Microsoft.CodeCoverage -Version 17.9.0 -OutputDirectory tools # TODO: it'll be deprecated soon
-    - nuget install ReportGenerator -Version 5.2.5 -OutputDirectory tools
+    - nuget install ReportGenerator -Version 5.3.0 -OutputDirectory tools
     - $testsDll = (Get-ChildItem -Path .\Tests\bin -Filter Tests.dll -Recurse -File | Select-Object -First 1).FullName
-    - tools\Microsoft.TestPlatform.17.9.0\tools\net462\Common7\IDE\Extensions\TestPlatform\vstest.console.exe /InIsolation /Platform:x86 /Logger:trx /Framework:Framework40 /EnableCodeCoverage $testsDll
+    - tools\Microsoft.TestPlatform.17.9.0\tools\net462\Common7\IDE\Extensions\TestPlatform\vstest.console.exe /InIsolation /Logger:trx /EnableCodeCoverage $testsDll
     - $coverageFile = (Get-ChildItem -Path TestResults -Filter *.coverage -Recurse -File | Select-Object -First 1).FullName.Replace((Resolve-Path .\).Path + "\", "")
     - tools\Microsoft.CodeCoverage.17.9.0\build\netstandard2.0\CodeCoverage\CodeCoverage.exe analyze /output:TestResults/coverage.xml $coverageFile
-    - tools\ReportGenerator.5.2.5\tools\net47\ReportGenerator.exe -reports:TestResults\coverage.xml -targetdir:TestResults -reporttypes:Cobertura
+    - tools\ReportGenerator.5.3.0\tools\net47\ReportGenerator.exe -reports:TestResults\coverage.xml -targetdir:TestResults -reporttypes:Cobertura
     - "[xml]$coverageXml = Get-Content TestResults\\Cobertura.xml"
     - '$coverageTotal = [math]::Round([float]$coverageXml.coverage."line-rate" * 100, 2)'
     - Write-Host "COVERAGE_PERCENT=$coverageTotal%"

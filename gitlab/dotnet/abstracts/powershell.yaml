@@ -1,0 +1,16 @@
+.powershell:
+  cache: # relative to the project directory ($CI_PROJECT_DIR)
+    key: "$CI_JOB_NAME_SLUG"
+    paths:
+      - 'packages'
+      - 'tools'
+    when: 'always'
+  before_script:
+    - $slnFile = (Get-ChildItem -Path .\ -Filter *.sln).FullName
+    - nuget restore -PackagesDirectory .\packages $slnFile
+    - 'Start-Process -FilePath "C:\Program Files\Microsoft Visual Studio\2022\Preview\MSBuild\Current\Bin\MSBuild.exe" -ArgumentList "/p:Configuration=Release" -NoNewWindow -Wait'
+  tags:
+    - 'dev-gitlab-runner-onprem-windows'
+  rules:
+    - if: "$CI_MERGE_REQUEST_IID"
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"

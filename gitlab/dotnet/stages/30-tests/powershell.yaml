@@ -1,9 +1,8 @@
 include:
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dotnet/abstracts/msbuild.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dotnet/abstracts/powershell.yaml'
 
-# TODO: this could be executed with dotnet sdk
 test:all:
-  extends: '.msbuild'
+  extends: '.powershell'
   stage: 'tests'
   script:
     - nuget install Microsoft.TestPlatform -Version 17.9.0 -OutputDirectory tools

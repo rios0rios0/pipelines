@@ -67,12 +67,12 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed the Java projects to have deployment using Kubernetes environments
 - changed the GoLang pipeline to remove the redundant make command
 - changed the Python pipeline to fix the dependancy track stage by making sure the required packages are installed before executing the script
-- changed the 
-- changed the publish function task in `azure-devops/golang` `delivery` to use Azure CLI version 2.56.0 instead Azure Task because after this version Golang Azure Function is having time-out problems 
+- changed the publish function task in `azure-devops/golang` `delivery` to use Azure CLI version 2.56.0 instead Azure Task because after this version Golang Azure Function is having time-out problems
 - changed the position of the script to get pipeline variables and added a new variable to be re-used in all code
 - changed gradle version from `8.1` to `8.7`
 - changed `Golang` version in `azure-devops` from `1.20` to `1.22.0`
 - changed `SETTINGS` variable in `azure-devops/golang` `delivery`
+- node version upgrade from 16.20.0 to 18.19.0
 
 ### Removed
 

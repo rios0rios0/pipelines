@@ -16,7 +16,7 @@ test:all:
       - "$REPORT_PATH/coverage.xml"
 
 test:build:
-  extends: '.pdm'
+  extends: '.pdm-prod'
   stage: 'tests'
   script:
     - pdm build

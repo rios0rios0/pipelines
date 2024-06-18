@@ -12,3 +12,8 @@
   rules:
     - if: "$CI_MERGE_REQUEST_IID"
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+
+.pdm-prod:
+  extends: '.pdm'
+  before_script:
+    - pdm install --prod

@@ -74,6 +74,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed `Golang` version in `azure-devops` from `1.20` to `1.22.0`
 - changed `SETTINGS` variable in `azure-devops/golang` `delivery`
 - node version upgrade from 16.20.0 to 18.19.0
+- changed `pdm-prod` abstract to use its own cache
 
 ### Removed
 

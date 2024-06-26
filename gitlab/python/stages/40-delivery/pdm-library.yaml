@@ -2,7 +2,7 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/python/abstracts/pdm.yaml'
 
 publish:qa:
-  extends: '.pdm'
+  extends: '.pdm-prod'
   stage: 'delivery'
   variables:
     SUFFIX: '-snapshots'

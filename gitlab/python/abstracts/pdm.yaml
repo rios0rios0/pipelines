@@ -15,5 +15,10 @@
 
 .pdm-prod:
   extends: '.pdm'
+  cache:
+    key: "$CI_JOB_NAME-prod"
+    paths:
+      - '.venv'
+    when: 'always'
   before_script:
     - pdm install --prod

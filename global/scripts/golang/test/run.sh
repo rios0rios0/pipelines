@@ -16,8 +16,23 @@ touch coverage.xml
 dir="cmd"
 [ -d "$(pwd)/main" ] && dir="main"
 
-# run the tests
+# Run the tests
 go test -v -tags test,unit,integration -coverpkg ./$dir/... -covermode=count ./$dir/... -coverprofile=coverage.txt
+test_exit_code=$?
+
 go tool cover -func coverage.txt
+cover_exit_code=$?
+
 go install github.com/boumenot/gocover-cobertura@latest
+install_exit_code=$?
+
 gocover-cobertura < coverage.txt > coverage.xml
+cobertura_exit_code=$?
+
+# Exit with the highest exit code
+exit_code=$((test_exit_code > cover_exit_code ? test_exit_code : cover_exit_code))
+exit_code=$((exit_code > install_exit_code ? exit_code : install_exit_code))
+exit_code=$((exit_code > cobertura_exit_code ? exit_code : cobertura_exit_code))
+
+# Exit
+exit $exit_code

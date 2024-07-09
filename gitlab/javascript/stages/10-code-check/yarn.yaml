@@ -1,0 +1,10 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/javascript/abstracts/yarn.yaml'
+
+style:eslint:
+  extends: '.yarn'
+  stage: 'code check (style/quality)'
+  script:
+    - !reference [ .test:all, before_script ]
+    - yarn lint
+    - !reference [ .test:all, after_script ]

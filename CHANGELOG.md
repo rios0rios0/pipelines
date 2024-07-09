@@ -43,6 +43,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added `java` support on .NET pipeline
 - added `python` steps for building and delivery via `PDM` in `azure-devops`
 - added `pdm-prod.yaml` to only install production and tests dependencies
+- added a new env variable for `java` to avoid `out-of-memory` error inside the security step
 
 ### Changed
 

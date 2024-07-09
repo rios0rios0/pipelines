@@ -4,6 +4,8 @@ include:
 
 variables:
   PREFIX: ''
+  # Increase the available memory for Java to avoid Out-of-Memory error in security step
+  GRADLE_OPTS: '-Xmx2g'
 
 .dependency-check:
   extends: '.gradle-application'

@@ -6,5 +6,5 @@ style:eslint:
   stage: 'code check (style/quality)'
   script:
     - !reference [ .test:all, before_script ]
-    - yarn lint
+    - yarn lint:ci
     - !reference [ .test:all, after_script ]

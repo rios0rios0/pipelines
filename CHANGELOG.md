@@ -80,7 +80,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Removed
 
--
+- removed `after_script` from javascript code check step
 
 ### Fixed
 

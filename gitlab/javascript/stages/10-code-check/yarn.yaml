@@ -7,4 +7,3 @@ style:eslint:
   script:
     - !reference [ .test:all, before_script ]
     - yarn lint:ci
-    - !reference [ .test:all, after_script ]

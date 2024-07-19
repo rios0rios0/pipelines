@@ -4,7 +4,10 @@ include:
 style:eslint:
   extends: '.yarn'
   stage: 'code check (style/quality)'
+  before_script:
   script:
-    - !reference [ .test:all, before_script ]
+    - !reference [ .style:eslint, before_script ]
     - yarn lint:ci
-    - !reference [ .test:all, after_script ]
+    - !reference [ .style:eslint, after_script ]
+  cache:
+    paths: !reference [ .style:eslint, cache, paths ]

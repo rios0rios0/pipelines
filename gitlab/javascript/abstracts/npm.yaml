@@ -5,8 +5,6 @@
     paths:
       - 'node_modules'
     when: 'always'
-  before_script:
-    - npm install
   rules:
     - if: "$CI_MERGE_REQUEST_IID"
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"

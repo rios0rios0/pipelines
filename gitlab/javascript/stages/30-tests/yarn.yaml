@@ -9,6 +9,8 @@ test:all:
     - yarn test:ci
     - !reference [ .test:all, after_script ]
   coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
+  cache:
+    paths: !reference [ .test:all, cache, paths ]
   artifacts:
     when: 'always'
     paths:
@@ -17,3 +19,21 @@ test:all:
       coverage_report:
         coverage_format: 'cobertura'
         path: 'coverage/jest_public/cobertura-coverage.xml'
+
+test:build:
+  extends: '.yarn'
+  stage: 'tests'
+  before_script:
+  script:
+    - !reference [ .test:build, before_script ]
+    - yarn build
+    - !reference [ .test:build, after_script ]
+  cache:
+    paths: !reference [ .test:build, cache, paths ]
+  artifacts:
+    paths:
+      - 'build'
+  rules:
+    - if: "$CI_MERGE_REQUEST_IID"
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+    - if: "$CI_COMMIT_TAG"

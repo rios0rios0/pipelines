@@ -16,7 +16,7 @@ report:sonarqube:
       - 'node_modules'
   script:
     - 'sed -i "s/\"extends\": \"\.\.\/\.\.\/tsconfig\.json\",/ /g" tsconfig.json'
-    - yarn sonar
+    - yarn && yarn sonar
   tags:
     - 'dev-gitlab-runner-onprem'
   allow_failure: true
@@ -26,6 +26,6 @@ report:sonarqube:
 report:dependency-track:
   extends: [ '.npm', '.dependency-track' ]
   script:
-    - npm run sbom
+    - npm install && npm run sbom
     - apt update && apt install -y --no-install-recommends curl jq
     - !reference [ .dependency-track, script ]

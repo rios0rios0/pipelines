@@ -88,6 +88,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed the JS pipeline to output the right tag in the delivery step
 - fixed wrong java jre package
 - fixed Golang test script not exiting with a non-zero exit code when the test fails
+- fixed Golang delivery script not exiting with a non-zero exit code when the test fails
 
 ## [1.0.0] - 2023-01-02
 

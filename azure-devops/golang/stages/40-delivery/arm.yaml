@@ -61,6 +61,8 @@ stages:
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
+                set -e
+
                 SETTINGS=""
 
                 for var in $(compgen -e); do
@@ -95,6 +97,8 @@ stages:
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
+                set -e
+
                 # TODO: move this "IF" to a file and (or) use an Azure resource to create a condition
                 if grep -r 'goose' db/migrations/*.sql; then
                   PIPELINE_IP=$(curl -s ifconfig.me/ip)
@@ -152,8 +156,11 @@ stages:
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
+                set -e
+
                 pip install -Iv azure-cli==2.56.0 --extra-index-url https://azurecliprod.blob.core.windows.net/edge
                 az --version
                 az functionapp deployment source config-zip --resource-group "$(resourceGroupName)"  \
                   --name "$(siteName)" --src "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
       - template: '../../../global/stages/40-delivery/release.yaml'
+

@@ -77,6 +77,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - node version upgrade from 16.20.0 to 18.19.0
 - changed `pdm-prod` abstract to use its own cache
 - changed the OSD version to 2.15.0 due to an upgrade request
+- changed the `golang` version from `1.19.9` to `1.22`
 
 ### Removed
 

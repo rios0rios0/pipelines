@@ -7,3 +7,11 @@ variables:
 
 .test:all:
   extends: '.gradle-library'
+
+.test:build:
+  extends: '.gradle-library'
+  script:
+    - gradle jar -x check -x test
+  artifacts:
+    paths:
+      - 'lib/build'

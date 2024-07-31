@@ -90,6 +90,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed wrong java jre package
 - fixed Golang test script not exiting with a non-zero exit code when the test fails
 - fixed Golang delivery script not exiting with a non-zero exit code when the test fails
+- fixed Gradle pipeline for Java projects in library mode was missing the artifact for management step
 
 ## [1.0.0] - 2023-01-02
 

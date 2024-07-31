@@ -1,5 +1,7 @@
 variables:
   SEMGREP_LANG: 'java'
+  # to avoid Out-of-Memory error in this step
+  GRADLE_OPTS: '-Xmx2g'
 
 include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'

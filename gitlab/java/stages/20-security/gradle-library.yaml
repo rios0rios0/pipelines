@@ -13,5 +13,6 @@ variables:
       - '.gradle-home/caches'
       - '.gradle-home/notifications'
       - '.owasp'
-      - 'build'
       - 'lib/build'
+      - 'buildSrc/.gradle'
+      - 'buildSrc/build'

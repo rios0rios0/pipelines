@@ -2,6 +2,7 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/35-management/abstracts.yaml'
 
+# TODO: those two jobs depend on the artifact of the previous step
 report:sonarqube:
   extends: '.report:sonarqube'
   stage: 'management'

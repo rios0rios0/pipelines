@@ -8,5 +8,6 @@ include:
       - '.gradle'
       - '.gradle-home/caches'
       - '.gradle-home/notifications'
-      - 'build'
       - 'lib/build'
+      - 'buildSrc/.gradle'
+      - 'buildSrc/build'

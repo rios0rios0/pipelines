@@ -17,7 +17,6 @@
     - 'dev-gitlab-runner-onprem'
   rules: # TODO: this could be not duplicated using !reference
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
-  allow_failure: true # TODO: should be removed after the first successful analysis
 
 .dependency-track:
   stage: 'management'
@@ -33,4 +32,3 @@
     - 'dev-gitlab-runner-onprem'
   rules: # TODO: this could be not duplicated using !reference
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
-  allow_failure: true # TODO: should be removed after the first successful analysis

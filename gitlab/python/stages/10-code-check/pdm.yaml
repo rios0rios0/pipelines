@@ -24,4 +24,3 @@ quality:mypy:
   stage: 'code check (style/quality)'
   script:
     - pdm run type-check
-  allow_failure: true

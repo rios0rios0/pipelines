@@ -11,7 +11,6 @@ sast:horusec: # TODO: change the false positive acceptance way (https://github.c
     when: 'always'
     reports:
       sast: "$REPORT_PATH/horusec.json"
-  allow_failure: true
   dependencies: [] # prevent from fetching artifacts
 
 # TODO: try to add huskyci

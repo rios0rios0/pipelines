@@ -19,7 +19,6 @@ report:sonarqube:
     - yarn && yarn sonar
   tags:
     - 'dev-gitlab-runner-onprem'
-  allow_failure: true
   rules: # TODO: this could be not duplicated using !reference
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
 

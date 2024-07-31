@@ -2,6 +2,7 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo-alpine-docker.yaml'
 
+# TODO: a good feature is commenting on the PR the findings for each tool, like the old false positives in Horusec
 sast:horusec: # TODO: change the false positive acceptance way (https://github.com/ZupIT/horusec/issues/699)
   extends: '.scripts-repo-alpine-docker'
   stage: 'security (sca/sast)'

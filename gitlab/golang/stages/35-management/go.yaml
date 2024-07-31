@@ -19,7 +19,8 @@ report:dependency-track:
     - apt update && apt install -y --no-install-recommends curl jq
 
     - go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
-    - 'folder=$(find cmd -name "*.go" -print | head -n 1 | xargs -n 1 dirname)' # find the directory containing Go files
+    - 'if [ -d "main" ]; then folder="main"; fi' # TODO: assumptions of common structures. It should be a list of possible folders
+    - 'if [ -z "$folder" ]; then folder=$(find cmd -name "*.go" -print | head -n 1 | xargs -n 1 dirname); fi' # find the directory containing Go files
     - 'if [ -z "$folder" ]; then echo "Could not find a directory containing Go files"; exit 1; fi'
     - cyclonedx-gomod app -json -output "$PREFIX$REPORT_PATH/bom.json" -packages -files -licenses -main $folder
     - !reference [ .dependency-track, script ]

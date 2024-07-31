@@ -20,6 +20,12 @@ report:sonarqube:
   rules: # TODO: this could be not duplicated using !reference
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
 
+# do it in your 'build.gradle' file:
+# tasks.cyclonedxBom {
+#   setOutputName('bom')
+#	setOutputFormat('json')
+#	setProjectType('<application or library>')
+# }
 report:dependency-track:
   extends: [ '.report:dependency-track', '.dependency-track' ]
   script:

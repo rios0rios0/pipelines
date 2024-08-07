@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [2.0.0] - 2024-08-07
+
 ### Added
 
 - added Alibaba `AccessKey ID` regex to `allowlist`
@@ -48,7 +50,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
-- **BREAKING CHANGE**: changed the structure to support more than one CI/CD platform
+- **BREAKING CHANGE:** changed the structure to support more than one CI/CD platform
 - changed GoLang version in `azure-devops` from `1.20` to `1.22.0`
 - changed Javascript deployment to continue tasks with error
 - changed Node version from 16.20.0 to 18.19.0

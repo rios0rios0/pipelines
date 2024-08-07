@@ -103,6 +103,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
+- changed the GoLang linter configuration to use project-specific config
 - changed the GoLang configuration linter to disable the `depguard` rules
 - changed the structure to support two package managers in the Java category
 - corrected GitLeaks Shell condition to test if there was an error

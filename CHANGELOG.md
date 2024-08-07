@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING CHANGE**: changed `global/scripts/golang/test/run.sh` to execute `go test` for all folders instad for `main` or `cmd`
+
 ## [2.0.0] - 2024-08-07
 
 ### Added

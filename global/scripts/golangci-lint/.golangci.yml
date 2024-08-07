@@ -1,0 +1,8 @@
+linters:
+  enable-all: true
+  disable:
+    - depguard # Checks package imports are in a list of acceptable packages
+    - godot # Checks if all comments ends with a period
+    - nlreturn # Checks if all return statements have a new line before them
+    - wsl # Checks for missing whitespaces
+

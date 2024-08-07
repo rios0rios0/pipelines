@@ -54,4 +54,3 @@ wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/ins
 
 rm $mergedYamlFile
 exit $EXIT_CODE
-

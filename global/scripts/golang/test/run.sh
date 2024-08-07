@@ -12,12 +12,8 @@ export INIT_SCRIPT="config.sh"
 
 touch coverage.xml
 
-# determine the directory to use
-dir="cmd"
-[ -d "$(pwd)/main" ] && dir="main"
-
 # Run the tests
-go test -v -tags test,unit,integration -coverpkg ./$dir/... -covermode=count ./$dir/... -coverprofile=coverage.txt
+go test -v -tags test,unit,integration -coverpkg ./... -covermode=count ./... -coverprofile=coverage.txt
 test_exit_code=$?
 
 go tool cover -func coverage.txt

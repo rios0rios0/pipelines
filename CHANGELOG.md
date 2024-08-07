@@ -18,95 +18,95 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added `musl-tools` in the goreleaser pipeline to support building with musl
-- added the `goreleaser` pipelines
-- added the exposure for the coverage in Python projects
-- added SonarQube for Java and Python projects
+- added Alibaba `AccessKey ID` regex to `allowlist`
+- added Azure DevOps support for JavaScript
+- added Dependency Track and SonarQube for GoLang projects
+- added Java support on the .NET pipeline
+- added K8s deployment for all languages in GitLab CI
 - added Maven support for Java projects
-- added Azure Devops support for JavaScript
-- added option to override a Semgrep rule
-- added step to run migrations in Azure Pipelines
-- added step to create and delete firewall rule to run migrations
-- added the missing configuration to Azure DevOps deployment with JS
+- added SonarQube for Java and Python projects
+- added `musl-tools` in the `goreleaser` pipeline to support building with `musl`
+- added `pdm-prod.yaml` to only install production and tests dependencies
+- added `python` steps for building and delivery via `PDM` in `azure-devops`
+- added `python` steps for security and code-check in `azure-devops`
+- added a new env variable for Java to avoid `out-of-memory` error inside the security step
 - added a new step to replace the environment variables contained inside the `yaml` file
 - added a script into the Golang `delivery` to get the new `siteName` variable
-- added the code check step for GoLang inside the GitHub Actions provider - [#19](https://github.com/rios0rios0/pipelines/issues/19)
-- added the binary release feature for GoLang pipelines
 - added a script into the Golang `delivery` to seed the database using `Goose`
-- added Dependency Track and SonarQube for GoLang projects
-- added K8s deployment for all languages in GitLab CI
-- added `Alibaba AccessKey ID` regex to `allowlist`
-- added task in `golang` stage `delivery` to replace the value of Azure function settings variables by library variables
+- added option to override a Semgrep rule
 - added skeleton for .NET project pipelines with basic steps
-- added `python` steps for security and code-check in `azure-devops`
-- added tasks to publish all security reports as Azure artifact in `azure-devops`
-- added `java` support on .NET pipeline
-- added `python` steps for building and delivery via `PDM` in `azure-devops`
-- added `pdm-prod.yaml` to only install production and tests dependencies
-- added a new env variable for `java` to avoid `out-of-memory` error inside the security step
+- added step to create and delete firewall rule to run migrations
+- added step to run migrations in Azure Pipelines
+- added task in GoLang stage `delivery` to replace the value of Azure function settings variables with library variables
+- added tasks to publish all security reports as Azure artifacts in `azure-devops`
+- added the JavaScript rules to test, monitor, and deploy
+- added the `goreleaser` pipelines
+- added the binary release feature for GoLang pipelines
+- added the code check step for GoLang inside the GitHub Actions provider - [#19](https://github.com/rios0rios0/pipelines/issues/19)
+- added the exposure for the coverage in Python projects
+- added the missing configuration to Azure DevOps deployment with JavaScript
 
 ### Changed
 
 - **BREAKING CHANGE**: changed the structure to support more than one CI/CD platform
-- changed SonarQube to be inside the `management` step instead of the `delivery` step
-- corrected Horusec issue with the Docker version
-- corrected the coverage artifact to be uploaded with the XML report
-- corrected typos in the shell script
-- added the JS rules to test, monitor and deploy
-- corrected Semgrep to add the ability to merge the ignored rules files
-- changed the version of the container `GoLang` to `1.19`
-- changed `release` code in every step to have a regex more flexible to catch in any merge case
-- changed `semgrep` to only use default `.semgrepignore` file if custom is not available
-- changed the GoLang code to have multiple standards to run testing
-- refactor firewall rules for migrations in delivery stage
-- corrected the way the delivery and deployment steps are skipped or not in Azure DevOps
-- corrected GoLang delivery and deployment to have the default image and the proper format
+- changed GoLang version in `azure-devops` from `1.20` to `1.22.0`
 - changed Javascript deployment to continue tasks with error
-- corrected use of `stageDependencies` in the deployment stage
-- changed GoLang pipeline to match with the GitHub merge commit message
-- simplified the patching mechanism in the `deployments` step for JS
-- changed directory of migrations into Golang `delivery`
-- changed the Java projects to have deployment using Kubernetes environments
-- changed the GoLang pipeline to remove the redundant make command
-- changed the Python pipeline to fix the dependancy track stage by making sure the required packages are installed before executing the script
-- changed the publish function task in `azure-devops/golang` `delivery` to use Azure CLI version 2.56.0 instead Azure Task because after this version Golang Azure Function is having time-out problems
-- changed the position of the script to get pipeline variables and added a new variable to be re-used in all code
+- changed Node version from 16.20.0 to 18.19.0
+- changed Semgrep only to use the default `.semgrepignore` file if custom is not available
+- changed SonarQube to be inside the `management` step instead of the `delivery` step
+- changed `release` code in every step to have a regex more flexible to catch in any merge case
 - changed gradle version from `8.1` to `8.7`
-- changed `Golang` version in `azure-devops` from `1.20` to `1.22.0`
-- changed `SETTINGS` variable in `azure-devops/golang` `delivery`
-- node version upgrade from 16.20.0 to 18.19.0
-- changed `pdm-prod` abstract to use its own cache
+- changed the GoLang code to have multiple standards to run testing
+- changed the GoLang linter configuration to use the project-specific config
+- changed the GoLang pipeline to match with the GitHub merge commit message
+- changed the GoLang pipeline to remove the redundant make command
+- changed the Java projects to have deployment using Kubernetes environments
 - changed the OSD version to 2.15.0 due to an upgrade request
+- changed the Python pipeline to fix the dependency track stage by making sure the required packages are installed before executing the script
+- changed the `SETTINGS` variable in `azure-devops/golang` `delivery`
 - changed the `golang` version from `1.19.9` to `1.22`
+- changed the `pdm-prod` abstract to use its cache
+- changed the directory of migrations into Golang `delivery`
+- changed the position of the script to get pipeline variables and added a new variable to be re-used in all code
+- changed the publish function task in `azure-devops/golang` `delivery` to use Azure CLI version 2.56.0 instead of Azure Task because after this version Golang Azure Function is having time-out problems
+- changed the version of the container `GoLang` to `1.19`
+- corrected GoLang delivery and deployment to have the default image and the proper format
+- corrected Horusec issue with the Docker version
+- corrected Semgrep to add the ability to merge the ignored rules files
+- corrected the coverage artifact to be uploaded with the XML report
+- corrected the way the delivery and deployment steps are skipped or not in Azure DevOps
+- corrected typos in the shell script
+- corrected use of `stageDependencies` in the deployment stage
+- refactor firewall rules for migrations in the delivery stage
+- simplified the patching mechanism in the `deployments` step for JavaScript projects
 
 ### Removed
 
-- removed `after_script` from javascript code check step
+- removed `after_script` from the JavaScript code check step
 
 ### Fixed
 
-- fixed the regex matching the merge commit messages
-- fixed the JS pipeline to output the right tag in the delivery step
-- fixed wrong java jre package
-- fixed Golang test script not exiting with a non-zero exit code when the test fails
 - fixed Golang delivery script not exiting with a non-zero exit code when the test fails
-- fixed Gradle pipeline for Java projects in library mode was missing the artifact for management step
+- fixed Golang test script not exiting with a non-zero exit code when the test fails
+- fixed Gradle pipeline for Java projects in library mode which was missing the artifact for the management step
+- fixed the JS pipeline to output the right tag in the delivery step
+- fixed the regex matching the merge commit messages
+- fixed the wrong Java JRE package
 
 ## [1.0.0] - 2023-01-02
 
 ### Added
 
 - added GoLang support with the formatting basic checking
-- added SAM delivery and deployment as a separated approaches
+- added SAM delivery and deployment as independent approaches
 - added the capability to merge config files in the `golanglint-ci`
 - added the capability to run customized scripts in Debian-based images
 
 ### Changed
 
-- changed the GoLang linter configuration to use project-specific config
 - changed the GoLang configuration linter to disable the `depguard` rules
 - changed the structure to support two package managers in the Java category
-- corrected GitLeaks Shell condition to test if there was an error
+- corrected GitLeaks script condition to test if there was an error
 - corrected GoLang images to detect the right `$GOPATH`
 - corrected GoLang tests step to avoid issues when there's no test at all in the application
 - corrected all the structures to have segregated caches and numbered step-by-step jobs

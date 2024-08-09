@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- changed the OSD version to 2.16.0 due to an upgrade request
+
 ## [2.0.0] - 2024-08-07
 
 ### Added

@@ -21,6 +21,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed the OSD version to 2.16.0 due to an upgrade request
 - **BREAKING CHANGE**: changed `global/scripts/golang/test/run.sh` to execute `go test` for all folders instad for `main` or `cmd`
 
+### Fixed
+
+- fixed the error in `global/scripts/golang/test/run.sh` to execute the `go test` only for `main`, `cmd` and `internal`
+
 ## [2.0.0] - 2024-08-07
 
 ### Added

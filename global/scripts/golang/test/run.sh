@@ -8,7 +8,7 @@ export GOPATH="$(pwd)/.go" # the GOPATH must be absolute
 export PATH="$PATH:$GOPATH/bin" # this is a workaround to detect the new GOPATH
 
 export INIT_SCRIPT="config.sh"
-[[ -f $INIT_SCRIPT ]] && ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
+[ -f "$INIT_SCRIPT" ] && ./"$INIT_SCRIPT" || echo "The '$INIT_SCRIPT' file is not found, skipping..."
 
 touch coverage.xml
 
@@ -20,7 +20,12 @@ else
 fi
 
 # Run the tests
-go test -v -tags test,unit,integration -coverpkg "$folders" -covermode=count "$folders" -coverprofile=coverage.txt
+go test -v -tags test,unit,integration \
+  -coverpkg="$(echo $folders | tr ' ' ',')" \
+  -covermode=count \
+  -coverprofile=coverage.txt \
+  $folders
+
 test_exit_code=$?
 
 go tool cover -func coverage.txt

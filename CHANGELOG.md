@@ -23,6 +23,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
+- fixed argument passing errors in `global/scripts/golang/test/run.sh`
 - fixed the error in `global/scripts/golang/test/run.sh` to execute the `go test` only for `main`, `cmd` and `internal`
 
 ## [2.0.0] - 2024-08-07

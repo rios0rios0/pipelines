@@ -12,19 +12,28 @@ export INIT_SCRIPT="config.sh"
 
 touch coverage.xml
 
-folders=""
-if [ -d "$(pwd)/main" ]; then
-  folders="./main/..."
-else
-  folders="./cmd/... ./internal/..."
+# Find the directories to test
+directories=""
+[ -d "$(pwd)/main" ] && directories="$directories ./main/..."
+[ -d "$(pwd)/cmd" ] && directories="$directories ./cmd/..."
+[ -d "$(pwd)/internal" ] && directories="$directories ./internal/..."
+
+# Check if directories is empty, meaning no directories were found
+if [ -z "$directories" ]; then
+  echo >&2 "No directories found to test"
+  exit 1
 fi
+
+# Trim leading or trailing spaces
+directories=$(echo $directories | sed 's/^ *//;s/ *$//')
+echo "Testing code in the following directories: $directories"
 
 # Run the tests
 go test -v -tags test,unit,integration \
-  -coverpkg="$(echo $folders | tr ' ' ',')" \
+  -coverpkg="$(echo $directories | tr ' ' ',')" \
   -covermode=count \
   -coverprofile=coverage.txt \
-  $folders
+  $directories
 
 test_exit_code=$?
 

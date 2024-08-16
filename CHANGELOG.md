@@ -16,6 +16,9 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+- added `clone.sh` script into the root
+
 ### Changed
 
 - changed the OSD version to 2.16.0 due to an upgrade request

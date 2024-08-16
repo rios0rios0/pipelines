@@ -71,6 +71,12 @@ stages:
   - template: 'azure-devops/golang/go-arm.yaml@pipelines'
 ```
 
+## Cloning this repo to be used in the projects
+
+```bash
+curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
+```
+
 ## Contributing
 
 

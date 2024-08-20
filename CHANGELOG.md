@@ -23,6 +23,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - changed the OSD version to 2.16.0 due to an upgrade request
 - **BREAKING CHANGE**: changed `global/scripts/golang/test/run.sh` to execute `go test` for all folders instad for `main` or `cmd`
+- changed `run.sh` `goland` test script to install docker used by test containers in integration tests
 
 ### Fixed
 
@@ -130,3 +131,4 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Removed
 
 - removed Alpine images from GoLang stages because it doesn't work without `gcc` and `g++`
+

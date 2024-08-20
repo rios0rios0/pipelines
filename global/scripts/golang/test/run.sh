@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
+set -e
 
 if [ -z "$SCRIPTS_DIR" ]; then
   export SCRIPTS_DIR="$(echo $(dirname "$(realpath "$0")") | sed 's|\(.*pipelines\).*|\1|')"
@@ -22,6 +23,15 @@ directories=""
 if [ -z "$directories" ]; then
   echo >&2 "No directories found to test"
   exit 1
+fi
+
+# Download and install docker for integration tests with test containers
+distro=$(grep '^NAME=' /etc/os-release | awk -F= '{print $2}' | tr -d '"')
+if ["$distro" != "Arch Linux" && [ "$distro" != "Gentoo" ]; then
+  echo "Installing docker"
+  curl -fsSL https://get.docker.com | bash
+else
+  echo "Skipping installation for unsupported distro"
 fi
 
 # Trim leading or trailing spaces

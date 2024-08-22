@@ -19,6 +19,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Added
 
 - added `clone.sh` script into the root
+- added Python pipelines for GitHub actions
 
 ### Changed
 

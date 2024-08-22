@@ -1,0 +1,15 @@
+on:
+  workflow_call:
+
+jobs:
+  python:
+    uses: 'rios0rios0/pipelines/.github/workflows/python.yaml@main'
+
+  # fourth stage
+  delivery-docker:
+    name: 'delivery > docker'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/docker@main'
+    needs: [ 'python' ]
+    if: "!failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/'))"

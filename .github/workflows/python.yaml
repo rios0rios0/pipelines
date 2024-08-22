@@ -1,0 +1,106 @@
+# see the bottom of the file for more information¹
+# the parent workflow is responsible for setting up the call events²
+on:
+  workflow_call:
+
+jobs:
+  # first stage
+  code_check-style_isort:
+    name: 'code-check > style:isort'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - run: pdm run isort --check-only .
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  code_check-style_black:
+    name: 'code-check > style:black'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - run: pdm run black --check .
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  code_check-quality_flake8:
+    name: 'code-check > style:flake8'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - run: pdm run flake8 .
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  code_check-quality_mypy:
+    name: 'code-check > style:mypy'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - run: pdm run type-check
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
+  # second stage
+  security-sast_horusec:
+    name: 'security > sast:horusec'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-horusec@main'
+    needs: [ 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
+    continue-on-error: true # TODO: this is a temporary fix, remove it after the issue is fixed
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sast_semgrep:
+    name: 'security > sast:semgrep'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-semgrep@main'
+        with:
+          semgrep_lang: 'golang'
+    needs: [ 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sast_gitleaks:
+    name: 'security > sast:gitleaks'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-gitleaks@main'
+    needs: [ 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sca_safety:
+    name: 'security > sca:safety'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - run: pdm run safety-check
+    needs: [ 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
+  # third stage
+  tests-test_all:
+    name: 'tests > test:all'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - run: pdm run test
+    needs: [ 'security-sast_horusec', 'security-sast_semgrep', 'security-sast_gitleaks' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
+  # fourth stage
+  delivery-release:
+    name: 'delivery > release'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
+    needs: [ 'tests-test_all' ]
+    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore/bump-')"
+
+
+# 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations
+# 2- the recommended events to trigger this workflow and permissions are:
+#on:
+#  push:
+#    branches:
+#      - 'main'
+#    tags:
+#      - '*'
+#  pull_request:
+#    branches:
+#      - 'main'
+#  workflow_dispatch:
+#

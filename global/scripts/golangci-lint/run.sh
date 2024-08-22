@@ -11,32 +11,30 @@ if [ -f ".golangci.yml" ]; then
   python3 - "$defaultYamlFile" "$mergedYamlFile" << EOF
 import sys, yaml
 
-default_yaml_path = sys.argv[1]
-merged_yaml_path = sys.argv[2]
-
-with open(default_yaml_path, "r") as default_config_file:
+with open(sys.argv[1], "r") as default_config_file:
     default_config = yaml.safe_load(default_config_file)
 with open(".golangci.yml", "r") as repo_config_file:
     repo_config = yaml.safe_load(repo_config_file)
 
-merged_config = {
-    "linters": {
-        "enable-all": True,
-        "disable": list(
-            set(
-                default_config["linters"]["disable"]
-                + repo_config["linters"].get("disable", [])
-            )
-        ),
-    }
-}
-
+# Merge enabled linters
 for linter in repo_config["linters"].get("enable", []):
-    if linter in merged_config["linters"]["disable"]:
-        merged_config["linters"]["disable"].remove(linter)
+    if linter not in default_config["linters"]["enable"]:
+        default_config["linters"]["enable"].append(linter)
 
-with open(merged_yaml_path, "w") as merged_config_file:
-    yaml.dump(merged_config, merged_config_file)
+# Merge disabled linters
+for linter in repo_config["linters"].get("disable", []):
+    if linter in default_config["linters"]["enable"]:
+        default_config["linters"]["enable"].remove(linter)
+
+# Merge linter settings
+for linter, settings in repo_config.get("linters-settings", {}).items():
+    if settings is not None:
+        if default_config.get("linters-settings") is None:
+            default_config["linters-settings"] = {}
+        default_config["linters-settings"][linter] = settings
+
+with open(sys.argv[2], "w") as merged_config_file:
+    yaml.dump(default_config, merged_config_file)
 EOF
 else
   cp "$defaultYamlFile" $mergedYamlFile

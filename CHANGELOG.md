@@ -17,10 +17,12 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ## [Unreleased]
 
 ### Added
+
 - added `clone.sh` script into the root
 
 ### Changed
 
+- updated the golangci-lint pipeline to use a tweaked version of @maratori's config
 - changed the OSD version to 2.16.0 due to an upgrade request
 - **BREAKING CHANGE**: changed `global/scripts/golang/test/run.sh` to execute `go test` for all folders instad for `main` or `cmd`
 - changed `run.sh` `goland` test script to install docker used by test containers in integration tests

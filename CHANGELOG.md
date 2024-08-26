@@ -30,6 +30,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
+- added two missing linters to the `golangci-lint` pipeline
 - fixed the error in `global/scripts/golang/test/run.sh` where `cmd` and `internal` folders were both required at the same time
 - fixed argument passing errors in `global/scripts/golang/test/run.sh`
 - fixed the error in `global/scripts/golang/test/run.sh` to execute the `go test` only for `main`, `cmd` and `internal`

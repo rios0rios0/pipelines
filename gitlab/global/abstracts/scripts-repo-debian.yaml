@@ -5,8 +5,8 @@ include:
   extends: '.scripts-repo'
   before_script:
     - |
-      apt update && \
-      apt install -y --no-install-recommends \
+      apt-get update && \
+      apt-get install -y --no-install-recommends \
           git jq \
           python3 python3-yaml # for golangci-lint config merging
     - !reference [ .scripts-repo, before_script ]

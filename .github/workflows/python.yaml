@@ -8,6 +8,8 @@ jobs:
   code_check-style_isort:
     name: 'code-check > style:isort'
     runs-on: 'ubuntu-latest'
+    container:
+      image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
     steps:
       - run: pdm run isort --check-only .
     if: "!startsWith(github.ref, 'refs/tags/')"
@@ -15,6 +17,8 @@ jobs:
   code_check-style_black:
     name: 'code-check > style:black'
     runs-on: 'ubuntu-latest'
+    container:
+      image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
     steps:
       - run: pdm run black --check .
     if: "!startsWith(github.ref, 'refs/tags/')"
@@ -22,6 +26,8 @@ jobs:
   code_check-quality_flake8:
     name: 'code-check > style:flake8'
     runs-on: 'ubuntu-latest'
+    container:
+      image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
     steps:
       - run: pdm run flake8 .
     if: "!startsWith(github.ref, 'refs/tags/')"
@@ -29,6 +35,8 @@ jobs:
   code_check-quality_mypy:
     name: 'code-check > style:mypy'
     runs-on: 'ubuntu-latest'
+    container:
+      image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
     steps:
       - run: pdm run type-check
     if: "!startsWith(github.ref, 'refs/tags/')"
@@ -65,6 +73,8 @@ jobs:
   security-sca_safety:
     name: 'security > sca:safety'
     runs-on: 'ubuntu-latest'
+    container:
+      image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
     steps:
       - run: pdm run safety-check
     needs: [ 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
@@ -75,6 +85,8 @@ jobs:
   tests-test_all:
     name: 'tests > test:all'
     runs-on: 'ubuntu-latest'
+    container:
+      image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
     steps:
       - run: pdm run test
     needs: [ 'security-sast_horusec', 'security-sast_semgrep', 'security-sast_gitleaks' ]

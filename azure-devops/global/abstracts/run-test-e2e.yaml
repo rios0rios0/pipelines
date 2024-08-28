@@ -1,0 +1,88 @@
+parameters:
+  - name: TAG_NAME
+    type: string
+  - name: PLUGIN_NAME
+    type: string
+  - name: OS_PORT
+    type: string
+  - name: OSD_PORT
+    type: string
+
+steps:
+  - template: ./clone-and-move-opensearch-dashboards.yaml
+    parameters:
+      TAG_NAME: ${{ parameters.TAG_NAME }}
+      PLUGIN_NAME: ${{ parameters.PLUGIN_NAME }}
+
+  - template: ./replace-environment-variables.yaml
+    parameters:
+      FILE: '$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/.ci/config/opensearch_dashboards.yml'
+      DISPLAY_NAME: 'Replace Environment Variables'
+
+  - script: |
+      idToken=$(curl -s --request POST --header 'Content-Length: 0' \
+          --url "$(ROPC_URL)?username=$(ROPC_USERNAME)&password=$(ROPC_PASSWORD)&grant_type=password&scope=openid%20$(ROPC_CLIENT_ID)%20offline_access&client_id=$(ROPC_CLIENT_ID)&response_type=token%20id_token" | grep -oP '(?<="id_token":")[^"]*')
+
+      sed "s/ID_TOKEN/$idToken/" -i $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/public/global/functions/fetch_token.ts
+    name: GetCatalogToken
+    displayName: 'Get API Token'
+
+  - script: |
+      cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
+      yarn osd bootstrap &&
+      yarn > $(Agent.TempDirectory)/yarn.log 2>&1
+    displayName: 'Updating Repository and Installing Dependencies'
+
+  - script: |
+      sed -i 's|#server.basePath:.*|server.basePath: "/abc"|' $(Agent.TempDirectory)/OpenSearch-Dashboards/config/opensearch_dashboards.yml
+      sed -i 's|#server.rewriteBasePath:.*|server.rewriteBasePath: true|' $(Agent.TempDirectory)/OpenSearch-Dashboards/config/opensearch_dashboards.yml
+    displayName: 'Modifing OpenSearch Dashboards config'
+
+  - task: Bash@3
+    continueOnError: true
+    inputs:
+      targetType: 'inline'
+      script: |
+        cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
+        yarn os snapshot > $(Agent.TempDirectory)/snapshot.log 2>&1 &
+        OS_PID=$!
+
+        while ! grep -q "recovered \[0\] indices into cluster_state" $(Agent.TempDirectory)/snapshot.log; do
+          sleep 1
+        done
+
+        yarn debug > $(Agent.TempDirectory)/debug.log 2>&1 &
+        APP_PID=$!
+
+        while ! grep -q "bundles compiled successfully after" $(Agent.TempDirectory)/debug.log; do
+          sleep 1
+        done
+
+        export TERM=xterm
+        yarn cy:headless
+        CYPRESS_EXIT_CODE=$?
+
+        PORT_OS_PID=$(lsof -t -i:${{ parameters.OS_PORT }})
+        PORT_OSD_PID=$(lsof -t -i:${{ parameters.OSD_PORT }})
+
+        if [ -n "$PORT_OS_PIDS" ]; then
+          for PID in $PORT_OS_PIDS; do
+            kill -9 $PID
+          done
+        fi
+
+        if [ -n "$PORT_OSD_PID" ]; then
+          kill -9 $PORT_OSD_PID
+        fi
+
+        rm -r -f $(Agent.TempDirectory)/snapshot.log $(Agent.TempDirectory)/debug.log $(Agent.TempDirectory)/yarn.log
+        exit $CYPRESS_EXIT_CODE
+    displayName: 'Run E2E Tests and Stop Server'
+
+  - task: PublishPipelineArtifact@1
+    condition: failed()
+    inputs:
+      targetPath: '$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/public/assets/screenshots'
+      artifact: 'screenshots'
+      publishLocation: 'pipeline'
+    displayName: 'Publish Screenshots'

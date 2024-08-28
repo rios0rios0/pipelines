@@ -13,22 +13,10 @@ parameters:
     default: ''
 
 steps:
-  - task: NodeTool@0
-    inputs:
-      versionSpec: '18.19.0'
-
-  - script: npm install --global yarn
-
-  - script: |
-      git clone --depth 1 --branch ${{ parameters.TAG_NAME }} https://github.com/opensearch-project/OpenSearch-Dashboards.git $(Agent.TempDirectory)/OpenSearch-Dashboards
-    displayName: 'Clone OpenSearch Dashboards repository'
-
-  - task: CopyFiles@2
-    inputs:
-      SourceFolder: '$(Build.Repository.LocalPath)'
-      Contents: '**'
-      TargetFolder: '$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}'
-    displayName: 'Copy Plugin to Plugins folder'
+  - template: ./clone-and-move-opensearch-dashboards.yaml
+    parameters:
+      TAG_NAME: ${{ parameters.TAG_NAME }}
+      PLUGIN_NAME: ${{ parameters.PLUGIN_NAME }}
 
   - script: |
       cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}

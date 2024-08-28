@@ -6,7 +6,7 @@ stages:
       - job: 'delivery'
         displayName: 'delivery'
         steps:
-          - template: '../../../global/abstracts/clone-and-move-plugin-steps.yml'
+          - template: '../../../global/abstracts/execute-command-opensearch-dashboards.yaml'
             parameters:
               TAG_NAME: '2.17.0'
               PLUGIN_NAME: 'app'

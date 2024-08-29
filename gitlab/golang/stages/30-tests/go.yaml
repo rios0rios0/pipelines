@@ -16,3 +16,13 @@ test:all:
       coverage_report:
         coverage_format: 'cobertura'
         path: 'coverage.xml'
+
+test:build:
+  extends: '.go'
+  stage: 'tests'
+  script:
+    - mkdir -p ./bin
+    - go build -o ./bin ./...
+  artifacts:
+    paths:
+      - 'bin'

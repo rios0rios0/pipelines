@@ -20,6 +20,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - added `clone.sh` script into the root
 - added Python pipelines for GitHub actions
+- added `test:build` for `golang` projects for `gitlab`
 
 ### Changed
 

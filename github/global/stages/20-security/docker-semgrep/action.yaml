@@ -9,7 +9,19 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - uses: 'actions/checkout@v3'
-    - uses: 'rios0rios0/pipelines/github/golang/abstracts/scripts-repo@main'
-    - run: $SCRIPTS_DIR/global/scripts/semgrep/run.sh "${{ inputs.semgrep_lang }}"
+    - name: 'load'
+      uses: 'actions/checkout@v3'
+    - name: 'set context'
+      uses: 'rios0rios0/pipelines/github/golang/abstracts/scripts-repo@main'
+    - name: 'execute'
       shell: 'bash'
+      run: $SCRIPTS_DIR/global/scripts/semgrep/run.sh "${{ inputs.semgrep_lang }}"
+    - name: 'upload'
+      uses: 'actions/upload-artifact@v4'
+      with:
+        name: 'semgrep'
+        path: 'build/reports/semgrep.json'
+        if-no-files-found: 'error'
+        overwrite: 'true'
+        retention-days: 10
+      if: always()

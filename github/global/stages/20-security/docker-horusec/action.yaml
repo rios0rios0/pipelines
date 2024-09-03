@@ -4,14 +4,14 @@ on:
 runs:
   using: 'composite'
   steps:
-    - name: 'load'
+    - name: Checkout repository
       uses: 'actions/checkout@v3'
-    - name: 'set context'
+    - name: Setup the scripts repository
       uses: 'rios0rios0/pipelines/github/golang/abstracts/scripts-repo@main'
-    - name: 'execute'
+    - name: Run Horusec
       shell: 'bash'
       run: '$SCRIPTS_DIR/global/scripts/horusec/run.sh'
-    - name: 'upload'
+    - name: Upload artifacts
       uses: 'actions/upload-artifact@v4'
       with:
         name: 'horusec'

@@ -9,14 +9,14 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: 'load'
+    - name: Checkout repository
       uses: 'actions/checkout@v3'
-    - name: 'set context'
+    - name: Setup the scripts repository
       uses: 'rios0rios0/pipelines/github/golang/abstracts/scripts-repo@main'
-    - name: 'execute'
+    - name: Run Semgrep
       shell: 'bash'
       run: $SCRIPTS_DIR/global/scripts/semgrep/run.sh "${{ inputs.semgrep_lang }}"
-    - name: 'upload'
+    - name: Upload artifacts
       uses: 'actions/upload-artifact@v4'
       with:
         name: 'semgrep'

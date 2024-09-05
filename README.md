@@ -89,6 +89,21 @@ To clone this repository and use it in your projects, run the following command:
 curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
 ```
 
+## Tricks to use locally
+
+```bash
+git clone git@github.com:rios0rios0/pipelines.git ~/pipelines
+ln -s ~/pipelines/global/scripts/golangci-lint/.golangci.yml ~/.golangci.yml
+```
+
+or
+
+```bash
+curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
+export SCRIPTS_DIR=/home/rios0rios0/Development/github.com/rios0rios0/pipelines
+$SCRIPTS_DIR/global/scripts/golangci-lint/run.sh # or any other script
+```
+
 ## Contributing
 
 We welcome contributions! Please read our [Contributing Guidelines](CONTRIBUTING.md) for more information.

@@ -38,14 +38,26 @@ fi
 directories=$(echo $directories | sed 's/^ *//;s/ *$//')
 echo "Testing code in the following directories: $directories"
 
+go install github.com/wadey/gocovmerge@latest
+
 # Run the tests
-go test -v -tags test,unit,integration \
+go test -v -tags test,unit \
   -coverpkg="$(echo $directories | tr ' ' ',')" \
   -covermode=count \
-  -coverprofile=coverage.txt \
+  -coverprofile=unit_coverage.txt \
+  $directories
+
+go test -p 1 -v -tags integration \
+  -coverpkg="$(echo $directories | tr ' ' ',')" \
+  -covermode=count \
+  -coverprofile=integration_coverage.txt \
   $directories
 
 test_exit_code=$?
+
+gocovmerge unit_coverage.txt integration_coverage.txt > coverage.txt
+
+rm unit_coverage.txt integration_coverage.txt
 
 go tool cover -func coverage.txt
 cover_exit_code=$?

@@ -31,6 +31,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed `run.sh` `golang` test script to install docker used by test containers in integration tests
 - changed `run.sh` `golang` test script to run integration tests separately and one per time
 - changed GitHub `python.yaml` to run stage with custom Docker image
+- changed gitlab `GO` version to `1.23.1`
 
 ### Fixed
 

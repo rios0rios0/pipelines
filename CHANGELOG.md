@@ -35,6 +35,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
+- fixed Go Debian pipeline failing to upload the `.deb` file to the GitLab releases
 - fixed Go pipeline for GitHub Actions missing permissions to install dependencies
 - added two missing linters to the `golangci-lint` pipeline
 - fixed the error in `global/scripts/golang/test/run.sh` where `cmd` and `internal` folders were both required at the same time

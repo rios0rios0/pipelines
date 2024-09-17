@@ -104,6 +104,22 @@ export SCRIPTS_DIR=/home/rios0rios0/Development/github.com/rios0rios0/pipelines
 $SCRIPTS_DIR/global/scripts/golangci-lint/run.sh # or any other script
 ```
 
+## Running Dev/Testing Branches
+
+In the dev branch of pipelines, you can use the following command to replace all of the references to the `main` branch:
+
+```bash
+export BRANCH=fix/golang
+find . -type f -name "*.yaml" -exec sed -i "/^[[:space:]]*-[[:space:]]\+remote:.*main/s/main/$BRANCH/g" {} +
+```
+
+After you push these changes to the dev/testing branch, update the references in your repository to point to the new branch:
+
+```yaml
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/$BRANCH/gitlab/golang/go-debian.yaml'
+```
+
 ## Contributing
 
 We welcome contributions! Please read our [Contributing Guidelines](CONTRIBUTING.md) for more information.

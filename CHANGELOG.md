@@ -25,6 +25,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
+- changed the OSD version to 2.17.0 due to an upgrade request
 - updated the golangci-lint pipeline to use a tweaked version of @maratori's config
 - changed the OSD version to 2.16.0 due to an upgrade request
 - **BREAKING CHANGE**: changed `global/scripts/golang/test/run.sh` to execute `go test` for all folders instad for `main` or `cmd`

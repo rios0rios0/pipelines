@@ -16,7 +16,7 @@ steps:
 
   - template: ./replace-environment-variables.yaml
     parameters:
-      FILE: '$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/.ci/config/opensearch_dashboards.yml'
+      FILE: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/.ci/config/opensearch_dashboards.yml"
       DISPLAY_NAME: 'Replace Environment Variables'
 
   - script: |
@@ -29,6 +29,7 @@ steps:
 
   - script: |
       cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
+      bash build_tools/rename_vars.sh
       yarn osd bootstrap &&
       yarn > $(Agent.TempDirectory)/yarn.log 2>&1
     displayName: 'Updating Repository and Installing Dependencies'
@@ -82,7 +83,7 @@ steps:
   - task: PublishPipelineArtifact@1
     condition: failed()
     inputs:
-      targetPath: '$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/public/assets/screenshots'
+      targetPath: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/public/assets/screenshots"
       artifact: 'screenshots'
       publishLocation: 'pipeline'
     displayName: 'Publish Screenshots'

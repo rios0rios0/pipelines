@@ -23,6 +23,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added artifact upload for SAST pipelines in GitHub Actions
 - added building tests for GoLang inside GitLab pipelines
 - added command to run `e2e` tests for JS projects
+- added command to run rename_vars.sh file
 
 ### Changed
 
@@ -146,4 +147,3 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Removed
 
 - removed Alpine images from GoLang stages because it doesn't work without `gcc` and `g++`
-

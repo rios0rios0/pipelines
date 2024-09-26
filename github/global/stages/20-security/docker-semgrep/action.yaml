@@ -10,7 +10,7 @@ runs:
   using: 'composite'
   steps:
     - name: Checkout repository
-      uses: 'actions/checkout@v3'
+      uses: 'actions/checkout@v4'
     - name: Setup the scripts repository
       uses: 'rios0rios0/pipelines/github/golang/abstracts/scripts-repo@main'
     - name: Run Semgrep

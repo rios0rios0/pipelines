@@ -10,7 +10,7 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - uses: 'actions/checkout@v3'
+    - uses: 'actions/checkout@v4'
     - run: |
         echo "PACKAGE_NAME=$(echo '${{ inputs.binary_name }}-${{ github.ref }}' | sed 's/refs\/tags\///')" >> $GITHUB_ENV
       shell: 'bash'

@@ -1,0 +1,25 @@
+parameters:
+  - name: TAG_NAME
+    type: string
+  - name: PLUGIN_NAME
+    type: string
+
+steps:
+  - task: NodeTool@0
+    inputs:
+      versionSpec: '18.19.0'
+    displayName: 'Use Node.js 18.19.0'
+
+  - script: npm install --global yarn
+    displayName: 'Install Yarn'
+
+  - script: |
+      git clone --depth 1 --branch ${{ parameters.TAG_NAME }} https://github.com/opensearch-project/OpenSearch-Dashboards.git $(Agent.TempDirectory)/OpenSearch-Dashboards
+    displayName: 'Clone OpenSearch Dashboards repository'
+
+  - task: CopyFiles@2
+    inputs:
+      SourceFolder: '$(Build.Repository.LocalPath)'
+      Contents: '**'
+      TargetFolder: '$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}'
+    displayName: 'Copy Plugin to Plugins folder'

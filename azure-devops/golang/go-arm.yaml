@@ -2,4 +2,5 @@ stages:
   - template: 'stages/10-code-check/go.yaml'
   - template: 'stages/20-security/go.yaml'
   - template: 'stages/30-tests/go.yaml'
+  - template: 'stages/35-management/go.yaml'
   - template: 'stages/40-delivery/arm.yaml'

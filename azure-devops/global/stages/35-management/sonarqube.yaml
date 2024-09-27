@@ -1,0 +1,18 @@
+parameters:
+  - name: 'BEFORE_SCRIPT'
+    type: 'string'
+    default: ''
+
+jobs:
+  - job: 'report_sonarqube'
+    container: 'sonarsource/sonar-scanner-cli:latest'
+    variables:
+      GIT_DEPTH: '0'
+      SONAR_USER_HOME: '$(Build.SourcesDirectory)/.sonar'
+    steps:
+      - task: 'Cache@2'
+        inputs:
+          key: "$(Agent.JobName)"
+          path: '.sonar/cache'
+      - script: ${{ parameters.BEFORE_SCRIPT }}
+      - script: sonar-scanner

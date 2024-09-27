@@ -1,15 +1,15 @@
 parameters:
-  - name: TAG_NAME
-    type: string
-  - name: PLUGIN_NAME
-    type: string
-  - name: COMMANDS
-    type: string
-  - name: ARTIFACT_NAME
-    type: string
+  - name: 'TAG_NAME'
+    type: 'string'
+  - name: 'PLUGIN_NAME'
+    type: 'string'
+  - name: 'COMMANDS'
+    type: 'string'
+  - name: 'ARTIFACT_NAME'
+    type: 'string'
     default: ''
-  - name: ARTIFACT_PATH
-    type: string
+  - name: 'ARTIFACT_PATH'
+    type: 'string'
     default: ''
 
 steps:

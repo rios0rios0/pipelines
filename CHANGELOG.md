@@ -24,6 +24,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added building tests for GoLang inside GitLab pipelines
 - added command to run `e2e` tests for JS projects
 - added command to run rename_vars.sh file
+- added management step for Azure DevOps environment
 
 ### Changed
 

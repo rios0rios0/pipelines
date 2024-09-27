@@ -1,5 +1,5 @@
 parameters:
-  - name: 'semgrepLang'
+  - name: 'SEMGREP_LANGUAGE'
     type: 'string'
 
 jobs:
@@ -9,7 +9,7 @@ jobs:
       - template: '../../abstracts/scripts-repo.yaml'
       - script: $(Scripts.Directory)/global/scripts/horusec/run.sh # TODO: needs to receive the requirements.txt
         continueOnError: true
-      - task: PublishPipelineArtifact@1
+      - task: 'PublishPipelineArtifact@1'
         inputs:
           targetPath: 'build/reports'
           artifact: 'HorusecReport'
@@ -19,9 +19,9 @@ jobs:
     displayName: 'sast:semgrep'
     steps:
       - template: '../../abstracts/scripts-repo.yaml'
-      - script: $(Scripts.Directory)/global/scripts/semgrep/run.sh "${{ parameters.semgrepLang }}" # it takes the first param as the main language
+      - script: $(Scripts.Directory)/global/scripts/semgrep/run.sh "${{ parameters.SEMGREP_LANGUAGE }}" # it takes the first param as the main language
         continueOnError: true
-      - task: PublishPipelineArtifact@1
+      - task: 'PublishPipelineArtifact@1'
         inputs:
           targetPath: 'build/reports'
           artifact: 'SemgrepReport'
@@ -33,7 +33,7 @@ jobs:
       - template: '../../abstracts/scripts-repo.yaml'
       - script: $(Scripts.Directory)/global/scripts/gitleaks/run.sh
         continueOnError: true
-      - task: PublishPipelineArtifact@1
+      - task: 'PublishPipelineArtifact@1'
         inputs:
           targetPath: 'build/reports'
           artifact: 'GitLeaksReport'

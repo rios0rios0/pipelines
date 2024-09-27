@@ -8,7 +8,7 @@ stages:
         steps:
           - task: 'GoTool@0'
             inputs:
-              version: '1.22.0'
+              version: '1.23.1'
           - script: |
               sudo apt-get update && \
               sudo apt-get install -y python3 python3-yaml # for golangci-lint config merging

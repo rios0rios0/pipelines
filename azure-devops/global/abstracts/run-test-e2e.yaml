@@ -1,12 +1,12 @@
 parameters:
-  - name: TAG_NAME
-    type: string
-  - name: PLUGIN_NAME
-    type: string
-  - name: OS_PORT
-    type: string
-  - name: OSD_PORT
-    type: string
+  - name: 'TAG_NAME'
+    type: 'string'
+  - name: 'PLUGIN_NAME'
+    type: 'string'
+  - name: 'OS_PORT'
+    type: 'string'
+  - name: 'OSD_PORT'
+    type: 'string'
 
 steps:
   - template: ./clone-and-move-opensearch-dashboards.yaml

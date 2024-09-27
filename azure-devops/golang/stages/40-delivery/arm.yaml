@@ -9,7 +9,7 @@ stages:
           # TODO: could we consider the use of Makefile?
           - task: 'GoTool@0'
             inputs:
-              version: '1.22.0'
+              version: '1.23.1'
               architecture: 'amd64'
               goArguments: 'mod tidy'
           # TODO: this should be a share script between the vendors
@@ -163,4 +163,3 @@ stages:
                 az functionapp deployment source config-zip --resource-group "$(resourceGroupName)"  \
                   --name "$(siteName)" --src "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
       - template: '../../../global/stages/40-delivery/release.yaml'
-

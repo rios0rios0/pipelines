@@ -13,17 +13,17 @@ stages:
               COMMANDS: 'yarn osd bootstrap && yarn build'
               ARTIFACT_NAME: 'build'
               ARTIFACT_PATH: 'build'
-          - task: DownloadBuildArtifacts@0
+          - task: 'DownloadBuildArtifacts@0'
             inputs:
               buildType: 'current'
               downloadType: 'single'
               artifactName: 'build'
               downloadPath: '.'
-          - task: Docker@2
+          - task: 'Docker@2'
             displayName: 'Docker Login'
             inputs:
               command: 'login'
-              containerRegistry: '$(DOCKER_REGISTRY_ENDPOINT)'
+              containerRegistry: "$(DOCKER_REGISTRY_ENDPOINT)"
           - script: |
               docker buildx create --use
 

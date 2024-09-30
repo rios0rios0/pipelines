@@ -8,7 +8,7 @@
   before_script:
     - $slnFile = (Get-ChildItem -Path .\ -Filter *.sln).FullName
     - nuget restore -PackagesDirectory .\packages $slnFile
-    - 'Start-Process -FilePath "C:\Program Files\Microsoft Visual Studio\2022\Preview\MSBuild\Current\Bin\MSBuild.exe" -ArgumentList "/p:Configuration=Release" -NoNewWindow -Wait'
+    - 'Start-Process -FilePath "C:\Program Files\Microsoft Visual Studio\2022\Preview\MSBuild\Current\Bin\MSBuild.exe" -ArgumentList "/p:Configuration=Debug" -NoNewWindow -Wait'
   tags:
     - 'dev-gitlab-runner-onprem-windows'
   rules:

@@ -15,7 +15,6 @@ stages:
               ARTIFACT_PATH: 'coverage'
 
       - job: 'test_e2e'
-        timeoutInMinutes: 180
         displayName: 'test:e2e'
         steps:
           - template: '../../../global/abstracts/run-test-e2e.yaml'

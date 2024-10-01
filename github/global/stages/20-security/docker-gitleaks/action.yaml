@@ -4,14 +4,14 @@ on:
 runs:
   using: 'composite'
   steps:
-    - name: Checkout repository
+    - name: 'load'
       uses: 'actions/checkout@v4'
-    - name: Setup the scripts repository
+    - name: 'set context'
       uses: 'rios0rios0/pipelines/github/golang/abstracts/scripts-repo@main'
-    - name: Run Gitleaks
+    - name: 'execute'
       shell: 'bash'
       run: $SCRIPTS_DIR/global/scripts/gitleaks/run.sh
-    - name: Upload artifacts
+    - name: 'upload'
       uses: 'actions/upload-artifact@v4'
       with:
         name: 'gitleaks'

@@ -18,33 +18,33 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added artifact upload for SAST pipelines
-- added `clone.sh` script into the root
 - added Python pipelines for GitHub actions
-- added `test:build` for `golang` projects for `gitlab`
-- added command to run `e2e` tests
+- added `clone.sh` script into the root to help local development
+- added artifact upload for SAST pipelines in GitHub Actions
+- added building tests for GoLang inside GitLab pipelines
+- added command to run `e2e` tests for JS projects
 
 ### Changed
 
-- upgraded `actions/checkout@v3` uses a deprecated Node.js version
+- changed GitHub `python.yaml` to run stage with custom Docker image
+- changed GoLang pipelines using GitLab to version to `1.23.1`
+- changed GoLang test script to install docker used by test containers in integration tests
+- changed GoLang test script to run integration tests separately and one per time
+- changed `Horusec` JSON configuration file to ignore `pipelines_*` directory created by GitHub Actions
+- changed `global/scripts/golang/test/run.sh` to execute `go test` for all folders instead for `main` or `cmd`
+- changed the CSharp pipeline to run tests with the Debug configuration instead of Release
 - changed the OSD version to 2.17.0 due to an upgrade request
 - updated the golangci-lint pipeline to use a tweaked version of @maratori's config
-- changed the OSD version to 2.16.0 due to an upgrade request
-- **BREAKING CHANGE**: changed `global/scripts/golang/test/run.sh` to execute `go test` for all folders instad for `main` or `cmd`
-- changed `run.sh` `golang` test script to install docker used by test containers in integration tests
-- changed `run.sh` `golang` test script to run integration tests separately and one per time
-- changed GitHub `python.yaml` to run stage with custom Docker image
-- changed gitlab `GO` version to `1.23.1`
-- changed the CSharp pipeline to run tests with the Debug configuration instead of Release
+- upgraded `actions/checkout@v3` uses a deprecated Node.js version
 
 ### Fixed
 
-- fixed Go Debian pipeline failing to upload the `.deb` file to the GitLab releases
-- fixed Go pipeline for GitHub Actions missing permissions to install dependencies
 - added two missing linters to the `golangci-lint` pipeline
-- fixed the error in `global/scripts/golang/test/run.sh` where `cmd` and `internal` folders were both required at the same time
+- fixed GoLang Debian pipeline failing to upload the `.deb` file to the GitLab releases
+- fixed GoLang pipeline for GitHub Actions missing permissions to install dependencies
 - fixed argument passing errors in `global/scripts/golang/test/run.sh`
 - fixed the error in `global/scripts/golang/test/run.sh` to execute the `go test` only for `main`, `cmd` and `internal`
+- fixed the error in `global/scripts/golang/test/run.sh` where `cmd` and `internal` folders were both required at the same time
 
 ## [2.0.0] - 2024-08-07
 

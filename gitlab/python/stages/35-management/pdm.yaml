@@ -6,6 +6,8 @@ include:
 report:sonarqube:
   extends: '.sonarqube'
   script:
+    # Install necessary utilities before running the find command
+    - apt-get update && apt-get install -y findutils grep
     # Find __init__.py in a root-level folder, excluding "tests" directory
     - file=$(find . -maxdepth 2 -type f -name "__init__.py" ! -path "./tests/*")
     - 'if [ -z "$file" ]; then echo "Couldn''t find the __init__.py file in a root-level folder"; exit 1; fi'

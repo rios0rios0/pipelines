@@ -1,11 +1,11 @@
 parameters:
-  - name: TAG_NAME
-    type: string
-  - name: PLUGIN_NAME
-    type: string
+  - name: 'TAG_NAME'
+    type: 'string'
+  - name: 'PLUGIN_NAME'
+    type: 'string'
 
 steps:
-  - task: NodeTool@0
+  - task: 'NodeTool@0'
     inputs:
       versionSpec: '18.19.0'
     displayName: 'Use Node.js 18.19.0'
@@ -17,7 +17,7 @@ steps:
       git clone --depth 1 --branch ${{ parameters.TAG_NAME }} https://github.com/opensearch-project/OpenSearch-Dashboards.git $(Agent.TempDirectory)/OpenSearch-Dashboards
     displayName: 'Clone OpenSearch Dashboards repository'
 
-  - task: CopyFiles@2
+  - task: 'CopyFiles@2'
     inputs:
       SourceFolder: '$(Build.Repository.LocalPath)'
       Contents: '**'

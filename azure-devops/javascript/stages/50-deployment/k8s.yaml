@@ -13,10 +13,10 @@ stages:
             inputs:
               action: 'createSecret'
               secretType: 'dockerRegistry'
-              secretName: '$(K8S_IMAGE_PULL_SECRET_NAME)'
-              dockerRegistryEndpoint: '$(DOCKER_REGISTRY_ENDPOINT)'
-              kubernetesServiceConnection: '$(K8S_ENDPOINT)'
-              namespace: '$(K8S_NAMESPACE)'
+              secretName: "$(K8S_IMAGE_PULL_SECRET_NAME)"
+              dockerRegistryEndpoint: "$(DOCKER_REGISTRY_ENDPOINT)"
+              kubernetesServiceConnection: "$(K8S_ENDPOINT)"
+              namespace: "$(K8S_NAMESPACE)"
           - template: '../../../global/abstracts/replace-environment-variables.yaml'
             parameters:
               FILE: '.ci/config/opensearch_dashboards.yml'
@@ -24,16 +24,16 @@ stages:
           - task: Kubernetes@1
             inputs:
               connectionType: 'Kubernetes Service Connection'
-              configMapName: '$(K8S_CONFIGMAP_NAME)'
+              configMapName: "$(K8S_CONFIGMAP_NAME)"
               forceUpdateConfigMap: true
               configMapArguments: '--from-file=.ci/config/opensearch_dashboards.yml'
-              kubernetesServiceEndpoint: '$(K8S_ENDPOINT)'
-              namespace: '$(K8S_NAMESPACE)'
+              kubernetesServiceEndpoint: "$(K8S_ENDPOINT)"
+              namespace: "$(K8S_NAMESPACE)"
           - task: KubernetesManifest@0
             inputs:
               action: 'patch'
               kind: 'deployment'
-              name: '$(K8S_DEPLOYMENT_NAME)'
+              name: "$(K8S_DEPLOYMENT_NAME)"
               mergeStrategy: 'strategic'
               patch: |
                 {
@@ -70,12 +70,12 @@ stages:
                     }
                   }
                 }
-              kubernetesServiceConnection: '$(K8S_ENDPOINT)'
-              namespace: '$(K8S_NAMESPACE)'
+              kubernetesServiceConnection: "$(K8S_ENDPOINT)"
+              namespace: "$(K8S_NAMESPACE)"
           - task: Kubernetes@1
             inputs:
               connectionType: 'Kubernetes Service Connection'
-              kubernetesServiceEndpoint: '$(K8S_ENDPOINT)'
-              namespace: '$(K8S_NAMESPACE)'
+              kubernetesServiceEndpoint: "$(K8S_ENDPOINT)"
+              namespace: "$(K8S_NAMESPACE)"
               command: 'rollout'
-              arguments: 'restart deployment/$(K8S_DEPLOYMENT_NAME)'
+              arguments: "restart deployment/$(K8S_DEPLOYMENT_NAME)"

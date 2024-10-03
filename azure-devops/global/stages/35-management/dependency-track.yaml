@@ -1,0 +1,15 @@
+parameters:
+  - name: 'BEFORE_SCRIPT'
+    type: 'string'
+    default: ''
+
+steps:
+  - script: ${{ parameters.BEFORE_SCRIPT }}
+  - script: |
+      export REQUEST_CONTENT_TYPE="Content-Type: multipart/form-data"
+      export REQUEST_API_KEY="X-Api-Key: $(DEPENDENCY_TRACK_TOKEN)"
+      curl --insecure --fail --request 'POST' "$(DEPENDENCY_TRACK_HOST_URL)/api/v1/bom" \
+        -H "$REQUEST_CONTENT_TYPE" -H "$REQUEST_API_KEY" \
+        -F "projectName=$(cat $(PREFIX)$(REPORT_PATH)/bom.json | jq -r '.metadata.component.name')" \
+        -F "projectVersion=$(cat $(PREFIX)$(REPORT_PATH)/bom.json | jq -r '.metadata.component.version')" \
+        -F 'autoCreate=true' -F "bom=@$(PREFIX)$(REPORT_PATH)/bom.json"

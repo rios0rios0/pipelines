@@ -1,8 +1,8 @@
 parameters:
-  - name: FILE
-    type: string
-  - name: DISPLAY_NAME
-    type: string
+  - name: 'FILE'
+    type: 'string'
+  - name: 'DISPLAY_NAME'
+    type: 'string'
     default: 'Replace Environment Variables'
 
 steps:

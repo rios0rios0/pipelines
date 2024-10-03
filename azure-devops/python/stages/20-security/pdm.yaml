@@ -5,4 +5,4 @@ stages:
     jobs:
       - template: '../../../global/stages/20-security/docker.yaml'
         parameters:
-          semgrepLang: 'python'
+          SEMGREP_LANGUAGE: 'python'

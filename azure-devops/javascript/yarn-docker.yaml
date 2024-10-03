@@ -2,6 +2,6 @@ stages:
   - template: 'stages/10-code-check/yarn.yaml'
   - template: 'stages/20-security/yarn.yaml'
   - template: 'stages/30-tests/yarn.yaml'
-  - template: 'stages/35-management/npm-yarn.yaml'
+  - template: 'stages/35-management/yarn.yaml'
   - template: 'stages/40-delivery/docker.yaml'
   - template: 'stages/50-deployment/k8s.yaml'

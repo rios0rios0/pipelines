@@ -6,10 +6,19 @@ include:
 report:sonarqube:
   extends: '.sonarqube'
   script:
-    # Install necessary utilities before running the find command
-    - apt-get update && apt-get install -y findutils grep
-    # Find __init__.py in a root-level folder, excluding "tests" directory
-    - file=$(find . -maxdepth 2 -type f -name "__init__.py" ! -path "./tests/*")
+    # Use shell globbing to find __init__.py files, excluding those in the "tests" directory, and limit search depth to 2
+    - shopt -s globstar
+    - file=""
+    # Loop through all __init__.py files
+    - for f in **/__init__.py; do
+        if [[ "$f" == "./tests/"* ]]; then
+          continue;
+        fi;
+        if [[ $(echo "$f" | grep -o "/" | wc -l) -le 2 ]]; then
+          file="$f";
+          break;
+        fi;
+      done
     - 'if [ -z "$file" ]; then echo "Couldn''t find the __init__.py file in a root-level folder"; exit 1; fi'
     # Read version from the found __init__.py
     - version=$(grep "^__version__\s*=\s*['\"]" "$file" | cut -d'"' -f 2)

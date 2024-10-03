@@ -11,7 +11,7 @@ jobs:
       options: '--user root' # TODO: workaround for Azure DevOps error
     variables:
       GIT_DEPTH: '0'
-      SONAR_USER_HOME: '$(Build.SourcesDirectory)/.sonar'
+      SONAR_USER_HOME: "$(Build.SourcesDirectory)/.sonar"
     steps:
       - task: 'Cache@2'
         inputs:

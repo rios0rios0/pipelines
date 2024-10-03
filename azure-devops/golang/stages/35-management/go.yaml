@@ -14,13 +14,16 @@ stages:
 
       - job: 'report_dependency_track'
         displayName: 'report:dependency-track'
+        # TODO: this is being repeated all over the place
+        variables:
+          PREFIX: ''
+          REPORT_PATH: 'build/reports'
+          GOPATH: "$(Build.SourcesDirectory)/.go"
+          GOBIN: "$(GOPATH)/bin"
         steps:
           - task: 'GoTool@0'
             inputs:
               version: '1.23.1'
-          - script: |
-              export GOPATH="$(pwd)/.go"
-              export PATH="$PATH:$GOPATH/bin" # TODO: do we need this?
           - task: 'Cache@2'
             inputs:
               key: '$(Agent.JobName)'
@@ -30,9 +33,10 @@ stages:
               # TODO: duplicated code with GitLab pipelines
               BEFORE_SCRIPT: |
                 mkdir -p "$(PREFIX)$(REPORT_PATH)"
-                apt update && apt install -y --no-install-recommends curl jq
+                # TODO: this is not required in Azure DevOps
+                # apt update && apt install -y --no-install-recommends curl jq
                 go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
                 if [ -d "main" ]; then folder="main"; fi
                 if [ -z "$folder" ]; then folder=$(find cmd -name "*.go" -print | head -n 1 | xargs -n 1 dirname); fi
                 if [ -z "$folder" ]; then echo "Could not find a directory containing Go files"; exit 1; fi
-                cyclonedx-gomod app -json -output "$(PREFIX)$(REPORT_PATH)/bom.json" -packages -files -licenses -main $folder
+                $GOBIN/cyclonedx-gomod app -json -output "$(PREFIX)$(REPORT_PATH)/bom.json" -packages -files -licenses -main $folder

@@ -5,7 +5,10 @@ parameters:
 
 jobs:
   - job: 'report_sonarqube'
-    container: 'sonarsource/sonar-scanner-cli:latest'
+    displayName: 'report:sonarqube'
+    container:
+      image: 'sonarsource/sonar-scanner-cli:latest'
+      options: '--user root' # TODO: workaround for Azure DevOps error
     variables:
       GIT_DEPTH: '0'
       SONAR_USER_HOME: '$(Build.SourcesDirectory)/.sonar'

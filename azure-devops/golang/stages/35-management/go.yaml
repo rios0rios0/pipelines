@@ -3,17 +3,14 @@ stages:
     condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     displayName: 'management'
     jobs:
-      - job: 'report_sonarqube'
-        displayName: 'report:sonarqube'
-        steps:
-          - template: '../../../global/stages/35-management/sonarqube.yaml'
-            parameters:
-              # TODO: duplicated code with GitLab pipelines
-              BEFORE_SCRIPT: |
-                version=$(git describe --tags --abbrev=0) || true
-                if [ -z "$version" ]; then version="0.0.0"; echo "No version tag found in the repository, setting version to $version"; fi
-                echo "sonar.projectVersion=$version" >> sonar-project.properties
-                echo "Updated sonar.projectVersion to $version"
+      - template: '../../../global/stages/35-management/sonarqube.yaml'
+        parameters:
+          # TODO: duplicated code with GitLab pipelines
+          BEFORE_SCRIPT: |
+            version=$(git describe --tags --abbrev=0) || true
+            if [ -z "$version" ]; then version="0.0.0"; echo "No version tag found in the repository, setting version to $version"; fi
+            echo "sonar.projectVersion=$version" >> sonar-project.properties
+            echo "Updated sonar.projectVersion to $version"
 
       - job: 'report_dependency_track'
         displayName: 'report:dependency-track'

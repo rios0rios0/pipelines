@@ -5,36 +5,48 @@ stages:
     jobs:
       - job: 'report_sonarqube'
         displayName: 'report:sonarqube'
-        container: 'node:18.7.0-bullseye'
         variables:
-          GIT_DEPTH: 0
           SONAR_USER_HOME: "$(Build.SourcesDirectory)/.sonar"
         steps:
+          - task: 'UseNode@1'
+            inputs:
+              version: '18.19.0'
+          - script: |
+              corepack enable
+              corepack prepare yarn@stable --activate
           - task: 'Cache@2'
             inputs:
               key: "$(Agent.JobName)"
               path: 'node_modules'
           - task: 'Cache@2'
             inputs:
-              key: "$(Agent.JobName)"
+              key: "$(Agent.JobName)-2"
               path: "$(SONAR_USER_HOME)"
           - script: |
               sed -i "s/\"extends\": \"\.\.\/\.\.\/tsconfig\.json\",/ /g" tsconfig.json
               yarn && yarn sonar
-            env:
-              GIT_DEPTH: "$(GIT_DEPTH)"
-              SONAR_USER_HOME: "$(SONAR_USER_HOME)"
 
       - job: 'report_dependency_track'
         displayName: 'report:dependency-track'
+        # TODO: this is being repeated all over the place
+        variables:
+          PREFIX: ''
+          REPORT_PATH: 'build/reports'
         steps:
+          - task: 'UseNode@1'
+            inputs:
+              version: '18.19.0'
+          - script: |
+              corepack enable
+              corepack prepare yarn@stable --activate
           - task: 'Cache@2'
             inputs:
               key: "$(Agent.JobName)"
               path: 'node_modules'
-          - template: '../../../global/35-management/dependency-track.yaml'
+          - template: '../../../global/stages/35-management/dependency-track.yaml'
             parameters:
               # TODO: duplicated code with GitLab pipelines
               BEFORE_SCRIPT: |
-                npm install && npm run sbom
-                apt update && apt install -y --no-install-recommends curl jq
+                yarn && yarn sbom
+                # TODO: this is not required in Azure DevOps
+                # apt update && apt install -y --no-install-recommends curl jq

@@ -48,6 +48,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed the error in `global/scripts/golang/test/run.sh` to execute the `go test` only for `main`, `cmd` and `internal`
 - fixed the error in `global/scripts/golang/test/run.sh` where `cmd` and `internal` folders were both required at the same time
 - fixed `python management` step to install necessary package before executing the command
+- fixed `python management` step to adjust for commands for the non-debian image
 
 ## [2.0.0] - 2024-08-07
 

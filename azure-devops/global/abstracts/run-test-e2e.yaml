@@ -79,8 +79,20 @@ steps:
         exit $CYPRESS_EXIT_CODE
     displayName: 'Run E2E Tests and Stop Server'
 
+  - task: Bash@3
+    displayName: 'Check for Screenshots'
+    condition: always()
+    inputs:
+      targetType: 'inline'
+      script: |
+        if [ -d "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/public/assets/screenshots" ]; then
+          echo "##vso[task.setvariable variable=SCREENSHOTS_EXIST]true"
+        else
+          echo "##vso[task.setvariable variable=SCREENSHOTS_EXIST]false"
+        fi
+
   - task: PublishPipelineArtifact@1
-    condition: failed()
+    condition: and(succeededOrFailed(), eq(variables['SCREENSHOTS_EXIST'], 'true'))
     inputs:
       targetPath: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/public/assets/screenshots"
       artifact: 'screenshots'

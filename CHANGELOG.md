@@ -25,6 +25,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added command to run `e2e` tests for JS projects
 - added command to run rename_vars.sh file
 - added management step for Azure DevOps environment
+- added a new step to publish the code coverage for `azure-devops`
 
 ### Changed
 

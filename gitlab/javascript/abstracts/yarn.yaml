@@ -1,6 +1,6 @@
 .yarn:
   image:
-    name: 'node:18.7.0-bullseye'
+    name: 'node:18.17.1-bullseye'
     docker:
       user: 'node'
   cache: # relative to the project directory ($CI_PROJECT_DIR)

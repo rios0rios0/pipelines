@@ -38,6 +38,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed the OSD version to 2.17.0 due to an upgrade request
 - updated the golangci-lint pipeline to use a tweaked version of @maratori's config
 - upgraded `actions/checkout@v3` uses a deprecated Node.js version
+- changed Gitlab `yarn.yaml` node image version to `18.17.1`
 
 ### Fixed
 

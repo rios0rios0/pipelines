@@ -11,3 +11,8 @@ stages:
               version: '1.23.1'
           - template: '../../../global/abstracts/scripts-repo.yaml'
           - script: $(Scripts.Directory)/global/scripts/golang/test/run.sh
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Coverage File'
+            inputs:
+              targetPath: '$(System.DefaultWorkingDirectory)/coverage.txt'
+              artifact: 'coverage'

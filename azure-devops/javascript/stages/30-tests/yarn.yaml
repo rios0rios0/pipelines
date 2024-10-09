@@ -10,7 +10,7 @@ stages:
             parameters:
               TAG_NAME: '2.17.0'
               PLUGIN_NAME: 'app'
-              COMMANDS: 'yarn osd bootstrap && yarn test:coverage'
+              COMMANDS: 'yarn && yarn osd bootstrap && yarn test:coverage'
               ARTIFACT_NAME: 'coverage'
               ARTIFACT_PATH: 'coverage'
 

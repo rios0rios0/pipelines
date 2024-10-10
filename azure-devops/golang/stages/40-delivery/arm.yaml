@@ -25,7 +25,7 @@ stages:
             inputs:
               Contents: |
                 api/function.json
-                bin/main
+                bin/*
                 host.json
               TargetFolder: '$(Build.SourcesDirectory)/$(Build.BuildId)'
           - task: 'ArchiveFiles@2'

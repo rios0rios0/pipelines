@@ -40,6 +40,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - updated the golangci-lint pipeline to use a tweaked version of @maratori's config
 - upgraded `actions/checkout@v3` uses a deprecated Node.js version
 - changed Gitlab `yarn.yaml` node image version to `18.17.1`
+- changed the binary copy process in the `delivery` stage of `azure-devops` to a more generic approach
 
 ### Fixed
 

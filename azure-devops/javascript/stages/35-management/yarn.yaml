@@ -9,15 +9,23 @@ stages:
           SONAR_USER_HOME: "$(Build.SourcesDirectory)/.sonar"
         steps:
           - task: 'UseNode@1'
+            displayName: 'Use Node.js 18.19.0'
             inputs:
               version: '18.19.0'
           - script: |
               corepack enable
               corepack prepare yarn@stable --activate
+            displayName: 'Install Yarn'
           - task: 'Cache@2'
+            displayName: 'Using cache for node_modules'
             inputs:
               key: "$(Agent.JobName)"
               path: 'node_modules'
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download Coverage File'
+            inputs:
+              artifactName: 'coverage'
+              targetPath: '$(Build.SourcesDirectory)/coverage'
           - task: 'Cache@2'
             inputs:
               key: "$(Agent.JobName)-2"
@@ -34,12 +42,15 @@ stages:
           REPORT_PATH: 'build/reports'
         steps:
           - task: 'UseNode@1'
+            displayName: 'Use Node.js 18.19.0'
             inputs:
               version: '18.19.0'
           - script: |
               corepack enable
               corepack prepare yarn@stable --activate
+            displayName: 'Install Yarn'
           - task: 'Cache@2'
+            displayName: 'Using cache for node_modules'
             inputs:
               key: "$(Agent.JobName)"
               path: 'node_modules'

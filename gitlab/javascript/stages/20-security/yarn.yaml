@@ -2,5 +2,5 @@ variables:
   SEMGREP_LANG: 'javascript'
 
 include:
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/docker.yaml'
-  #- remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/javascript/abstracts/yarn.yaml' TODO: should be the security procedures for JS
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/global/stages/20-security/docker.yaml'
+  #- remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/javascript/abstracts/yarn.yaml' TODO: should be the security procedures for JS

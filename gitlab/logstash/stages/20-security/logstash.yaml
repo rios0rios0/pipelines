@@ -2,4 +2,4 @@ variables:
   SEMGREP_LANG: 'kubernetes'
 
 include:
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/docker.yaml'
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/global/stages/20-security/docker.yaml'

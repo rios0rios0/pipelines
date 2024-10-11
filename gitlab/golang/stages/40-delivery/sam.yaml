@@ -1,5 +1,5 @@
 include:
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/40-delivery/sam.yaml'
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/global/stages/40-delivery/sam.yaml'
 
 .delivery:
   image: 'ghcr.io/rios0rios0/pipelines/golang:1.19-awscli'

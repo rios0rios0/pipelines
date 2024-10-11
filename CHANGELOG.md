@@ -42,6 +42,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed Gitlab `yarn.yaml` node image version to `18.17.1`
 - changed the binary copy process in the `delivery` stage of `azure-devops` to a more generic approach
 - changed `javascript` pipeline for `azure-devops` to publish the code coverage in `sonarqube`
+- changed `yarn.yaml` user to use root
 
 ### Fixed
 

@@ -1,5 +1,5 @@
 include:
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/javascript/abstracts/yarn.yaml'
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/javascript/abstracts/yarn.yaml'
 
 test:all:
   extends: '.yarn'

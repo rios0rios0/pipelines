@@ -1,6 +1,6 @@
 include:
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo-alpine-docker.yaml'
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/global/abstracts/scripts-repo-alpine-docker.yaml'
 
 # TODO: a good feature is commenting on the PR the findings for each tool, like the old false positives in Horusec
 sast:horusec: # TODO: change the false positive acceptance way (https://github.com/ZupIT/horusec/issues/699)
@@ -20,7 +20,7 @@ sast:semgrep:
   extends: '.scripts-repo-alpine-docker'
   stage: 'security (sca/sast)'
   script:
-    - $SCRIPTS_DIR/global/scripts/semgrep/run.sh $SEMGREP_LANG # it takes the first param as the main language
+    - $SCRIPTS_DIR/global/scripts/semgrep/run.sh $SEMGREP_LANG # it takes the first param as the feat/change-node-user language
   artifacts:
     when: 'always'
     reports:

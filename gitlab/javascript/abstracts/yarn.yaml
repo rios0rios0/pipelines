@@ -1,8 +1,6 @@
 .yarn:
   image:
-    name: 'node:18.17.1-bullseye'
-    docker:
-      user: 'node'
+    name: 'node:18-buster'
   cache: # relative to the project directory ($CI_PROJECT_DIR)
     key: "$CI_JOB_NAME"
     paths:

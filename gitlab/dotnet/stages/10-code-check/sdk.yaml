@@ -1,5 +1,5 @@
 include:
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dotnet/abstracts/sdk.yaml'
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/dotnet/abstracts/sdk.yaml'
 
 #style:stylecop:
 

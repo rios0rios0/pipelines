@@ -1,8 +1,8 @@
 include:
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/35-management/abstracts.yaml'
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/javascript/abstracts/npm.yaml'
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/javascript/abstracts/yarn.yaml'
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/global/stages/35-management/abstracts.yaml'
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/javascript/abstracts/npm.yaml'
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/javascript/abstracts/yarn.yaml'
 
 report:sonarqube:
   extends: '.yarn'

@@ -4,8 +4,8 @@ variables:
   GRADLE_OPTS: '-Xmx2g'
 
 include:
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/docker.yaml'
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/global/stages/20-security/docker.yaml'
 
 sca:dependency-check:
   extends: '.dependency-check'
@@ -34,6 +34,6 @@ sca:dependency-check:
 #    when: 'always'
 #    reports:
 #      sast:
-#        - "$REPORT_PATH/spotbugs/main.xml"
+#        - "$REPORT_PATH/spotbugs/feat/change-node-user.xml"
 #        - "$REPORT_PATH/spotbugs/test.xml"
 #  allow_failure: true

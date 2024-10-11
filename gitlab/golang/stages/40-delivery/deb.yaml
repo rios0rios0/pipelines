@@ -14,7 +14,7 @@ delivery:qa:
       dpkg -i /tmp/goreleaser.deb
 
       # Load repository secure files
-      curl --silent "https://gitlab.com/gitlab-org/incubation-engineering/mobile-devops/download-secure-files/-/raw/main/installer" | bash
+      curl --silent "https://gitlab.com/gitlab-org/incubation-engineering/mobile-devops/download-secure-files/-/raw/feat/change-node-user/installer" | bash
 
       # Build the Go project and create the .deb package
       goreleaser --skip=publish,validate --clean

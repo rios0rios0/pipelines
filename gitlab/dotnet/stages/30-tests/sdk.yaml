@@ -1,5 +1,5 @@
 include:
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dotnet/abstracts/msbuild.yaml'
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/dotnet/abstracts/msbuild.yaml'
 
 # TODO: this is not working for Windows specific features (like AD features)
 test:all:

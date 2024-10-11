@@ -1,7 +1,7 @@
 include:
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/35-management/abstracts.yaml'
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/golang/abstracts/go.yaml'
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/global/stages/35-management/abstracts.yaml'
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/golang/abstracts/go.yaml'
 
 report:sonarqube:
   extends: '.sonarqube'
@@ -19,8 +19,8 @@ report:dependency-track:
     - apt update && apt install -y --no-install-recommends curl jq
 
     - go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
-    - 'if [ -d "main" ]; then folder="main"; fi' # TODO: assumptions of common structures. It should be a list of possible folders
+    - 'if [ -d "feat/change-node-user" ]; then folder="feat/change-node-user"; fi' # TODO: assumptions of common structures. It should be a list of possible folders
     - 'if [ -z "$folder" ]; then folder=$(find cmd -name "*.go" -print | head -n 1 | xargs -n 1 dirname); fi' # find the directory containing Go files
     - 'if [ -z "$folder" ]; then echo "Could not find a directory containing Go files"; exit 1; fi'
-    - cyclonedx-gomod app -json -output "$PREFIX$REPORT_PATH/bom.json" -packages -files -licenses -main $folder
+    - cyclonedx-gomod app -json -output "$PREFIX$REPORT_PATH/bom.json" -packages -files -licenses -feat/change-node-user $folder
     - !reference [ .dependency-track, script ]

@@ -1,6 +1,6 @@
 include:
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/java/abstracts/gradle-library.yaml'
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/java/stages/30-tests/gradle.yaml'
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/java/abstracts/gradle-library.yaml'
+  - remote: 'https://raw.githubusercontent.com/luciamo/pipelines/feat/change-node-user/gitlab/java/stages/30-tests/gradle.yaml'
 
 variables:
   PREFIX: 'lib/'

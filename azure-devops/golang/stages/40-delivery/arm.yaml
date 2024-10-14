@@ -79,16 +79,11 @@ stages:
                 if [[ -z $SETTINGS ]]; then
                   echo "Warning: There are no environment variables to update"
                 else
-                  pip install -Iv azure-cli==2.56.0 --extra-index-url https://azurecliprod.blob.core.windows.net/edge
-                  az --version
                   # TODO: change this part to do only one call in the command az functionapp
-                  IFS=' ' read -ra ADDR <<< "$SETTINGS"
-                  for i in "${ADDR[@]}"; do
-                    az functionapp config appsettings set \
-                      --name "$(siteName)" \
-                      --resource-group "$(resourceGroupName)" \
-                      --settings "$i"
-                  done
+                  az functionapp config appsettings set \
+                    --name "$(siteName)" \
+                    --resource-group "$(resourceGroupName)" \
+                    --settings $SETTINGS
                 fi
           - task: AzureCLI@2
             displayName: Migrations
@@ -157,8 +152,6 @@ stages:
               scriptLocation: 'inlineScript'
               inlineScript: |
                 set -e
-
-                pip install -Iv azure-cli==2.56.0 --extra-index-url https://azurecliprod.blob.core.windows.net/edge
                 az --version
                 az functionapp deployment source config-zip --resource-group "$(resourceGroupName)"  \
                   --name "$(siteName)" --src "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"

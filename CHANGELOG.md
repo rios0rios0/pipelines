@@ -42,6 +42,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed Gitlab `yarn.yaml` node image version to `18.17.1`
 - changed the binary copy process in the `delivery` stage of `azure-devops` to a more generic approach
 - changed `javascript` pipeline for `azure-devops` to publish the code coverage in `sonarqube`
+- changed `Replace Azure Function Variables` script to modify all variables in a single command
 
 ### Fixed
 
@@ -53,6 +54,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed the error in `global/scripts/golang/test/run.sh` where `cmd` and `internal` folders were both required at the same time
 - fixed `python management` step to install necessary package before executing the command
 - fixed `python management` step to adjust for commands for the non-debian image
+
+### Removed
+
+- removed the explicit installation of `Azure CLI` version 2.56 to use the pre-installed LTS version
 
 ## [2.0.0] - 2024-08-07
 

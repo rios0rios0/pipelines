@@ -35,6 +35,18 @@ stages:
               archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
               includeRootFolder: false
               replaceExistingArchive: true
+          - script: |
+              resourceGroupName=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
+              echo $resourceGroupName
+
+              functionAppName=$(az functionapp list --resource-group $resourceGroupName --query "[].name" --output tsv)
+              echo $functionAppName
+
+              az --version
+              outboundIPs=$(az webapp show --resource-group $resourceGroupName --name $functionAppName --query outboundIpAddresses --output tsv)
+
+              echo $outboundIPs
+            displayName: 'Getting outboundIpAddresses'
           # TODO: this should be the deployment stage
           - task: 'AzureResourceGroupDeployment@2'
             inputs:

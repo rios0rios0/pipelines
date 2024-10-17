@@ -78,6 +78,25 @@ stages:
               replaceExistingArchive: true
             displayName: 'Archive Build Output'
 
+          - task: AzureCLI@2
+            displayName: 'Getting Function Outbound IP Addresses'
+            inputs:
+              azureSubscription: '$(AZM_SERVICE_CONNECTION)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                resourceGroupName=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
+
+                az --version
+                functionAppName=$(az functionapp list --resource-group $resourceGroupName --query "[].name" --output tsv)
+                echo "Function App name: $functionAppName"
+
+                outboundIPAddresses=$(az webapp show --resource-group $resourceGroupName --name $functionAppName --query outboundIpAddresses --output tsv)
+
+                echo "List of outbound IPs: $outboundIPAddresses"
+
+                echo "##vso[task.setvariable variable=outboundIPAddresses]$outboundIPAddresses"
+          # TODO: this should be the deployment stage
           - task: 'AzureResourceGroupDeployment@2'
             condition: eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false')
             inputs:
@@ -86,7 +105,7 @@ stages:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               resourceGroupName: "$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)"
               csmFile: 'azuredeploy.json'
-              overrideParameters: "-location $(AZM_LOCATION) -environment $(ENVIRONMENT) -functionAppName $(AZM_FUNCTION_NAME) -inboundAllowedIps $(INBOUND_ALLOWED_IPS)"
+              overrideParameters: '-location $(AZM_LOCATION) -environment $(ENVIRONMENT) -functionAppName $(AZM_FUNCTION_NAME) -inboundAllowedIps $(INBOUND_ALLOWED_IPS) -oldOutboundIpAddresses $(outboundIPAddresses)'
               templateLocation: 'Linked artifact'
               deploymentMode: Incremental
               deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'

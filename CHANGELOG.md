@@ -16,7 +16,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
-### Added 
+### Added
 
 - added Python pipelines for GitHub actions
 - added `clone.sh` script into the root to help local development
@@ -55,6 +55,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed the error in `global/scripts/golang/test/run.sh` where `cmd` and `internal` folders were both required at the same time
 - fixed `python management` step to install necessary package before executing the command
 - fixed `python management` step to adjust for commands for the non-debian image
+- fixed `Go Build` step in the `azure-devops` `delivery` step to create output directory before compiling
 - fixed artifact generation for `e2e` tests
 
 ### Removed

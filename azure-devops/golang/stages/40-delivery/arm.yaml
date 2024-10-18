@@ -1,6 +1,6 @@
 stages:
   - stage: 'delivery'
-    condition: or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main'))
+    # condition: or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main'))
     displayName: 'delivery'
     jobs:
       - job: 'delivery'
@@ -81,19 +81,16 @@ stages:
           - task: AzureCLI@2
             displayName: 'Getting Function Outbound IP Addresses'
             inputs:
-              azureSubscription: '$(AZM_SERVICE_CONNECTION)'
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
                 resourceGroupName=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
+                echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
 
-                az --version
                 functionAppName=$(az functionapp list --resource-group $resourceGroupName --query "[].name" --output tsv)
-                echo "Function App name: $functionAppName"
 
                 outboundIPAddresses=$(az webapp show --resource-group $resourceGroupName --name $functionAppName --query outboundIpAddresses --output tsv)
-
-                echo "List of outbound IPs: $outboundIPAddresses"
 
                 echo "##vso[task.setvariable variable=outboundIPAddresses]$outboundIPAddresses"
           # TODO: this should be the deployment stage
@@ -105,7 +102,7 @@ stages:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               resourceGroupName: "$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)"
               csmFile: 'azuredeploy.json'
-              overrideParameters: '-location $(AZM_LOCATION) -environment $(ENVIRONMENT) -functionAppName $(AZM_FUNCTION_NAME) -inboundAllowedIps $(INBOUND_ALLOWED_IPS) -oldOutboundIpAddresses $(outboundIPAddresses)'
+              overrideParameters: "-location $(AZM_LOCATION) -environment $(ENVIRONMENT) -functionAppName $(AZM_FUNCTION_NAME) -inboundAllowedIps $(INBOUND_ALLOWED_IPS) -oldOutboundIpAddresses $(outboundIPAddresses)"
               templateLocation: 'Linked artifact'
               deploymentMode: Incremental
               deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'
@@ -139,8 +136,6 @@ stages:
               siteName=$(echo $OUTPUTS | jq -r '.siteName.value')
               echo "##vso[task.setvariable variable=siteName]$siteName"
 
-              resourceGroupName=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
-              echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
             displayName: 'Getting Pipeline Variables'
 
           - task: 'AzureCLI@2'
@@ -199,7 +194,6 @@ stages:
 
                 # TODO: create firewall for others databases
                 # TODO: this command is here because, without it, the code wasn't authorized, need to investigate the reason
-                  az --version
                   az postgres flexible-server firewall-rule create \
                     --resource-group "$(resourceGroupName)" \
                     --name "$DATABASE_SERVER_NAME" \

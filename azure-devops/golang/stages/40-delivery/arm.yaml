@@ -3,55 +3,40 @@ stages:
     condition: or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main'))
     displayName: 'delivery'
     jobs:
-
       - job: 'delivery'
-        displayName: 'Delivery Job'
+        displayName: 'delivery'
         variables:
-          GO_CACHE: /home/vsts/.cache/go-build
-          GO_MOD_CACHE: /home/vsts/go/pkg/mod
-          MIGRATION_CACHE: /home/vsts/migration_cache
-          AZURE_DEPLOY_CACHE: /home/vsts/deployment-output
+          GOPATH: "$(Build.SourcesDirectory)/.go"
+          MIGRATIONS_CACHE: "$(Build.SourcesDirectory)/.migration"
+          AZURE_DEPLOY_CACHE: "$(Build.SourcesDirectory)/.azuredeploy"
         steps:
           # TODO: check if this is necessary
           - script: |
               set -e
-              export GOPATH=/home/vsts/go  # Set GOPATH to project directory
-              export GOCACHE=$(GO_CACHE)
-              echo "GOPATH is set to $GOPATH"
-              echo "GOCACHE is set to $GOCACHE"
-              mkdir -p $(GO_MOD_CACHE)  # Ensure the module cache directory exists in the project directory
-              mkdir -p $(GO_CACHE)
-              mkdir -p $(AZURE_DEPLOY_CACHE)
-              mkdir -p $(MIGRATION_CACHE)
 
-              touch $(MIGRATION_CACHE)/dummy
+              mkdir -p $(MIGRATIONS_CACHE)
+              mkdir -p $(AZURE_DEPLOY_CACHE)
             displayName: 'Setup Cache'
 
-          - task: Cache@2
+          - task: 'Cache@2'
             inputs:
-              key: 'golang-module-cache-$(Agent.OS)|go.sum'
-              path: $(GO_MOD_CACHE)
+              key: "go-$(Agent.OS)|go.sum"
+              path: "$(GOPATH)"
             displayName: 'Cache Go Modules'
 
-          - task: Cache@2
+          - task: 'CacheBeta@1'
             inputs:
-              key: 'golang-build-cache-$(Agent.OS)|go.sum'
-              path: $(GO_CACHE)
-            displayName: 'Cache Go Build Cache'
+              key: 'go-migrations|db/migrations/*.sql|db/seeders/*.sql'
+              path: "$(MIGRATIONS_CACHE)"
+              cacheHitVar: 'MIGRATIONS_CACHE_HIT'
+            displayName: 'Cache Migrations'
 
-          - task: Cache@2
+          - task: 'Cache@2'
             inputs:
-              key: 'azure-resource-group-deployment-cache|azuredeploy.json'
-              path: $(AZURE_DEPLOY_CACHE)
+              key: 'azure-deploy|azuredeploy.json'
+              path: "$(AZURE_DEPLOY_CACHE)"
               cacheHitVar: 'AZURE_DEPLOY_CACHE_HIT'
             displayName: 'Cache Azure Deploy'
-
-          - task: CacheBeta@1
-            inputs:
-              key: 'golang-goose-migrations|db/migrations/*.sql|db/seeders/*.sql'
-              path: $(MIGRATION_CACHE)
-              cacheHitVar: 'MIGRATION_CACHE_HIT'
-            displayName: 'Cache Migrations'
 
           - task: 'GoTool@0'
             inputs:
@@ -68,9 +53,9 @@ stages:
 
           - script: |
               set -e
+
               export CGO_ENABLED=0
               export BUILD_FLAGS="-ldflags='-w -s'"
-              mkdir -p bin
               go build -o ./bin -v ./...
             displayName: 'Build Go Project'
 
@@ -80,14 +65,14 @@ stages:
                 api/function.json
                 bin/*
                 host.json
-              TargetFolder: '$(Build.SourcesDirectory)/$(Build.BuildId)'
+              TargetFolder: "$(Build.SourcesDirectory)/$(Build.BuildId)"
             displayName: 'Copy App Files'
 
           - task: 'ArchiveFiles@2'
             inputs:
               archiveType: 'zip'
-              rootFolderOrFile: '$(Build.SourcesDirectory)/$(Build.BuildId)'
-              archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+              rootFolderOrFile: "$(Build.SourcesDirectory)/$(Build.BuildId)"
+              archiveFile: "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
               includeRootFolder: false
               replaceExistingArchive: true
             displayName: 'Archive Build Output'
@@ -95,40 +80,39 @@ stages:
           - task: 'AzureResourceGroupDeployment@2'
             condition: eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false')
             inputs:
-              location: '$(AZM_LOCATION)'
+              location: "$(AZM_LOCATION)"
               action: 'Create Or Update Resource Group'
-              azureSubscription: '$(AZM_SERVICE_CONNECTION)'
-              resourceGroupName: '$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)'
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+              resourceGroupName: "$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)"
               csmFile: 'azuredeploy.json'
-              overrideParameters: '-location $(AZM_LOCATION) -environment $(ENVIRONMENT) -functionAppName $(AZM_FUNCTION_NAME) -inboundAllowedIps $(INBOUND_ALLOWED_IPS)'
+              overrideParameters: "-location $(AZM_LOCATION) -environment $(ENVIRONMENT) -functionAppName $(AZM_FUNCTION_NAME) -inboundAllowedIps $(INBOUND_ALLOWED_IPS)"
               templateLocation: 'Linked artifact'
               deploymentMode: Incremental
-              deploymentOutputs: 'AZUREOUTPUTS'
+              deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'
             displayName: 'Deploy Resource Group'
 
-          - task: AzureCLI@2
+          - task: 'AzureCLI@2'
             displayName: 'Save Deployment Outputs to File'
             inputs:
-              azureSubscription: '$(AZM_SERVICE_CONNECTION)'
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
                 set -e
 
-                touch $(AZURE_DEPLOY_CACHE)/outputs
-                echo $AZUREOUTPUTS > $(AZURE_DEPLOY_CACHE)/outputs
+                echo $AZURE_DEPLOY_OUTPUTS > $(AZURE_DEPLOY_CACHE)/outputs.json
             condition: eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false')
 
-          - task: AzureCLI@2
-            displayName: Read Outputs from file
+          - task: 'AzureCLI@2'
+            displayName: 'Read Outputs from file'
             inputs:
-              azureSubscription: '$(AZM_SERVICE_CONNECTION)'
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
                 set -e
 
-                outputs=$(cat $(AZURE_DEPLOY_CACHE)/outputs)
+                outputs=$(cat $(AZURE_DEPLOY_CACHE)/outputs.json)
                 echo "##vso[task.setvariable variable=OUTPUTS]$outputs"
 
           - script: |
@@ -139,10 +123,10 @@ stages:
               echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
             displayName: 'Getting Pipeline Variables'
 
-          - task: AzureCLI@2
-            displayName: Replace Azure Function Variables
+          - task: 'AzureCLI@2'
+            displayName: 'Replace Azure Function Variables'
             inputs:
-              azureSubscription: '$(AZM_SERVICE_CONNECTION)'
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
@@ -170,11 +154,11 @@ stages:
                     --settings $SETTINGS
                 fi
 
-          - task: AzureCLI@2
-            condition: eq(variables['MIGRATION_CACHE_HIT'], 'false')
-            displayName: Migrations
+          - task: 'AzureCLI@2'
+            condition: eq(variables['MIGRATIONS_CACHE_HIT'], 'false')
+            displayName: 'Migrations'
             inputs:
-              azureSubscription: '$(AZM_SERVICE_CONNECTION)'
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
@@ -231,18 +215,18 @@ stages:
                   --name "$DATABASE_SERVER_NAME" \
                   --rule-name "$PIPELINE_FIREWALL_NAME"
 
-          - task: AzureCLI@2
-            displayName: Publish Function
+          - task: 'AzureCLI@2'
+            displayName: 'Publish Function'
             inputs:
-              azureSubscription: '$(AZM_SERVICE_CONNECTION)'
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
                 set -e
+
                 az functionapp deployment source config-zip \
-                  --resource-group "$(resourceGroupName)" \
                   --name "$(siteName)" \
+                  --resource-group "$(resourceGroupName)" \
                   --src "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
 
       - template: '../../../global/stages/40-delivery/release.yaml'
-

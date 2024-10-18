@@ -5,59 +5,128 @@ stages:
     jobs:
       - job: 'delivery'
         displayName: 'delivery'
+        variables:
+          GOPATH: "$(Build.SourcesDirectory)/.go"
+          MIGRATIONS_CACHE: "$(Build.SourcesDirectory)/.migration"
+          AZURE_DEPLOY_CACHE: "$(Build.SourcesDirectory)/.azuredeploy"
         steps:
-          # TODO: could we consider the use of Makefile?
+          # TODO: check if this is necessary
+          - script: |
+              set -e
+
+              mkdir -p $(MIGRATIONS_CACHE)
+              mkdir -p $(AZURE_DEPLOY_CACHE)
+            displayName: 'Setup Cache'
+
+          - task: 'Cache@2'
+            inputs:
+              key: "go-$(Agent.OS)|go.sum"
+              path: "$(GOPATH)"
+            displayName: 'Cache Go Modules'
+
+          - task: 'CacheBeta@1'
+            inputs:
+              key: 'go-migrations|db/migrations/*.sql|db/seeders/*.sql'
+              path: "$(MIGRATIONS_CACHE)"
+              cacheHitVar: 'MIGRATIONS_CACHE_HIT'
+            displayName: 'Cache Migrations'
+
+          - task: 'Cache@2'
+            inputs:
+              key: 'azure-deploy|azuredeploy.json'
+              path: "$(AZURE_DEPLOY_CACHE)"
+              cacheHitVar: 'AZURE_DEPLOY_CACHE_HIT'
+            displayName: 'Cache Azure Deploy'
+
           - task: 'GoTool@0'
             inputs:
               version: '1.23.1'
               architecture: 'amd64'
               goArguments: 'mod tidy'
+            displayName: 'Go Module Dependency Cleanup'
+
           # TODO: this should be a share script between the vendors
           - script: |
               export INIT_SCRIPT="config.sh"
               [[ -f $INIT_SCRIPT ]] && ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
-          - script: mkdir -p bin
+            displayName: 'Initialize Environment'
+
           - script: |
+              set -e
+
               export CGO_ENABLED=0
               export BUILD_FLAGS="-ldflags='-w -s'"
               go build -o ./bin -v ./...
+            displayName: 'Build Go Project'
+
           - task: 'CopyFiles@2'
             inputs:
               Contents: |
                 api/function.json
                 bin/*
                 host.json
-              TargetFolder: '$(Build.SourcesDirectory)/$(Build.BuildId)'
+              TargetFolder: "$(Build.SourcesDirectory)/$(Build.BuildId)"
+            displayName: 'Copy App Files'
+
           - task: 'ArchiveFiles@2'
             inputs:
               archiveType: 'zip'
-              rootFolderOrFile: '$(Build.SourcesDirectory)/$(Build.BuildId)'
-              archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+              rootFolderOrFile: "$(Build.SourcesDirectory)/$(Build.BuildId)"
+              archiveFile: "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
               includeRootFolder: false
               replaceExistingArchive: true
-          # TODO: this should be the deployment stage
+            displayName: 'Archive Build Output'
+
           - task: 'AzureResourceGroupDeployment@2'
+            condition: eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false')
             inputs:
-              location: '$(AZM_LOCATION)'
+              location: "$(AZM_LOCATION)"
               action: 'Create Or Update Resource Group'
-              azureSubscription: '$(AZM_SERVICE_CONNECTION)'
-              resourceGroupName: '$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)'
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+              resourceGroupName: "$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)"
               csmFile: 'azuredeploy.json'
-              overrideParameters: '-location $(AZM_LOCATION) -environment $(ENVIRONMENT) -functionAppName $(AZM_FUNCTION_NAME) -inboundAllowedIps $(INBOUND_ALLOWED_IPS)'
+              overrideParameters: "-location $(AZM_LOCATION) -environment $(ENVIRONMENT) -functionAppName $(AZM_FUNCTION_NAME) -inboundAllowedIps $(INBOUND_ALLOWED_IPS)"
               templateLocation: 'Linked artifact'
-              deploymentMode: 'Incremental'
-              deploymentOutputs: 'OUTPUTS'
+              deploymentMode: Incremental
+              deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'
+            displayName: 'Deploy Resource Group'
+
+          - task: 'AzureCLI@2'
+            displayName: 'Save Deployment Outputs to File'
+            inputs:
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                set -e
+
+                echo $AZURE_DEPLOY_OUTPUTS > $(AZURE_DEPLOY_CACHE)/outputs.json
+            condition: eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false')
+
+          - task: 'AzureCLI@2'
+            displayName: 'Read Outputs from file'
+            inputs:
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                set -e
+
+                outputs=$(cat $(AZURE_DEPLOY_CACHE)/outputs.json)
+                echo "##vso[task.setvariable variable=OUTPUTS]$outputs"
+
           - script: |
-              siteName=$(echo $(OUTPUTS.siteName.value) | tr -d '"')
+              siteName=$(echo $OUTPUTS | jq -r '.siteName.value')
               echo "##vso[task.setvariable variable=siteName]$siteName"
 
               resourceGroupName=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
               echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
             displayName: 'Getting Pipeline Variables'
-          - task: AzureCLI@2
-            displayName: Replace Azure Function Variables
+
+          - task: 'AzureCLI@2'
+            displayName: 'Replace Azure Function Variables'
             inputs:
-              azureSubscription: '$(AZM_SERVICE_CONNECTION)'
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
@@ -79,16 +148,17 @@ stages:
                 if [[ -z $SETTINGS ]]; then
                   echo "Warning: There are no environment variables to update"
                 else
-                  # TODO: change this part to do only one call in the command az functionapp
                   az functionapp config appsettings set \
                     --name "$(siteName)" \
                     --resource-group "$(resourceGroupName)" \
                     --settings $SETTINGS
                 fi
-          - task: AzureCLI@2
-            displayName: Migrations
+
+          - task: 'AzureCLI@2'
+            condition: eq(variables['MIGRATIONS_CACHE_HIT'], 'false')
+            displayName: 'Migrations'
             inputs:
-              azureSubscription: '$(AZM_SERVICE_CONNECTION)'
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
@@ -96,9 +166,16 @@ stages:
 
                 # TODO: move this "IF" to a file and (or) use an Azure resource to create a condition
                 if grep -r 'goose' db/migrations/*.sql; then
+                  DATABASE_SERVER_NAME=$(echo $OUTPUTS | jq -r '.databaseServerName.value')
+                  PORT=$(echo $OUTPUTS | jq -r '.databaseServerPort.value')
+                  HOST=$(echo $OUTPUTS | jq -r '.databaseServerHost.value')
+                  USER=$(echo $OUTPUTS | jq -r '.databaseServerUsername.value')
+                  PASSWORD=$(echo $OUTPUTS | jq -r '.databaseServerPassword.value')
+                  DBNAME=$(echo $OUTPUTS | jq -r '.databaseName.value')
+                  SSL=$(echo $OUTPUTS | jq -r '.databaseServerSSL.value')
+
                   PIPELINE_IP=$(curl -s ifconfig.me/ip)
                   PIPELINE_FIREWALL_NAME="PipelineFirewall_$(date +"%Y%m%d%H%M%S")"
-                  DATABASE_SERVER_NAME=$(OUTPUTS.databaseServername.value)
 
                 # TODO: create firewall for others databases
                 # TODO: this command is here because, without it, the code wasn't authorized, need to investigate the reason
@@ -111,12 +188,6 @@ stages:
 
                   go install github.com/pressly/goose/v3/cmd/goose@v3.17.0
 
-                  PORT=$(OUTPUTS.databaseServerPort.value)
-                  HOST=$(OUTPUTS.databaseServerHost.value)
-                  USER=$(OUTPUTS.databaseServerUsername.value)
-                  PASSWORD=$(OUTPUTS.databaseServerPassword.value)
-                  DBNAME=$(OUTPUTS.databaseName.value)
-                  SSL=$(OUTPUTS.databaseServerSSL.value)
                   CONNECTION_STRING="host=$HOST port=$PORT user=$USER password=$PASSWORD dbname=$DBNAME sslmode=$SSL"
 
                   $(go env GOPATH)/bin/goose -dir db/migrations postgres "$CONNECTION_STRING" up
@@ -144,15 +215,18 @@ stages:
                   --name "$DATABASE_SERVER_NAME" \
                   --rule-name "$PIPELINE_FIREWALL_NAME"
 
-          - task: AzureCLI@2
-            displayName: Publish Function
+          - task: 'AzureCLI@2'
+            displayName: 'Publish Function'
             inputs:
-              azureSubscription: '$(AZM_SERVICE_CONNECTION)'
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
                 set -e
-                az --version
-                az functionapp deployment source config-zip --resource-group "$(resourceGroupName)"  \
-                  --name "$(siteName)" --src "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
+
+                az functionapp deployment source config-zip \
+                  --name "$(siteName)" \
+                  --resource-group "$(resourceGroupName)" \
+                  --src "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
+
       - template: '../../../global/stages/40-delivery/release.yaml'

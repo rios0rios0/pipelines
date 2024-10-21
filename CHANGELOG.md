@@ -26,7 +26,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added command to run rename_vars.sh file
 - added management step for Azure DevOps environment
 - added a new step to publish the code coverage for `azure-devops`
-- added a new task in `azure-devops/golang/delivery` to retrieve list of `outboundIPAddresses` 
+- added a new task in `azure-devops/golang/delivery` to retrieve list of `outboundIPAddresses`
 - added the list of `outboundIPAddresses` to the `overrideParameters` in the `AzureResourceGroupDeployment@2` task
 
 ### Changed
@@ -59,6 +59,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed `python management` step to adjust for commands for the non-debian image
 - fixed `Go Build` step in the `azure-devops` `delivery` step to create output directory before compiling
 - fixed artifact generation for `e2e` tests
+- fixed the `golang` pipeline for `azure-devops` to use an optional cache in the `delivery` stage
 
 ### Removed
 

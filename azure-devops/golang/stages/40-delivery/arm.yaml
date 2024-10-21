@@ -56,8 +56,7 @@ stages:
 
               export CGO_ENABLED=0
               export BUILD_FLAGS="-ldflags='-w -s'"
-              mkdir ./bin
-              go build -o ./bin -v ./...
+              mkdir ./bin && go build -o ./bin -v ./...
             displayName: 'Build Go Project'
 
           - task: 'CopyFiles@2'
@@ -78,21 +77,21 @@ stages:
               replaceExistingArchive: true
             displayName: 'Archive Build Output'
 
-          - task: AzureCLI@2
+          - task: 'AzureCLI@2'
             displayName: 'Getting Function Outbound IP Addresses'
             inputs:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
+                set -e
+
                 resourceGroupName=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
                 echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
-
                 functionAppName=$(az functionapp list --resource-group $resourceGroupName --query "[].name" --output tsv)
+                outboundIpAddresses=$(az webapp show --resource-group $resourceGroupName --name $functionAppName --query outboundIpAddresses --output tsv)
+                echo "##vso[task.setvariable variable=outboundIpAddresses]$outboundIpAddresses"
 
-                outboundIPAddresses=$(az webapp show --resource-group $resourceGroupName --name $functionAppName --query outboundIpAddresses --output tsv)
-
-                echo "##vso[task.setvariable variable=outboundIPAddresses]$outboundIPAddresses"
           # TODO: this should be the deployment stage
           - task: 'AzureResourceGroupDeployment@2'
             condition: eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false')
@@ -100,9 +99,9 @@ stages:
               location: "$(AZM_LOCATION)"
               action: 'Create Or Update Resource Group'
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
-              resourceGroupName: "$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)"
+              resourceGroupName: "$(resourceGroupName)"
               csmFile: 'azuredeploy.json'
-              overrideParameters: "-location $(AZM_LOCATION) -environment $(ENVIRONMENT) -functionAppName $(AZM_FUNCTION_NAME) -inboundAllowedIps $(INBOUND_ALLOWED_IPS) -oldOutboundIpAddresses $(outboundIPAddresses)"
+              overrideParameters: "-location $(AZM_LOCATION) -environment $(ENVIRONMENT) -functionAppName $(AZM_FUNCTION_NAME) -inboundAllowedIps $(INBOUND_ALLOWED_IPS) -oldOutboundIpAddresses $(outboundIpAddresses)"
               templateLocation: 'Linked artifact'
               deploymentMode: Incremental
               deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'

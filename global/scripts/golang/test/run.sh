@@ -17,6 +17,7 @@ touch coverage.xml
 directories=""
 [ -d "$(pwd)/main" ] && directories="$directories ./main/..."
 [ -d "$(pwd)/cmd" ] && directories="$directories ./cmd/..."
+[ -d "$(pwd)/pkg" ] && directories="$directories ./pkg/..."
 [ -d "$(pwd)/internal" ] && directories="$directories ./internal/..."
 
 # Check if directories is empty, meaning no directories were found

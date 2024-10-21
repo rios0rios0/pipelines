@@ -30,6 +30,7 @@ stages:
               path: "$(MIGRATIONS_CACHE)"
               cacheHitVar: 'MIGRATIONS_CACHE_HIT'
             displayName: 'Cache Migrations'
+            continueOnError: true
 
           - task: 'Cache@2'
             inputs:

@@ -16,7 +16,7 @@ steps:
 
   - template: './replace-environment-variables.yaml'
     parameters:
-      FILE: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/.ci/config/opensearch_dashboards.yml"
+      FILE: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/.ci/40-delivery/config/opensearch_dashboards.yml"
       DISPLAY_NAME: 'Replace Environment Variables'
 
   - task: 'Cache@2'
@@ -35,8 +35,7 @@ steps:
 
   - script: |
       cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
-      yarn osd bootstrap &&
-      yarn > $(Agent.TempDirectory)/yarn.log 2>&1
+      yarn add
     displayName: 'Updating Repository and Installing Dependencies'
 
   - script: |

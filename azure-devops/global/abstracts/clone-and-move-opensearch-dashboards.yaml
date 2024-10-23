@@ -17,6 +17,8 @@ steps:
 
   - script: |
       git clone --depth 1 --branch ${{ parameters.TAG_NAME }} https://github.com/opensearch-project/OpenSearch-Dashboards.git $(Agent.TempDirectory)/OpenSearch-Dashboards
+      cd $(Agent.TempDirectory)/OpenSearch-Dashboards
+      yarn osd bootstrap
     displayName: 'Clone OpenSearch Dashboards repository'
 
   - task: 'CopyFiles@2'

@@ -8,13 +8,16 @@ stages:
         variables:
           GOPATH: "$(Build.SourcesDirectory)/.go"
           MIGRATIONS_CACHE: "$(Build.SourcesDirectory)/.migration"
+          SEEDERS_CACHE: "$(Build.SourcesDirectory)/.seeder"
           AZURE_DEPLOY_CACHE: "$(Build.SourcesDirectory)/.azuredeploy"
+          PIPELINE_FIREWALL_NAME: 'PipelineFirewall_$(date +"%Y%m%d%H%M%S")'
         steps:
           # TODO: check if this is necessary
           - script: |
               set -e
 
               mkdir -p $(MIGRATIONS_CACHE)
+              mkdir -p $(SEEDERS_CACHE)
               mkdir -p $(AZURE_DEPLOY_CACHE)
             displayName: 'Setup Cache'
 
@@ -26,10 +29,18 @@ stages:
 
           - task: 'CacheBeta@1'
             inputs:
-              key: 'go-migrations|db/migrations/*.sql|db/seeders/*.sql'
+              key: 'go-migrations|db/migrations/*.sql'
               path: "$(MIGRATIONS_CACHE)"
               cacheHitVar: 'MIGRATIONS_CACHE_HIT'
             displayName: 'Cache Migrations'
+            continueOnError: true
+
+          - task: 'CacheBeta@1'
+            inputs:
+              key: 'go-migrations|db/seeders/*.sql'
+              path: "$(SEEDERS_CACHE)"
+              cacheHitVar: 'SEEDERS_CACHE_HIT'
+            displayName: 'Cache Seeders'
             continueOnError: true
 
           - task: 'Cache@2'
@@ -171,7 +182,26 @@ stages:
 
           - task: 'AzureCLI@2'
             condition: eq(variables['MIGRATIONS_CACHE_HIT'], 'false')
-            displayName: 'Migrations'
+            displayName: 'Create Flexible Firewall Rule to execute migrations and seeders'
+            inputs:
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                set -e
+
+                DATABASE_SERVER_NAME=$(echo $OUTPUTS | jq -r '.databaseServerName.value')
+                PIPELINE_IP=$(curl -s ifconfig.me/ip)
+
+                az postgres flexible-server firewall-rule create \
+                    --resource-group "$(resourceGroupName)" \
+                    --name "$DATABASE_SERVER_NAME" \
+                    --rule-name "$(PIPELINE_FIREWALL_NAME)" \
+                    --start-ip-address "$PIPELINE_IP"
+
+          - task: 'AzureCLI@2'
+            condition: eq(variables['MIGRATIONS_CACHE_HIT'], 'false')
+            displayName: 'Execute Migrations'
             inputs:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
@@ -181,7 +211,32 @@ stages:
 
                 # TODO: move this "IF" to a file and (or) use an Azure resource to create a condition
                 if grep -r 'goose' db/migrations/*.sql; then
-                  DATABASE_SERVER_NAME=$(echo $OUTPUTS | jq -r '.databaseServerName.value')
+                  PORT=$(echo $OUTPUTS | jq -r '.databaseServerPort.value')
+                  HOST=$(echo $OUTPUTS | jq -r '.databaseServerHost.value')
+                  USER=$(echo $OUTPUTS | jq -r '.databaseServerUsername.value')
+                  PASSWORD=$(echo $OUTPUTS | jq -r '.databaseServerPassword.value')
+                  DBNAME=$(echo $OUTPUTS | jq -r '.databaseName.value')
+                  SSL=$(echo $OUTPUTS | jq -r '.databaseServerSSL.value')
+                  CONNECTION_STRING="host=$HOST port=$PORT user=$USER password=$PASSWORD dbname=$DBNAME sslmode=$SSL"
+
+                  go install github.com/pressly/goose/v3/cmd/goose@v3.17.0
+
+                  $(go env GOPATH)/bin/goose -dir db/migrations postgres "$CONNECTION_STRING" up
+
+                else
+                  echo "No Goose migration files found. Skipping Goose installation and migration."
+                fi
+          - task: 'AzureCLI@2'
+            condition: eq(variables['SEEDERS_CACHE_HIT'], 'false')
+            displayName: 'Execute Seeders'
+            inputs:
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                set -e
+
+                if grep -r 'goose' db/seeders/*.sql; then
                   PORT=$(echo $OUTPUTS | jq -r '.databaseServerPort.value')
                   HOST=$(echo $OUTPUTS | jq -r '.databaseServerHost.value')
                   USER=$(echo $OUTPUTS | jq -r '.databaseServerUsername.value')
@@ -189,28 +244,10 @@ stages:
                   DBNAME=$(echo $OUTPUTS | jq -r '.databaseName.value')
                   SSL=$(echo $OUTPUTS | jq -r '.databaseServerSSL.value')
 
-                  PIPELINE_IP=$(curl -s ifconfig.me/ip)
-                  PIPELINE_FIREWALL_NAME="PipelineFirewall_$(date +"%Y%m%d%H%M%S")"
-
-                # TODO: create firewall for others databases
-                # TODO: this command is here because, without it, the code wasn't authorized, need to investigate the reason
-                  az postgres flexible-server firewall-rule create \
-                    --resource-group "$(resourceGroupName)" \
-                    --name "$DATABASE_SERVER_NAME" \
-                    --rule-name "$PIPELINE_FIREWALL_NAME" \
-                    --start-ip-address "$PIPELINE_IP"
+                  CONNECTION_STRING="host=$HOST port=$PORT user=$USER password=$PASSWORD dbname=$DBNAME sslmode=$SSL"
 
                   go install github.com/pressly/goose/v3/cmd/goose@v3.17.0
 
-                  CONNECTION_STRING="host=$HOST port=$PORT user=$USER password=$PASSWORD dbname=$DBNAME sslmode=$SSL"
-
-                  $(go env GOPATH)/bin/goose -dir db/migrations postgres "$CONNECTION_STRING" up
-
-                else
-                  echo "No Goose migration files found. Skipping Goose installation and migration."
-                fi
-
-                if grep -r 'goose' db/seeders/*.sql; then
                   for dir in "" "dev" "prod"; do
                       if [ -z "$dir" ] || [ "$ENVIRONMENT" == "$dir" ]; then
                         dir_path="db/seeders/$dir"
@@ -224,10 +261,23 @@ stages:
                     echo "No Goose seed files found. Skipping seed"
                 fi
 
+          - task: 'AzureCLI@2'
+            condition: eq(variables['MIGRATIONS_CACHE_HIT'], 'false')
+            displayName: 'Delete Flexible Firewall Rule to execute migrations and seeders'
+            inputs:
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                set -e
+
+                DATABASE_SERVER_NAME=$(echo $OUTPUTS | jq -r '.databaseServerName.value')
+                PIPELINE_IP=$(curl -s ifconfig.me/ip)
+
                 az postgres flexible-server firewall-rule delete --yes \
                   --resource-group "$(resourceGroupName)" \
                   --name "$DATABASE_SERVER_NAME" \
-                  --rule-name "$PIPELINE_FIREWALL_NAME"
+                  --rule-name "$(PIPELINE_FIREWALL_NAME)"
 
           - task: 'AzureCLI@2'
             displayName: 'Publish Function'

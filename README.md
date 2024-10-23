@@ -31,6 +31,10 @@ jobs:
     uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'
 ```
 
+Example for GoLang:
+
+![github-golang](.docs/github-golang.png)
+
 ### GitLab
 
 To get started with GitLab, include the following configuration:
@@ -47,6 +51,10 @@ include:
     paths: !reference [ .go, cache, paths ]
     policy: 'pull'
 ```
+
+Example for Java:
+
+![gitlab-java](.docs/gitlab-java.png)
 
 ### Azure DevOps
 
@@ -80,6 +88,10 @@ resources:
 stages:
   - template: 'azure-devops/golang/go-arm.yaml@pipelines'
 ```
+
+Example for GoLang:
+
+![azure-devops-golang](.docs/azure-devops-golang.png)
 
 ## Cloning the Repository
 

@@ -46,6 +46,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed `javascript` pipeline for `azure-devops` to publish the code coverage in `sonarqube`
 - changed `Replace Azure Function Variables` script to modify all variables in a single command
 - changed `golang` pipeline for `azure-devops` to use caching in the `delivery` stage
+- changed the `azure-devops` to execute the migrations and seeders in a different tasks
 
 ### Fixed
 

@@ -130,6 +130,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - corrected use of `stageDependencies` in the deployment stage
 - refactor firewall rules for migrations in the delivery stage
 - simplified the patching mechanism in the `deployments` step for JavaScript projects
+- updated `golang` `test` script and the `azure devops` `delivery` to source the config script
 
 ### Removed
 

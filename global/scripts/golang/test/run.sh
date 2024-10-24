@@ -9,7 +9,7 @@ export GOPATH="$(pwd)/.go" # the GOPATH must be absolute
 export PATH="$PATH:$GOPATH/bin" # this is a workaround to detect the new GOPATH
 
 export INIT_SCRIPT="config.sh"
-[ -f "$INIT_SCRIPT" ] && ./"$INIT_SCRIPT" || echo "The '$INIT_SCRIPT' file is not found, skipping..."
+[ -f "$INIT_SCRIPT" ] && . ./"$INIT_SCRIPT" || echo "The '$INIT_SCRIPT' file is not found, skipping..."
 
 touch coverage.xml
 
@@ -27,7 +27,7 @@ fi
 
 # Download and install docker for integration tests with test containers
 distro=$(grep '^NAME=' /etc/os-release | awk -F= '{print $2}' | tr -d '"')
-if ["$distro" != "Arch Linux" && [ "$distro" != "Gentoo" ]; then
+if [ "$distro" != "Arch Linux" ] && [ "$distro" != "Gentoo" ]; then
   echo "Installing docker"
   curl -fsSL https://get.docker.com | bash
 else

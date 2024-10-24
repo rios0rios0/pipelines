@@ -8,9 +8,6 @@ fi
 export GOPATH="$(pwd)/.go" # the GOPATH must be absolute
 export PATH="$PATH:$GOPATH/bin" # this is a workaround to detect the new GOPATH
 
-export INIT_SCRIPT="config.sh"
-[ -f "$INIT_SCRIPT" ] && . ./"$INIT_SCRIPT" || echo "The '$INIT_SCRIPT' file is not found, skipping..."
-
 touch coverage.xml
 
 # Find the directories to test

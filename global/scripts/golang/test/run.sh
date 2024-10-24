@@ -25,15 +25,6 @@ if [ -z "$directories" ]; then
   exit 1
 fi
 
-# Download and install docker for integration tests with test containers
-distro=$(grep '^NAME=' /etc/os-release | awk -F= '{print $2}' | tr -d '"')
-if [ "$distro" != "Arch Linux" ] && [ "$distro" != "Gentoo" ]; then
-  echo "Installing docker"
-  curl -fsSL https://get.docker.com | bash
-else
-  echo "Skipping installation for unsupported distro"
-fi
-
 # Trim leading or trailing spaces
 directories=$(echo $directories | sed 's/^ *//;s/ *$//')
 echo "Testing code in the following directories: $directories"

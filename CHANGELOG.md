@@ -60,8 +60,9 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed `python management` step to adjust for commands for the non-debian image
 - fixed `Go Build` step in the `azure-devops` `delivery` step to create output directory before compiling
 - fixed artifact generation for `e2e` tests
-- fixed the `golang` pipeline for `azure-devops` to use an optional cache in the `delivery` stage
-- fixed the `golang` `test` script to test the `pkg` directory to not exclude lib-only directories from testing
+- fixed the GoLang pipeline for Azure DevOps to use an optional cache in the delivery stage
+- fixed the GoLang test script to test the `pkg` directory to avoid excluding lib-only directories from testing
+- fixed the GoLang for Azure DevOps stages to use the `config.sh` script as a source from each project
 
 ### Removed
 

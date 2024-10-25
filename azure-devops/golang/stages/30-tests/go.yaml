@@ -10,9 +10,19 @@ stages:
             inputs:
               version: '1.23.1'
           - template: '../../../global/abstracts/scripts-repo.yaml'
+
+          # TODO: this should be a share script between the vendors
+          - script: |
+              set -e
+              INIT_SCRIPT="config.sh"
+              [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
+            displayName: 'Load Config'
+
           - script: $(Scripts.Directory)/global/scripts/golang/test/run.sh
-          - task: PublishPipelineArtifact@1
-            displayName: 'Publish Coverage File'
+            displayName: 'Run Tests'
+
+          - task: 'PublishPipelineArtifact@1'
             inputs:
               targetPath: '$(System.DefaultWorkingDirectory)/coverage.txt'
               artifact: 'coverage'
+            displayName: 'Publish Coverage File'

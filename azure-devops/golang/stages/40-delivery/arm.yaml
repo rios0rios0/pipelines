@@ -59,9 +59,10 @@ stages:
 
           # TODO: this should be a share script between the vendors
           - script: |
-              export INIT_SCRIPT="config.sh"
-              [[ -f $INIT_SCRIPT ]] && ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
-            displayName: 'Initialize Environment'
+              set -e
+              INIT_SCRIPT="config.sh"
+              [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
+            displayName: 'Load Config'
 
           - script: |
               set -e
@@ -181,7 +182,7 @@ stages:
                 fi
 
           - task: 'AzureCLI@2'
-            condition: eq(variables['MIGRATIONS_CACHE_HIT'], 'false')
+            condition: or(eq(variables['MIGRATIONS_CACHE_HIT'], 'false'), eq(variables['SEEDERS_CACHE_HIT'], 'false'))
             displayName: 'Create Flexible Firewall Rule to execute migrations and seeders'
             inputs:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
@@ -226,6 +227,7 @@ stages:
                 else
                   echo "No Goose migration files found. Skipping Goose installation and migration."
                 fi
+
           - task: 'AzureCLI@2'
             condition: eq(variables['SEEDERS_CACHE_HIT'], 'false')
             displayName: 'Execute Seeders'

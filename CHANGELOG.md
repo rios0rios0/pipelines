@@ -47,6 +47,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed `Replace Azure Function Variables` script to modify all variables in a single command
 - changed `golang` pipeline for `azure-devops` to use caching in the `delivery` stage
 - changed the `azure-devops` to execute the migrations and seeders in a different tasks
+- changed the `Publish Function` task to retry when failed
 
 ### Fixed
 
@@ -64,6 +65,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed the GoLang test script to test the `pkg` directory to avoid excluding lib-only directories from testing
 - fixed the GoLang for Azure DevOps stages to use the `config.sh` script as a source from each project
 - fixed dependency track stage in the Golang azure devops pipeline to set up the correct environment
+- fixed Golang delivery stage for azure devops to only execute a task when previous tasks are successful
+- fixed the `Getting Function Outbound IP Addresses` task in Golang delivery stage to retrieve only the last function app
 
 ### Removed
 

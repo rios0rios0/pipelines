@@ -14,13 +14,19 @@ jobs:
       SONAR_USER_HOME: "$(Build.SourcesDirectory)/.sonar"
     steps:
       - task: DownloadPipelineArtifact@2
-        displayName: 'Download Coverage File'
         inputs:
           artifactName: 'coverage'
           targetPath: '$(Build.SourcesDirectory)'
+        displayName: 'Download Coverage File'
+
       - task: 'Cache@2'
         inputs:
           key: "$(Agent.JobName)"
           path: '.sonar/cache'
+        displayName: 'Cache SonarQube Scanner'
+
       - script: ${{ parameters.BEFORE_SCRIPT }}
+        displayName: 'Before Script'
+
       - script: sonar-scanner
+        displayName: 'SonarQube Scanner'

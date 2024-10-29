@@ -13,17 +13,20 @@ stages:
               COMMANDS: 'yarn osd bootstrap && yarn build'
               ARTIFACT_NAME: 'build'
               ARTIFACT_PATH: 'build'
+
           - task: 'DownloadBuildArtifacts@0'
             inputs:
               buildType: 'current'
               downloadType: 'single'
               artifactName: 'build'
               downloadPath: '.'
+
           - task: 'Docker@2'
             displayName: 'Docker Login'
             inputs:
               command: 'login'
               containerRegistry: "$(DOCKER_REGISTRY_ENDPOINT)"
+
           - script: |
               docker buildx create --use
 
@@ -37,5 +40,6 @@ stages:
 
               docker buildx build --platform linux/amd64,linux/arm64 -t $TAGS --push .
             name: 'build'
+            displayName: 'Docker Build & Push'
         continueOnError: false
       - template: '../../../global/stages/40-delivery/release.yaml'

@@ -24,19 +24,47 @@ stages:
           - task: 'GoTool@0'
             inputs:
               version: '1.23.1'
+              architecture: 'amd64'
+              goArguments: 'mod tidy'
+            displayName: 'Go Install and Module Dependency Cleanup'
+
           - task: 'Cache@2'
             inputs:
               key: '$(Agent.JobName)'
               path: '.go'
+            displayName: 'Cache Go Modules'
+
+          - script: |
+              set -e
+              INIT_SCRIPT="config.sh"
+              [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
+            displayName: 'Load Config'
+
           - template: '../../../global/stages/35-management/dependency-track.yaml'
             parameters:
               # TODO: duplicated code with GitLab pipelines
               BEFORE_SCRIPT: |
-                mkdir -p "$(PREFIX)$(REPORT_PATH)"
-                # TODO: this is not required in Azure DevOps
-                # apt update && apt install -y --no-install-recommends curl jq
+                path="$(PREFIX)$(REPORT_PATH)"
+                mkdir -p "$path"
+
+                echo "Installing CycloneDX Go Module..."
                 go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
-                if [ -d "main" ]; then folder="main"; fi
-                if [ -z "$folder" ]; then folder=$(find cmd -name "*.go" -print | head -n 1 | xargs -n 1 dirname); fi
-                if [ -z "$folder" ]; then echo "Could not find a directory containing Go files"; exit 1; fi
-                $GOBIN/cyclonedx-gomod app -json -output "$(PREFIX)$(REPORT_PATH)/bom.json" -packages -files -licenses -main $folder
+
+                if [ -d "main" ]; then
+                    folder="main"
+                elif find cmd -name "*.go" | grep -q .; then
+                    folder=$(find cmd -name "*.go" -print | head -n 1 | xargs -n 1 dirname)
+                elif [ -d "pkg" ]; then
+                    folder="pkg"
+                else
+                    echo "Could not find a directory containing Go files";
+                    exit 1
+                fi
+
+                if find $folder -type d -name "*pkg" | grep -q .; then
+                    echo "Found a 'pkg' directory, using 'cyclonedx-gomod mod' command..."
+                    "$GOBIN/cyclonedx-gomod" mod -json -output "$path/bom.json" -licenses
+                else
+                    echo "Using 'cyclonedx-gomod app' command..."
+                    "$GOBIN/cyclonedx-gomod" app -json -output "$path/bom.json" -packages -files -licenses -main $folder
+                fi

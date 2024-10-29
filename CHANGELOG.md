@@ -63,6 +63,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed the GoLang pipeline for Azure DevOps to use an optional cache in the delivery stage
 - fixed the GoLang test script to test the `pkg` directory to avoid excluding lib-only directories from testing
 - fixed the GoLang for Azure DevOps stages to use the `config.sh` script as a source from each project
+- fixed dependency track stage in the Golang azure devops pipeline to set up the correct environment
 
 ### Removed
 

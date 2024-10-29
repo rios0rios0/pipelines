@@ -15,12 +15,36 @@ report:sonarqube:
 report:dependency-track:
   extends: [ '.go', '.dependency-track' ]
   script:
-    - mkdir -p "$PREFIX$REPORT_PATH"
-    - apt update && apt install -y --no-install-recommends curl jq
+    |
+    set -e
 
-    - go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
-    - 'if [ -d "main" ]; then folder="main"; fi' # TODO: assumptions of common structures. It should be a list of possible folders
-    - 'if [ -z "$folder" ]; then folder=$(find cmd -name "*.go" -print | head -n 1 | xargs -n 1 dirname); fi' # find the directory containing Go files
-    - 'if [ -z "$folder" ]; then echo "Could not find a directory containing Go files"; exit 1; fi'
-    - cyclonedx-gomod app -json -output "$PREFIX$REPORT_PATH/bom.json" -packages -files -licenses -main $folder
-    - !reference [ .dependency-track, script ]
+    INIT_SCRIPT="config.sh"
+    [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
+
+    path="$(PREFIX)$(REPORT_PATH)"
+    mkdir -p "$path"
+
+    GOBIN=$(go env GOPATH)/bin
+
+    echo "Installing CycloneDX Go Module..."
+    apt update && apt install -y --no-install-recommends curl jq
+    go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
+
+    if [ -d "main" ]; then
+        folder="main"
+    elif find cmd -name "*.go" | grep -q .; then
+        folder=$(find cmd -name "*.go" -print | head -n 1 | xargs -n 1 dirname)
+    elif [ -d "pkg" ]; then
+        folder="pkg"
+    else
+        echo "Could not find a directory containing Go files";
+        exit 1
+    fi
+
+    if find $folder -type d -name "*pkg" | grep -q .; then
+        echo "Found a 'pkg' directory, using 'cyclonedx-gomod mod' command..."
+        "$GOBIN/cyclonedx-gomod" mod -json -output "$path/bom.json" -licenses
+    else
+        echo "Using 'cyclonedx-gomod app' command..."
+        "$GOBIN/cyclonedx-gomod" app -json -output "$path/bom.json" -packages -files -licenses -main $folder
+    fi

@@ -101,13 +101,14 @@ stages:
 
                 resourceGroupName=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
                 echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
-                functionAppName=$(az functionapp list --resource-group $resourceGroupName --query "[].name" --output tsv)
+                functionAppName=$(az functionapp list --resource-group $resourceGroupName --query "[].name" --output tsv | tail -n 1)
+
                 outboundIpAddresses=$(az webapp show --resource-group $resourceGroupName --name $functionAppName --query outboundIpAddresses --output tsv)
                 echo "##vso[task.setvariable variable=outboundIpAddresses]$outboundIpAddresses"
 
           # TODO: this should be the deployment stage
           - task: 'AzureResourceGroupDeployment@2'
-            condition: eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false')
+            condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
             inputs:
               location: "$(AZM_LOCATION)"
               action: 'Create Or Update Resource Group'
@@ -130,7 +131,7 @@ stages:
                 set -e
 
                 echo $AZURE_DEPLOY_OUTPUTS > $(AZURE_DEPLOY_CACHE)/outputs.json
-            condition: eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false')
+            condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
 
           - task: 'AzureCLI@2'
             displayName: 'Read Outputs from file'
@@ -147,7 +148,6 @@ stages:
           - script: |
               siteName=$(echo $OUTPUTS | jq -r '.siteName.value')
               echo "##vso[task.setvariable variable=siteName]$siteName"
-
             displayName: 'Getting Pipeline Variables'
 
           - task: 'AzureCLI@2'
@@ -182,7 +182,7 @@ stages:
                 fi
 
           - task: 'AzureCLI@2'
-            condition: or(eq(variables['MIGRATIONS_CACHE_HIT'], 'false'), eq(variables['SEEDERS_CACHE_HIT'], 'false'))
+            condition: and(succeeded(), or(eq(variables['MIGRATIONS_CACHE_HIT'], 'false'), eq(variables['SEEDERS_CACHE_HIT'], 'false')))
             displayName: 'Create Flexible Firewall Rule to execute migrations and seeders'
             inputs:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
@@ -201,7 +201,7 @@ stages:
                     --start-ip-address "$PIPELINE_IP"
 
           - task: 'AzureCLI@2'
-            condition: eq(variables['MIGRATIONS_CACHE_HIT'], 'false')
+            condition: and(succeeded(), eq(variables['MIGRATIONS_CACHE_HIT'], 'false'))
             displayName: 'Execute Migrations'
             inputs:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
@@ -229,7 +229,7 @@ stages:
                 fi
 
           - task: 'AzureCLI@2'
-            condition: eq(variables['SEEDERS_CACHE_HIT'], 'false')
+            condition: and(succeeded(), eq(variables['SEEDERS_CACHE_HIT'], 'false'))
             displayName: 'Execute Seeders'
             inputs:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
@@ -264,7 +264,7 @@ stages:
                 fi
 
           - task: 'AzureCLI@2'
-            condition: eq(variables['MIGRATIONS_CACHE_HIT'], 'false')
+            condition: and(succeeded(), or(eq(variables['MIGRATIONS_CACHE_HIT'], 'false'), eq(variables['SEEDERS_CACHE_HIT'], 'false')))
             displayName: 'Delete Flexible Firewall Rule to execute migrations and seeders'
             inputs:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
@@ -294,5 +294,6 @@ stages:
                   --name "$(siteName)" \
                   --resource-group "$(resourceGroupName)" \
                   --src "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
+            retryCountOnTaskFailure: 3
 
       - template: '../../../global/stages/40-delivery/release.yaml'

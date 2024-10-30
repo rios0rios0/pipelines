@@ -48,6 +48,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed `golang` pipeline for `azure-devops` to use caching in the `delivery` stage
 - changed the `azure-devops` to execute the migrations and seeders in a different tasks
 - changed the `Publish Function` task to retry when failed
+- changed `e2e` test job to receive a different pool
 
 ### Fixed
 

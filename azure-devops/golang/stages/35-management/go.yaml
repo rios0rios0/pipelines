@@ -30,7 +30,7 @@ stages:
 
           - task: 'Cache@2'
             inputs:
-              key: '$(Agent.JobName)'
+              key: "$(Agent.JobName)"
               path: '.go'
             displayName: 'Cache Go Modules'
 

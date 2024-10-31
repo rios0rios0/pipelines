@@ -13,7 +13,7 @@ jobs:
       GIT_DEPTH: '0'
       SONAR_USER_HOME: "$(Build.SourcesDirectory)/.sonar"
     steps:
-      - task: DownloadPipelineArtifact@2
+      - task: 'DownloadPipelineArtifact@2'
         inputs:
           artifactName: 'coverage'
           targetPath: '$(Build.SourcesDirectory)'
@@ -25,7 +25,7 @@ jobs:
           path: '.sonar/cache'
         displayName: 'Cache SonarQube Scanner'
 
-      - script: ${{ parameters.BEFORE_SCRIPT }}
+      - script: "${{ parameters.BEFORE_SCRIPT }}"
         displayName: 'Before Script'
 
       - script: sonar-scanner

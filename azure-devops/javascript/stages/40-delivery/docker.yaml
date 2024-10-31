@@ -22,10 +22,10 @@ stages:
               downloadPath: '.'
 
           - task: 'Docker@2'
-            displayName: 'Docker Login'
             inputs:
               command: 'login'
               containerRegistry: "$(DOCKER_REGISTRY_ENDPOINT)"
+            displayName: 'Docker Login'
 
           - script: |
               docker buildx create --use

@@ -68,6 +68,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed dependency track stage in the Golang azure devops pipeline to set up the correct environment
 - fixed Golang delivery stage for azure devops to only execute a task when previous tasks are successful
 - fixed the `Getting Function Outbound IP Addresses` task in Golang delivery stage to retrieve only the last function app
+- fixed cache keys in the Golang delivery stage for azure devops
 
 ### Removed
 

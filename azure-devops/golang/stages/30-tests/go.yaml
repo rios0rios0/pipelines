@@ -9,6 +9,7 @@ stages:
           - task: 'GoTool@0'
             inputs:
               version: '1.23.1'
+
           - template: '../../../global/abstracts/scripts-repo.yaml'
 
           # TODO: this should be a share script between the vendors
@@ -23,6 +24,6 @@ stages:
 
           - task: 'PublishPipelineArtifact@1'
             inputs:
-              targetPath: '$(System.DefaultWorkingDirectory)/coverage.txt'
+              targetPath: "$(System.DefaultWorkingDirectory)/coverage.txt"
               artifact: 'coverage'
             displayName: 'Publish Coverage File'

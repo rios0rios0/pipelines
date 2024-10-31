@@ -9,7 +9,7 @@ stages:
       - job: 'deployment'
         displayName: 'deployment'
         steps:
-          - task: KubernetesManifest@0
+          - task: 'KubernetesManifest@0'
             inputs:
               action: 'createSecret'
               secretType: 'dockerRegistry'
@@ -17,11 +17,13 @@ stages:
               dockerRegistryEndpoint: "$(DOCKER_REGISTRY_ENDPOINT)"
               kubernetesServiceConnection: "$(K8S_ENDPOINT)"
               namespace: "$(K8S_NAMESPACE)"
+
           - template: '../../../global/abstracts/replace-environment-variables.yaml'
             parameters:
               FILE: '.ci/config/opensearch_dashboards.yml'
               DISPLAY_NAME: 'Replace Environment Variables'
-          - task: Kubernetes@1
+
+          - task: 'Kubernetes@1'
             inputs:
               connectionType: 'Kubernetes Service Connection'
               configMapName: "$(K8S_CONFIGMAP_NAME)"
@@ -29,7 +31,8 @@ stages:
               configMapArguments: '--from-file=.ci/config/opensearch_dashboards.yml'
               kubernetesServiceEndpoint: "$(K8S_ENDPOINT)"
               namespace: "$(K8S_NAMESPACE)"
-          - task: KubernetesManifest@0
+
+          - task: 'KubernetesManifest@0'
             inputs:
               action: 'patch'
               kind: 'deployment'
@@ -72,7 +75,8 @@ stages:
                 }
               kubernetesServiceConnection: "$(K8S_ENDPOINT)"
               namespace: "$(K8S_NAMESPACE)"
-          - task: Kubernetes@1
+
+          - task: 'Kubernetes@1'
             inputs:
               connectionType: 'Kubernetes Service Connection'
               kubernetesServiceEndpoint: "$(K8S_ENDPOINT)"

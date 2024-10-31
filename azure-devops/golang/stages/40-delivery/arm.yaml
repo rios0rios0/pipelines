@@ -23,13 +23,13 @@ stages:
 
           - task: 'Cache@2'
             inputs:
-              key: "go-$(Agent.OS)|go.sum"
+              key: "$(ENVIRONMENT)|go-$(Agent.OS)|go.sum"
               path: "$(GOPATH)"
             displayName: 'Cache Go Modules'
 
           - task: 'CacheBeta@1'
             inputs:
-              key: 'go-migrations|db/migrations/*.sql'
+              key: '$(ENVIRONMENT)|go-migrations|db/migrations/*.sql'
               path: "$(MIGRATIONS_CACHE)"
               cacheHitVar: 'MIGRATIONS_CACHE_HIT'
             displayName: 'Cache Migrations'
@@ -37,7 +37,7 @@ stages:
 
           - task: 'CacheBeta@1'
             inputs:
-              key: 'go-migrations|db/seeders/*.sql'
+              key: '$(ENVIRONMENT)|go-migrations|db/seeders/*.sql'
               path: "$(SEEDERS_CACHE)"
               cacheHitVar: 'SEEDERS_CACHE_HIT'
             displayName: 'Cache Seeders'
@@ -45,7 +45,7 @@ stages:
 
           - task: 'Cache@2'
             inputs:
-              key: 'azure-deploy|azuredeploy.json'
+              key: '$(ENVIRONMENT)|azure-deploy|azuredeploy.json'
               path: "$(AZURE_DEPLOY_CACHE)"
               cacheHitVar: 'AZURE_DEPLOY_CACHE_HIT'
             displayName: 'Cache Azure Deploy'

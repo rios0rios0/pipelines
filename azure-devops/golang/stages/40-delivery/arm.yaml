@@ -12,7 +12,6 @@ stages:
           AZURE_DEPLOY_CACHE: "$(Build.SourcesDirectory)/.azuredeploy"
           PIPELINE_FIREWALL_NAME: 'PipelineFirewall_$(date +"%Y%m%d%H%M%S")'
         steps:
-          # TODO: check if this is necessary
           - script: |
               set -e
 
@@ -27,7 +26,7 @@ stages:
               path: "$(GOPATH)"
             displayName: 'Cache Go Modules'
 
-          - task: 'CacheBeta@1'
+          - task: 'Cache@2'
             inputs:
               key: '$(ENVIRONMENT)|go-migrations|db/migrations/*.sql'
               path: "$(MIGRATIONS_CACHE)"
@@ -35,7 +34,7 @@ stages:
             displayName: 'Cache Migrations'
             continueOnError: true
 
-          - task: 'CacheBeta@1'
+          - task: 'Cache@2'
             inputs:
               key: '$(ENVIRONMENT)|go-migrations|db/seeders/*.sql'
               path: "$(SEEDERS_CACHE)"

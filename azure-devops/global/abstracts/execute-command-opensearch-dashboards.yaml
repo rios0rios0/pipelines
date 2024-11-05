@@ -18,13 +18,22 @@ steps:
       TAG_NAME: ${{ parameters.TAG_NAME }}
       PLUGIN_NAME: ${{ parameters.PLUGIN_NAME }}
 
+  - task: 'Cache@2'
+    inputs:
+      key: "node-modules|$(Build.SourcesDirectory)/yarn.lock"
+      path: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/node_modules"
+    displayName: 'Cache node modules'
+    continueOnError: true
+
   - script: |
       cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
       ${{ parameters.COMMANDS }}
+    displayName: 'Execute Commands'
 
   - task: PublishBuildArtifacts@1
     inputs:
       PathtoPublish: '$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/${{ parameters.ARTIFACT_PATH }}'
       ArtifactName: '${{ parameters.ARTIFACT_NAME }}'
       publishLocation: 'Container'
-    condition: ne('${{ parameters.ARTIFACT_NAME }}', '')
+    condition: and(succeeded(), ne('${{ parameters.ARTIFACT_NAME }}', ''))
+    displayName: 'Publish Artifact'

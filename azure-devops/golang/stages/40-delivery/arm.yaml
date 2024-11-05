@@ -100,9 +100,14 @@ stages:
 
                 resourceGroupName=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
                 echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
-                functionAppName=$(az functionapp list --resource-group $resourceGroupName --query "[].name" --output tsv | tail -n 1)
 
-                outboundIpAddresses=$(az webapp show --resource-group $resourceGroupName --name $functionAppName --query outboundIpAddresses --output tsv)
+                resourceGroupExists=$(az group exists --name $resourceGroupName)
+                if [ "$resourceGroupExists" = true ]; then
+                  functionAppName=$(az functionapp list --resource-group $resourceGroupName --query "[].name" --output tsv | tail -n 1)
+                  outboundIpAddresses=$(az webapp show --resource-group $resourceGroupName --name $functionAppName --query outboundIpAddresses --output tsv)
+                else
+                  outboundIpAddresses="''"
+                fi
                 echo "##vso[task.setvariable variable=outboundIpAddresses]$outboundIpAddresses"
 
           # TODO: this should be the deployment stage

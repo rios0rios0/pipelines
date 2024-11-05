@@ -12,4 +12,4 @@ steps:
         escaped_value=$(printf '%s\n' "$value" | sed 's:[\/&]:\\&:g')
         sed -i "s/\${$var}/$escaped_value/g" ${{ parameters.FILE }}
       done
-    displayName: ${{ parameters.DISPLAY_NAME }}
+    displayName: "${{ parameters.DISPLAY_NAME }}"

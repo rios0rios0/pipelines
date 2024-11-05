@@ -21,7 +21,7 @@ steps:
 
   - task: 'CopyFiles@2'
     inputs:
-      SourceFolder: '$(Build.Repository.LocalPath)'
+      SourceFolder: "$(Build.Repository.LocalPath)"
       Contents: '**'
-      TargetFolder: '$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}'
+      TargetFolder: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}"
     displayName: 'Copy Plugin to Plugins folder'

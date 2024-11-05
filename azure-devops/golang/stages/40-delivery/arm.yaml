@@ -116,7 +116,7 @@ stages:
               csmFile: 'azuredeploy.json'
               overrideParameters: "-location $(AZM_LOCATION) -environment $(ENVIRONMENT) -functionAppName $(AZM_FUNCTION_NAME) -inboundAllowedIps $(INBOUND_ALLOWED_IPS) -oldOutboundIpAddresses $(outboundIpAddresses)"
               templateLocation: 'Linked artifact'
-              deploymentMode: Incremental
+              deploymentMode: 'Incremental'
               deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'
             displayName: 'Deploy Resource Group'
 

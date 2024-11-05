@@ -9,12 +9,12 @@ parameters:
     type: 'string'
 
 steps:
-  - template: ./clone-and-move-opensearch-dashboards.yaml
+  - template: './clone-and-move-opensearch-dashboards.yaml'
     parameters:
       TAG_NAME: ${{ parameters.TAG_NAME }}
       PLUGIN_NAME: ${{ parameters.PLUGIN_NAME }}
 
-  - template: ./replace-environment-variables.yaml
+  - template: './replace-environment-variables.yaml'
     parameters:
       FILE: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/.ci/config/opensearch_dashboards.yml"
       DISPLAY_NAME: 'Replace Environment Variables'
@@ -24,7 +24,7 @@ steps:
           --url "$(ROPC_URL)?username=$(ROPC_USERNAME)&password=$(ROPC_PASSWORD)&grant_type=password&scope=openid%20$(ROPC_CLIENT_ID)%20offline_access&client_id=$(ROPC_CLIENT_ID)&response_type=token%20id_token" | grep -oP '(?<="id_token":")[^"]*')
 
       sed "s/ID_TOKEN/$idToken/" -i $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/public/global/functions/fetch_token.ts
-    name: GetCatalogToken
+    name: 'GetCatalogToken'
     displayName: 'Get API Token'
 
   - script: |
@@ -36,9 +36,9 @@ steps:
   - script: |
       sed -i 's|#server.basePath:.*|server.basePath: "/abc"|' $(Agent.TempDirectory)/OpenSearch-Dashboards/config/opensearch_dashboards.yml
       sed -i 's|#server.rewriteBasePath:.*|server.rewriteBasePath: true|' $(Agent.TempDirectory)/OpenSearch-Dashboards/config/opensearch_dashboards.yml
-    displayName: 'Modifing OpenSearch Dashboards config'
+    displayName: 'Modifying OpenSearch Dashboards config'
 
-  - task: Bash@3
+  - task: 'Bash@3'
     continueOnError: true
     inputs:
       targetType: 'inline'
@@ -79,7 +79,7 @@ steps:
         exit $CYPRESS_EXIT_CODE
     displayName: 'Run E2E Tests and Stop Server'
 
-  - task: Bash@3
+  - task: 'Bash@3'
     displayName: 'Check for Screenshots'
     condition: always()
     inputs:
@@ -91,7 +91,7 @@ steps:
           echo "##vso[task.setvariable variable=SCREENSHOTS_EXIST]false"
         fi
 
-  - task: PublishPipelineArtifact@1
+  - task: 'PublishPipelineArtifact@1'
     condition: and(succeededOrFailed(), eq(variables['SCREENSHOTS_EXIST'], 'true'))
     inputs:
       targetPath: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/public/assets/screenshots"

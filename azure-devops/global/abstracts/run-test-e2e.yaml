@@ -19,6 +19,12 @@ steps:
       FILE: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/.ci/config/opensearch_dashboards.yml"
       DISPLAY_NAME: 'Replace Environment Variables'
 
+  - task: Cache@2
+    inputs:
+      key: 'cypress-cache'
+      path: '$(Agent.HomeDirectory)/.cache/Cypress'
+    displayName: 'Cache Cypress'
+
   - script: |
       idToken=$(curl -s --request POST --header 'Content-Length: 0' \
           --url "$(ROPC_URL)?username=$(ROPC_USERNAME)&password=$(ROPC_PASSWORD)&grant_type=password&scope=openid%20$(ROPC_CLIENT_ID)%20offline_access&client_id=$(ROPC_CLIENT_ID)&response_type=token%20id_token" | grep -oP '(?<="id_token":")[^"]*')

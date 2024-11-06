@@ -4,6 +4,7 @@ stages:
     displayName: 'tests'
     jobs:
       - job: 'test_all'
+        continueOnError: false
         displayName: 'test:all'
         steps:
           - task: 'GoTool@0'

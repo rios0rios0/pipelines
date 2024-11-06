@@ -5,6 +5,8 @@ stages:
     jobs:
       - job: 'delivery'
         displayName: 'delivery'
+        variables:
+          DOCKER_CACHE_DIR: '$(Agent.TempDirectory)/docker-cache'
         steps:
           - template: '../../../global/abstracts/execute-command-opensearch-dashboards.yaml'
             parameters:
@@ -13,6 +15,12 @@ stages:
               COMMANDS: 'yarn osd bootstrap && yarn build'
               ARTIFACT_NAME: 'build'
               ARTIFACT_PATH: 'build'
+
+          - task: Cache@2
+            inputs:
+              key: 'docker-cache|$(Build.SourcesDirectory)/Dockerfile'
+              path: '$(DOCKER_CACHE_DIR)'
+            displayName: 'Cache Docker Buildx'
 
           - task: 'DownloadBuildArtifacts@0'
             inputs:
@@ -28,17 +36,22 @@ stages:
             displayName: 'Docker Login'
 
           - script: |
+              set -e
+
               docker buildx create --use
 
               TAGS="$(DOCKER_CONTAINER_IMAGE):latest"
               if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
-                TAGS="$TAGS -t $(DOCKER_CONTAINER_IMAGE):$(Build.SourceBranchName)"
-                echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]$(Build.SourceBranchName)"
+                  TAGS="$TAGS -t $(DOCKER_CONTAINER_IMAGE):$(Build.SourceBranchName)"
+                  echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]$(Build.SourceBranchName)"
               else
-                echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]latest"
+                  echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]latest"
               fi
-
-              docker buildx build --platform linux/amd64,linux/arm64 -t $TAGS --push .
+              docker buildx build --platform linux/amd64,linux/arm64 \
+                -t $TAGS \
+                --cache-from=type=local,src=$(DOCKER_CACHE_DIR) \
+                --cache-to=type=local,dest=$(DOCKER_CACHE_DIR),mode=max \
+                --push .
             name: 'build'
             displayName: 'Docker Build & Push'
         continueOnError: false

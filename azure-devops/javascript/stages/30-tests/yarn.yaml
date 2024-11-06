@@ -17,7 +17,7 @@ stages:
       - job: 'test_e2e'
         displayName: 'test:e2e'
         pool:
-          name: $(E2E_POOL)
+          name: "$(E2E_POOL)"
         steps:
           - template: '../../../global/abstracts/run-test-e2e.yaml'
             parameters:

@@ -29,6 +29,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added a new task in `azure-devops/golang/delivery` to retrieve list of `outboundIPAddresses`
 - added the list of `outboundIPAddresses` to the `overrideParameters` in the `AzureResourceGroupDeployment@2` task
 - added cache for `execute-command-opensearch-dashboards.yaml` template to cache the node modules and speed up the pipeline
+- added cache for `tests` and `delivery` stages in Azure DevOps Javascript pipeline
 
 ### Changed
 

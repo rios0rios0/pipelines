@@ -17,7 +17,7 @@ stages:
               set -e
               INIT_SCRIPT="config.sh"
               [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
-            displayName: 'Load Config'
+            displayName: 'Load Custom Configuration'
 
           - script: $(Scripts.Directory)/global/scripts/golang/test/run.sh
             displayName: 'Run Tests'
@@ -27,3 +27,4 @@ stages:
               targetPath: "$(System.DefaultWorkingDirectory)/coverage.txt"
               artifact: 'coverage'
             displayName: 'Publish Coverage File'
+        continueOnError: false

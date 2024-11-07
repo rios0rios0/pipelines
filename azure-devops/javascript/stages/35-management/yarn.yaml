@@ -8,6 +8,7 @@ stages:
         variables:
           SONAR_USER_HOME: "$(Build.SourcesDirectory)/.sonar"
         steps:
+          # TODO: duplicated code 3 times, 2 here and another at clone-and-move-opensearch-dashboards.yaml
           - task: 'UseNode@1'
             inputs:
               version: '18.19.0'
@@ -22,7 +23,8 @@ stages:
             inputs:
               key: "$(Agent.JobName)"
               path: 'node_modules'
-            displayName: 'Using cache for node_modules'
+            displayName: 'Using cache for "node_modules"'
+          # TODO: duplicated code 3 times, 2 here and another at clone-and-move-opensearch-dashboards.yaml
 
           - task: 'DownloadPipelineArtifact@2'
             inputs:
@@ -46,6 +48,7 @@ stages:
           PREFIX: ''
           REPORT_PATH: 'build/reports'
         steps:
+          # TODO: duplicated code 3 times, 2 here and another at clone-and-move-opensearch-dashboards.yaml
           - task: 'UseNode@1'
             inputs:
               version: '18.19.0'
@@ -60,7 +63,8 @@ stages:
             inputs:
               key: "$(Agent.JobName)"
               path: 'node_modules'
-            displayName: 'Using cache for node_modules'
+            displayName: 'Using cache for "node_modules"'
+          # TODO: duplicated code 3 times, 2 here and another at clone-and-move-opensearch-dashboards.yaml
 
           - template: '../../../global/stages/35-management/dependency-track.yaml'
             parameters:

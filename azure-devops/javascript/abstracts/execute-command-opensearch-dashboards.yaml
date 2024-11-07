@@ -45,10 +45,10 @@ steps:
     displayName: 'Execute Commands'
     condition: ne('${{ parameters.COMMANDS }}', '')
 
-  - task: 'PublishBuildArtifacts@1'
+  - task: 'PublishPipelineArtifact@1'
     inputs:
-      PathtoPublish: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/${{ parameters.ARTIFACT_PATH }}"
-      ArtifactName: "${{ parameters.ARTIFACT_NAME }}"
-      publishLocation: 'Container'
+      targetPath: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/${{ parameters.ARTIFACT_PATH }}"
+      artifact: "${{ parameters.ARTIFACT_NAME }}"
+      publishLocation: 'pipeline'
     displayName: 'Publish Artifact'
     condition: and(succeeded(), ne('${{ parameters.ARTIFACT_NAME }}', ''))

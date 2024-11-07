@@ -58,7 +58,7 @@ stages:
           - task: 'CopyFiles@2'
             inputs:
               Contents: |
-                api/function.json
+                api*/function.json
                 bin/*
                 host.json
               TargetFolder: "$(Build.SourcesDirectory)/$(Build.BuildId)"

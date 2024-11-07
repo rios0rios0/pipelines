@@ -1,7 +1,7 @@
 stages:
   - stage: 'tests'
-    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     displayName: 'tests'
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     jobs:
       - job: 'test_all'
         displayName: 'test:all'

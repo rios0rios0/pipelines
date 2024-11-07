@@ -1,7 +1,7 @@
 stages:
   - stage: 'management'
-    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     displayName: 'management'
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     jobs:
       - job: 'report_sonarqube'
         displayName: 'report:sonarqube'
@@ -23,19 +23,22 @@ stages:
             inputs:
               key: "$(Agent.JobName)|node_modules"
               path: 'node_modules'
-            displayName: 'Using cache for "node_modules"'
+            displayName: 'Cache for "node_modules"'
+            continueOnError: true
           # TODO: duplicated code 3 times, 2 here and another at clone-and-move-opensearch-dashboards.yaml
+
+          - task: 'Cache@2'
+            inputs:
+              key: "$(Agent.JobName)|sonar"
+              path: "$(SONAR_USER_HOME)"
+            displayName: 'Cache for SonarQube'
+            continueOnError: true
 
           - task: 'DownloadPipelineArtifact@2'
             inputs:
               artifactName: 'coverage'
               targetPath: '$(Build.SourcesDirectory)/coverage'
             displayName: 'Download Coverage File'
-
-          - task: 'Cache@2'
-            inputs:
-              key: "$(Agent.JobName)|sonar"
-              path: "$(SONAR_USER_HOME)"
 
           - script: |
               sed -i "s/\"extends\": \"\.\.\/\.\.\/tsconfig\.json\",/ /g" tsconfig.json
@@ -63,7 +66,8 @@ stages:
             inputs:
               key: "$(Agent.JobName)|node_modules"
               path: 'node_modules'
-            displayName: 'Using cache for "node_modules"'
+            displayName: 'Cache for "node_modules"'
+            continueOnError: true
           # TODO: duplicated code 3 times, 2 here and another at clone-and-move-opensearch-dashboards.yaml
 
           - template: '../../../global/stages/35-management/dependency-track.yaml'

@@ -1,7 +1,7 @@
 stages:
   - stage: 'delivery'
-    condition: or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main'))
     displayName: 'delivery'
+    condition: or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main'))
     jobs:
       - job: 'delivery'
         displayName: 'delivery'
@@ -22,32 +22,33 @@ stages:
 
           - task: 'Cache@2'
             inputs:
-              key: "$(ENVIRONMENT)|go-$(Agent.OS)|go.sum"
+              key: "$(ENVIRONMENT)|go-$(Agent.OS)|go.sum" # shared between all jobs
               path: "$(GOPATH)"
-            displayName: 'Cache Go Modules'
+            displayName: 'Cache for Go modules'
+            continueOnError: true
 
           - task: 'Cache@2'
             inputs:
-              key: '$(ENVIRONMENT)|go-migrations|db/migrations/*.sql'
+              key: "$(ENVIRONMENT)|db/migrations/*.sql"
               path: "$(MIGRATIONS_CACHE)"
               cacheHitVar: 'MIGRATIONS_CACHE_HIT'
-            displayName: 'Cache Migrations'
+            displayName: 'Cache for Migrations'
             continueOnError: true
 
           - task: 'Cache@2'
             inputs:
-              key: '$(ENVIRONMENT)|go-migrations|db/seeders/*.sql'
+              key: "$(ENVIRONMENT)|db/seeders/*.sql"
               path: "$(SEEDERS_CACHE)"
               cacheHitVar: 'SEEDERS_CACHE_HIT'
-            displayName: 'Cache Seeders'
+            displayName: 'Cache for Seeders'
             continueOnError: true
 
           - task: 'Cache@2'
             inputs:
-              key: '$(ENVIRONMENT)|azure-deploy|azuredeploy.json'
+              key: "$(ENVIRONMENT)|azuredeploy.json"
               path: "$(AZURE_DEPLOY_CACHE)"
               cacheHitVar: 'AZURE_DEPLOY_CACHE_HIT'
-            displayName: 'Cache Azure Deploy'
+            displayName: 'Cache for Resources Deployment in Azure'
 
           - task: 'GoTool@0'
             inputs:
@@ -90,7 +91,6 @@ stages:
             displayName: 'Archive Build Output'
 
           - task: 'AzureCLI@2'
-            displayName: 'Getting Function Outbound IP Addresses'
             inputs:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
@@ -110,10 +110,10 @@ stages:
                   fi
                 fi
                 echo "##vso[task.setvariable variable=outboundIpAddresses]$outboundIpAddresses"
+            displayName: 'Getting Function Outbound IP Addresses'
 
           # TODO: this should be the deployment stage
           - task: 'AzureResourceGroupDeployment@2'
-            condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
             inputs:
               location: "$(AZM_LOCATION)"
               action: 'Create Or Update Resource Group'
@@ -125,9 +125,9 @@ stages:
               deploymentMode: 'Incremental'
               deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'
             displayName: 'Deploy Resource Group'
+            condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
 
           - task: 'AzureCLI@2'
-            displayName: 'Save Deployment Outputs to File'
             inputs:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
@@ -136,10 +136,10 @@ stages:
                 set -e
 
                 echo $AZURE_DEPLOY_OUTPUTS > $(AZURE_DEPLOY_CACHE)/outputs.json
+            displayName: 'Save Deployment Outputs to File'
             condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
 
           - task: 'AzureCLI@2'
-            displayName: 'Read Outputs from file'
             inputs:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
@@ -149,6 +149,7 @@ stages:
 
                 outputs=$(cat $(AZURE_DEPLOY_CACHE)/outputs.json)
                 echo "##vso[task.setvariable variable=OUTPUTS]$outputs"
+            displayName: 'Read Outputs from file'
 
           - script: |
               siteName=$(echo $OUTPUTS | jq -r '.siteName.value')
@@ -156,7 +157,6 @@ stages:
             displayName: 'Getting Pipeline Variables'
 
           - task: 'AzureCLI@2'
-            displayName: 'Replace Azure Function Variables'
             inputs:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
@@ -185,10 +185,9 @@ stages:
                     --resource-group "$(resourceGroupName)" \
                     --settings $SETTINGS
                 fi
+            displayName: 'Replace Azure Function Variables'
 
           - task: 'AzureCLI@2'
-            condition: and(succeeded(), or(eq(variables['MIGRATIONS_CACHE_HIT'], 'false'), eq(variables['SEEDERS_CACHE_HIT'], 'false')))
-            displayName: 'Create Flexible Firewall Rule to execute migrations and seeders'
             inputs:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
@@ -204,10 +203,10 @@ stages:
                     --name "$DATABASE_SERVER_NAME" \
                     --rule-name "$(PIPELINE_FIREWALL_NAME)" \
                     --start-ip-address "$PIPELINE_IP"
+            displayName: 'Create Flexible Firewall Rule to execute migrations and seeders'
+            condition: and(succeeded(), or(eq(variables['MIGRATIONS_CACHE_HIT'], 'false'), eq(variables['SEEDERS_CACHE_HIT'], 'false')))
 
           - task: 'AzureCLI@2'
-            condition: and(succeeded(), eq(variables['MIGRATIONS_CACHE_HIT'], 'false'))
-            displayName: 'Execute Migrations'
             inputs:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
@@ -232,10 +231,10 @@ stages:
                 else
                   echo "No Goose migration files found. Skipping Goose installation and migration."
                 fi
+            displayName: 'Execute Migrations'
+            condition: and(succeeded(), eq(variables['MIGRATIONS_CACHE_HIT'], 'false'))
 
           - task: 'AzureCLI@2'
-            condition: and(succeeded(), eq(variables['SEEDERS_CACHE_HIT'], 'false'))
-            displayName: 'Execute Seeders'
             inputs:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
@@ -267,10 +266,10 @@ stages:
                 else
                     echo "No Goose seed files found. Skipping seed"
                 fi
+            displayName: 'Execute Seeders'
+            condition: and(succeeded(), eq(variables['SEEDERS_CACHE_HIT'], 'false'))
 
           - task: 'AzureCLI@2'
-            condition: and(succeeded(), or(eq(variables['MIGRATIONS_CACHE_HIT'], 'false'), eq(variables['SEEDERS_CACHE_HIT'], 'false')))
-            displayName: 'Delete Flexible Firewall Rule to execute migrations and seeders'
             inputs:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
@@ -285,6 +284,8 @@ stages:
                   --resource-group "$(resourceGroupName)" \
                   --name "$DATABASE_SERVER_NAME" \
                   --rule-name "$(PIPELINE_FIREWALL_NAME)"
+            displayName: 'Delete Flexible Firewall Rule to execute migrations and seeders'
+            condition: and(succeeded(), or(eq(variables['MIGRATIONS_CACHE_HIT'], 'false'), eq(variables['SEEDERS_CACHE_HIT'], 'false')))
 
           - task: 'AzureCLI@2'
             displayName: 'Publish Function'

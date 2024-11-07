@@ -19,12 +19,28 @@ steps:
       TAG_NAME: "${{ parameters.TAG_NAME }}"
       PLUGIN_NAME: "${{ parameters.PLUGIN_NAME }}"
 
-  - script: |
-      cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
-      yarn install && yarn osd bootstrap
-    displayName: 'Bootstrapping Plugin'
+  # $(Agent.HomeDirectory) is "home/vsts/agents/3.246.0/" different from the real home directory
+  - task: 'Cache@2'
+    inputs:
+      key: "$(Agent.JobName)|yarn1-x"
+      path: "$(HOME)/.cache/yarn"
+    displayName: 'Cache for Yarn 1.x'
+    continueOnError: true
+
+  - task: 'Cache@2'
+    inputs:
+      key: "$(Agent.JobName)|yarn4-5-x"
+      path: "$(HOME)/.yarn"
+    displayName: 'Cache for Yarn 4.5.x'
+    continueOnError: true
 
   - script: |
+      cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
+      yarn && yarn osd bootstrap
+    displayName: 'Install Dependencies'
+
+  - script: |
+      cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
       ${{ parameters.COMMANDS }}
     displayName: 'Execute Commands'
     condition: ne('${{ parameters.COMMANDS }}', '')

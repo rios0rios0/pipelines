@@ -19,10 +19,11 @@ steps:
       FILE: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/.ci/40-delivery/config/opensearch_dashboards.yml"
       DISPLAY_NAME: 'Replace Environment Variables'
 
+  # $(Agent.HomeDirectory) is "home/vsts/agents/3.246.0/" different from the real home directory
   - task: 'Cache@2'
     inputs:
-      key: 'cypress-cache'
-      path: "$(Agent.HomeDirectory)/.cache/Cypress"
+      key: "$(Agent.JobName)|cypress"
+      path: "$(HOME)/.cache/Cypress"
     displayName: 'Cache Cypress'
 
   - script: |

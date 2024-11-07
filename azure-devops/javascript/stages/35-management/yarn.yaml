@@ -21,7 +21,7 @@ stages:
 
           - task: 'Cache@2'
             inputs:
-              key: "$(Agent.JobName)"
+              key: "$(Agent.JobName)|node_modules"
               path: 'node_modules'
             displayName: 'Using cache for "node_modules"'
           # TODO: duplicated code 3 times, 2 here and another at clone-and-move-opensearch-dashboards.yaml
@@ -34,7 +34,7 @@ stages:
 
           - task: 'Cache@2'
             inputs:
-              key: "$(Agent.JobName)-2"
+              key: "$(Agent.JobName)|sonar"
               path: "$(SONAR_USER_HOME)"
 
           - script: |
@@ -61,7 +61,7 @@ stages:
 
           - task: 'Cache@2'
             inputs:
-              key: "$(Agent.JobName)"
+              key: "$(Agent.JobName)|node_modules"
               path: 'node_modules'
             displayName: 'Using cache for "node_modules"'
           # TODO: duplicated code 3 times, 2 here and another at clone-and-move-opensearch-dashboards.yaml

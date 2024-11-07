@@ -18,9 +18,9 @@ stages:
               kubernetesServiceConnection: "$(K8S_ENDPOINT)"
               namespace: "$(K8S_NAMESPACE)"
 
-          - template: '../../../global/abstracts/replace-environment-variables.yaml'
+          - template: '../../abstracts/replace-environment-variables.yaml'
             parameters:
-              FILE: '.ci/config/opensearch_dashboards.yml'
+              FILE: '.ci/40-delivery/config/opensearch_dashboards.yml'
               DISPLAY_NAME: 'Replace Environment Variables'
 
           - task: 'Kubernetes@1'
@@ -28,7 +28,7 @@ stages:
               connectionType: 'Kubernetes Service Connection'
               configMapName: "$(K8S_CONFIGMAP_NAME)"
               forceUpdateConfigMap: true
-              configMapArguments: '--from-file=.ci/config/opensearch_dashboards.yml'
+              configMapArguments: '--from-file=.ci/40-delivery/config/opensearch_dashboards.yml'
               kubernetesServiceEndpoint: "$(K8S_ENDPOINT)"
               namespace: "$(K8S_NAMESPACE)"
 

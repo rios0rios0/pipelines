@@ -6,11 +6,11 @@ stages:
       - job: 'test_all'
         displayName: 'test:all'
         steps:
-          - template: '../../../global/abstracts/execute-command-opensearch-dashboards.yaml'
+          - template: '../../abstracts/execute-command-opensearch-dashboards.yaml'
             parameters:
               TAG_NAME: '2.18.0'
               PLUGIN_NAME: 'app'
-              COMMANDS: 'yarn && yarn osd bootstrap && yarn test:coverage'
+              COMMANDS: 'yarn test:coverage'
               ARTIFACT_NAME: 'coverage'
               ARTIFACT_PATH: 'coverage'
 
@@ -19,7 +19,7 @@ stages:
         pool:
           name: "$(E2E_POOL)"
         steps:
-          - template: '../../../global/abstracts/run-test-e2e.yaml'
+          - template: '../../abstracts/run-test-e2e.yaml'
             parameters:
               TAG_NAME: '2.18.0'
               PLUGIN_NAME: 'app'

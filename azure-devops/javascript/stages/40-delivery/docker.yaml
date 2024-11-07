@@ -18,7 +18,7 @@ stages:
 
           - task: 'Cache@2'
             inputs:
-              key: "$(Build.SourcesDirectory)/Dockerfile"
+              key: "$(Agent.JobName)|$(Build.SourcesDirectory)/.ci/40-delivery/app.Dockerfile"
               path: "$(DOCKER_CACHE_DIR)"
             displayName: 'Cache Docker Buildx'
             continueOnError: true

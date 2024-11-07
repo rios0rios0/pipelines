@@ -1,5 +1,6 @@
 jobs:
   - job: 'release'
+    displayName: 'release'
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), or(contains(variables['Build.SourceVersionMessage'], 'origin/chore/bump-'), contains(variables['Build.SourceVersionMessage'], 'chore(bump)')))
     steps:
       - script: |

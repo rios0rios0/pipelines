@@ -1,7 +1,7 @@
 stages:
   - stage: 'code_check'
-    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     displayName: 'code check (style/quality)'
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     jobs:
       - job: 'style_golangci_lint'
         displayName: 'style:golangci-lint'
@@ -9,6 +9,13 @@ stages:
           - task: 'GoTool@0'
             inputs:
               version: '1.23.1'
+
+          - task: 'Cache@2'
+            inputs:
+              key: "$(ENVIRONMENT)|go-$(Agent.OS)|go.sum" # shared between all jobs
+              path: "$(GOPATH)"
+            displayName: 'Cache for Go modules'
+            continueOnError: true
 
           - script: |
               sudo apt-get update && \
@@ -22,7 +29,7 @@ stages:
               set -e
               INIT_SCRIPT="config.sh"
               [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
-            displayName: 'Load Config'
+            displayName: 'Load Custom Configuration'
 
           - script: $(Scripts.Directory)/global/scripts/golangci-lint/run.sh
             displayName: 'Run golangci-lint'

@@ -1,7 +1,7 @@
 stages:
   - stage: 'delivery'
-    condition: or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     displayName: 'delivery'
+    condition: or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     jobs:
       - job: 'delivery'
         displayName: 'delivery'
@@ -52,7 +52,7 @@ stages:
               docker buildx build --platform linux/amd64,linux/arm64 \
                 --cache-from=type=local,src=$(DOCKER_CACHE_DIR) \
                 --cache-to=type=local,dest=$(DOCKER_CACHE_DIR),mode=max \
-                --file .ci/40-delivery/app.Dockerfile --tags $TAGS --push .
+                --file .ci/40-delivery/app.Dockerfile --tag $TAGS --push .
             name: 'build'
             displayName: 'Docker Build and Push'
         continueOnError: false

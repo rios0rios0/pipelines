@@ -53,7 +53,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed `e2e` test job to receive a different pool
 - changed the OSD version to 2.18.0 due to an upgrade request
 - changed task that publishes artifact from `PublishBuildArtifact` to `PublishPipelineArtifact` in Azure Devops Javascript's `execute-command-opensearch-dashboards.yaml` template
-
+- changed all display names and conditions to obey a certain position for all Azure DevOps tasks
+-
 ### Fixed
 
 - added two missing linters to the `golangci-lint` pipeline

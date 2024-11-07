@@ -1,8 +1,8 @@
 # TODO: needs to be reviewed to use same configuration accross jobs via templates or other implementation
 stages:
   - stage: 'code_check'
-    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     displayName: 'Code Check (Style/Quality)'
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     jobs:
       - job: 'style_isort'
         displayName: 'Check isort'

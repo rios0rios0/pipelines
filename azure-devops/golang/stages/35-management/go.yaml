@@ -1,7 +1,7 @@
 stages:
   - stage: 'management'
-    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     displayName: 'management'
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     jobs:
       - template: '../../../global/stages/35-management/sonarqube.yaml'
         parameters:
@@ -30,15 +30,16 @@ stages:
 
           - task: 'Cache@2'
             inputs:
-              key: "$(Agent.JobName)"
-              path: '.go'
-            displayName: 'Cache Go Modules'
+              key: "$(ENVIRONMENT)|go-$(Agent.OS)|go.sum" # shared between all jobs
+              path: "$(GOPATH)"
+            displayName: 'Cache for Go modules'
+            continueOnError: true
 
           - script: |
               set -e
               INIT_SCRIPT="config.sh"
               [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
-            displayName: 'Load Config'
+            displayName: 'Load Custom Configuration'
 
           - template: '../../../global/stages/35-management/dependency-track.yaml'
             parameters:

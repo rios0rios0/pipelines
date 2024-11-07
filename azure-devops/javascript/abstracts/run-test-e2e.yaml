@@ -9,7 +9,7 @@ parameters:
     type: 'string'
 
 steps:
-  - template: './clone-and-move-opensearch-dashboards.yaml'
+  - template: './execute-command-opensearch-dashboards.yaml'
     parameters:
       TAG_NAME: "${{ parameters.TAG_NAME }}"
       PLUGIN_NAME: "${{ parameters.PLUGIN_NAME }}"
@@ -32,11 +32,6 @@ steps:
       sed "s/ID_TOKEN/$idToken/" -i $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/public/global/functions/fetch_token.ts
     name: 'GetCatalogToken'
     displayName: 'Get API Token'
-
-  - script: |
-      cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
-      yarn osd bootstrap
-    displayName: 'Updating Repository and Installing Dependencies'
 
   - script: |
       sed -i 's|#server.basePath:.*|server.basePath: "/abc"|' $(Agent.TempDirectory)/OpenSearch-Dashboards/config/opensearch_dashboards.yml

@@ -6,8 +6,8 @@ stages:
       - job: 'style_eslint'
         displayName: 'style:eslint'
         steps:
-          - template: '../../../global/abstracts/execute-command-opensearch-dashboards.yaml'
+          - template: '../../abstracts/execute-command-opensearch-dashboards.yaml'
             parameters:
               TAG_NAME: '2.18.0'
               PLUGIN_NAME: 'app'
-              COMMANDS: 'yarn osd bootstrap && yarn lint'
+              COMMANDS: 'yarn lint'

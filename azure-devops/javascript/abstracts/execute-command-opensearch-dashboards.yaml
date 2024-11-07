@@ -20,37 +20,11 @@ steps:
       PLUGIN_NAME: "${{ parameters.PLUGIN_NAME }}"
 
   - script: |
-      echo "##vso[task.setvariable variable=YARN_CACHE_FOLDER]$(yarn config get cacheFolder)"
-    displayName: 'Set Yarn Cache Folder'
-
-  - task: 'Cache@2'
-    inputs:
-      key: "$(YARN_CACHE_FOLDER)"
-      path: "$(YARN_CACHE_FOLDER)"
-    displayName: 'Cache Yarn'
-    continueOnError: true
-
-  - task: 'Cache@2'
-    inputs:
-      key: "$(Agent.TempDirectory)/OpenSearch-Dashboards/yarn.lock"
-      path: "$(Agent.TempDirectory)/OpenSearch-Dashboards/node_modules"
-    displayName: 'Cache "OpenSearch-Dashboards/node_modules"'
-    continueOnError: true
-
-  - task: 'Cache@2'
-    inputs:
-      key: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/yarn.lock"
-      path: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/node_modules"
-    displayName: 'Cache "OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/node_modules"'
-    continueOnError: true
-
-  - script: |
-      cd $(Agent.TempDirectory)/OpenSearch-Dashboards
-      yarn osd bootstrap
-    displayName: 'Bootstrapping and Installing Dependencies'
-
-  - script: |
       cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
+      yarn install && yarn osd bootstrap
+    displayName: 'Bootstrapping Plugin'
+
+  - script: |
       ${{ parameters.COMMANDS }}
     displayName: 'Execute Commands'
     condition: ne('${{ parameters.COMMANDS }}', '')

@@ -19,6 +19,22 @@ steps:
       git clone --depth 1 --branch ${{ parameters.TAG_NAME }} https://github.com/opensearch-project/OpenSearch-Dashboards.git $(Agent.TempDirectory)/OpenSearch-Dashboards
     displayName: 'Clone OpenSearch Dashboards repository'
 
+  - script: |
+      echo "##vso[task.setvariable variable=YARN_CACHE_FOLDER]$(yarn config get cacheFolder)"
+    displayName: 'Set Yarn Cache Folder'
+
+  - task: 'Cache@2'
+    inputs:
+      key: "$(YARN_CACHE_FOLDER)"
+      path: "$(YARN_CACHE_FOLDER)"
+    displayName: 'Cache Yarn'
+    continueOnError: true
+
+  - script: |
+      cd $(Agent.TempDirectory)/OpenSearch-Dashboards
+      yarn osd bootstrap
+    displayName: 'Bootstrapping OpenSearch Dashboards'
+
   - task: 'CopyFiles@2'
     inputs:
       SourceFolder: "$(Build.Repository.LocalPath)"

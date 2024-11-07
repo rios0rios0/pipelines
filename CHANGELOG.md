@@ -51,6 +51,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed the `azure-devops` to execute the migrations and seeders in a different tasks
 - changed the `Publish Function` task to retry when failed
 - changed `e2e` test job to receive a different pool
+- changed the OSD version to 2.18.0 due to an upgrade request
 
 ### Fixed
 

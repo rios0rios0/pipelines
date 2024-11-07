@@ -10,7 +10,7 @@ stages:
         steps:
           - template: '../../../global/abstracts/execute-command-opensearch-dashboards.yaml'
             parameters:
-              TAG_NAME: '2.17.0'
+              TAG_NAME: '2.18.0'
               PLUGIN_NAME: 'app'
               COMMANDS: 'yarn osd bootstrap && yarn build'
               ARTIFACT_NAME: 'build'

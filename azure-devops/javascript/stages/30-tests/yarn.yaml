@@ -8,7 +8,7 @@ stages:
         steps:
           - template: '../../../global/abstracts/execute-command-opensearch-dashboards.yaml'
             parameters:
-              TAG_NAME: '2.17.0'
+              TAG_NAME: '2.18.0'
               PLUGIN_NAME: 'app'
               COMMANDS: 'yarn && yarn osd bootstrap && yarn test:coverage'
               ARTIFACT_NAME: 'coverage'
@@ -21,7 +21,7 @@ stages:
         steps:
           - template: '../../../global/abstracts/run-test-e2e.yaml'
             parameters:
-              TAG_NAME: '2.17.0'
+              TAG_NAME: '2.18.0'
               PLUGIN_NAME: 'app'
               # TODO: set the ports as an array of strings
               OS_PORT: '9200'

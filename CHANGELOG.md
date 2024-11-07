@@ -52,6 +52,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed the `Publish Function` task to retry when failed
 - changed `e2e` test job to receive a different pool
 - changed the OSD version to 2.18.0 due to an upgrade request
+- changed task that publishes artifact from `PublishBuildArtifact` to `PublishPipelineArtifact` in Azure Devops Javascript's `execute-command-opensearch-dashboards.yaml` template
 
 ### Fixed
 

@@ -1,7 +1,7 @@
 stages:
   - stage: 'security'
-    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     displayName: 'security (sca/sast)'
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     jobs:
       - template: '../../../global/stages/20-security/docker.yaml'
         parameters:

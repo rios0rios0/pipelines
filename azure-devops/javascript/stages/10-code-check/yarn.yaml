@@ -1,7 +1,7 @@
 stages:
   - stage: 'code_check'
-    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     displayName: 'code check (style/quality)'
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     jobs:
       - job: 'style_eslint'
         displayName: 'style:eslint'

@@ -7,14 +7,16 @@ stages:
         displayName: 'delivery'
         variables:
           DOCKER_CACHE_DIR: '$(Agent.TempDirectory)/docker-cache'
+          BUILD_ARTIFACT_NAME: 'build'
+          BUILD_ARTIFACT_PATH: 'build'
         steps:
           - template: '../../abstracts/execute-command-opensearch-dashboards.yaml'
             parameters:
               TAG_NAME: '2.18.0'
               PLUGIN_NAME: 'app'
               COMMANDS: 'yarn build'
-              ARTIFACT_NAME: 'build'
-              ARTIFACT_PATH: 'build'
+              ARTIFACT_NAME: '$(BUILD_ARTIFACT_NAME)'
+              ARTIFACT_PATH: '$(BUILD_ARTIFACT_PATH)'
 
           - task: 'Cache@2'
             inputs:
@@ -23,12 +25,11 @@ stages:
             displayName: 'Cache Docker Buildx'
             continueOnError: true
 
-          - task: 'DownloadBuildArtifacts@0'
+          - task: 'DownloadPipelineArtifact@2'
             inputs:
-              buildType: 'current'
-              downloadType: 'single'
-              artifactName: 'build'
-              downloadPath: '.'
+              artifactName: '$(BUILD_ARTIFACT_NAME)'
+              targetPath: 'build'
+            displayName: 'Download Build Artifact'
 
           - task: 'Docker@2'
             inputs:
@@ -49,10 +50,13 @@ stages:
                 echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]latest"
               fi
 
-              docker buildx build --platform linux/amd64,linux/arm64 \
+              docker buildx build \
+                --platform linux/amd64,linux/arm64 \
                 --cache-from=type=local,src=$(DOCKER_CACHE_DIR) \
                 --cache-to=type=local,dest=$(DOCKER_CACHE_DIR),mode=max \
-                --file .ci/40-delivery/app.Dockerfile --tag $TAGS --push .
+                --file .ci/40-delivery/app.Dockerfile \
+                --tag $TAGS \
+                --push .
             name: 'build'
             displayName: 'Docker Build and Push'
         continueOnError: false

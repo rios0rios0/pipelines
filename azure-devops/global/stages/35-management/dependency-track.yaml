@@ -14,29 +14,33 @@ steps:
     continueOnError: true
 
   - script: |
-      export UUID=$(cat $(Pipeline.Workspace)/uuid/uuid.txt)
-      export REQUEST_CONTENT_TYPE="Content-Type: multipart/form-data"
-      export REQUEST_API_KEY="X-Api-Key: $(DEPENDENCY_TRACK_TOKEN)"
-      curl --insecure --fail --request 'POST' "$(DEPENDENCY_TRACK_HOST_URL)/api/v1/bom" \
-        -H "$REQUEST_CONTENT_TYPE" -H "$REQUEST_API_KEY" \
-        -F "project=$UUID" \
-        -F "projectVersion=$(cat $(PREFIX)$(REPORT_PATH)/bom.json | jq -r '.metadata.component.version')" \
-        -F "bom=@$(PREFIX)$(REPORT_PATH)/bom.json"
+      if [ -f "$(Pipeline.Workspace)/uuid/uuid.txt" ]; then
+        export UUID=$(cat $(Pipeline.Workspace)/uuid/uuid.txt)
+        export REQUEST_CONTENT_TYPE="Content-Type: multipart/form-data"
+        export REQUEST_API_KEY="X-Api-Key: $(DEPENDENCY_TRACK_TOKEN)"
+        curl --insecure --fail --request 'POST' "$(DEPENDENCY_TRACK_HOST_URL)/api/v1/bom" \
+          -H "$REQUEST_CONTENT_TYPE" -H "$REQUEST_API_KEY" \
+          -F "project=$UUID" \
+          -F "projectVersion=$(cat $(PREFIX)$(REPORT_PATH)/bom.json | jq -r '.metadata.component.version')" \
+          -F "bom=@$(PREFIX)$(REPORT_PATH)/bom.json"
+      else
+        echo "UUID artifact not found. Creating a new project."
+      fi
     displayName: 'Upload BOM with existing UUID'
-    condition: and(succeeded(), exists("$(Pipeline.Workspace)/uuid/uuid.txt"))
 
   - script: |
-      export REQUEST_CONTENT_TYPE="Content-Type: multipart/form-data"
-      export REQUEST_API_KEY="X-Api-Key: $(DEPENDENCY_TRACK_TOKEN)"
-      RESPONSE=$(curl --insecure --fail --request 'POST' "$(DEPENDENCY_TRACK_HOST_URL)/api/v1/bom" \
-        -H "$REQUEST_CONTENT_TYPE" -H "$REQUEST_API_KEY" \
-        -F "projectName=$(cat $(PREFIX)$(REPORT_PATH)/bom.json | jq -r '.metadata.component.name')" \
-        -F "projectVersion=$(cat $(PREFIX)$(REPORT_PATH)/bom.json | jq -r '.metadata.component.version')" \
-        -F 'autoCreate=true' -F "bom=@$(PREFIX)$(REPORT_PATH)/bom.json")
-      UUID=$(echo $RESPONSE | jq -r '.token')
-      echo $UUID > $(Pipeline.Workspace)/uuid/uuid.txt
+      if [ ! -f "$(Pipeline.Workspace)/uuid/uuid.txt" ]; then
+        export REQUEST_CONTENT_TYPE="Content-Type: multipart/form-data"
+        export REQUEST_API_KEY="X-Api-Key: $(DEPENDENCY_TRACK_TOKEN)"
+        RESPONSE=$(curl --insecure --fail --request 'POST' "$(DEPENDENCY_TRACK_HOST_URL)/api/v1/bom" \
+          -H "$REQUEST_CONTENT_TYPE" -H "$REQUEST_API_KEY" \
+          -F "projectName=$(cat $(PREFIX)$(REPORT_PATH)/bom.json | jq -r '.metadata.component.name')" \
+          -F "projectVersion=$(cat $(PREFIX)$(REPORT_PATH)/bom.json | jq -r '.metadata.component.version')" \
+          -F 'autoCreate=true' -F "bom=@$(PREFIX)$(REPORT_PATH)/bom.json")
+        UUID=$(echo $RESPONSE | jq -r '.token')
+        echo $UUID > $(Pipeline.Workspace)/uuid/uuid.txt
+      fi
     displayName: 'Create new project and upload BOM'
-    condition: and(succeeded(), not(exists("$(Pipeline.Workspace)/uuid/uuid.txt")))
 
   - task: 'PublishPipelineArtifact@1'
     inputs:

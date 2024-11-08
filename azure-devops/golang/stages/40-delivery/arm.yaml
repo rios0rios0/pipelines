@@ -6,19 +6,16 @@ stages:
       - job: 'delivery'
         displayName: 'delivery'
         variables:
-          GOPATH: "$(Build.SourcesDirectory)/.go"
           MIGRATIONS_CACHE: "$(Build.SourcesDirectory)/.migration"
           SEEDERS_CACHE: "$(Build.SourcesDirectory)/.seeder"
           AZURE_DEPLOY_CACHE: "$(Build.SourcesDirectory)/.azuredeploy"
           PIPELINE_FIREWALL_NAME: 'PipelineFirewall_$(date +"%Y%m%d%H%M%S")'
         steps:
-          - script: |
-              set -e
-
-              mkdir -p $(MIGRATIONS_CACHE)
-              mkdir -p $(SEEDERS_CACHE)
-              mkdir -p $(AZURE_DEPLOY_CACHE)
-            displayName: 'Setup Cache'
+          - task: 'GoTool@0'
+            inputs:
+              version: '1.23.1'
+              architecture: 'amd64'
+              goArguments: 'mod tidy'
 
           - task: 'Cache@2'
             inputs:
@@ -50,12 +47,13 @@ stages:
               cacheHitVar: 'AZURE_DEPLOY_CACHE_HIT'
             displayName: 'Cache for Resources Deployment in Azure'
 
-          - task: 'GoTool@0'
-            inputs:
-              version: '1.23.1'
-              architecture: 'amd64'
-              goArguments: 'mod tidy'
-            displayName: 'Go Module Dependency Cleanup'
+          - script: |
+              set -e
+
+              mkdir -p $(MIGRATIONS_CACHE)
+              mkdir -p $(SEEDERS_CACHE)
+              mkdir -p $(AZURE_DEPLOY_CACHE)
+            displayName: 'Setup Cache'
 
           # TODO: this should be a share script between the vendors
           - script: |

@@ -18,15 +18,12 @@ stages:
         variables:
           PREFIX: ''
           REPORT_PATH: 'build/reports'
-          GOPATH: "$(Build.SourcesDirectory)/.go"
-          GOBIN: "$(GOPATH)/bin"
         steps:
           - task: 'GoTool@0'
             inputs:
               version: '1.23.1'
               architecture: 'amd64'
               goArguments: 'mod tidy'
-            displayName: 'Go Install and Module Dependency Cleanup'
 
           - task: 'Cache@2'
             inputs:
@@ -64,8 +61,8 @@ stages:
 
                 if find $folder -type d -name "*pkg" | grep -q .; then
                     echo "Found a 'pkg' directory, using 'cyclonedx-gomod mod' command..."
-                    "$GOBIN/cyclonedx-gomod" mod -json -output "$path/bom.json" -licenses
+                    "$(go env GOPATH)/bin/cyclonedx-gomod" mod -json -output "$path/bom.json" -licenses
                 else
                     echo "Using 'cyclonedx-gomod app' command..."
-                    "$GOBIN/cyclonedx-gomod" app -json -output "$path/bom.json" -packages -files -licenses -main $folder
+                    "$(go env GOPATH)/bin/cyclonedx-gomod" app -json -output "$path/bom.json" -packages -files -licenses -main $folder
                 fi

@@ -15,19 +15,19 @@ stages:
               TAG_NAME: '2.18.0'
               PLUGIN_NAME: 'app'
               COMMANDS: 'yarn build'
-              ARTIFACT_NAME: '$(BUILD_ARTIFACT_NAME)'
-              ARTIFACT_PATH: '$(BUILD_ARTIFACT_PATH)'
+              ARTIFACT_NAME: "$(BUILD_ARTIFACT_NAME)"
+              ARTIFACT_PATH: "$(BUILD_ARTIFACT_PATH)"
 
           - task: 'Cache@2'
             inputs:
-              key: "$(Agent.JobName)|$(Build.SourcesDirectory)/.ci/40-delivery/app.Dockerfile"
+              key: "$(Agent.JobName)|.ci/40-delivery/app.Dockerfile"
               path: "$(DOCKER_CACHE_DIR)"
             displayName: 'Cache Docker Buildx'
             continueOnError: true
 
           - task: 'DownloadPipelineArtifact@2'
             inputs:
-              artifactName: '$(BUILD_ARTIFACT_NAME)'
+              artifactName: "$(BUILD_ARTIFACT_NAME)"
               targetPath: 'build'
             displayName: 'Download Build Artifact'
 

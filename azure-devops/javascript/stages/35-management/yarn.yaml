@@ -21,7 +21,7 @@ stages:
 
           - task: 'Cache@2'
             inputs:
-              key: "$(Agent.JobName)|node_modules"
+              key: "$(Agent.JobName)|yarn.lock"
               path: 'node_modules'
             displayName: 'Cache for "node_modules"'
             continueOnError: true
@@ -37,7 +37,7 @@ stages:
           - task: 'DownloadPipelineArtifact@2'
             inputs:
               artifactName: 'coverage'
-              targetPath: '$(Build.SourcesDirectory)/coverage'
+              targetPath: "$(Build.SourcesDirectory)/coverage"
             displayName: 'Download Coverage File'
 
           - script: |
@@ -64,7 +64,7 @@ stages:
 
           - task: 'Cache@2'
             inputs:
-              key: "$(Agent.JobName)|node_modules"
+              key: "$(Agent.JobName)|yarn.lock"
               path: 'node_modules'
             displayName: 'Cache for "node_modules"'
             continueOnError: true

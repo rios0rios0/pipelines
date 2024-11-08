@@ -20,14 +20,14 @@ stages:
 
           - task: 'Cache@2'
             inputs:
-              key: "$(ENVIRONMENT)|go-$(Agent.OS)|go.sum" # shared between all jobs
+              key: "$(Agent.JobName)|$(Agent.OS)|go.sum"
               path: "$(GOPATH)"
             displayName: 'Cache for Go modules'
             continueOnError: true
 
           - task: 'Cache@2'
             inputs:
-              key: "$(ENVIRONMENT)|db/migrations/*.sql"
+              key: "$(Agent.JobName)|$(ENVIRONMENT)|db/migrations/*.sql"
               path: "$(MIGRATIONS_CACHE)"
               cacheHitVar: 'MIGRATIONS_CACHE_HIT'
             displayName: 'Cache for Migrations'
@@ -35,7 +35,7 @@ stages:
 
           - task: 'Cache@2'
             inputs:
-              key: "$(ENVIRONMENT)|db/seeders/*.sql"
+              key: "$(Agent.JobName)|$(ENVIRONMENT)|db/seeders/*.sql"
               path: "$(SEEDERS_CACHE)"
               cacheHitVar: 'SEEDERS_CACHE_HIT'
             displayName: 'Cache for Seeders'
@@ -43,7 +43,7 @@ stages:
 
           - task: 'Cache@2'
             inputs:
-              key: "$(ENVIRONMENT)|azuredeploy.json"
+              key: "$(Agent.JobName)|$(ENVIRONMENT)|azuredeploy.json"
               path: "$(AZURE_DEPLOY_CACHE)"
               cacheHitVar: 'AZURE_DEPLOY_CACHE_HIT'
             displayName: 'Cache for Resources Deployment in Azure'

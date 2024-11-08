@@ -75,6 +75,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed the `Getting Function Outbound IP Addresses` task in Golang delivery stage to retrieve only the last function app
 - fixed cache keys in the Golang delivery stage for azure devops
 - fixed `Getting Function Outbound IP Addresses` task for Azure Devops Golang to avoid failing if there's no function or resource group deployed
+- fixed the `Download Build Artifact` task in the delivery stage for Javascript in Azure DevOps to download the artifact to the correct directory
+- fixed the Golang delivery stage for Azure DevOps by adding the `GOPATH` environment variable
 
 ### Removed
 

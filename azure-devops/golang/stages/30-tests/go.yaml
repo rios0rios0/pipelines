@@ -5,6 +5,8 @@ stages:
     jobs:
       - job: 'test_all'
         displayName: 'test:all'
+        variables:
+          GOPATH: "$(Pipeline.Workspace)/.go"
         steps:
           - task: 'GoTool@0'
             inputs:

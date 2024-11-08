@@ -9,8 +9,15 @@ stages:
           - task: 'GoTool@0'
             inputs:
               version: '1.23.1'
+              architecture: 'amd64'
+              goArguments: 'mod tidy'
 
-          - template: '../../../global/abstracts/scripts-repo.yaml'
+          - task: 'Cache@2'
+            inputs:
+              key: "$(ENVIRONMENT)|go-$(Agent.OS)|go.sum" # shared between all jobs
+              path: "$(GOPATH)"
+            displayName: 'Cache for Go modules'
+            continueOnError: true
 
           # TODO: this should be a share script between the vendors
           - script: |
@@ -18,6 +25,8 @@ stages:
               INIT_SCRIPT="config.sh"
               [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
             displayName: 'Load Custom Configuration'
+
+          - template: '../../../global/abstracts/scripts-repo.yaml'
 
           - script: $(Scripts.Directory)/global/scripts/golang/test/run.sh
             displayName: 'Run Tests'

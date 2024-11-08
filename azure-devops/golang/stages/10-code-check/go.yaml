@@ -9,6 +9,8 @@ stages:
           - task: 'GoTool@0'
             inputs:
               version: '1.23.1'
+              architecture: 'amd64'
+              goArguments: 'mod tidy'
 
           - task: 'Cache@2'
             inputs:

@@ -30,6 +30,7 @@ echo "Testing code in the following directories: $directories"
 echo "Installing dependencies..."
 go install github.com/wadey/gocovmerge@latest
 go install github.com/boumenot/gocover-cobertura@latest
+go install github.com/jstemmer/go-junit-report@latest
 
 # run the tests
 go test -v -tags test,unit \
@@ -45,10 +46,8 @@ go test -p 1 -v -tags integration \
   -coverprofile=integration_coverage.txt \
   $directories
 
-$(go env GOPATH)/bin/gocovmerge unit_coverage.txt integration_coverage.txt > coverage.txt
-
-rm unit_coverage.txt integration_coverage.txt
-
+$(go env GOPATH)/bin/gocovmerge unit_coverage.txt integration_coverage.txt > coverage.txt && \
+  rm unit_coverage.txt integration_coverage.txt
+$(go env GOPATH)/bin/go-junit-report -in coverage.txt -out junit.xml
 go tool cover -func coverage.txt
-
-$(go env GOPATH)/bin/gocover-cobertura < coverage.txt > coverage.xml
+$(go env GOPATH)/bin/gocover-cobertura < coverage.txt > cobertura.xml

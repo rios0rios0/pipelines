@@ -33,6 +33,17 @@ stages:
           - script: $(Scripts.Directory)/global/scripts/golang/test/run.sh
             displayName: 'Run Tests'
 
+          - task: 'PublishTestResults@2'
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '**/junit.xml'
+            displayName: 'Publish Test Results'
+
+          - task: 'PublishCodeCoverageResults@2'
+            inputs:
+              summaryFileLocation: 'cobertura.xml'
+            displayName: 'Publish Code Coverage Results'
+
           - task: 'PublishPipelineArtifact@1'
             inputs:
               targetPath: "$(System.DefaultWorkingDirectory)/coverage.txt"

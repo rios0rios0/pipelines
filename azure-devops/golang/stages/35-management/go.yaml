@@ -18,6 +18,7 @@ stages:
         variables:
           PREFIX: ''
           REPORT_PATH: 'build/reports'
+          GOPATH: "$(Pipeline.Workspace)/.go"
         steps:
           - task: 'GoTool@0'
             inputs:

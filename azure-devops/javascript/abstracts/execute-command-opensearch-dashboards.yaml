@@ -35,11 +35,15 @@ steps:
     continueOnError: true
 
   - script: |
+      set -e
+
       cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
       yarn && yarn osd bootstrap
     displayName: 'Install Dependencies'
 
   - script: |
+      set -e
+
       cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
       ${{ parameters.COMMANDS }}
     displayName: 'Execute Commands'

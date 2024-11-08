@@ -5,6 +5,8 @@ stages:
     jobs:
       - job: 'style_golangci_lint'
         displayName: 'style:golangci-lint'
+        variables:
+          GOPATH: "$(Pipeline.Workspace)/.go"
         steps:
           - task: 'GoTool@0'
             inputs:

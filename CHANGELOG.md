@@ -78,6 +78,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed the `Download Build Artifact` task in the delivery stage for Javascript in Azure DevOps to download the artifact to the correct directory
 - fixed the Golang delivery stage for Azure DevOps by adding the `GOPATH` environment variable
 - fixed GoLang test script to set `GOPATH` variable just when it's not set (it was preventing cache in Azure DevOps)
+- fixed Dependency Track to avoid creating many of the same project
 
 ### Removed
 

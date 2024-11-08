@@ -1,7 +1,7 @@
 stages:
   - stage: 'management'
     displayName: 'management'
-    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
     jobs:
       - template: '../../../global/stages/35-management/sonarqube.yaml'
         parameters:
@@ -14,6 +14,7 @@ stages:
 
       - job: 'report_dependency_track'
         displayName: 'report:dependency-track'
+        continueOnError: true
         # TODO: this is being repeated all over the place
         variables:
           PREFIX: ''

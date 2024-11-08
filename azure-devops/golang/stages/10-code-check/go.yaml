@@ -16,7 +16,7 @@ stages:
 
           - task: 'Cache@2'
             inputs:
-              key: "$(ENVIRONMENT)|go-$(Agent.OS)|go.sum" # shared between all jobs
+              key: "$(Agent.JobName)|$(Agent.OS)|go.sum"
               path: "$(GOPATH)"
             displayName: 'Cache for Go modules'
             continueOnError: true

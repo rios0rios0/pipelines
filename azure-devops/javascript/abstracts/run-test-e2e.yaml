@@ -22,7 +22,7 @@ steps:
   # $(Agent.HomeDirectory) is "home/vsts/agents/3.246.0/" different from the real home directory
   - task: 'Cache@2'
     inputs:
-      key: "$(Agent.JobName)|cypress"
+      key: "$(Agent.JobName)|$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/yarn.lock"
       path: "$(HOME)/.cache/Cypress"
     displayName: 'Cache for Cypress'
     continueOnError: true

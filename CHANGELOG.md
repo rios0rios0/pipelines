@@ -54,7 +54,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed the OSD version to 2.18.0 due to an upgrade request
 - changed task that publishes artifact from `PublishBuildArtifact` to `PublishPipelineArtifact` in Azure Devops Javascript's `execute-command-opensearch-dashboards.yaml` template
 - changed all display names and conditions to obey a certain position for all Azure DevOps tasks
--
+
 ### Fixed
 
 - added two missing linters to the `golangci-lint` pipeline
@@ -77,6 +77,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed `Getting Function Outbound IP Addresses` task for Azure Devops Golang to avoid failing if there's no function or resource group deployed
 - fixed the `Download Build Artifact` task in the delivery stage for Javascript in Azure DevOps to download the artifact to the correct directory
 - fixed the Golang delivery stage for Azure DevOps by adding the `GOPATH` environment variable
+- fixed GoLang test script to set `GOPATH` variable just when it's not set (it was preventing cache in Azure DevOps)
 
 ### Removed
 

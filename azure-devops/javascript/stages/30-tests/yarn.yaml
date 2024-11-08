@@ -14,6 +14,17 @@ stages:
               ARTIFACT_NAME: 'coverage'
               ARTIFACT_PATH: 'coverage'
 
+          - task: 'PublishTestResults@2'
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '**/junit.xml'
+            displayName: 'Publish Test Results'
+
+          - task: 'PublishCodeCoverageResults@2'
+            inputs:
+              summaryFileLocation: 'cobertura.xml'
+            displayName: 'Publish Code Coverage Results'
+
       - job: 'test_e2e'
         displayName: 'test:e2e'
         continueOnError: true
@@ -27,3 +38,14 @@ stages:
               # TODO: set the ports as an array of strings
               OS_PORT: '9200'
               OSD_PORT: '5603'
+
+          - task: 'PublishTestResults@2'
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '**/junit.xml'
+            displayName: 'Publish Test Results'
+
+          - task: 'PublishCodeCoverageResults@2'
+            inputs:
+              summaryFileLocation: 'cobertura.xml'
+            displayName: 'Publish Code Coverage Results'

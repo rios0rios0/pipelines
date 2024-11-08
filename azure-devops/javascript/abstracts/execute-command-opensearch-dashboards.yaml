@@ -47,7 +47,7 @@ steps:
       cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
       ${{ parameters.COMMANDS }}
     displayName: 'Execute Commands'
-    condition: ne('${{ parameters.COMMANDS }}', '')
+    condition: ne("${{ parameters.COMMANDS }}", '')
 
   - task: 'PublishPipelineArtifact@1'
     inputs:
@@ -55,4 +55,4 @@ steps:
       artifact: "${{ parameters.ARTIFACT_NAME }}"
       publishLocation: 'pipeline'
     displayName: 'Publish Artifact'
-    condition: and(succeeded(), ne('${{ parameters.ARTIFACT_NAME }}', ''))
+    condition: and(succeeded(), ne("${{ parameters.ARTIFACT_NAME }}", ''))

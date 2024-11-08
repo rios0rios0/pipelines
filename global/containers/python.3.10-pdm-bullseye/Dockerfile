@@ -3,13 +3,13 @@ FROM python:3.10-slim-bullseye
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   gcc \
+  libglib2.0-dev \
+  libharfbuzz-bin \
+  libpango-1.0-0 \
+  libpangocairo-1.0-0 \
+  libpangoft2-1.0-0 \
   libpq-dev \
   python3-dev \
-  libglib2.0-dev \
-  libpango-1.0-0 \
-  libharfbuzz-bin \
-  libpangoft2-1.0-0 \
-  libpangocairo-1.0-0 \
   && apt-get clean autoclean \
   && apt-get autoremove --yes \
   && rm -rf /var/lib/apt/lists/* \

@@ -115,6 +115,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added the code check step for GoLang inside the GitHub Actions provider - [#19](https://github.com/rios0rios0/pipelines/issues/19)
 - added the exposure for the coverage in Python projects
 - added the missing configuration to Azure DevOps deployment with JavaScript
+- added condition to Jobs in Azure Devops Pipelines to only proceed if the previous job was successful
 
 ### Changed
 

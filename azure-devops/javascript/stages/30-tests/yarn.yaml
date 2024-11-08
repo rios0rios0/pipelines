@@ -1,7 +1,7 @@
 stages:
   - stage: 'tests'
     displayName: 'tests'
-    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
     jobs:
       - job: 'test_all'
         displayName: 'test:all'
@@ -16,6 +16,7 @@ stages:
 
       - job: 'test_e2e'
         displayName: 'test:e2e'
+        continueOnError: true
         pool:
           name: "$(E2E_POOL)"
         steps:

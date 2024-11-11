@@ -30,7 +30,7 @@ echo "Testing code in the following directories: $directories"
 echo "Installing dependencies..."
 go install github.com/wadey/gocovmerge@latest
 go install github.com/boumenot/gocover-cobertura@latest
-go install github.com/jstemmer/go-junit-report@latest
+go install github.com/jstemmer/go-junit-report/v2@latest
 
 # run the tests
 go test -v -tags test,unit \

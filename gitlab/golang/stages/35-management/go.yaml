@@ -21,7 +21,7 @@ report:dependency-track:
     INIT_SCRIPT="config.sh"
     [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
 
-    path="$(PREFIX)$(REPORT_PATH)"
+    path="$PREFIX/$REPORT_PATH"
     mkdir -p "$path"
 
     GOBIN=$(go env GOPATH)/bin

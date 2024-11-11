@@ -27,22 +27,6 @@ stages:
 
           - task: 'Cache@2'
             inputs:
-              key: "$(Agent.JobName)|$(ENVIRONMENT)|db/migrations/*.sql"
-              path: "$(MIGRATIONS_CACHE)"
-              cacheHitVar: 'MIGRATIONS_CACHE_HIT'
-            displayName: 'Cache for Migrations'
-            continueOnError: true
-
-          - task: 'Cache@2'
-            inputs:
-              key: "$(Agent.JobName)|$(ENVIRONMENT)|db/seeders/*.sql"
-              path: "$(SEEDERS_CACHE)"
-              cacheHitVar: 'SEEDERS_CACHE_HIT'
-            displayName: 'Cache for Seeders'
-            continueOnError: true
-
-          - task: 'Cache@2'
-            inputs:
               key: "$(Agent.JobName)|$(ENVIRONMENT)|azuredeploy.json"
               path: "$(AZURE_DEPLOY_CACHE)"
               cacheHitVar: 'AZURE_DEPLOY_CACHE_HIT'
@@ -203,7 +187,48 @@ stages:
                     --rule-name "$(PIPELINE_FIREWALL_NAME)" \
                     --start-ip-address "$PIPELINE_IP"
             displayName: 'Create Flexible Firewall Rule to execute migrations and seeders'
-            condition: and(succeeded(), or(eq(variables['MIGRATIONS_CACHE_HIT'], 'false'), eq(variables['SEEDERS_CACHE_HIT'], 'false')))
+
+          - script: |
+              set -e
+
+              PORT=$(echo $OUTPUTS | jq -r '.databaseServerPort.value')
+              HOST=$(echo $OUTPUTS | jq -r '.databaseServerHost.value')
+              USER=$(echo $OUTPUTS | jq -r '.databaseServerUsername.value')
+              PASSWORD=$(echo $OUTPUTS | jq -r '.databaseServerPassword.value')
+              DBNAME=$(echo $OUTPUTS | jq -r '.databaseName.value')
+              SSL=$(echo $OUTPUTS | jq -r '.databaseServerSSL.value')
+
+              CONNECTION_STRING="host=$HOST port=$PORT user=$USER password=$PASSWORD dbname=$DBNAME sslmode=$SSL"
+              echo "##vso[task.setvariable variable=CONNECTION_STRING]$CONNECTION_STRING"
+            displayName: 'Set Database Connection String'
+
+          - script: |
+              set -e
+
+              table_hash=$(psql "$(CONNECTION_STRING)" -t -c \
+              "SELECT md5(string_agg(concat_ws('|', version_id::text, is_applied::text), ',' ORDER BY id)) AS table_hash FROM goose_db_version;")
+
+              table_hash=$(echo "$table_hash" | xargs)
+              echo "table_hash: $table_hash"
+              echo "##vso[task.setvariable variable=GOOSE_TABLE_HASH]$table_hash"
+            displayName: 'Set Goose Table Hash variable'
+            continueOnError: true
+
+          - task: 'Cache@2'
+            inputs:
+              key: "$(Agent.JobName)|$(ENVIRONMENT)|$(GOOSE_TABLE_HASH)|db/migrations/*.sql"
+              path: "$(MIGRATIONS_CACHE)"
+              cacheHitVar: 'MIGRATIONS_CACHE_HIT'
+            displayName: 'Cache for Migrations'
+            continueOnError: true
+
+          - task: 'Cache@2'
+            inputs:
+              key: "$(Agent.JobName)|$(ENVIRONMENT)|$(GOOSE_TABLE_HASH)|db/seeders/*.sql"
+              path: "$(SEEDERS_CACHE)"
+              cacheHitVar: 'SEEDERS_CACHE_HIT'
+            displayName: 'Cache for Seeders'
+            continueOnError: true
 
           - task: 'AzureCLI@2'
             inputs:
@@ -215,17 +240,9 @@ stages:
 
                 # TODO: move this "IF" to a file and (or) use an Azure resource to create a condition
                 if grep -r 'goose' db/migrations/*.sql; then
-                  PORT=$(echo $OUTPUTS | jq -r '.databaseServerPort.value')
-                  HOST=$(echo $OUTPUTS | jq -r '.databaseServerHost.value')
-                  USER=$(echo $OUTPUTS | jq -r '.databaseServerUsername.value')
-                  PASSWORD=$(echo $OUTPUTS | jq -r '.databaseServerPassword.value')
-                  DBNAME=$(echo $OUTPUTS | jq -r '.databaseName.value')
-                  SSL=$(echo $OUTPUTS | jq -r '.databaseServerSSL.value')
-                  CONNECTION_STRING="host=$HOST port=$PORT user=$USER password=$PASSWORD dbname=$DBNAME sslmode=$SSL"
-
                   go install github.com/pressly/goose/v3/cmd/goose@v3.17.0
 
-                  $(go env GOPATH)/bin/goose -dir db/migrations postgres "$CONNECTION_STRING" up
+                  $(go env GOPATH)/bin/goose -dir db/migrations postgres "$(CONNECTION_STRING)" up
 
                 else
                   echo "No Goose migration files found. Skipping Goose installation and migration."
@@ -242,15 +259,6 @@ stages:
                 set -e
 
                 if grep -r 'goose' db/seeders/*.sql; then
-                  PORT=$(echo $OUTPUTS | jq -r '.databaseServerPort.value')
-                  HOST=$(echo $OUTPUTS | jq -r '.databaseServerHost.value')
-                  USER=$(echo $OUTPUTS | jq -r '.databaseServerUsername.value')
-                  PASSWORD=$(echo $OUTPUTS | jq -r '.databaseServerPassword.value')
-                  DBNAME=$(echo $OUTPUTS | jq -r '.databaseName.value')
-                  SSL=$(echo $OUTPUTS | jq -r '.databaseServerSSL.value')
-
-                  CONNECTION_STRING="host=$HOST port=$PORT user=$USER password=$PASSWORD dbname=$DBNAME sslmode=$SSL"
-
                   go install github.com/pressly/goose/v3/cmd/goose@v3.22.1
 
                   for dir in "" "dev" "prod"; do
@@ -258,7 +266,7 @@ stages:
                         dir_path="db/seeders/$dir"
                         dir_path=${dir_path%/}
                         if grep -q 'goose' $dir_path/*.sql; then
-                          $(go env GOPATH)/bin/goose -dir $dir_path postgres "$CONNECTION_STRING" up
+                          $(go env GOPATH)/bin/goose -dir $dir_path postgres "$(CONNECTION_STRING)" up
                         fi
                       fi
                   done
@@ -284,7 +292,6 @@ stages:
                   --name "$DATABASE_SERVER_NAME" \
                   --rule-name "$(PIPELINE_FIREWALL_NAME)"
             displayName: 'Delete Flexible Firewall Rule to execute migrations and seeders'
-            condition: and(succeeded(), or(eq(variables['MIGRATIONS_CACHE_HIT'], 'false'), eq(variables['SEEDERS_CACHE_HIT'], 'false')))
 
           - task: 'AzureCLI@2'
             displayName: 'Publish Function'

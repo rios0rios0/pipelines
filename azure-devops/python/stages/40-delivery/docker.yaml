@@ -1,7 +1,7 @@
 stages:
   - stage: 'delivery'
     displayName: 'delivery'
-    condition: or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
     jobs:
       - job: 'deliver'
         displayName: 'Build and Push'

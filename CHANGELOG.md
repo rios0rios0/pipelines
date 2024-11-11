@@ -79,6 +79,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed the Golang delivery stage for Azure DevOps by adding the `GOPATH` environment variable
 - fixed GoLang test script to set `GOPATH` variable just when it's not set (it was preventing cache in Azure DevOps)
 - fixed Dependency Track to avoid creating many of the same project
+- fixed the Azure Devops delivery stages by adding one more condition to run only when previous stages succeeded
 
 ### Removed
 

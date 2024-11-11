@@ -1,7 +1,7 @@
 stages:
   - stage: 'delivery'
     displayName: 'delivery'
-    condition: and(succeeded(), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
+#    condition: and(succeeded(), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
     jobs:
       - job: 'delivery'
         displayName: 'delivery'
@@ -18,29 +18,13 @@ stages:
               architecture: 'amd64'
               goArguments: 'mod tidy'
 
-          - task: 'Cache@2'
-            inputs:
-              key: "$(Agent.JobName)|$(Agent.OS)|go.sum"
-              path: "$(GOPATH)"
-            displayName: 'Cache for Go modules'
-            continueOnError: true
-
-          - task: 'Cache@2'
-            inputs:
-              key: "$(Agent.JobName)|$(ENVIRONMENT)|db/migrations/*.sql"
-              path: "$(MIGRATIONS_CACHE)"
-              cacheHitVar: 'MIGRATIONS_CACHE_HIT'
-            displayName: 'Cache for Migrations'
-            continueOnError: true
-
-          - task: 'Cache@2'
-            inputs:
-              key: "$(Agent.JobName)|$(ENVIRONMENT)|db/seeders/*.sql"
-              path: "$(SEEDERS_CACHE)"
-              cacheHitVar: 'SEEDERS_CACHE_HIT'
-            displayName: 'Cache for Seeders'
-            continueOnError: true
-
+#          - task: 'Cache@2'
+#            inputs:
+#              key: "$(Agent.JobName)|$(Agent.OS)|go.sum"
+#              path: "$(GOPATH)"
+#            displayName: 'Cache for Go modules'
+#            continueOnError: true
+#
           - task: 'Cache@2'
             inputs:
               key: "$(Agent.JobName)|$(ENVIRONMENT)|azuredeploy.json"
@@ -56,38 +40,38 @@ stages:
               mkdir -p $(AZURE_DEPLOY_CACHE)
             displayName: 'Setup Cache'
 
-          # TODO: this should be a share script between the vendors
-          - script: |
-              set -e
-              INIT_SCRIPT="config.sh"
-              [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
-            displayName: 'Load Custom Configuration'
+#          # TODO: this should be a share script between the vendors
+#          - script: |
+#              set -e
+#              INIT_SCRIPT="config.sh"
+#              [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
+#            displayName: 'Load Custom Configuration'
+#
+#          - script: |
+#              set -e
+#
+#              export CGO_ENABLED=0
+#              export BUILD_FLAGS="-ldflags='-w -s'"
+#              mkdir ./bin && go build -o ./bin -v ./...
+#            displayName: 'Build Go Project'
 
-          - script: |
-              set -e
-
-              export CGO_ENABLED=0
-              export BUILD_FLAGS="-ldflags='-w -s'"
-              mkdir ./bin && go build -o ./bin -v ./...
-            displayName: 'Build Go Project'
-
-          - task: 'CopyFiles@2'
-            inputs:
-              Contents: |
-                api/function.json
-                bin/*
-                host.json
-              TargetFolder: "$(Build.SourcesDirectory)/$(Build.BuildId)"
-            displayName: 'Copy App Files'
-
-          - task: 'ArchiveFiles@2'
-            inputs:
-              archiveType: 'zip'
-              rootFolderOrFile: "$(Build.SourcesDirectory)/$(Build.BuildId)"
-              archiveFile: "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
-              includeRootFolder: false
-              replaceExistingArchive: true
-            displayName: 'Archive Build Output'
+#          - task: 'CopyFiles@2'
+#            inputs:
+#              Contents: |
+#                api/function.json
+#                bin/*
+#                host.json
+#              TargetFolder: "$(Build.SourcesDirectory)/$(Build.BuildId)"
+#            displayName: 'Copy App Files'
+#
+#          - task: 'ArchiveFiles@2'
+#            inputs:
+#              archiveType: 'zip'
+#              rootFolderOrFile: "$(Build.SourcesDirectory)/$(Build.BuildId)"
+#              archiveFile: "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
+#              includeRootFolder: false
+#              replaceExistingArchive: true
+#            displayName: 'Archive Build Output'
 
           - task: 'AzureCLI@2'
             inputs:
@@ -155,36 +139,36 @@ stages:
               echo "##vso[task.setvariable variable=siteName]$siteName"
             displayName: 'Getting Pipeline Variables'
 
-          - task: 'AzureCLI@2'
-            inputs:
-              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              inlineScript: |
-                set -e
-
-                SETTINGS=""
-
-                for var in $(compgen -e); do
-                  if [[ $var == REPLACE_* ]]; then
-                    if [[ -z ${!var} ]]; then
-                      echo "Warning: $var isn't defined"
-                    else
-                      setting_name=${var#REPLACE_}
-                      SETTINGS+="$setting_name=${!var} "
-                    fi
-                  fi
-                done
-
-                if [[ -z $SETTINGS ]]; then
-                  echo "Warning: There are no environment variables to update"
-                else
-                  az functionapp config appsettings set \
-                    --name "$(siteName)" \
-                    --resource-group "$(resourceGroupName)" \
-                    --settings $SETTINGS
-                fi
-            displayName: 'Replace Azure Function Variables'
+#          - task: 'AzureCLI@2'
+#            inputs:
+#              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+#              scriptType: 'bash'
+#              scriptLocation: 'inlineScript'
+#              inlineScript: |
+#                set -e
+#
+#                SETTINGS=""
+#
+#                for var in $(compgen -e); do
+#                  if [[ $var == REPLACE_* ]]; then
+#                    if [[ -z ${!var} ]]; then
+#                      echo "Warning: $var isn't defined"
+#                    else
+#                      setting_name=${var#REPLACE_}
+#                      SETTINGS+="$setting_name=${!var} "
+#                    fi
+#                  fi
+#                done
+#
+#                if [[ -z $SETTINGS ]]; then
+#                  echo "Warning: There are no environment variables to update"
+#                else
+#                  az functionapp config appsettings set \
+#                    --name "$(siteName)" \
+#                    --resource-group "$(resourceGroupName)" \
+#                    --settings $SETTINGS
+#                fi
+#            displayName: 'Replace Azure Function Variables'
 
           - task: 'AzureCLI@2'
             inputs:
@@ -203,70 +187,107 @@ stages:
                     --rule-name "$(PIPELINE_FIREWALL_NAME)" \
                     --start-ip-address "$PIPELINE_IP"
             displayName: 'Create Flexible Firewall Rule to execute migrations and seeders'
-            condition: and(succeeded(), or(eq(variables['MIGRATIONS_CACHE_HIT'], 'false'), eq(variables['SEEDERS_CACHE_HIT'], 'false')))
 
-          - task: 'AzureCLI@2'
+          - script: |
+              set -e
+
+              PORT=$(echo $OUTPUTS | jq -r '.databaseServerPort.value')
+              HOST=$(echo $OUTPUTS | jq -r '.databaseServerHost.value')
+              USER=$(echo $OUTPUTS | jq -r '.databaseServerUsername.value')
+              PASSWORD=$(echo $OUTPUTS | jq -r '.databaseServerPassword.value')
+              DBNAME=$(echo $OUTPUTS | jq -r '.databaseName.value')
+              SSL=$(echo $OUTPUTS | jq -r '.databaseServerSSL.value')
+
+              export PGPASSWORD="$PASSWORD"
+              CONNECTION_STRING="host=$HOST port=$PORT user=$USER dbname=$DBNAME sslmode=$SSL"
+
+              table_hash=$(psql "$CONNECTION_STRING" -t -c \
+              "SELECT md5(string_agg(concat_ws('|', version_id::text, is_applied::text), ',' ORDER BY id)) AS table_hash FROM goose_db_version;")
+
+              table_hash=$(echo "$table_hash" | xargs)
+              echo "Table hash: $table_hash"
+              echo "##vso[task.setvariable variable=GOOSE_TABLE_HASH]$table_hash"
+            displayName: 'Set Goose Table Hash variable'
+            continueOnError: true
+
+          - task: 'Cache@2'
             inputs:
-              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              inlineScript: |
-                set -e
+              key: "$(Agent.JobName)|$(ENVIRONMENT)|$(GOOSE_TABLE_HASH)|db/migrations/*.sql"
+              path: "$(MIGRATIONS_CACHE)"
+              cacheHitVar: 'MIGRATIONS_CACHE_HIT'
+            displayName: 'Cache for Migrations'
+            continueOnError: true
 
-                # TODO: move this "IF" to a file and (or) use an Azure resource to create a condition
-                if grep -r 'goose' db/migrations/*.sql; then
-                  PORT=$(echo $OUTPUTS | jq -r '.databaseServerPort.value')
-                  HOST=$(echo $OUTPUTS | jq -r '.databaseServerHost.value')
-                  USER=$(echo $OUTPUTS | jq -r '.databaseServerUsername.value')
-                  PASSWORD=$(echo $OUTPUTS | jq -r '.databaseServerPassword.value')
-                  DBNAME=$(echo $OUTPUTS | jq -r '.databaseName.value')
-                  SSL=$(echo $OUTPUTS | jq -r '.databaseServerSSL.value')
-                  CONNECTION_STRING="host=$HOST port=$PORT user=$USER password=$PASSWORD dbname=$DBNAME sslmode=$SSL"
-
-                  go install github.com/pressly/goose/v3/cmd/goose@v3.17.0
-
-                  $(go env GOPATH)/bin/goose -dir db/migrations postgres "$CONNECTION_STRING" up
-
-                else
-                  echo "No Goose migration files found. Skipping Goose installation and migration."
-                fi
-            displayName: 'Execute Migrations'
-            condition: and(succeeded(), eq(variables['MIGRATIONS_CACHE_HIT'], 'false'))
-
-          - task: 'AzureCLI@2'
+          - task: 'Cache@2'
             inputs:
-              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              inlineScript: |
-                set -e
+              key: "$(Agent.JobName)|$(ENVIRONMENT)|$(GOOSE_TABLE_HASH)|db/seeders/*.sql"
+              path: "$(SEEDERS_CACHE)"
+              cacheHitVar: 'SEEDERS_CACHE_HIT'
+            displayName: 'Cache for Seeders'
+            continueOnError: true
 
-                if grep -r 'goose' db/seeders/*.sql; then
-                  PORT=$(echo $OUTPUTS | jq -r '.databaseServerPort.value')
-                  HOST=$(echo $OUTPUTS | jq -r '.databaseServerHost.value')
-                  USER=$(echo $OUTPUTS | jq -r '.databaseServerUsername.value')
-                  PASSWORD=$(echo $OUTPUTS | jq -r '.databaseServerPassword.value')
-                  DBNAME=$(echo $OUTPUTS | jq -r '.databaseName.value')
-                  SSL=$(echo $OUTPUTS | jq -r '.databaseServerSSL.value')
-
-                  CONNECTION_STRING="host=$HOST port=$PORT user=$USER password=$PASSWORD dbname=$DBNAME sslmode=$SSL"
-
-                  go install github.com/pressly/goose/v3/cmd/goose@v3.22.1
-
-                  for dir in "" "dev" "prod"; do
-                      if [ -z "$dir" ] || [ "$ENVIRONMENT" == "$dir" ]; then
-                        dir_path="db/seeders/$dir"
-                        dir_path=${dir_path%/}
-                        if grep -q 'goose' $dir_path/*.sql; then
-                          $(go env GOPATH)/bin/goose -dir $dir_path postgres "$CONNECTION_STRING" up
-                        fi
-                      fi
-                  done
-                else
-                    echo "No Goose seed files found. Skipping seed"
-                fi
-            displayName: 'Execute Seeders'
-            condition: and(succeeded(), eq(variables['SEEDERS_CACHE_HIT'], 'false'))
+#          - task: 'AzureCLI@2'
+#            inputs:
+#              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+#              scriptType: 'bash'
+#              scriptLocation: 'inlineScript'
+#              inlineScript: |
+#                set -e
+#
+#                # TODO: move this "IF" to a file and (or) use an Azure resource to create a condition
+#                if grep -r 'goose' db/migrations/*.sql; then
+#                  PORT=$(echo $OUTPUTS | jq -r '.databaseServerPort.value')
+#                  HOST=$(echo $OUTPUTS | jq -r '.databaseServerHost.value')
+#                  USER=$(echo $OUTPUTS | jq -r '.databaseServerUsername.value')
+#                  PASSWORD=$(echo $OUTPUTS | jq -r '.databaseServerPassword.value')
+#                  DBNAME=$(echo $OUTPUTS | jq -r '.databaseName.value')
+#                  SSL=$(echo $OUTPUTS | jq -r '.databaseServerSSL.value')
+#                  CONNECTION_STRING="host=$HOST port=$PORT user=$USER password=$PASSWORD dbname=$DBNAME sslmode=$SSL"
+#
+#                  go install github.com/pressly/goose/v3/cmd/goose@v3.17.0
+#
+#                  $(go env GOPATH)/bin/goose -dir db/migrations postgres "$CONNECTION_STRING" up
+#
+#                else
+#                  echo "No Goose migration files found. Skipping Goose installation and migration."
+#                fi
+#            displayName: 'Execute Migrations'
+#            condition: and(succeeded(), eq(variables['MIGRATIONS_CACHE_HIT'], 'false'))
+#
+#          - task: 'AzureCLI@2'
+#            inputs:
+#              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+#              scriptType: 'bash'
+#              scriptLocation: 'inlineScript'
+#              inlineScript: |
+#                set -e
+#
+#                if grep -r 'goose' db/seeders/*.sql; then
+#                  PORT=$(echo $OUTPUTS | jq -r '.databaseServerPort.value')
+#                  HOST=$(echo $OUTPUTS | jq -r '.databaseServerHost.value')
+#                  USER=$(echo $OUTPUTS | jq -r '.databaseServerUsername.value')
+#                  PASSWORD=$(echo $OUTPUTS | jq -r '.databaseServerPassword.value')
+#                  DBNAME=$(echo $OUTPUTS | jq -r '.databaseName.value')
+#                  SSL=$(echo $OUTPUTS | jq -r '.databaseServerSSL.value')
+#
+#                  CONNECTION_STRING="host=$HOST port=$PORT user=$USER password=$PASSWORD dbname=$DBNAME sslmode=$SSL"
+#
+#                  go install github.com/pressly/goose/v3/cmd/goose@v3.22.1
+#
+#                  for dir in "" "dev" "prod"; do
+#                      if [ -z "$dir" ] || [ "$ENVIRONMENT" == "$dir" ]; then
+#                        dir_path="db/seeders/$dir"
+#                        dir_path=${dir_path%/}
+#                        if grep -q 'goose' $dir_path/*.sql; then
+#                          $(go env GOPATH)/bin/goose -dir $dir_path postgres "$CONNECTION_STRING" up
+#                        fi
+#                      fi
+#                  done
+#                else
+#                    echo "No Goose seed files found. Skipping seed"
+#                fi
+#            displayName: 'Execute Seeders'
+#            condition: and(succeeded(), eq(variables['SEEDERS_CACHE_HIT'], 'false'))
 
           - task: 'AzureCLI@2'
             inputs:
@@ -284,21 +305,20 @@ stages:
                   --name "$DATABASE_SERVER_NAME" \
                   --rule-name "$(PIPELINE_FIREWALL_NAME)"
             displayName: 'Delete Flexible Firewall Rule to execute migrations and seeders'
-            condition: and(succeeded(), or(eq(variables['MIGRATIONS_CACHE_HIT'], 'false'), eq(variables['SEEDERS_CACHE_HIT'], 'false')))
 
-          - task: 'AzureCLI@2'
-            displayName: 'Publish Function'
-            inputs:
-              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              inlineScript: |
-                set -e
-
-                az functionapp deployment source config-zip \
-                  --name "$(siteName)" \
-                  --resource-group "$(resourceGroupName)" \
-                  --src "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
-            retryCountOnTaskFailure: 3
+#          - task: 'AzureCLI@2'
+#            displayName: 'Publish Function'
+#            inputs:
+#              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+#              scriptType: 'bash'
+#              scriptLocation: 'inlineScript'
+#              inlineScript: |
+#                set -e
+#
+#                az functionapp deployment source config-zip \
+#                  --name "$(siteName)" \
+#                  --resource-group "$(resourceGroupName)" \
+#                  --src "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
+#            retryCountOnTaskFailure: 3
 
       - template: '../../../global/stages/40-delivery/release.yaml'

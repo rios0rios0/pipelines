@@ -26,7 +26,7 @@ jobs:
         displayName: 'Cache for SonarQube'
         continueOnError: true
 
-      - script: "${{ parameters.BEFORE_SCRIPT }}"
+      - script: ${{ parameters.BEFORE_SCRIPT }}
         displayName: 'Before Script'
 
       - script: sonar-scanner

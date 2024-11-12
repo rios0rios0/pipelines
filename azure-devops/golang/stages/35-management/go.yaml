@@ -44,7 +44,7 @@ stages:
             parameters:
               # TODO: duplicated code with GitLab pipelines
               BEFORE_SCRIPT: |
-                path="$(PREFIX)$(REPORT_PATH)"
+                path="$PREFIX$REPORT_PATH"
                 mkdir -p "$path"
 
                 echo "Installing CycloneDX Go Module..."

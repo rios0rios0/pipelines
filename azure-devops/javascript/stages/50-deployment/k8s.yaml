@@ -1,7 +1,7 @@
 stages:
   - stage: 'deployment'
     displayName: 'deployment'
-    condition: or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    condition: and(not(failed()), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
     dependsOn: 'delivery'
     variables:
       dockerContainerTag: $[stageDependencies.delivery.delivery.outputs['build.DOCKER_CONTAINER_TAG']]

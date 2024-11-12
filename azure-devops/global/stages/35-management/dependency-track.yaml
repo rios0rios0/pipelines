@@ -42,8 +42,8 @@ steps:
         curl --insecure --fail --request 'POST' "$(DEPENDENCY_TRACK_HOST_URL)/api/v1/bom" \
           -H "$REQUEST_CONTENT_TYPE" -H "$REQUEST_API_KEY" \
           -F "project=$UUID" \
-          -F "projectVersion=$(cat $(PREFIX)$(REPORT_PATH)/bom.json | jq -r '.metadata.component.version')" \
-          -F "bom=@$(PREFIX)$(REPORT_PATH)/bom.json"
+          -F "projectVersion=$(cat $PREFIX$REPORT_PATH/bom.json | jq -r '.metadata.component.version')" \
+          -F "bom=@$PREFIX$REPORT_PATH/bom.json"
       else
         echo "UUID artifact not found. Creating a new project."
       fi
@@ -57,9 +57,9 @@ steps:
         export REQUEST_API_KEY="X-Api-Key: $(DEPENDENCY_TRACK_TOKEN)"
         RESPONSE=$(curl --insecure --fail --request 'POST' "$(DEPENDENCY_TRACK_HOST_URL)/api/v1/bom" \
           -H "$REQUEST_CONTENT_TYPE" -H "$REQUEST_API_KEY" \
-          -F "projectName=$(cat $(PREFIX)$(REPORT_PATH)/bom.json | jq -r '.metadata.component.name')" \
-          -F "projectVersion=$(cat $(PREFIX)$(REPORT_PATH)/bom.json | jq -r '.metadata.component.version')" \
-          -F 'autoCreate=true' -F "bom=@$(PREFIX)$(REPORT_PATH)/bom.json")
+          -F "projectName=$(cat $PREFIX$REPORT_PATH/bom.json | jq -r '.metadata.component.name')" \
+          -F "projectVersion=$(cat $PREFIX$REPORT_PATH/bom.json | jq -r '.metadata.component.version')" \
+          -F 'autoCreate=true' -F "bom=@$PREFIX$REPORT_PATH/bom.json")
         UUID=$(echo $RESPONSE | jq -r '.token')
         mkdir -p $(Pipeline.Workspace)/${{ parameters.UUID_FOLDER }}
         echo $UUID > $(Pipeline.Workspace)/${{ parameters.UUID_FOLDER }}/$(Build.DefinitionName).txt

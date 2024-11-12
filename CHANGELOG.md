@@ -81,6 +81,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed Dependency Track to avoid creating many of the same project
 - fixed the Azure Devops delivery stages by adding one more condition to run only when previous stages succeeded
 - fixed the incorrect string concatenation of the `PREFIX` and `REPORT_PATH` variables
+- fixed the Azure Devops delivery stage for Golang by adding a goose db version table hash for the migrations and seeders caches to work based on properly versioning
 
 ### Removed
 

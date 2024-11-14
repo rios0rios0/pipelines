@@ -8,12 +8,6 @@ stages:
         variables:
           GOPATH: "$(Pipeline.Workspace)/.go"
         steps:
-          - task: 'GoTool@0'
-            inputs:
-              version: '1.23.1'
-              architecture: 'amd64'
-              goArguments: 'mod tidy'
-
           - task: 'Cache@2'
             inputs:
               key: "$(Agent.JobName)|$(Agent.OS)|go.sum"
@@ -25,7 +19,6 @@ stages:
               sudo apt-get update && \
               sudo apt-get install -y python3 python3-yaml # for golangci-lint config merging
             displayName: 'Install dependencies'
-
           - template: '../../../global/abstracts/scripts-repo.yaml'
 
           # TODO: this should be a share script between the vendors
@@ -34,6 +27,12 @@ stages:
               INIT_SCRIPT="config.sh"
               [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
             displayName: 'Load Custom Configuration'
+
+          - task: 'GoTool@0'
+            inputs:
+              version: '1.23.1'
+              architecture: 'amd64'
+              goArguments: 'mod tidy'
 
           - script: $(Scripts.Directory)/global/scripts/golangci-lint/run.sh
             displayName: 'Run golangci-lint'

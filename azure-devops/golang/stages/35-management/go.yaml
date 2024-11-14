@@ -21,6 +21,12 @@ stages:
           REPORT_PATH: 'build/reports'
           GOPATH: "$(Pipeline.Workspace)/.go"
         steps:
+          - script: |
+              set -e
+              INIT_SCRIPT="config.sh"
+              [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
+            displayName: 'Load Custom Configuration'
+
           - task: 'GoTool@0'
             inputs:
               version: '1.23.1'
@@ -33,12 +39,6 @@ stages:
               path: "$(GOPATH)"
             displayName: 'Cache for Go modules'
             continueOnError: true
-
-          - script: |
-              set -e
-              INIT_SCRIPT="config.sh"
-              [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
-            displayName: 'Load Custom Configuration'
 
           - template: '../../../global/stages/35-management/dependency-track.yaml'
             parameters:

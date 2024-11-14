@@ -12,6 +12,13 @@ stages:
           AZURE_DEPLOY_CACHE: "$(Build.SourcesDirectory)/.azuredeploy"
           PIPELINE_FIREWALL_NAME: 'PipelineFirewall_$(date +"%Y%m%d%H%M%S")'
         steps:
+          # TODO: this should be a share script between the vendors
+          - script: |
+              set -e
+              INIT_SCRIPT="config.sh"
+              [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
+            displayName: 'Load Custom Configuration'
+
           - task: 'GoTool@0'
             inputs:
               version: '1.23.1'
@@ -39,13 +46,6 @@ stages:
               mkdir -p $(SEEDERS_CACHE)
               mkdir -p $(AZURE_DEPLOY_CACHE)
             displayName: 'Setup Cache'
-
-          # TODO: this should be a share script between the vendors
-          - script: |
-              set -e
-              INIT_SCRIPT="config.sh"
-              [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
-            displayName: 'Load Custom Configuration'
 
           - script: |
               set -e

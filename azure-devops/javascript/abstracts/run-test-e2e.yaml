@@ -85,7 +85,7 @@ steps:
     inputs:
       targetType: 'inline'
       script: |
-        if [ -d "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/public/assets/screenshots" ]; then
+        if [ -d "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/build/cypress/screenshots" ]; then
           echo "##vso[task.setvariable variable=SCREENSHOTS_EXIST]true"
         else
           echo "##vso[task.setvariable variable=SCREENSHOTS_EXIST]false"
@@ -95,7 +95,7 @@ steps:
 
   - task: 'PublishPipelineArtifact@1'
     inputs:
-      targetPath: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/public/assets/screenshots"
+      targetPath: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/build/cypress/screenshots"
       artifact: 'screenshots'
       publishLocation: 'pipeline'
     displayName: 'Publish Screenshots'

@@ -8,12 +8,6 @@ stages:
         variables:
           GOPATH: "$(Pipeline.Workspace)/.go"
         steps:
-          - task: 'GoTool@0'
-            inputs:
-              version: '1.23.1'
-              architecture: 'amd64'
-              goArguments: 'mod tidy'
-
           - task: 'Cache@2'
             inputs:
               key: "$(Agent.JobName)|$(Agent.OS)|go.sum"
@@ -27,6 +21,12 @@ stages:
               INIT_SCRIPT="config.sh"
               [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
             displayName: 'Load Custom Configuration'
+
+          - task: 'GoTool@0'
+            inputs:
+              version: '1.23.1'
+              architecture: 'amd64'
+              goArguments: 'mod tidy'
 
           - template: '../../../global/abstracts/scripts-repo.yaml'
 

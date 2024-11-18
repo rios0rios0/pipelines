@@ -30,7 +30,7 @@ stages:
           - script: |
               set -e
               INIT_SCRIPT="config.sh"
-              [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
+              [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file was not found, skipping..."
             displayName: 'Load Custom Configuration'
 
           - task: 'GoTool@0'

@@ -4,8 +4,24 @@ on:
 runs:
   using: 'composite'
   steps:
-    - id: 'create_release'
-      uses: 'softprops/action-gh-release@v2'
-      with:
-        draft: false
-        prerelease: false
+    - id: 'get_commit_message'
+      run: |
+        git config --global user.name 'github-actions'
+        git config --global user.email 'github-actions@github.com'
+        echo "COMMIT_MESSAGE=$(git log -1 --pretty=%B)" >> $GITHUB_ENV
+
+    - id: 'check_bump'
+      run: |
+        REGEX="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)'.*$|.*chore\(bump\):.*version to ([0-9]+\.[0-9]+\.[0-9]+).*"
+        if echo -n "$COMMIT_MESSAGE" | grep -Eq "$REGEX"; then
+          VERSION=$(echo "$COMMIT_MESSAGE" | sed -En "s/$REGEX/\3\4/p" | head -n 1)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "is_bump=true" >> $GITHUB_ENV
+        else
+          echo "is_bump=false" >> $GITHUB_ENV
+        fi
+
+    - run: |
+        git tag -a $VERSION -m "Release $VERSION"
+        git push origin $VERSION
+      if: env.is_bump == 'true'

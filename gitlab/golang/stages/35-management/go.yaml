@@ -19,7 +19,7 @@ report:dependency-track:
     set -e
 
     INIT_SCRIPT="config.sh"
-    [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file is not found, skipping..."
+    [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file was not found, skipping..."
 
     path="$PREFIX$REPORT_PATH"
     mkdir -p "$path"

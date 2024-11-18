@@ -61,6 +61,11 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
+      # TODO: the release should be created after the tag
+      - uses: 'softprops/action-gh-release@v2'
+        with:
+          draft: false
+          prerelease: false
     needs: [ 'tests-test_all' ]
     if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore/bump-')"
 

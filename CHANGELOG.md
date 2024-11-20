@@ -86,6 +86,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed the Azure Devops delivery stage for Golang by adding a goose db version table hash for the migrations and seeders caches to work based on properly versioning
 - fixed the Azure Devops delivery stages conditions to run only when previous there were no errors in the previous stages instead of checking for success
 - fixed `golang-delivery` to register multiple functions using `api*/` wildcard
+- fixed path to `fetch_token_helpers` file in `test_e2e` job
 
 ### Removed
 

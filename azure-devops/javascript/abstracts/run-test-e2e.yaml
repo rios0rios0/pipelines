@@ -9,6 +9,14 @@ parameters:
     type: 'string'
 
 steps:
+  # $(Agent.HomeDirectory) is "home/vsts/agents/3.246.0/" different from the real home directory
+  - task: 'Cache@2'
+    inputs:
+      key: "$(Agent.JobName)|$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/yarn.lock"
+      path: "$(HOME)/.cache/Cypress"
+    displayName: 'Cache for Cypress'
+    continueOnError: true
+
   - template: './execute-command-opensearch-dashboards.yaml'
     parameters:
       TAG_NAME: "${{ parameters.TAG_NAME }}"
@@ -19,12 +27,11 @@ steps:
       FILE: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/.ci/40-delivery/config/opensearch_dashboards.yml"
       DISPLAY_NAME: 'Replace Environment Variables'
 
-  # $(Agent.HomeDirectory) is "home/vsts/agents/3.246.0/" different from the real home directory
   - task: 'Cache@2'
     inputs:
-      key: "$(Agent.JobName)|$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/yarn.lock"
-      path: "$(HOME)/.cache/Cypress"
-    displayName: 'Cache for Cypress'
+      key: "$(Agent.JobName)|$(Agent.TempDirectory)/OpenSearch-Dashboards/yarn.lock"
+      path: "$(Agent.TempDirectory)/OpenSearch-Dashboards/.opensearch"
+    displayName: 'Cache for OpenSearch Backend'
     continueOnError: true
 
   - script: |
@@ -32,13 +39,12 @@ steps:
           --url "$(ROPC_URL)?username=$(ROPC_USERNAME)&password=$(ROPC_PASSWORD)&grant_type=password&scope=openid%20$(ROPC_CLIENT_ID)%20offline_access&client_id=$(ROPC_CLIENT_ID)&response_type=token%20id_token" | grep -oP '(?<="id_token":")[^"]*')
 
       sed "s/ID_TOKEN/$idToken/" -i $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/public/global/infrastructure/helpers/token_helper.ts
-    name: 'GetCatalogToken'
     displayName: 'Get API Token'
 
   - script: |
       sed -i 's|#server.basePath:.*|server.basePath: "/abc"|' $(Agent.TempDirectory)/OpenSearch-Dashboards/config/opensearch_dashboards.yml
       sed -i 's|#server.rewriteBasePath:.*|server.rewriteBasePath: true|' $(Agent.TempDirectory)/OpenSearch-Dashboards/config/opensearch_dashboards.yml
-    displayName: 'Modifying OpenSearch Dashboards config'
+    displayName: 'Modify Configuration (YAML) File'
 
   - task: 'Bash@3'
     inputs:

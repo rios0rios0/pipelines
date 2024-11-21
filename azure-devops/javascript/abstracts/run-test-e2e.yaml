@@ -9,6 +9,11 @@ parameters:
     type: 'string'
 
 steps:
+  - template: './execute-command-opensearch-dashboards.yaml'
+    parameters:
+      TAG_NAME: "${{ parameters.TAG_NAME }}"
+      PLUGIN_NAME: "${{ parameters.PLUGIN_NAME }}"
+
   # $(Agent.HomeDirectory) is "home/vsts/agents/3.246.0/" different from the real home directory
   - task: 'Cache@2'
     inputs:
@@ -17,22 +22,17 @@ steps:
     displayName: 'Cache for Cypress'
     continueOnError: true
 
-  - template: './execute-command-opensearch-dashboards.yaml'
-    parameters:
-      TAG_NAME: "${{ parameters.TAG_NAME }}"
-      PLUGIN_NAME: "${{ parameters.PLUGIN_NAME }}"
-
-  - template: './replace-environment-variables.yaml'
-    parameters:
-      FILE: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/.ci/40-delivery/config/opensearch_dashboards.yml"
-      DISPLAY_NAME: 'Replace Environment Variables'
-
   - task: 'Cache@2'
     inputs:
       key: "$(Agent.JobName)|$(Agent.TempDirectory)/OpenSearch-Dashboards/yarn.lock"
       path: "$(Agent.TempDirectory)/OpenSearch-Dashboards/.opensearch"
     displayName: 'Cache for OpenSearch Backend'
     continueOnError: true
+
+  - template: './replace-environment-variables.yaml'
+    parameters:
+      FILE: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/.ci/40-delivery/config/opensearch_dashboards.yml"
+      DISPLAY_NAME: 'Replace Environment Variables'
 
   - script: |
       idToken=$(curl -s --request POST --header 'Content-Length: 0' \

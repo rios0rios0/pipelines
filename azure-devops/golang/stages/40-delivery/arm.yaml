@@ -18,7 +18,7 @@ stages:
               path: "$(GOPATH)"
             displayName: 'Cache for Go modules'
             continueOnError: true
-
+          
           - task: 'Cache@2'
             inputs:
               key: "$(Agent.JobName)|$(ENVIRONMENT)|azuredeploy.json"
@@ -109,7 +109,7 @@ stages:
               deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'
             displayName: 'Deploy Resource Group'
             condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
-
+            
           - task: 'AzureCLI@2'
             inputs:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
@@ -171,6 +171,28 @@ stages:
             displayName: 'Replace Azure Function Variables'
 
           - task: 'AzureCLI@2'
+            displayName: 'Check if Database Exists'
+            inputs:
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                DATABASE_SERVER_NAME=$(echo $OUTPUTS | jq -r '.databaseServerName.value')
+                if [[ -z "$DATABASE_SERVER_NAME" || "$DATABASE_SERVER_NAME" == "null" ]]; then
+                  echo "Invalid database server name: $DATABASE_SERVER_NAME"
+                  echo "##vso[task.setvariable variable=DB_EXISTS]false"
+                  exit 0
+                fi
+      
+                dbExists=$(az postgres flexible-server show --resource-group "$(resourceGroupName)" --name "$DATABASE_SERVER_NAME" --query "name" --output tsv 2>/dev/null || echo "null")
+                if [[ "$dbExists" != "null" ]]; then
+                  echo "##vso[task.setvariable variable=DB_EXISTS]true"
+                else
+                  echo "##vso[task.setvariable variable=DB_EXISTS]false"
+                fi
+
+          - task: 'AzureCLI@2'
+            condition: and(succeeded(), eq(variables['DB_EXISTS'], 'true'))
             inputs:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
               scriptType: 'bash'
@@ -201,6 +223,7 @@ stages:
               CONNECTION_STRING="host=$HOST port=$PORT user=$USER password=$PASSWORD dbname=$DBNAME sslmode=$SSL"
               echo "##vso[task.setvariable variable=CONNECTION_STRING]$CONNECTION_STRING"
             displayName: 'Set Database Connection String'
+            condition: and(succeeded(), eq(variables['DB_EXISTS'], 'true'))
 
           - script: |
               set -e
@@ -212,6 +235,7 @@ stages:
               echo "table_hash: $table_hash"
               echo "##vso[task.setvariable variable=GOOSE_TABLE_HASH]$table_hash"
             displayName: 'Set Goose Table Hash variable'
+            condition: and(succeeded(), eq(variables['DB_EXISTS'], 'true'))
             continueOnError: true
 
           - task: 'Cache@2'
@@ -221,6 +245,7 @@ stages:
               cacheHitVar: 'MIGRATIONS_CACHE_HIT'
             displayName: 'Cache for Migrations'
             continueOnError: true
+            condition: and(succeeded(), eq(variables['DB_EXISTS'], 'true'))
 
           - task: 'Cache@2'
             inputs:
@@ -229,6 +254,7 @@ stages:
               cacheHitVar: 'SEEDERS_CACHE_HIT'
             displayName: 'Cache for Seeders'
             continueOnError: true
+            condition: and(succeeded(), eq(variables['DB_EXISTS'], 'true'))
 
           - task: 'AzureCLI@2'
             inputs:
@@ -292,6 +318,7 @@ stages:
                   --name "$DATABASE_SERVER_NAME" \
                   --rule-name "$(PIPELINE_FIREWALL_NAME)"
             displayName: 'Delete Flexible Firewall Rule to execute migrations and seeders'
+            condition: and(succeeded(), eq(variables['DB_EXISTS'], 'true'))
 
           - task: 'AzureCLI@2'
             displayName: 'Publish Function'

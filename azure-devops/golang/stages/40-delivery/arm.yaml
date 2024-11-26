@@ -18,7 +18,7 @@ stages:
               path: "$(GOPATH)"
             displayName: 'Cache for Go modules'
             continueOnError: true
-          
+
           - task: 'Cache@2'
             inputs:
               key: "$(Agent.JobName)|$(ENVIRONMENT)|azuredeploy.json"
@@ -35,7 +35,7 @@ stages:
 
           - task: 'GoTool@0'
             inputs:
-              version: '1.23.1'
+              version: '1.23.3'
               architecture: 'amd64'
               goArguments: 'mod tidy'
 
@@ -109,7 +109,7 @@ stages:
               deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'
             displayName: 'Deploy Resource Group'
             condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
-            
+
           - task: 'AzureCLI@2'
             inputs:
               azureSubscription: "$(AZM_SERVICE_CONNECTION)"
@@ -183,7 +183,7 @@ stages:
                   echo "##vso[task.setvariable variable=DB_EXISTS]false"
                   exit 0
                 fi
-      
+
                 dbExists=$(az postgres flexible-server show --resource-group "$(resourceGroupName)" --name "$DATABASE_SERVER_NAME" --query "name" --output tsv 2>/dev/null || echo "null")
                 if [[ "$dbExists" != "null" ]]; then
                   echo "##vso[task.setvariable variable=DB_EXISTS]true"

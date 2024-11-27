@@ -38,7 +38,9 @@ steps:
       idToken=$(curl -s --request POST --header 'Content-Length: 0' \
           --url "$(ROPC_URL)?username=$(ROPC_USERNAME)&password=$(ROPC_PASSWORD)&grant_type=password&scope=openid%20$(ROPC_CLIENT_ID)%20offline_access&client_id=$(ROPC_CLIENT_ID)&response_type=token%20id_token" | grep -oP '(?<="id_token":")[^"]*')
 
-      sed "s/ID_TOKEN/$idToken/" -i $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/public/global/infrastructure/helpers/token_helper.ts
+      # sed "s/ID_TOKEN/$idToken/" -i $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/public/global/infrastructure/helpers/token_helper.ts
+      sed -i "s/authorization: 'Bearer [^']*'/authorization: 'Bearer $idToken'/" "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/public/global/infrastructure/helpers/token_helper.ts"
+      cat $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/public/global/infrastructure/helpers/token_helper.ts
     displayName: 'Get API Token'
 
   - script: |

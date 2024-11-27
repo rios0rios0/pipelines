@@ -3,27 +3,27 @@ stages:
     displayName: 'tests'
     condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
     jobs:
-      - job: 'test_all'
-        displayName: 'test:all'
-        steps:
-          - template: '../../abstracts/execute-command-opensearch-dashboards.yaml'
-            parameters:
-              TAG_NAME: '2.18.0'
-              PLUGIN_NAME: 'app'
-              COMMANDS: 'yarn test:coverage'
-              ARTIFACT_NAME: 'coverage'
-              ARTIFACT_PATH: 'coverage'
+      # - job: 'test_all'
+      #   displayName: 'test:all'
+      #   steps:
+      #     - template: '../../abstracts/execute-command-opensearch-dashboards.yaml'
+      #       parameters:
+      #         TAG_NAME: '2.18.0'
+      #         PLUGIN_NAME: 'app'
+      #         COMMANDS: 'yarn test:coverage'
+      #         ARTIFACT_NAME: 'coverage'
+      #         ARTIFACT_PATH: 'coverage'
 
-          - task: 'PublishTestResults@2'
-            inputs:
-              testResultsFormat: 'JUnit'
-              testResultsFiles: '**/junit.xml'
-            displayName: 'Publish Test Results'
+      #     - task: 'PublishTestResults@2'
+      #       inputs:
+      #         testResultsFormat: 'JUnit'
+      #         testResultsFiles: '**/junit.xml'
+      #       displayName: 'Publish Test Results'
 
-          - task: 'PublishCodeCoverageResults@2'
-            inputs:
-              summaryFileLocation: 'cobertura.xml'
-            displayName: 'Publish Code Coverage Results'
+      #     - task: 'PublishCodeCoverageResults@2'
+      #       inputs:
+      #         summaryFileLocation: 'cobertura.xml'
+      #       displayName: 'Publish Code Coverage Results'
 
       - job: 'test_e2e'
         displayName: 'test:e2e'

@@ -40,31 +40,26 @@ stages:
               architecture: 'amd64'
               goArguments: 'mod tidy'
 
-          - template: '../../../global/stages/35-management/dependency-track.yaml'
-            parameters:
-              # TODO: duplicated code with GitLab pipelines
-              BEFORE_SCRIPT: |
-                path="$PREFIX$REPORT_PATH"
-                mkdir -p "$path"
+          # TODO: duplicated code with GitLab pipelines
+          - script: |
+              # TODO: this is not needed, because it's covered in each script file
+              BOM_PATH="$PREFIX$REPORT_PATH" && mkdir -p "$BOM_PATH"
 
-                echo "Installing CycloneDX Go Module..."
-                go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
+              echo "Installing CycloneDX Go Module..."
+              go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
 
-                if [ -d "main" ]; then
-                    folder="main"
-                elif find cmd -name "*.go" | grep -q .; then
-                    folder=$(find cmd -name "*.go" -print | head -n 1 | xargs -n 1 dirname)
-                elif [ -d "pkg" ]; then
-                    folder="pkg"
-                else
-                    echo "Could not find a directory containing Go files";
-                    exit 1
+              if [ -d "pkg" ]; then
+                echo "Found 'pkg' directory, using 'cyclonedx-gomod mod' command..."
+                "$(go env GOPATH)/bin/cyclonedx-gomod" mod -json -output "$BOM_PATH/bom.json" -licenses
+              else
+                [ -d "$(pwd)/cmd" ] && folder="cmd"
+                if [ -z "$folder" ]; then
+                  echo "Could not find a directory containing Go files"
+                  exit 1
                 fi
+                echo "Using 'cyclonedx-gomod app' command..."
+                "$(go env GOPATH)/bin/cyclonedx-gomod" app -json -output "$BOM_PATH/bom.json" -packages -files -licenses -main "$folder"
+              fi
 
-                if find $folder -type d -name "*pkg" | grep -q .; then
-                    echo "Found a 'pkg' directory, using 'cyclonedx-gomod mod' command..."
-                    "$(go env GOPATH)/bin/cyclonedx-gomod" mod -json -output "$path/bom.json" -licenses
-                else
-                    echo "Using 'cyclonedx-gomod app' command..."
-                    "$(go env GOPATH)/bin/cyclonedx-gomod" app -json -output "$path/bom.json" -packages -files -licenses -main $folder
-                fi
+          - template: '../../../global/abstracts/scripts-repo.yaml'
+          - script: $(Scripts.Directory)/global/scripts/dependency-track/run.sh

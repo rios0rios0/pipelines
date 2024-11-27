@@ -71,10 +71,8 @@ stages:
             continueOnError: true
           # TODO: duplicated code 3 times, 2 here and another at clone-and-move-opensearch-dashboards.yaml
 
-          - template: '../../../global/stages/35-management/dependency-track.yaml'
-            parameters:
-              # TODO: duplicated code with GitLab pipelines
-              BEFORE_SCRIPT: |
-                yarn && yarn sbom
-                # TODO: this is not required in Azure DevOps
-                # apt update && apt install -y --no-install-recommends curl jq
+          - script: |
+              yarn && yarn sbom
+
+          - template: '../../../global/abstracts/scripts-repo.yaml'
+          - script: $(Scripts.Directory)/global/scripts/dependency-track/run.sh

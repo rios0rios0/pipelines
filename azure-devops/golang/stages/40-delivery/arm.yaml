@@ -85,6 +85,17 @@ stages:
                 echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
 
                 resourceGroupExists=$(az group exists --name $resourceGroupName)
+                echo "##vso[task.setvariable variable=resourceGroupExists]$resourceGroupExists"
+            displayName: 'Check if Resource Group Exists'
+
+          - task: 'AzureCLI@2'
+            inputs:
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                set -e
+
                 outboundIpAddresses="''"
                 if [ "$resourceGroupExists" = true ]; then
                   functionAppName=$(az functionapp list --resource-group $resourceGroupName --query "[].name" --output tsv | tail -n 1)

@@ -1,0 +1,34 @@
+parameters:
+  - name: 'RESOURCE_GROUP_NAME'
+    type: 'string'
+    default: ''
+
+steps:
+  - task: 'AzureCLI@2'
+    inputs:
+      azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        set -e
+        resourceGroupName=$(ENVIRONMENT)-rg-$(RESOURCE_GROUP_NAME)-$(AZM_LOCATION)
+        echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
+        resourceGroupExists=$(az group exists --name $resourceGroupName)
+        echo "##vso[task.setvariable variable=resourceGroupExists]$resourceGroupExists"
+    displayName: 'Check if Resource Group Exists'
+
+  - task: 'AzureResourceGroupDeployment@2'
+    inputs:
+      location: "$(AZM_LOCATION)"
+      action: 'Create Or Update Resource Group'
+      azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+      resourceGroupName: "$(resourceGroupName)"
+      csmFile: 'azuredeploy.json'
+      overrideParameters: "-location $(AZM_LOCATION) -environment $(ENVIRONMENT) -functionAppName $(AZM_FUNCTION_NAME) -inboundAllowedIps $(INBOUND_ALLOWED_IPS) -keyVaultName $(CUSTOMER_KEY_VAULT_NAME)"
+      templateLocation: 'Linked artifact'
+      deploymentMode: 'Incremental'
+      deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'
+    displayName: 'Update Resource Group'
+    condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
+
+  - template: '../../../global/stages/50-deployment/deploy-az-function.yaml'

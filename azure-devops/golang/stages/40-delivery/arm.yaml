@@ -72,14 +72,10 @@ stages:
               replaceExistingArchive: true
             displayName: 'Archive Build Output'
 
-        deployment:
-          - ${{ if eq(variables.APP_TYPE, 'distributed') }}:
-              - template: '../../../global/stages/50-deployment/distributed.yaml'
-                parameters:
-                  CUSTOMER_ID: '$(CUSTOMER_ID)'
-
-          - ${{ if eq(variables.APP_TYPE, 'central') }}:
-              - template: '../../../global/stages/50-deployment/central.yaml'
+        
+          - template: '../../../global/stages/50-deployment/distributed.yaml'
+            parameters:
+              CUSTOMER_ID: '$(CUSTOMER_ID)'
 
       #     - task: 'AzureCLI@2'
       #       inputs:

@@ -79,24 +79,23 @@ steps:
 
   - task: 'AzureCLI@2'
     inputs:
-      displayName: 'Execute Migrations'
       condition: and(succeeded(), eq(variables['MIGRATIONS_CACHE_HIT'], 'false'))
       azureSubscription: "$(AZM_SERVICE_CONNECTION)"
       scriptType: 'bash'
       scriptLocation: 'inlineScript'
       inlineScript: |
-            set -e
-            # TODO: move this "IF" to a file and (or) use an Azure resource to create a condition
-            if grep -r 'goose' db/migrations/*.sql; then
-              go install github.com/pressly/goose/v3/cmd/goose@v3.17.0
-              $(go env GOPATH)/bin/goose -dir db/migrations postgres "$(CONNECTION_STRING)" up
-            else
-              echo "No Goose migration files found. Skipping Goose installation and migration."
-            fi
+        set -e
+        # TODO: move this "IF" to a file and (or) use an Azure resource to create a condition
+        if grep -r 'goose' db/migrations/*.sql; then
+            go install github.com/pressly/goose/v3/cmd/goose@v3.17.0
+            $(go env GOPATH)/bin/goose -dir db/migrations postgres "$(CONNECTION_STRING)" up
+        else
+            echo "No Goose migration files found. Skipping Goose installation and migration."
+        fi
+      displayName: 'Execute Migrations'
 
   - task: 'AzureCLI@2'
     inputs:
-      displayName: 'Execute Seeders'
       condition: and(succeeded(), eq(variables['SEEDERS_CACHE_HIT'], 'false'))
       azureSubscription: "$(AZM_SERVICE_CONNECTION)"
       scriptType: 'bash'
@@ -117,6 +116,7 @@ steps:
         else
             echo "No Goose seed files found. Skipping seed"
         fi
+      displayName: 'Execute Seeders'
 
   - task: 'AzureCLI@2'
     displayName: 'Delete Flexible Firewall Rule to execute migrations and seeders'

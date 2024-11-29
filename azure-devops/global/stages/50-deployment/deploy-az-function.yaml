@@ -10,7 +10,7 @@ steps:
     displayName: 'Save Deployment Outputs to File'
     condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
   
-  - template: '../../../global/stages/50-deployment/database.yaml'
+  - template: './database.yaml'
  
   - task: 'AzureCLI@2'
     inputs:

@@ -40,7 +40,7 @@ steps:
   - task: 'AzureResourceGroupDeployment@2'
     inputs:
       location: "$(AZM_LOCATION)"
-      action: 'Update Resource Group'
+      action: 'Create Or Update Resource Group'
       azureSubscription: "$(AZM_SERVICE_CONNECTION)"
       resourceGroupName: "$(resourceGroupName)"
       csmFile: 'azuredeploy.json'

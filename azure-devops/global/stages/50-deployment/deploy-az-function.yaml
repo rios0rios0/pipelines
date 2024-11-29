@@ -21,11 +21,6 @@ steps:
         set -e
         outputs=$(cat $(AZURE_DEPLOY_CACHE)/outputs.json)
         echo "##vso[task.setvariable variable=OUTPUTS]$outputs"
-        
-        echo $outputs
-        echo $(AZURE_DEPLOY_CACHE)
-        echo "$(Build.SourcesDirectory)/.azuredeploy"
-
     displayName: 'Read Outputs from file'
   
   - script: |

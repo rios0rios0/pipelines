@@ -47,4 +47,75 @@ jobs:
           deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'
         displayName: 'Deploy Resource Group'
         condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
+
+      - task: 'AzureCLI@2'
+        inputs:
+          azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+          scriptType: 'bash'
+          scriptLocation: 'inlineScript'
+          inlineScript: |
+            set -e
+            echo $AZURE_DEPLOY_OUTPUTS > $(AZURE_DEPLOY_CACHE)/outputs.json
+        displayName: 'Save Deployment Outputs to File'
+        condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
+
+  - template: '../../../global/stages/50-deployment/database.yaml'
+ 
+  - task: 'AzureCLI@2'
+    inputs:
+      azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        set -e
+        outputs=$(cat $(AZURE_DEPLOY_CACHE)/outputs.json)
+        echo "##vso[task.setvariable variable=OUTPUTS]$outputs"
+    displayName: 'Read Outputs from file'
+
+  - script: |
+      siteName=$(echo $OUTPUTS | jq -r '.siteName.value')
+      echo "##vso[task.setvariable variable=siteName]$siteName"
+    displayName: 'Getting Pipeline Variables'
+
+  - task: 'AzureCLI@2'
+    inputs:
+      azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        set -e
+        SETTINGS=""
+        for var in $(compgen -e); do
+          if [[ $var == REPLACE_* ]]; then
+            if [[ -z ${!var} ]]; then
+              echo "Warning: $var isn't defined"
+            else
+              setting_name=${var#REPLACE_}
+              SETTINGS+="$setting_name=${!var} "
+            fi
+          fi
+        done
+        if [[ -z $SETTINGS ]]; then
+          echo "Warning: There are no environment variables to update"
+        else
+          az functionapp config appsettings set \
+            --name "$(siteName)" \
+            --resource-group "$(resourceGroupName)" \
+            --settings $SETTINGS
+        fi
+    displayName: 'Replace Azure Function Variables'
+
+  - task: 'AzureCLI@2'
+    displayName: 'Publish Function'
+    inputs:
+      azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        set -e
+        az functionapp deployment source config-zip \
+          --name "$(siteName)" \
+          --resource-group "$(resourceGroupName)" \
+          --src "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
+    retryCountOnTaskFailure: 3
   

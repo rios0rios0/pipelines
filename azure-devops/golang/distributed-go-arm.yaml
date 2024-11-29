@@ -1,0 +1,2 @@
+stages:
+  - template: 'stages/40-delivery/distributed-arm.yaml'

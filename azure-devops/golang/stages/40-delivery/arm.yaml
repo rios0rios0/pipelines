@@ -72,10 +72,9 @@ stages:
               replaceExistingArchive: true
             displayName: 'Archive Build Output'
 
-        
-          - template: '../../../global/stages/50-deployment/distributed.yaml'
-            parameters:
-              CUSTOMER_ID: '$(CUSTOMER_ID)'
+      - template: '../../../global/stages/50-deployment/distributed.yaml'
+        parameters:
+          CUSTOMER_ID: '$(CUSTOMER_ID)'
 
       #     - task: 'AzureCLI@2'
       #       inputs:

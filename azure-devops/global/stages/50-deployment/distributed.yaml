@@ -12,6 +12,9 @@ steps:
       inlineScript: |
         set -e
         resourceGroupName=$(ENVIRONMENT)-rg-$(CUSTOMER_ID)-$(AZM_LOCATION)
+
+        echo $resourceGroupName
+
         echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
         resourceGroupExists=$(az group exists --name $resourceGroupName)
         echo "##vso[task.setvariable variable=resourceGroupExists]$resourceGroupExists"

@@ -72,6 +72,8 @@ stages:
               replaceExistingArchive: true
             displayName: 'Archive Build Output'
 
-          - template: '../../../global/stages/50-deployment/central.yaml'
+          - template: '../../../global/stages/50-deployment/distributed.yaml'
+            parameters:
+              CUSTOMER_ID: '$(CUSTOMER_ID)'
 
       - template: '../../../global/stages/40-delivery/release.yaml'

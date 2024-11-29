@@ -1,14 +1,6 @@
-parameters:
-  - name: 'BEFORE_SCRIPT'
-    type: 'string'
-    default: ''
-
 jobs:
   - job: 'execute_database_migrations'
     displayName: 'database:migrations'
-    variables:
-      GIT_DEPTH: '0'
-      SONAR_USER_HOME: "$(Build.SourcesDirectory)/.sonar"
     steps:
       - task: 'AzureCLI@2'
         displayName: 'Check if Database Exists'

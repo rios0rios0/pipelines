@@ -72,6 +72,7 @@ stages:
               replaceExistingArchive: true
             displayName: 'Archive Build Output'
 
+        deployment:
           - ${{ if eq(variables.APP_TYPE, 'distributed') }}:
               - template: '../../../global/stages/50-deployment/distributed.yaml'
                 parameters:

@@ -4,7 +4,7 @@ parameters:
     default: ''
 
 jobs:
-  - job: 'delivery'
+  - job: 'delivery_distributed_app'
     displayName: 'delivery distributed app' 
     steps:
       - task: 'AzureCLI@2'

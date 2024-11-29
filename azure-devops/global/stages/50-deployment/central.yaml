@@ -1,6 +1,6 @@
 
 jobs:
-  - job: 'delivery'
+  - job: 'delivery_central_app'
     displayName: 'delivery central app'
     steps:
       - task: 'AzureCLI@2'

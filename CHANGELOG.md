@@ -95,6 +95,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Removed
 
 - removed the explicit installation of `Azure CLI` version 2.56 to use the pre-installed LTS version
+- removed unused variables in template for fixed and dynamic azure functions
 
 ## [2.0.0] - 2024-08-07
 

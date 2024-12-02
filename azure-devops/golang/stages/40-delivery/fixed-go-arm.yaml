@@ -1,0 +1,80 @@
+stages:
+  - stage: 'delivery'
+    displayName: 'delivery'
+    condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
+    jobs:
+      - job: 'delivery'
+        displayName: 'delivery'
+        variables:
+          MIGRATIONS_CACHE: "$(Build.SourcesDirectory)/.migration"
+          GOPATH: "$(Pipeline.Workspace)/.go"
+          SEEDERS_CACHE: "$(Build.SourcesDirectory)/.seeder"
+          AZURE_DEPLOY_CACHE: "$(Build.SourcesDirectory)/.azuredeploy"
+          PIPELINE_FIREWALL_NAME: 'PipelineFirewall_$(date +"%Y%m%d%H%M%S")'
+        steps:
+          - task: 'Cache@2'
+            inputs:
+              key: "$(Agent.JobName)|$(Agent.OS)|go.sum"
+              path: "$(GOPATH)"
+            displayName: 'Cache for Go modules'
+            continueOnError: true
+
+          - task: 'Cache@2'
+            inputs:
+              key: "$(Agent.JobName)|$(ENVIRONMENT)|$(AZM_FUNCTION_NAME)|$(AZM_LOCATION)|azuredeploy.json"
+              path: "$(AZURE_DEPLOY_CACHE)"
+              cacheHitVar: 'AZURE_DEPLOY_CACHE_HIT'
+            displayName: 'Cache for Resources Deployment in Azure'
+
+          # TODO: this should be a share script between the vendors
+          - script: |
+              set -e
+              INIT_SCRIPT="config.sh"
+              [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file was not found, skipping..."
+            displayName: 'Load Custom Configuration'
+
+          - task: 'GoTool@0'
+            inputs:
+              version: '1.23.3'
+              architecture: 'amd64'
+              goArguments: 'mod tidy'
+
+          - script: |
+              set -e
+
+              mkdir -p $(MIGRATIONS_CACHE)
+              mkdir -p $(SEEDERS_CACHE)
+              mkdir -p $(AZURE_DEPLOY_CACHE)
+            displayName: 'Setup Cache'
+
+          - script: |
+              set -e
+
+              export CGO_ENABLED=0
+              export BUILD_FLAGS="-ldflags='-w -s'"
+              mkdir ./bin && go build -o ./bin -v ./...
+            displayName: 'Build Go Project'
+
+          - task: 'CopyFiles@2'
+            inputs:
+              Contents: |
+                api*/function.json
+                bin/*
+                host.json
+              TargetFolder: "$(Build.SourcesDirectory)/$(Build.BuildId)"
+            displayName: 'Copy App Files'
+
+          - task: 'ArchiveFiles@2'
+            inputs:
+              archiveType: 'zip'
+              rootFolderOrFile: "$(Build.SourcesDirectory)/$(Build.BuildId)"
+              archiveFile: "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
+              includeRootFolder: false
+              replaceExistingArchive: true
+            displayName: 'Archive Build Output'
+
+          - template: '../../../global/stages/50-deployment/fixed.yaml'
+            parameters:
+              AZURE_DEPLOY_CACHE: '$(AZURE_DEPLOY_CACHE)'
+
+      - template: '../../../global/stages/40-delivery/release.yaml'

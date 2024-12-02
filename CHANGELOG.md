@@ -31,6 +31,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added cache for `execute-command-opensearch-dashboards.yaml` template to cache the node modules and speed up the pipeline
 - added cache for `tests` and `delivery` stages in Azure DevOps Javascript pipeline
 - added `step` to check if `database` exists in `golang delivery` before executing `database` tasks
+- added a new template to deploy an Azure Function in an existent Resource Group
 
 ### Changed
 

@@ -28,7 +28,21 @@ steps:
       templateLocation: 'Linked artifact'
       deploymentMode: 'Incremental'
       deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'
+    displayName: 'Update Resource Group with Key Vault'
+    condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'), ne(variables['CUSTOMER_KEY_VAULT_NAME'], ''))
+
+  - task: 'AzureResourceGroupDeployment@2'
+    inputs:
+      location: "$(AZM_LOCATION)"
+      action: 'Create Or Update Resource Group'
+      azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+      resourceGroupName: "$(resourceGroupName)"
+      csmFile: 'azuredeploy.json'
+      overrideParameters: "-location $(AZM_LOCATION) -environment $(ENVIRONMENT) -functionAppName $(AZM_FUNCTION_NAME) -inboundAllowedIps $(INBOUND_ALLOWED_IPS)"
+      templateLocation: 'Linked artifact'
+      deploymentMode: 'Incremental'
+      deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'
     displayName: 'Update Resource Group'
-    condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
+    condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'), eq(variables['CUSTOMER_KEY_VAULT_NAME'], ''))
 
   - template: '../../../global/stages/50-deployment/deploy-az-function.yaml'

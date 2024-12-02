@@ -74,7 +74,5 @@ stages:
             displayName: 'Archive Build Output'
 
           - template: '../../../global/stages/50-deployment/fixed.yaml'
-            parameters:
-              AZURE_DEPLOY_CACHE: '$(AZURE_DEPLOY_CACHE)'
 
       - template: '../../../global/stages/40-delivery/release.yaml'

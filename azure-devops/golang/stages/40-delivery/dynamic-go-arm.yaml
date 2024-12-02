@@ -71,6 +71,5 @@ stages:
           - template: '../../../global/stages/50-deployment/dynamic.yaml'
             parameters:
               RESOURCE_GROUP_NAME: '$(RESOURCE_GROUP_NAME)'
-              AZURE_DEPLOY_CACHE: 'AZURE_DEPLOY_CACHE'
 
       - template: '../../../global/stages/40-delivery/release.yaml'

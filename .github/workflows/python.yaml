@@ -70,7 +70,7 @@ jobs:
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-semgrep@main'
         with:
-          semgrep_lang: 'golang'
+          semgrep_lang: 'python'
     needs: [ 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 

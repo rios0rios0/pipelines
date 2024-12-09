@@ -36,7 +36,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Changed
 
 - changed GitHub `python.yaml` to run stage with custom Docker image
-- changed GoLang pipelines using GitLab to version to `1.23.1`
+- changed GoLang to version 1.23.4
 - changed GoLang test script to install docker used by test containers in integration tests
 - changed GoLang test script to run integration tests separately and one per time
 - changed `Horusec` JSON configuration file to ignore `pipelines_*` directory created by GitHub Actions

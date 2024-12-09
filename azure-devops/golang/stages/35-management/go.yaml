@@ -36,7 +36,7 @@ stages:
 
           - task: 'GoTool@0'
             inputs:
-              version: '1.23.3'
+              version: '1.23.4'
               architecture: 'amd64'
               goArguments: 'mod tidy'
 

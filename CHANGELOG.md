@@ -32,6 +32,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added cache for `tests` and `delivery` stages in Azure DevOps Javascript pipeline
 - added `step` to check if `database` exists in `golang delivery` before executing `database` tasks
 - added a new template to deploy an Azure Function in an existent Resource Group
+- added artifact generation for log files created in `test_e2e` job
 
 ### Changed
 

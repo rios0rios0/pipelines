@@ -61,6 +61,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed stages for Golang in Azure DevOps to be called after configuration
 - changed the way to validate the `AZURE_DEPLOY_CACHE_HIT` in deploy stage in Azure Devops
 - changed the validation to create or update the Resource Group for dynamic azure functions
+- corrected SonarQube scanning tag versions and blames for Azure DevOps and GitLab
 
 ### Fixed
 
@@ -96,7 +97,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Removed
 
-- removed the explicit installation of `Azure CLI` version 2.56 to use the pre-installed LTS version
+- removed the explicit installation of Azure CLI version 2.56 to use the pre-installed LTS version
 - removed unused variables in template for fixed and dynamic azure functions
 
 ## [2.0.0] - 2024-08-07

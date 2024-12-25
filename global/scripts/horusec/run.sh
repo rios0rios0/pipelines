@@ -13,8 +13,11 @@ if ! ls "$(pwd)"/horusec*.json 1> /dev/null 2>&1; then
 fi
 
 jq -s "add" "$SCRIPTS_DIR/global/scripts/horusec/default.json" "$(pwd)"/horusec*.json > "$(pwd)/custom.json"
+# TODO: upgrade Horusec version whenever the stable version is released
+# see more here: https://stackoverflow.com/questions/75522692/horusec-v2-8-is-not-working-in-ci-docker-in-docker-environment
 docker run \
   -v "$(pwd):$CONTAINER_PATH" \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  horuszup/horusec-cli:v2.7 horusec start \
-  -p "$CONTAINER_PATH" -P "$(pwd)" --config-file-path "$CONTAINER_PATH/custom.json" -O "$fileName"
+  horuszup/horusec-cli:v2.9.0-beta.3 horusec start \
+  --project-path "$CONTAINER_PATH" --container-bind-project-path "$(pwd)" \
+  --config-file-path "$CONTAINER_PATH/custom.json" --json-output-file "$fileName"

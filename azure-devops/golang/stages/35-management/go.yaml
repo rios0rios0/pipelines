@@ -8,7 +8,7 @@ stages:
           # TODO: duplicated code with GitLab pipelines
           BEFORE_SCRIPT: |
             version=$(git describe --tags --abbrev=0) || true
-            if [ -z "$version" ]; then version="0.0.0"; echo "No version tag found in the repository, setting version to $version"; fi
+            if [ -z "$version" ]; then version="latest"; echo "No version tag found in the repository, setting version to $version"; fi
             echo "sonar.projectVersion=$version" >> sonar-project.properties
             echo "Updated sonar.projectVersion to $version"
 

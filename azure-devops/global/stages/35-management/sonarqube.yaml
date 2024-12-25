@@ -13,11 +13,16 @@ jobs:
       GIT_DEPTH: '0'
       SONAR_USER_HOME: "$(Build.SourcesDirectory)/.sonar"
     steps:
+      - checkout: 'self'
+        fetchDepth: 0
+        fetchTags: true
+
       - task: 'DownloadPipelineArtifact@2'
         inputs:
           artifactName: 'coverage'
           targetPath: '$(Build.SourcesDirectory)'
         displayName: 'Download Coverage File'
+        continueOnError: true
 
       - task: 'Cache@2'
         inputs:

@@ -16,6 +16,7 @@
   tags:
     - 'dev-gitlab-runner-onprem'
   rules: # TODO: this could be not duplicated using !reference
+    - if: "$CI_MERGE_REQUEST_IID"
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
 
 .dependency-track:
@@ -31,4 +32,5 @@
   tags:
     - 'dev-gitlab-runner-onprem'
   rules: # TODO: this could be not duplicated using !reference
+    - if: "$CI_MERGE_REQUEST_IID"
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"

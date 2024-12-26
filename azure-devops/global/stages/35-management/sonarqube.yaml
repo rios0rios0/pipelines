@@ -1,8 +1,3 @@
-parameters:
-  - name: 'BEFORE_SCRIPT'
-    type: 'string'
-    default: ''
-
 jobs:
   - job: 'report_sonarqube'
     displayName: 'report:sonarqube'
@@ -31,8 +26,5 @@ jobs:
         displayName: 'Cache for SonarQube'
         continueOnError: true
 
-      - script: ${{ parameters.BEFORE_SCRIPT }}
-        displayName: 'Before Script'
-
-      - script: sonar-scanner
-        displayName: 'SonarQube Scanner'
+      - template: '../../abstracts/scripts-repo.yaml'
+      - script: $(Scripts.Directory)/global/scripts/sonarqube/run.sh

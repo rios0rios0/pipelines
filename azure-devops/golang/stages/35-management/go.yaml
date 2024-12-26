@@ -4,13 +4,6 @@ stages:
     condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
     jobs:
       - template: '../../../global/stages/35-management/sonarqube.yaml'
-        parameters:
-          # TODO: duplicated code with GitLab pipelines
-          BEFORE_SCRIPT: |
-            version=$(git describe --tags --abbrev=0) || true
-            if [ -z "$version" ]; then version="latest"; echo "No version tag found in the repository, setting version to $version"; fi
-            echo "sonar.projectVersion=$version" >> sonar-project.properties
-            echo "Updated sonar.projectVersion to $version"
 
       - job: 'report_dependency_track'
         displayName: 'report:dependency-track'
@@ -41,25 +34,6 @@ stages:
               goArguments: 'mod tidy'
 
           # TODO: duplicated code with GitLab pipelines
-          - script: |
-              # TODO: this is not needed, because it's covered in each script file
-              BOM_PATH="$PREFIX$REPORT_PATH" && mkdir -p "$BOM_PATH"
-
-              echo "Installing CycloneDX Go Module..."
-              go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
-
-              if [ -d "pkg" ]; then
-                echo "Found 'pkg' directory, using 'cyclonedx-gomod mod' command..."
-                "$(go env GOPATH)/bin/cyclonedx-gomod" mod -json -output "$BOM_PATH/bom.json" -licenses
-              else
-                [ -d "$(pwd)/cmd" ] && folder="cmd"
-                if [ -z "$folder" ]; then
-                  echo "Could not find a directory containing Go files"
-                  exit 1
-                fi
-                echo "Using 'cyclonedx-gomod app' command..."
-                "$(go env GOPATH)/bin/cyclonedx-gomod" app -json -output "$BOM_PATH/bom.json" -packages -files -licenses -main "$folder"
-              fi
-
           - template: '../../../global/abstracts/scripts-repo.yaml'
+          - script: $(Scripts.Directory)/global/golang/cyclonedx/run.sh
           - script: $(Scripts.Directory)/global/scripts/dependency-track/run.sh

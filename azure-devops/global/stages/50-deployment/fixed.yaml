@@ -1,3 +1,17 @@
+parameters:
+  - name: PIPELINE_FIREWALL_NAME
+    type: 'string'
+  - name: AZM_FUNCTION_NAME
+    type: 'string'
+  - name: AZM_LOCATION
+    type: 'string'
+  - name: AZM_SERVICE_CONNECTION
+    type: 'string'
+  - name: ENVIRONMENT
+    type: 'string'
+  - name: INBOUND_ALLOWED_IPS
+    type: 'string'
+
 steps:
   - task: 'AzureCLI@2'
     inputs:
@@ -44,4 +58,9 @@ steps:
     displayName: 'Deploy Resource Group'
     condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
 
-  - template: '../../../global/stages/50-deployment/deploy-az-function.yaml'
+  - template: '../../../global/abstracts/deploy-az-function.yaml'
+    parameters:
+      RESOURCE_GROUP_NAME: $(resourceGroupName)
+      PIPELINE_FIREWALL_NAME: $(PIPELINE_FIREWALL_NAME)
+      ENVIRONMENT: $(ENVIRONMENT)
+      AZM_SERVICE_CONNECTION: $(AZM_SERVICE_CONNECTION)

@@ -32,6 +32,7 @@ stages:
               INIT_SCRIPT="config.sh"
               [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file was not found, skipping..."
             displayName: 'Load Custom Configuration'
+
           - task: 'GoTool@0'
             inputs:
               version: '1.23.4'
@@ -40,16 +41,20 @@ stages:
 
           - script: |
               set -e
+
               mkdir -p $(MIGRATIONS_CACHE)
               mkdir -p $(SEEDERS_CACHE)
               mkdir -p $(AZURE_DEPLOY_CACHE)
             displayName: 'Setup Cache'
+
           - script: |
               set -e
+
               export CGO_ENABLED=0
               export BUILD_FLAGS="-ldflags='-w -s'"
               mkdir ./bin && go build -o ./bin -v ./...
             displayName: 'Build Go Project'
+
           - task: 'CopyFiles@2'
             inputs:
               Contents: |
@@ -68,8 +73,13 @@ stages:
               replaceExistingArchive: true
             displayName: 'Archive Build Output'
 
-          - template: '../../../global/stages/50-deployment/dynamic.yaml'
+          - template: '../../../global/stages/50-deployment/fixed.yaml'
             parameters:
-              RESOURCE_GROUP_NAME: '$(RESOURCE_GROUP_NAME)'
+              PIPELINE_FIREWALL_NAME: '$(PIPELINE_FIREWALL_NAME)'
+              AZM_FUNCTION_NAME: '$(AZM_FUNCTION_NAME)'
+              AZM_LOCATION: '$(AZM_LOCATION)'
+              AZM_SERVICE_CONNECTION: '$(AZM_SERVICE_CONNECTION)'
+              ENVIRONMENT: '$(ENVIRONMENT)'
+              INBOUND_ALLOWED_IPS: '$(INBOUND_ALLOWED_IPS)'
 
       - template: '../../../global/stages/40-delivery/release.yaml'

@@ -97,6 +97,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Removed
 
+- removed duplicated code of SonarQube and DependencyTrack for GitLab and Azure DevOps
 - removed the explicit installation of Azure CLI version 2.56 to use the pre-installed LTS version
 - removed unused variables in template for fixed and dynamic azure functions
 

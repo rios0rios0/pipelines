@@ -6,45 +6,13 @@ include:
 report:sonarqube:
   extends: '.sonarqube'
   script:
-    - version=$(git describe --tags --abbrev=0) || true # get the latest tag as the current project version
-    - 'if [ -z "$version" ]; then version="latest"; echo "No version tag found in the repository, setting version to $version"; fi'
-    - echo "sonar.projectVersion=$version" >> sonar-project.properties # update sonar-project.properties
-    - echo "Updated sonar.projectVersion to $version"
-    - !reference [ .sonarqube, script ]
+    - !reference [ .scripts-repo, before_script ]
+    - $SCRIPTS_DIR/global/scripts/sonarqube/run.sh
 
 report:dependency-track:
   extends: [ '.go', '.dependency-track' ]
   script:
-    |
-    set -e
-
-    INIT_SCRIPT="config.sh"
-    [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file was not found, skipping..."
-
-    path="$PREFIX$REPORT_PATH"
-    mkdir -p "$path"
-
-    GOBIN=$(go env GOPATH)/bin
-
-    echo "Installing CycloneDX Go Module..."
-    apt update && apt install -y --no-install-recommends curl jq
-    go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
-
-    if [ -d "main" ]; then
-        folder="main"
-    elif find cmd -name "*.go" | grep -q .; then
-        folder=$(find cmd -name "*.go" -print | head -n 1 | xargs -n 1 dirname)
-    elif [ -d "pkg" ]; then
-        folder="pkg"
-    else
-        echo "Could not find a directory containing Go files";
-        exit 1
-    fi
-
-    if find $folder -type d -name "*pkg" | grep -q .; then
-        echo "Found a 'pkg' directory, using 'cyclonedx-gomod mod' command..."
-        "$GOBIN/cyclonedx-gomod" mod -json -output "$path/bom.json" -licenses
-    else
-        echo "Using 'cyclonedx-gomod app' command..."
-        "$GOBIN/cyclonedx-gomod" app -json -output "$path/bom.json" -packages -files -licenses -main $folder
-    fi
+    - 'INIT_SCRIPT="config.sh"'
+    - '[[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The $INIT_SCRIPT file was not found, skipping..."'
+    - !reference [ .scripts-repo, before_script ]
+    - $SCRIPTS_DIR/global/scripts/golang/cyclonedx/run.sh

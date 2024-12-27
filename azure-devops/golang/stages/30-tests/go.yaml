@@ -29,7 +29,6 @@ stages:
               goArguments: 'mod tidy'
 
           - template: '../../../global/abstracts/scripts-repo.yaml'
-
           - script: $(Scripts.Directory)/global/scripts/golang/test/run.sh
             displayName: 'Run Tests'
 

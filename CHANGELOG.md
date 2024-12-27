@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- changed GitLeaks inside Azure DevOps to clone full repository instead of just shallow clone
+
 ## [2.1.0] - 2024-12-27
 
 ### Added

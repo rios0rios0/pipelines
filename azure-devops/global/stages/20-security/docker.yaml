@@ -7,7 +7,6 @@ jobs:
     displayName: 'sast:horusec'
     steps:
       - template: '../../abstracts/scripts-repo.yaml'
-
       - script: $(Scripts.Directory)/global/scripts/horusec/run.sh # TODO: needs to receive the requirements.txt
         continueOnError: true
 
@@ -21,7 +20,6 @@ jobs:
     displayName: 'sast:semgrep'
     steps:
       - template: '../../abstracts/scripts-repo.yaml'
-
       - script: $(Scripts.Directory)/global/scripts/semgrep/run.sh "${{ parameters.SEMGREP_LANGUAGE }}" # it takes the first param as the main language
         continueOnError: true
 
@@ -34,8 +32,11 @@ jobs:
   - job: 'sast_gitleaks'
     displayName: 'sast:gitleaks'
     steps:
-      - template: '../../abstracts/scripts-repo.yaml'
+      - checkout: 'self'
+        fetchDepth: 0
+        fetchTags: true
 
+      - template: '../../abstracts/scripts-repo.yaml'
       - script: $(Scripts.Directory)/global/scripts/gitleaks/run.sh
         continueOnError: true
 

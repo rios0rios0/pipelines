@@ -34,6 +34,5 @@ stages:
             displayName: 'Install dependencies'
 
           - template: '../../../global/abstracts/scripts-repo.yaml'
-
           - script: $(Scripts.Directory)/global/scripts/golangci-lint/run.sh
             displayName: 'Run golangci-lint'

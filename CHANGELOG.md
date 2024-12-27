@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added a new pipeline in Azure DevOps for Terraform
+
 ### Changed
 
 - changed GitLeaks inside Azure DevOps to clone full repository instead of just shallow clone

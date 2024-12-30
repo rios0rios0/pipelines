@@ -12,7 +12,6 @@ report:sonarqube:
 report:dependency-track:
   extends: [ '.go', '.dependency-track' ]
   script:
-    - 'INIT_SCRIPT="config.sh"'
-    - '[[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The $INIT_SCRIPT file was not found, skipping..."'
     - !reference [ .scripts-repo, before_script ]
+    - $SCRIPTS_DIR/global/scripts/golang/init/run.sh
     - $SCRIPTS_DIR/global/scripts/golang/cyclonedx/run.sh

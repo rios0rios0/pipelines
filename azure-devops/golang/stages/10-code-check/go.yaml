@@ -15,11 +15,8 @@ stages:
             displayName: 'Cache for Go modules'
             continueOnError: true
 
-          # TODO: this should be a share script between the vendors
-          - script: |
-              set -e
-              INIT_SCRIPT="config.sh"
-              [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file was not found, skipping..."
+          - template: '../../../global/abstracts/scripts-repo.yaml'
+          - script: $(Scripts.Directory)/global/scripts/golang/init/run.sh
             displayName: 'Load Custom Configuration'
 
           - task: 'GoTool@0'
@@ -28,11 +25,11 @@ stages:
               architecture: 'amd64'
               goArguments: 'mod tidy'
 
+          # for golangci-lint config merging
           - script: |
               sudo apt-get update && \
-              sudo apt-get install -y python3 python3-yaml # for golangci-lint config merging
+              sudo apt-get install -y python3 python3-yaml
             displayName: 'Install dependencies'
 
-          - template: '../../../global/abstracts/scripts-repo.yaml'
           - script: $(Scripts.Directory)/global/scripts/golangci-lint/run.sh
-            displayName: 'Run golangci-lint'
+            displayName: 'Run GolangCI-Lint'

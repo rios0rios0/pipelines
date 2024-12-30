@@ -3,17 +3,17 @@ parameters:
     type: 'string'
   - name: 'GROUP_NAME'
     type: 'string'
-  - name: ENVIRONMENT
+  - name: 'ENVIRONMENT'
     type: 'string'
-  - name: AZM_SERVICE_CONNECTION
+  - name: 'AZM_SERVICE_CONNECTION'
     type: 'string'
-  - name: AZM_LOCATION
+  - name: 'AZM_LOCATION'
     type: 'string'
-  - name: AZM_FUNCTION_NAME
+  - name: 'AZM_FUNCTION_NAME'
     type: 'string'
-  - name: INBOUND_ALLOWED_IPS
+  - name: 'INBOUND_ALLOWED_IPS'
     type: 'string'
-  - name: CUSTOMER_KEY_VAULT_NAME
+  - name: 'CUSTOMER_KEY_VAULT_NAME'
     type: 'string'
     default: ''
 
@@ -29,6 +29,7 @@ steps:
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -e
+
         resourceGroupExists=$(az group exists --name $resourceGroupName)
         echo "##vso[task.setvariable variable=resourceGroupExists]$resourceGroupExists"
     displayName: 'Check if Resource Group Exists'

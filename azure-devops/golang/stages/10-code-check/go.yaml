@@ -8,22 +8,8 @@ stages:
         variables:
           GOPATH: "$(Pipeline.Workspace)/.go"
         steps:
-          - task: 'Cache@2'
-            inputs:
-              key: "$(Agent.JobName)|$(Agent.OS)|go.sum"
-              path: "$(GOPATH)"
-            displayName: 'Cache for Go modules'
-            continueOnError: true
-
-          - template: '../../../global/abstracts/scripts-repo.yaml'
-          - script: $(Scripts.Directory)/global/scripts/golang/init/run.sh
-            displayName: 'Load Custom Configuration'
-
-          - task: 'GoTool@0'
-            inputs:
-              version: '1.23.4'
-              architecture: 'amd64'
-              goArguments: 'mod tidy'
+          # $(Scripts.Directory) was already defined in the line below
+          - template: '../../abstracts/go1.23.4.yaml'
 
           # for golangci-lint config merging
           - script: |

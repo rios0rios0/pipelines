@@ -34,9 +34,7 @@ stages:
       - job: 'report_dependency_track'
         displayName: 'report:dependency-track'
         continueOnError: true
-        # TODO: this is being repeated all over the place
         variables:
-          PREFIX: ''
           REPORT_PATH: 'build/reports'
         steps:
           - template: '../../abstracts/corepack-node18.19.0.yaml'

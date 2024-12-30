@@ -6,4 +6,4 @@ stages:
       - template: '../../../global/stages/20-security/docker.yaml'
         parameters:
           SEMGREP_LANGUAGE: 'javascript'
-      # TODO: another Javascript security job
+      # TODO: another JavaScript security job

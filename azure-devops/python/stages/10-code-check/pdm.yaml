@@ -1,4 +1,4 @@
-# TODO: needs to be reviewed to use same configuration accross jobs via templates or other implementation
+# TODO: needs to be reviewed to use same configuration across jobs via templates or other implementation
 stages:
   - stage: 'code_check'
     displayName: 'Code Check (Style/Quality)'

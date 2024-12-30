@@ -7,4 +7,8 @@ if [ -z "$SCRIPTS_DIR" ]; then
 fi
 
 INIT_SCRIPT="config.sh"
-[[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file was not found, skipping..."
+if [ -f "$INIT_SCRIPT" ]; then
+  . ./"$INIT_SCRIPT"
+else
+  echo "The '$INIT_SCRIPT' file was not found, skipping..."
+fi

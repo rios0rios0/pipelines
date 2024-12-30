@@ -15,11 +15,8 @@ stages:
             displayName: 'Cache for Go modules'
             continueOnError: true
 
-          # TODO: this should be a share script between the vendors
-          - script: |
-              set -e
-              INIT_SCRIPT="config.sh"
-              [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file was not found, skipping..."
+          - template: '../../../global/abstracts/scripts-repo.yaml'
+          - script: $(Scripts.Directory)/global/scripts/golang/init/run.sh
             displayName: 'Load Custom Configuration'
 
           - task: 'GoTool@0'
@@ -28,7 +25,6 @@ stages:
               architecture: 'amd64'
               goArguments: 'mod tidy'
 
-          - template: '../../../global/abstracts/scripts-repo.yaml'
           - script: $(Scripts.Directory)/global/scripts/golang/test/run.sh
             displayName: 'Run Tests'
 

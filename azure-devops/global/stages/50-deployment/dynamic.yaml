@@ -1,9 +1,27 @@
 parameters:
-  - name: 'RESOURCE_GROUP_NAME'
+  - name: 'PIPELINE_FIREWALL_NAME'
+    type: 'string'
+  - name: 'GROUP_NAME'
+    type: 'string'
+  - name: ENVIRONMENT
+    type: 'string'
+  - name: AZM_SERVICE_CONNECTION
+    type: 'string'
+  - name: AZM_LOCATION
+    type: 'string'
+  - name: AZM_FUNCTION_NAME
+    type: 'string'
+  - name: INBOUND_ALLOWED_IPS
+    type: 'string'
+  - name: CUSTOMER_KEY_VAULT_NAME
     type: 'string'
     default: ''
 
 steps:
+  - script: |
+      resourceGroupName="${ENVIRONMENT}-rg-${GROUP_NAME}-${AZM_LOCATION}"
+      echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
+    displayName: 'Set resourceGroupName'
   - task: 'AzureCLI@2'
     inputs:
       azureSubscription: "$(AZM_SERVICE_CONNECTION)"
@@ -11,8 +29,6 @@ steps:
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -e
-        resourceGroupName=$(ENVIRONMENT)-rg-$(RESOURCE_GROUP_NAME)-$(AZM_LOCATION)
-        echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
         resourceGroupExists=$(az group exists --name $resourceGroupName)
         echo "##vso[task.setvariable variable=resourceGroupExists]$resourceGroupExists"
     displayName: 'Check if Resource Group Exists'
@@ -45,4 +61,9 @@ steps:
     displayName: 'Update Resource Group'
     condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'), eq(variables['CUSTOMER_KEY_VAULT_NAME'], ''))
 
-  - template: '../../../global/stages/50-deployment/deploy-az-function.yaml'
+  - template: '../../../global/abstracts/deploy-az-function.yaml'
+    parameters:
+      RESOURCE_GROUP_NAME: $(resourceGroupName)
+      PIPELINE_FIREWALL_NAME: $(PIPELINE_FIREWALL_NAME)
+      ENVIRONMENT: $(ENVIRONMENT)
+      AZM_SERVICE_CONNECTION: $(AZM_SERVICE_CONNECTION)

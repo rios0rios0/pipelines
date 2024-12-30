@@ -1,3 +1,13 @@
+parameters:
+  - name: 'PIPELINE_FIREWALL_NAME'
+    type: 'string'
+  - name: 'RESOURCE_GROUP_NAME'
+    type: 'string'
+  - name: ENVIRONMENT
+    type: 'string'
+  - name: AZM_SERVICE_CONNECTION
+    type: 'string'
+
 steps:
   - task: 'AzureCLI@2'
     displayName: 'Check if Database Exists'
@@ -12,7 +22,7 @@ steps:
           echo "##vso[task.setvariable variable=DB_EXISTS]false"
           exit 0
         fi
-        dbExists=$(az postgres flexible-server show --resource-group "$(resourceGroupName)" --name "$DATABASE_SERVER_NAME" --query "name" --output tsv 2>/dev/null || echo "null")
+        dbExists=$(az postgres flexible-server show --resource-group "$(RESOURCE_GROUP_NAME)" --name "$DATABASE_SERVER_NAME" --query "name" --output tsv 2>/dev/null || echo "null")
         if [[ "$dbExists" != "null" ]]; then
           echo "##vso[task.setvariable variable=DB_EXISTS]true"
         else
@@ -33,7 +43,7 @@ steps:
 
         PIPELINE_IP=$(curl -s ifconfig.me/ip)
         az postgres flexible-server firewall-rule create \
-            --resource-group "$(resourceGroupName)" \
+            --resource-group "$(RESOURCE_GROUP_NAME)" \
             --name "$DATABASE_SERVER_NAME" \
             --rule-name "$(PIPELINE_FIREWALL_NAME)" \
             --start-ip-address "$PIPELINE_IP"
@@ -60,6 +70,7 @@ steps:
     displayName: 'Set Goose Table Hash variable'
     condition: and(succeeded(), eq(variables['DB_EXISTS'], 'true'))
     continueOnError: true
+
   - task: 'Cache@2'
     displayName: 'Cache for Migrations'
     condition: and(succeeded(), eq(variables['DB_EXISTS'], 'true'))
@@ -131,6 +142,6 @@ steps:
         DATABASE_SERVER_NAME=$(echo $OUTPUTS | jq -r '.databaseServerName.value')
         PIPELINE_IP=$(curl -s ifconfig.me/ip)
         az postgres flexible-server firewall-rule delete --yes \
-          --resource-group "$(resourceGroupName)" \
+          --resource-group "$(RESOURCE_GROUP_NAME)" \
           --name "$DATABASE_SERVER_NAME" \
           --rule-name "$(PIPELINE_FIREWALL_NAME)"

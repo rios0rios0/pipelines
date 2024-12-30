@@ -35,5 +35,5 @@ stages:
 
           # TODO: duplicated code with GitLab pipelines
           - template: '../../../global/abstracts/scripts-repo.yaml'
-          - script: $(Scripts.Directory)/global/golang/cyclonedx/run.sh
+          - script: $(Scripts.Directory)/global/scripts/golang/cyclonedx/run.sh
           - script: $(Scripts.Directory)/global/scripts/dependency-track/run.sh

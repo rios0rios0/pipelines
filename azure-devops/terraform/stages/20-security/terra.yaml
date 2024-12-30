@@ -5,5 +5,4 @@ stages:
     jobs:
       - template: '../../../global/stages/20-security/docker.yaml'
         parameters:
-          SEMGREP_LANGUAGE: 'python'
-      # TODO: another JavaScript security job
+          SEMGREP_LANGUAGE: 'terraform'

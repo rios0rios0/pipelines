@@ -1,6 +1,6 @@
-stages:
+steps:
   # $(Scripts.Directory) was already defined in the line below
-  - template: 'abstracts/go1.23.4.yaml'
+  - template: 'go1.23.4.yaml'
 
   - task: 'Cache@2'
     inputs:

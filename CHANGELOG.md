@@ -19,6 +19,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Changed
 
 - changed GitLeaks inside Azure DevOps to clone full repository instead of just shallow clone
+- changed the dynamic deploy to `PublishPipelineArtifact` the files to deploy the Azure Function
 
 ## [2.1.0] - 2024-12-27
 

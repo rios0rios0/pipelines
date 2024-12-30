@@ -32,7 +32,6 @@ stages:
               INIT_SCRIPT="config.sh"
               [[ -f $INIT_SCRIPT ]] && . ./$INIT_SCRIPT || echo "The '$INIT_SCRIPT' file was not found, skipping..."
             displayName: 'Load Custom Configuration'
-
           - task: 'GoTool@0'
             inputs:
               version: '1.23.4'
@@ -41,15 +40,12 @@ stages:
 
           - script: |
               set -e
-
               mkdir -p $(MIGRATIONS_CACHE)
               mkdir -p $(SEEDERS_CACHE)
               mkdir -p $(AZURE_DEPLOY_CACHE)
             displayName: 'Setup Cache'
-
           - script: |
               set -e
-
               export CGO_ENABLED=0
               export BUILD_FLAGS="-ldflags='-w -s'"
               mkdir ./bin && go build -o ./bin -v ./...
@@ -73,6 +69,25 @@ stages:
               replaceExistingArchive: true
             displayName: 'Archive Build Output'
 
-          - template: '../../../global/stages/50-deployment/fixed.yaml'
+          - task: 'CopyFiles@2'
+            inputs:
+              Contents: |
+                azuredeploy.json
+              TargetFolder: "$(Build.SourcesDirectory)/build/templates"
+            displayName: 'Copy azuredeploy.json'
+
+          - task: 'PublishPipelineArtifact@1'
+            inputs:
+              targetPath: '$(Build.SourcesDirectory)/build/templates/azuredeploy.json'
+              artifactName: 'AzureDeployFile'
+              publishLocation: 'pipeline'
+            displayName: 'Publish azuredeploy.json Artifact'
+
+          - task: 'PublishPipelineArtifact@1'
+            inputs:
+              targetPath: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+              artifactName: 'BuildArtifact'
+              publishLocation: 'pipeline'
+            displayName: 'Publish ZIP Artifact'
 
       - template: '../../../global/stages/40-delivery/release.yaml'

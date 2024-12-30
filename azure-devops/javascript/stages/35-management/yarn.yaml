@@ -12,24 +12,7 @@ stages:
             fetchDepth: 0
             fetchTags: true
 
-          # TODO: duplicated code 3 times, 2 here and another at clone-and-move-opensearch-dashboards.yaml
-          - task: 'UseNode@1'
-            inputs:
-              version: '18.19.0'
-            displayName: 'Use Node.js 18.19.0'
-
-          - script: |
-              corepack enable
-              corepack prepare yarn@stable --activate
-            displayName: 'Install Yarn'
-
-          - task: 'Cache@2'
-            inputs:
-              key: "$(Agent.JobName)|yarn.lock"
-              path: 'node_modules'
-            displayName: 'Cache for "node_modules"'
-            continueOnError: true
-          # TODO: duplicated code 3 times, 2 here and another at clone-and-move-opensearch-dashboards.yaml
+          - template: '../../abstracts/corepack-node18.19.0.yaml'
 
           - task: 'Cache@2'
             inputs:
@@ -56,27 +39,9 @@ stages:
           PREFIX: ''
           REPORT_PATH: 'build/reports'
         steps:
-          # TODO: duplicated code 3 times, 2 here and another at clone-and-move-opensearch-dashboards.yaml
-          - task: 'UseNode@1'
-            inputs:
-              version: '18.19.0'
-            displayName: 'Use Node.js 18.19.0'
+          - template: '../../abstracts/corepack-node18.19.0.yaml'
 
-          - script: |
-              corepack enable
-              corepack prepare yarn@stable --activate
-            displayName: 'Install Yarn'
-
-          - task: 'Cache@2'
-            inputs:
-              key: "$(Agent.JobName)|yarn.lock"
-              path: 'node_modules'
-            displayName: 'Cache for "node_modules"'
-            continueOnError: true
-          # TODO: duplicated code 3 times, 2 here and another at clone-and-move-opensearch-dashboards.yaml
-
-          - script: |
-              yarn && yarn sbom
+          - script: yarn && yarn sbom
 
           - template: '../../../global/abstracts/scripts-repo.yaml'
           - script: $(Scripts.Directory)/global/scripts/dependency-track/run.sh

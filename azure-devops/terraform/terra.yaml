@@ -1,0 +1,5 @@
+stages:
+  - template: 'stages/10-code-check/terra.yaml'
+  #- template: 'stages/20-security/terra.yaml'
+  #- template: 'stages/35-management/terra.yaml'
+  #- template: 'stages/40-delivery/terra.yaml'

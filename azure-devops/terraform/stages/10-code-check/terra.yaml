@@ -1,0 +1,25 @@
+stages:
+  - stage: 'code_check'
+    displayName: 'code check (style/quality)'
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    jobs:
+      - job: 'style_terraform_fmt'
+        displayName: 'style:terraform-fmt'
+        steps:
+          - task: 'TerraformInstaller@1'
+            inputs:
+              terraformVersion: '1.9.3'
+            displayName: 'Install Terraform'
+
+          - script: terraform fmt -recursive -check
+            displayName: 'Run Terraform format check'
+
+          - script: |
+              curl -L -o terragrunt $(curl -s https://api.github.com/repos/gruntwork-io/terragrunt/releases/latest \
+                | grep "browser_download_url.*terragrunt_linux_amd64" | cut -d '"' -f 4) -o terragrunt
+              chmod +x terragrunt
+              ./terragrunt --version
+            displayName: 'Install Terragrunt'
+
+          - script: ./terragrunt hclfmt --terragrunt-check **/*.hcl
+            displayName: 'Run Terragrunt HCL format check'

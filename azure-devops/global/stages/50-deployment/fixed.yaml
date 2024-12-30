@@ -1,15 +1,15 @@
 parameters:
-  - name: PIPELINE_FIREWALL_NAME
+  - name: 'PIPELINE_FIREWALL_NAME'
     type: 'string'
-  - name: AZM_FUNCTION_NAME
+  - name: 'AZM_FUNCTION_NAME'
     type: 'string'
-  - name: AZM_LOCATION
+  - name: 'AZM_LOCATION'
     type: 'string'
-  - name: AZM_SERVICE_CONNECTION
+  - name: 'AZM_SERVICE_CONNECTION'
     type: 'string'
-  - name: ENVIRONMENT
+  - name: 'ENVIRONMENT'
     type: 'string'
-  - name: INBOUND_ALLOWED_IPS
+  - name: 'INBOUND_ALLOWED_IPS'
     type: 'string'
 
 steps:
@@ -20,6 +20,7 @@ steps:
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -e
+
         resourceGroupName=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
         echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
         resourceGroupExists=$(az group exists --name $resourceGroupName)
@@ -43,7 +44,6 @@ steps:
         echo "##vso[task.setvariable variable=outboundIpAddresses]$outboundIpAddresses"
     displayName: 'Getting Function Outbound IP Addresses'
 
-  # TODO: this should be the deployment stage
   - task: 'AzureResourceGroupDeployment@2'
     inputs:
       location: "$(AZM_LOCATION)"

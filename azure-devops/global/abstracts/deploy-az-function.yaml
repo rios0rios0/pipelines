@@ -1,85 +1,81 @@
 parameters:
-  - name: 'PIPELINE_FIREWALL_NAME'
+  - name: PIPELINE_FIREWALL_NAME
     type: 'string'
-  - name: 'RESOURCE_GROUP_NAME'
+  - name: RESOURCE_GROUP_NAME
     type: 'string'
   - name: ENVIRONMENT
     type: 'string'
   - name: AZM_SERVICE_CONNECTION
     type: 'string'
+  - name: AZURE_DEPLOY_OUTPUTS
+    type: 'object'
+  - name: MIGRATIONS_CACHE
+    type: 'string'
+  - name: SEEDERS_CACHE
+    type: 'string'
 
 steps:
-  - task: 'AzureCLI@2'
-    inputs:
-      azureSubscription: "$(AZM_SERVICE_CONNECTION)"
-      scriptType: 'bash'
-      scriptLocation: 'inlineScript'
-      inlineScript: |
-        set -e
-        echo $AZURE_DEPLOY_OUTPUTS > $(AZURE_DEPLOY_CACHE)/outputs.json
-    displayName: 'Save Deployment Outputs to File'
-    condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
-
-  - task: 'AzureCLI@2'
-    inputs:
-      azureSubscription: "$(AZM_SERVICE_CONNECTION)"
-      scriptType: 'bash'
-      scriptLocation: 'inlineScript'
-      inlineScript: |
-        set -e
-        outputs=$(cat $(AZURE_DEPLOY_CACHE)/outputs.json)
-        echo "##vso[task.setvariable variable=OUTPUTS]$outputs"
-    displayName: 'Read Outputs from file'
+  - script: |
+      set -e
+      echo "Environment Variable: $RESOURCE_GROUP_NAME"
+    displayName: 'Print resourceGroupName'
+    env:
+      RESOURCE_GROUP_NAME: ${{ parameters.RESOURCE_GROUP_NAME }}
 
   - template: './database.yaml'
     parameters:
-      PIPELINE_FIREWALL_NAME: $(PIPELINE_FIREWALL_NAME)
-      RESOURCE_GROUP_NAME: $(RESOURCE_GROUP_NAME)
-      ENVIRONMENT: $(ENVIRONMENT)
-      AZM_SERVICE_CONNECTION: $(AZM_SERVICE_CONNECTION)
+      PIPELINE_FIREWALL_NAME: ${{ parameters.PIPELINE_FIREWALL_NAME }}
+      RESOURCE_GROUP_NAME: ${{ parameters.RESOURCE_GROUP_NAME }}
+      ENVIRONMENT: ${{ parameters.ENVIRONMENT }}
+      AZM_SERVICE_CONNECTION: ${{ parameters.AZM_SERVICE_CONNECTION }}
+      OUTPUTS: ${{ parameters.AZURE_DEPLOY_OUTPUTS }}
+      MIGRATIONS_CACHE: ${{ parameters.MIGRATIONS_CACHE }}
+      SEEDERS_CACHE: ${{ parameters.SEEDERS_CACHE }}
 
   - script: |
-      siteName=$(echo $OUTPUTS | jq -r '.siteName.value')
+      set -e
+      siteName=$(echo '${{ parameters.AZURE_DEPLOY_OUTPUTS }}' | jq -r '.siteName.value')
       echo "##vso[task.setvariable variable=siteName]$siteName"
     displayName: 'Getting Pipeline Variables'
-  - task: 'AzureCLI@2'
-    inputs:
-      azureSubscription: "$(AZM_SERVICE_CONNECTION)"
-      scriptType: 'bash'
-      scriptLocation: 'inlineScript'
-      inlineScript: |
-        set -e
-        SETTINGS=""
-        for var in $(compgen -e); do
-          if [[ $var == REPLACE_* ]]; then
-            if [[ -z ${!var} ]]; then
-              echo "Warning: $var isn't defined"
-            else
-              setting_name=${var#REPLACE_}
-              SETTINGS+="$setting_name=${!var} "
-            fi
-          fi
-        done
-        if [[ -z $SETTINGS ]]; then
-          echo "Warning: There are no environment variables to update"
-        else
-          az functionapp config appsettings set \
-            --name "$(siteName)" \
-            --resource-group "$(RESOURCE_GROUP_NAME)" \
-            --settings $SETTINGS
-        fi
-    displayName: 'Replace Azure Function Variables'
 
-  - task: 'AzureCLI@2'
-    displayName: 'Publish Function'
-    inputs:
-      azureSubscription: "$(AZM_SERVICE_CONNECTION)"
-      scriptType: 'bash'
-      scriptLocation: 'inlineScript'
-      inlineScript: |
-        set -e
-        az functionapp deployment source config-zip \
-          --name "$(siteName)" \
-          --resource-group "$(RESOURCE_GROUP_NAME)" \
-          --src "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
-    retryCountOnTaskFailure: 3
+  # - task: 'AzureCLI@2'
+  #   inputs:
+  #     azureSubscription: ${{ parameters.AZM_SERVICE_CONNECTION }}
+  #     scriptType: 'bash'
+  #     scriptLocation: 'inlineScript'
+  #     inlineScript: |
+  #       set -e
+  #       SETTINGS=""
+  #       for var in $(compgen -e); do
+  #         if [[ $var == REPLACE_* ]]; then
+  #           if [[ -z ${!var} ]]; then
+  #             echo "Warning: $var isn't defined"
+  #           else
+  #             setting_name=${var#REPLACE_}
+  #             SETTINGS+="$setting_name=${!var} "
+  #           fi
+  #         fi
+  #       done
+  #       if [[ -z $SETTINGS ]]; then
+  #         echo "Warning: There are no environment variables to update"
+  #       else
+  #         az functionapp config appsettings set \
+  #           --name "$(siteName)" \
+  #           --resource-group "${{ parameters.RESOURCE_GROUP_NAME }}" \
+  #           --settings $SETTINGS
+  #       fi
+  #   displayName: 'Replace Azure Function Variables'
+
+  # - task: 'AzureCLI@2'
+  #   displayName: 'Publish Function'
+  #   inputs:
+  #     azureSubscription: ${{ parameters.AZM_SERVICE_CONNECTION }}
+  #     scriptType: 'bash'
+  #     scriptLocation: 'inlineScript'
+  #     inlineScript: |
+  #       set -e
+  #       az functionapp deployment source config-zip \
+  #         --name "$(siteName)" \
+  #         --resource-group "${{ parameters.RESOURCE_GROUP_NAME }}" \
+  #         --src "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
+  #   retryCountOnTaskFailure: 3

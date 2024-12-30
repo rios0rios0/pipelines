@@ -1,18 +1,47 @@
 parameters:
-  - name: 'PIPELINE_FIREWALL_NAME'
+  - name: PIPELINE_FIREWALL_NAME
     type: 'string'
-  - name: 'AZM_FUNCTION_NAME'
+  - name: AZM_FUNCTION_NAME
     type: 'string'
-  - name: 'AZM_LOCATION'
+  - name: AZM_LOCATION
     type: 'string'
-  - name: 'AZM_SERVICE_CONNECTION'
+  - name: AZM_SERVICE_CONNECTION
     type: 'string'
-  - name: 'ENVIRONMENT'
+  - name: ENVIRONMENT
     type: 'string'
-  - name: 'INBOUND_ALLOWED_IPS'
+  - name: INBOUND_ALLOWED_IPS
     type: 'string'
+  - name: AZURE_DEPLOY_CACHE
+    type: 'string'
+  - name: MIGRATIONS_CACHE
+    type: 'string'
+  - name: SEEDERS_CACHE
+    type: 'string'
+  - name: resourceGroupName
+    type: string
 
 steps:
+  - script: |
+      set -e
+
+      mkdir -p $(MIGRATIONS_CACHE)
+      mkdir -p $(SEEDERS_CACHE)
+      mkdir -p $(AZURE_DEPLOY_CACHE)
+    displayName: 'Setup Cache'
+
+  - task: 'Cache@2'
+    inputs:
+      key: "$(Agent.JobName)|$(ENVIRONMENT)|$(AZM_FUNCTION_NAME)|$(AZM_LOCATION)|azuredeploy.json"
+      path: "$(AZURE_DEPLOY_CACHE)"
+      cacheHitVar: 'AZURE_DEPLOY_CACHE_HIT'
+    displayName: 'Cache for Resources Deployment in Azure'
+
+  # - script: |
+  #     set -e
+  #     resourceGroupName=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
+  #     echo "##vso[task.setvariable variable=resourceGroupName;isOutput=true]$resourceGroupName"
+  #   displayName: 'Set resourceGroupName'
+
   - task: 'AzureCLI@2'
     inputs:
       azureSubscription: "$(AZM_SERVICE_CONNECTION)"
@@ -21,9 +50,21 @@ steps:
       inlineScript: |
         set -e
 
-        resourceGroupName=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
-        echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
-        resourceGroupExists=$(az group exists --name $resourceGroupName)
+        echo "The value of resourceGroupName is: ${{ parameters.resourceGroupName }}"
+        
+        resourceGroupExists=$(az group exists --name ${{ parameters.resourceGroupName }})
+        echo "##vso[task.setvariable variable=resourceGroupExists]$resourceGroupExists"
+    displayName: 'Check if Resource Group Exists'
+
+  - task: 'AzureCLI@2'
+    inputs:
+      azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        set -e
+
+        resourceGroupExists=$(az group exists --name ${{ parameters.resourceGroupName }})
         echo "##vso[task.setvariable variable=resourceGroupExists]$resourceGroupExists"
     displayName: 'Check if Resource Group Exists'
 
@@ -36,9 +77,9 @@ steps:
         set -e
         outboundIpAddresses="''"
         if [ "$resourceGroupExists" = true ]; then
-          functionAppName=$(az functionapp list --resource-group $resourceGroupName --query "[].name" --output tsv | tail -n 1)
+          functionAppName=$(az functionapp list --resource-group ${{ parameters.resourceGroupName }} --query "[].name" --output tsv | tail -n 1)
           if [ -n "$functionAppName" ]; then
-            outboundIpAddresses=$(az webapp show --resource-group $resourceGroupName --name $functionAppName --query outboundIpAddresses --output tsv)
+            outboundIpAddresses=$(az webapp show --resource-group ${{ parameters.resourceGroupName }} --name $functionAppName --query outboundIpAddresses --output tsv)
           fi
         fi
         echo "##vso[task.setvariable variable=outboundIpAddresses]$outboundIpAddresses"
@@ -49,18 +90,53 @@ steps:
       location: "$(AZM_LOCATION)"
       action: 'Create Or Update Resource Group'
       azureSubscription: "$(AZM_SERVICE_CONNECTION)"
-      resourceGroupName: "$(resourceGroupName)"
+      resourceGroupName: "${{ parameters.resourceGroupName }}"
       csmFile: 'azuredeploy.json'
       overrideParameters: "-location $(AZM_LOCATION) -environment $(ENVIRONMENT) -functionAppName $(AZM_FUNCTION_NAME) -inboundAllowedIps $(INBOUND_ALLOWED_IPS) -oldOutboundIpAddresses $(outboundIpAddresses)"
       templateLocation: 'Linked artifact'
       deploymentMode: 'Incremental'
       deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'
     displayName: 'Deploy Resource Group'
-    condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
+    # condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
+
+  - task: 'AzureCLI@2'
+    inputs:
+      azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        set -e
+        echo $AZURE_DEPLOY_OUTPUTS > $(AZURE_DEPLOY_CACHE)/outputs.json
+    displayName: 'Save Deployment Outputs to File'
+    # condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
+
+  - task: 'AzureCLI@2'
+    inputs:
+      azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        set -e
+        outputs=$(cat $(AZURE_DEPLOY_CACHE)/outputs.json)
+        echo "##vso[task.setvariable variable=OUTPUTS]$outputs"
+    displayName: 'Read Outputs from file'
+
+  # - template: '../../../global/abstracts/deploy-az-function.yaml'
+  #   parameters:
+  #     RESOURCE_GROUP_NAME: $(resourceGroupName)
+  #     PIPELINE_FIREWALL_NAME: $(PIPELINE_FIREWALL_NAME)
+  #     ENVIRONMENT: $(ENVIRONMENT)
+  #     AZM_SERVICE_CONNECTION: $(AZM_SERVICE_CONNECTION)
+  #     AZURE_DEPLOY_OUTPUTS: $(OUTPUTS)
+  #     MIGRATIONS_CACHE: $(MIGRATIONS_CACHE)
+  #     SEEDERS_CACHE: $(SEEDERS_CACHE)
 
   - template: '../../../global/abstracts/deploy-az-function.yaml'
     parameters:
-      RESOURCE_GROUP_NAME: $(resourceGroupName)
-      PIPELINE_FIREWALL_NAME: $(PIPELINE_FIREWALL_NAME)
-      ENVIRONMENT: $(ENVIRONMENT)
-      AZM_SERVICE_CONNECTION: $(AZM_SERVICE_CONNECTION)
+      RESOURCE_GROUP_NAME: ${{ parameters.resourceGroupName }}
+      PIPELINE_FIREWALL_NAME: ${{ parameters.PIPELINE_FIREWALL_NAME }}
+      ENVIRONMENT: ${{ parameters.ENVIRONMENT }}
+      AZM_SERVICE_CONNECTION: ${{ parameters.AZM_SERVICE_CONNECTION }}
+      AZURE_DEPLOY_OUTPUTS: $(OUTPUTS)
+      MIGRATIONS_CACHE: ${{ parameters.MIGRATIONS_CACHE }}
+      SEEDERS_CACHE: ${{ parameters.SEEDERS_CACHE }}

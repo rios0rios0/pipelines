@@ -1,21 +1,29 @@
+parameters:
+  - name: ENVIRONMENT
+    type: 'string'
+  - name: AZM_FUNCTION_NAME
+    type: 'string'
+  - name: AZM_LOCATION
+    type: 'string'
+
 steps:
   # $(Scripts.Directory) was already defined in the line below
   - template: 'go1.23.4.yaml'
 
-  - task: 'Cache@2'
-    inputs:
-      key: "$(Agent.JobName)|$(ENVIRONMENT)|$(AZM_FUNCTION_NAME)|$(AZM_LOCATION)|azuredeploy.json"
-      path: "$(AZURE_DEPLOY_CACHE)"
-      cacheHitVar: 'AZURE_DEPLOY_CACHE_HIT'
-    displayName: 'Cache for Resources Deployment in Azure'
+  # - task: 'Cache@2'
+  #   inputs:
+  #     key: "$(Agent.JobName)|$(ENVIRONMENT)|$(AZM_FUNCTION_NAME)|$(AZM_LOCATION)|azuredeploy.json"
+  #     path: "$(AZURE_DEPLOY_CACHE)"
+  #     cacheHitVar: 'AZURE_DEPLOY_CACHE_HIT'
+  #   displayName: 'Cache for Resources Deployment in Azure'
 
-  - script: |
-      set -e
+  # - script: |
+  #     set -e
 
-      mkdir -p $(MIGRATIONS_CACHE)
-      mkdir -p $(SEEDERS_CACHE)
-      mkdir -p $(AZURE_DEPLOY_CACHE)
-    displayName: 'Setup Cache'
+  #     mkdir -p $(MIGRATIONS_CACHE)
+  #     mkdir -p $(SEEDERS_CACHE)
+  #     mkdir -p $(AZURE_DEPLOY_CACHE)
+  #   displayName: 'Setup Cache'
 
   - script: |
       set -e

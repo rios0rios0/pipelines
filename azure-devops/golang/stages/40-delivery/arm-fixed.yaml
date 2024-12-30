@@ -1,7 +1,7 @@
 stages:
   - stage: 'delivery'
     displayName: 'delivery'
-    condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
+    # condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
     jobs:
       - job: 'delivery'
         displayName: 'delivery'
@@ -13,5 +13,9 @@ stages:
           PIPELINE_FIREWALL_NAME: 'PipelineFirewall_$(date +"%Y%m%d%H%M%S")'
         steps:
           - template: '../../abstracts/arm.yaml'
+            parameters:
+              AZM_FUNCTION_NAME: '$(AZM_FUNCTION_NAME)'
+              AZM_LOCATION: '$(AZM_LOCATION)'
+              ENVIRONMENT: '$(ENVIRONMENT)'
 
       - template: '../../../global/stages/40-delivery/release.yaml'

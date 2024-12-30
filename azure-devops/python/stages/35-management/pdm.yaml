@@ -9,11 +9,11 @@ stages:
         displayName: 'report:dependency-track'
         variables:
           REPORT_PATH: 'build/reports'
-          GOPATH: "$(Pipeline.Workspace)/.go"
         steps:
           # $(Scripts.Directory) was already defined in the line below
-          - template: '../../abstracts/go1.23.4.yaml'
+          - template: '../../abstracts/pdm-python3.10.yaml'
 
-          - script: $(Scripts.Directory)/global/scripts/golang/cyclonedx/run.sh
+          - script: pdm run sbom
+
           - script: $(Scripts.Directory)/global/scripts/dependency-track/run.sh
         continueOnError: true

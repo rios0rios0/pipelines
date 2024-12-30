@@ -11,7 +11,7 @@ stages:
               terraformVersion: '1.9.3'
             displayName: 'Install Terraform'
 
-          - script: terraform fmt -recursive -check
+          - script: terraform fmt -check -recursive
             displayName: 'Run Terraform format check'
 
           - script: |

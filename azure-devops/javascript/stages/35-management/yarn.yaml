@@ -33,7 +33,6 @@ stages:
 
       - job: 'report_dependency_track'
         displayName: 'report:dependency-track'
-        continueOnError: true
         variables:
           REPORT_PATH: 'build/reports'
         steps:
@@ -43,3 +42,4 @@ stages:
 
           - template: '../../../global/abstracts/scripts-repo.yaml'
           - script: $(Scripts.Directory)/global/scripts/dependency-track/run.sh
+        continueOnError: true

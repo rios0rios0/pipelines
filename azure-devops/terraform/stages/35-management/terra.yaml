@@ -11,7 +11,8 @@ stages:
           REPORT_PATH: 'build/reports'
         steps:
           # $(Scripts.Directory) was already defined in the line below
-          - template: '../../abstracts/go1.23.4.yaml'
-
+          - template: '../../abstracts/terra-terraform1.9.3.yaml'
+          # TODO: see https://www.reddit.com/r/Terraform/comments/1g9go7p/what_do_you_use_to_generate_sbom_for_terraform/
+          - script: echo "missing Cyclonedx for Terraform"
           - script: $(Scripts.Directory)/global/scripts/dependency-track/run.sh
         continueOnError: true

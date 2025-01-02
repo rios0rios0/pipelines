@@ -6,3 +6,4 @@ stages:
       - template: '../../../global/stages/20-security/docker.yaml'
         parameters:
           SEMGREP_LANGUAGE: 'terraform'
+      # TODO: another Terraform security job (TFSec and Checkov are already in the global Docker job)

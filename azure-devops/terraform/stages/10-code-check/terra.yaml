@@ -6,20 +6,17 @@ stages:
       - job: 'style_terraform_fmt'
         displayName: 'style:terraform-fmt'
         steps:
-          - task: 'TerraformInstaller@1'
-            inputs:
-              terraformVersion: '1.9.3'
-            displayName: 'Install Terraform'
+          # $(Scripts.Directory) was already defined in the line below
+          - template: '../../abstracts/terra-terraform1.9.3.yaml'
 
           - script: terraform fmt -check -recursive
             displayName: 'Run Terraform format check'
 
-          - script: |
-              curl -L -o terragrunt $(curl -s https://api.github.com/repos/gruntwork-io/terragrunt/releases/latest \
-                | grep "browser_download_url.*terragrunt_linux_amd64" | cut -d '"' -f 4) -o terragrunt
-              chmod +x terragrunt
-              ./terragrunt --version
-            displayName: 'Install Terragrunt'
-
           - script: ./terragrunt hclfmt --terragrunt-check **/*.hcl
             displayName: 'Run Terragrunt HCL format check'
+
+          - script: curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+            displayName: 'Install TFLint'
+
+          - script: tflint --chdir . --recursive
+            displayName: 'Run TFLint'

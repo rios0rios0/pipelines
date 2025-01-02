@@ -13,15 +13,14 @@ parameters:
     type: 'string'
   - name: SEEDERS_CACHE
     type: 'string'
+  # - name: CONNECTION_STRING
+  #   type: 'string'
+  #   default: ''
+  # - name: DATABASE_SERVER_NAME
+  #   type: 'string'
+  #   default: ''
 
 steps:
-  - script: |
-      set -e
-      echo "Environment Variable: $RESOURCE_GROUP_NAME"
-    displayName: 'Print resourceGroupName'
-    env:
-      RESOURCE_GROUP_NAME: ${{ parameters.RESOURCE_GROUP_NAME }}
-
   - template: './database.yaml'
     parameters:
       PIPELINE_FIREWALL_NAME: ${{ parameters.PIPELINE_FIREWALL_NAME }}
@@ -31,12 +30,16 @@ steps:
       OUTPUTS: ${{ parameters.AZURE_DEPLOY_OUTPUTS }}
       MIGRATIONS_CACHE: ${{ parameters.MIGRATIONS_CACHE }}
       SEEDERS_CACHE: ${{ parameters.SEEDERS_CACHE }}
+      # CONNECTION_STRING: ${{ parameters.CONNECTION_STRING }}
+      # DATABASE_SERVER_NAME: ${{ parameters.DATABASE_SERVER_NAME }}
 
   - script: |
       set -e
-      siteName=$(echo '${{ parameters.AZURE_DEPLOY_OUTPUTS }}' | jq -r '.siteName.value')
+      siteName=$(echo $AZURE_DEPLOY_OUTPUTS | jq -r '.siteName.value')
       echo "##vso[task.setvariable variable=siteName]$siteName"
     displayName: 'Getting Pipeline Variables'
+    env:
+      AZURE_DEPLOY_OUTPUTS: ${{ parameters.AZURE_DEPLOY_OUTPUTS }}
 
   # - task: 'AzureCLI@2'
   #   inputs:

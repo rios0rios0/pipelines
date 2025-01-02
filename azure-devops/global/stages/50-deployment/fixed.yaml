@@ -36,26 +36,6 @@ steps:
       cacheHitVar: 'AZURE_DEPLOY_CACHE_HIT'
     displayName: 'Cache for Resources Deployment in Azure'
 
-  # - script: |
-  #     set -e
-  #     resourceGroupName=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
-  #     echo "##vso[task.setvariable variable=resourceGroupName;isOutput=true]$resourceGroupName"
-  #   displayName: 'Set resourceGroupName'
-
-  - task: 'AzureCLI@2'
-    inputs:
-      azureSubscription: "$(AZM_SERVICE_CONNECTION)"
-      scriptType: 'bash'
-      scriptLocation: 'inlineScript'
-      inlineScript: |
-        set -e
-
-        echo "The value of resourceGroupName is: ${{ parameters.resourceGroupName }}"
-        
-        resourceGroupExists=$(az group exists --name ${{ parameters.resourceGroupName }})
-        echo "##vso[task.setvariable variable=resourceGroupExists]$resourceGroupExists"
-    displayName: 'Check if Resource Group Exists'
-
   - task: 'AzureCLI@2'
     inputs:
       azureSubscription: "$(AZM_SERVICE_CONNECTION)"
@@ -99,6 +79,36 @@ steps:
     displayName: 'Deploy Resource Group'
     # condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
 
+  - script: |
+      set -e
+
+      echo "AZURE_DEPLOY_OUTPUTS is: $AZURE_DEPLOY_OUTPUTS"
+    displayName: 'Print AZURE_DEPLOY_OUTPUTS'
+
+  # - script: |
+  #     set -e
+
+  #     PORT=$(echo $AZURE_DEPLOY_OUTPUTS | jq -r '.databaseServerPort.value')
+  #     HOST=$(echo $AZURE_DEPLOY_OUTPUTS | jq -r '.databaseServerHost.value')
+  #     USER=$(echo $AZURE_DEPLOY_OUTPUTS | jq -r '.databaseServerUsername.value')
+  #     PASSWORD=$(echo $AZURE_DEPLOY_OUTPUTS | jq -r '.databaseServerPassword.value')
+  #     DBNAME=$(echo $AZURE_DEPLOY_OUTPUTS | jq -r '.databaseName.value')
+  #     SSL=$(echo $AZURE_DEPLOY_OUTPUTS | jq -r '.databaseServerSSL.value')
+  #     CONNECTION_STRING="host=$HOST port=$PORT user=$USER password=$PASSWORD dbname=$DBNAME sslmode=$SSL"
+
+  #     DATABASE_SERVER_NAME=$(echo $AZURE_DEPLOY_OUTPUTS | jq -r '.databaseServerName.value')
+
+  #     echo "##vso[task.setvariable variable=CONNECTION_STRING]$CONNECTION_STRING"
+  #     echo "##vso[task.setvariable variable=DATABASE_SERVER_NAME]$DATABASE_SERVER_NAME"
+  #   displayName: 'Extract and Set Variables'
+  #   env:
+  #     AZURE_DEPLOY_OUTPUTS: $(AZURE_DEPLOY_OUTPUTS)
+  
+  # - script: |
+  #     set -e
+  #     printenv
+  #   displayName: 'Print ENV'  
+
   - task: 'AzureCLI@2'
     inputs:
       azureSubscription: "$(AZM_SERVICE_CONNECTION)"
@@ -110,16 +120,38 @@ steps:
     displayName: 'Save Deployment Outputs to File'
     # condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
 
-  - task: 'AzureCLI@2'
-    inputs:
-      azureSubscription: "$(AZM_SERVICE_CONNECTION)"
-      scriptType: 'bash'
-      scriptLocation: 'inlineScript'
-      inlineScript: |
-        set -e
-        outputs=$(cat $(AZURE_DEPLOY_CACHE)/outputs.json)
-        echo "##vso[task.setvariable variable=OUTPUTS]$outputs"
-    displayName: 'Read Outputs from file'
+  # - task: 'AzureCLI@2'
+  #   inputs:
+  #     azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+  #     scriptType: 'bash'
+  #     scriptLocation: 'inlineScript'
+  #     inlineScript: |
+  #       set -e
+  #       outputs=$(cat $(AZURE_DEPLOY_CACHE)/outputs.json)
+  #       echo "##vso[task.setvariable variable=OUTPUTS]$outputs"
+  #   displayName: 'Read Outputs from file'
+
+  # - script: |
+  #     set -e
+
+  #     PORT=$(echo $OUTPUTS | jq -r '.databaseServerPort.value')
+  #     HOST=$(echo $OUTPUTS | jq -r '.databaseServerHost.value')
+  #     USER=$(echo $OUTPUTS | jq -r '.databaseServerUsername.value')
+  #     PASSWORD=$(echo $OUTPUTS | jq -r '.databaseServerPassword.value')
+  #     DBNAME=$(echo $OUTPUTS | jq -r '.databaseName.value')
+  #     SSL=$(echo $OUTPUTS | jq -r '.databaseServerSSL.value')
+  #     CONNECTION_STRING="host=$HOST port=$PORT user=$USER password=$PASSWORD dbname=$DBNAME sslmode=$SSL"
+
+  #     CONNECTION_STRING="host=$HOST port=$PORT user=$USER password=$PASSWORD dbname=$DBNAME sslmode=$SSL"
+
+  #     echo "PORT: $PORT"
+  #     echo "HOST: $HOST"
+  #     echo "USER: $USER"
+  #     echo "PASSWORD: $PASSWORD"
+  #     echo "DBNAME: $DBNAME"
+  #     echo "SSL: $SSL"
+  #     echo "CONNECTION_STRING: $CONNECTION_STRING"
+  #   displayName: 'Print variables'
 
   # - template: '../../../global/abstracts/deploy-az-function.yaml'
   #   parameters:
@@ -137,6 +169,8 @@ steps:
       PIPELINE_FIREWALL_NAME: ${{ parameters.PIPELINE_FIREWALL_NAME }}
       ENVIRONMENT: ${{ parameters.ENVIRONMENT }}
       AZM_SERVICE_CONNECTION: ${{ parameters.AZM_SERVICE_CONNECTION }}
-      AZURE_DEPLOY_OUTPUTS: $(OUTPUTS)
+      AZURE_DEPLOY_OUTPUTS: $(AZURE_DEPLOY_OUTPUTS)
       MIGRATIONS_CACHE: ${{ parameters.MIGRATIONS_CACHE }}
       SEEDERS_CACHE: ${{ parameters.SEEDERS_CACHE }}
+      # CONNECTION_STRING: $(CONNECTION_STRING)
+      # DATABASE_SERVER_NAME: $(DATABASE_SERVER_NAME)

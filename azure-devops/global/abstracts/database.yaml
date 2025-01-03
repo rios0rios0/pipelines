@@ -11,44 +11,47 @@ parameters:
 steps:
   - task: 'AzureCLI@2'
     displayName: 'Check if Database Exists'
+    name: CheckDatabase
     inputs:
       azureSubscription: "$(AZM_SERVICE_CONNECTION)"
       scriptType: 'bash'
       scriptLocation: 'inlineScript'
       inlineScript: |
         DATABASE_SERVER_NAME=$(echo $OUTPUTS | jq -r '.databaseServerName.value')
+        
         if [[ -z "$DATABASE_SERVER_NAME" || "$DATABASE_SERVER_NAME" == "null" ]]; then
           echo "Invalid database server name: $DATABASE_SERVER_NAME"
-          echo "##vso[task.setvariable variable=DB_EXISTS]false"
+          echo "##vso[task.setvariable variable=DB_EXISTS;isOutput=true]false"
           exit 0
         fi
-        dbExists=$(az postgres flexible-server show --resource-group "$(RESOURCE_GROUP_NAME)" --name "$DATABASE_SERVER_NAME" --query "name" --output tsv 2>/dev/null || echo "null")
+        dbExists=$(az postgres flexible-server show --resource-group "$(resourceGroupName)" --name "$DATABASE_SERVER_NAME" --query "name" --output tsv 2>/dev/null || echo "null")
         if [[ "$dbExists" != "null" ]]; then
-          echo "##vso[task.setvariable variable=DB_EXISTS]true"
+          echo "##vso[task.setvariable variable=DB_EXISTS;isOutput=true]true"
         else
-          echo "##vso[task.setvariable variable=DB_EXISTS]false"
+          echo "##vso[task.setvariable variable=DB_EXISTS;isOutput=true]false"
         fi
+
   - task: 'AzureCLI@2'
     displayName: 'Create Flexible Firewall Rule to execute migrations and seeders'
-    condition: and(succeeded(), eq(variables['DB_EXISTS'], 'true'))
+    condition: and(succeeded(), eq(variables['CheckDatabase.DB_EXISTS'], 'true'))
     inputs:
       azureSubscription: "$(AZM_SERVICE_CONNECTION)"
       scriptType: 'bash'
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -e
-        DATABASE_SERVER_NAME=$(echo $OUTPUTS | jq -r '.databaseServerName.value')
 
-        echo $DATABASE_SERVER_NAME
+        DATABASE_SERVER_NAME=$(echo $OUTPUTS | jq -r '.databaseServerName.value')
 
         PIPELINE_IP=$(curl -s ifconfig.me/ip)
         az postgres flexible-server firewall-rule create \
-            --resource-group "$(RESOURCE_GROUP_NAME)" \
+            --resource-group "$(resourceGroupName)" \
             --name "$DATABASE_SERVER_NAME" \
             --rule-name "$(PIPELINE_FIREWALL_NAME)" \
             --start-ip-address "$PIPELINE_IP"
   - script: |
       set -e
+
       PORT=$(echo $OUTPUTS | jq -r '.databaseServerPort.value')
       HOST=$(echo $OUTPUTS | jq -r '.databaseServerHost.value')
       USER=$(echo $OUTPUTS | jq -r '.databaseServerUsername.value')
@@ -59,7 +62,7 @@ steps:
       echo "##vso[task.setvariable variable=CONNECTION_STRING]$CONNECTION_STRING"
       echo $CONNECTION_STRING
     displayName: 'Set Database Connection String'
-    condition: and(succeeded(), eq(variables['DB_EXISTS'], 'true'))
+    condition: and(succeeded(), eq(variables['CheckDatabase.DB_EXISTS'], 'true'))
   - script: |
       set -e
       table_hash=$(psql "$(CONNECTION_STRING)" -t -c \
@@ -68,12 +71,12 @@ steps:
       echo "table_hash: $table_hash"
       echo "##vso[task.setvariable variable=GOOSE_TABLE_HASH]$table_hash"
     displayName: 'Set Goose Table Hash variable'
-    condition: and(succeeded(), eq(variables['DB_EXISTS'], 'true'))
+    condition: and(succeeded(), eq(variables['CheckDatabase.DB_EXISTS'], 'true'))
     continueOnError: true
 
   - task: 'Cache@2'
     displayName: 'Cache for Migrations'
-    condition: and(succeeded(), eq(variables['DB_EXISTS'], 'true'))
+    condition: and(succeeded(), eq(variables['CheckDatabase.DB_EXISTS'], 'true'))
     inputs:
       key: "$(Agent.JobName)|$(ENVIRONMENT)|$(GOOSE_TABLE_HASH)|db/migrations/*.sql"
       path: "$(MIGRATIONS_CACHE)"
@@ -82,7 +85,7 @@ steps:
 
   - task: 'Cache@2'
     displayName: 'Cache for Seeders'
-    condition: and(succeeded(), eq(variables['DB_EXISTS'], 'true'))
+    condition: and(succeeded(), eq(variables['CheckDatabase.DB_EXISTS'], 'true'))
     inputs:
       key: "$(Agent.JobName)|$(ENVIRONMENT)|$(GOOSE_TABLE_HASH)|db/seeders/*.sql"
       path: "$(SEEDERS_CACHE)"
@@ -104,7 +107,7 @@ steps:
         else
           echo "No Goose migration files found. Skipping Goose installation and migration."
         fi
-      displayName: 'Execute Migrations'
+    displayName: 'Execute Migrations'
 
   - task: 'AzureCLI@2'
     inputs:
@@ -128,11 +131,11 @@ steps:
         else
             echo "No Goose seed files found. Skipping seed"
         fi
-      displayName: 'Execute Seeders'
+    displayName: 'Execute Seeders'
 
   - task: 'AzureCLI@2'
     displayName: 'Delete Flexible Firewall Rule to execute migrations and seeders'
-    condition: and(succeeded(), eq(variables['DB_EXISTS'], 'true'))
+    condition: and(succeeded(), eq(variables['CheckDatabase.DB_EXISTS'], 'true'))
     inputs:
       azureSubscription: "$(AZM_SERVICE_CONNECTION)"
       scriptType: 'bash'
@@ -142,6 +145,6 @@ steps:
         DATABASE_SERVER_NAME=$(echo $OUTPUTS | jq -r '.databaseServerName.value')
         PIPELINE_IP=$(curl -s ifconfig.me/ip)
         az postgres flexible-server firewall-rule delete --yes \
-          --resource-group "$(RESOURCE_GROUP_NAME)" \
+          --resource-group "$(resourceGroupName)" \
           --name "$DATABASE_SERVER_NAME" \
           --rule-name "$(PIPELINE_FIREWALL_NAME)"

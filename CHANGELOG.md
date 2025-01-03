@@ -26,6 +26,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed GitLeaks inside Azure DevOps to clone full repository instead of just shallow clone
 - changed the dynamic deploy to `PublishPipelineArtifact` the files to deploy the Azure Function
 
+### Fixed
+
+- fixed golang pipeline to work with dynamic deploy
+
 ## [2.1.0] - 2024-12-27
 
 ### Added

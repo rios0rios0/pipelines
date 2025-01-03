@@ -10,6 +10,11 @@ steps:
     displayName: 'Cache for Resources Deployment in Azure'
 
   - script: |
+      echo "##vso[task.setvariable variable=AZURE_DEPLOY_CACHE_HIT;isOutput=true]$(AZURE_DEPLOY_CACHE_HIT)"
+    displayName: 'Set Cache Hit Variable'
+    name: cacheStep
+
+  - script: |
       set -e
 
       mkdir -p $(MIGRATIONS_CACHE)
@@ -42,3 +47,10 @@ steps:
       includeRootFolder: false
       replaceExistingArchive: true
     displayName: 'Archive Build Output'
+
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+      artifact: 'build-output'
+      publishLocation: 'pipeline'
+    displayName: 'Publish Build Artifact'

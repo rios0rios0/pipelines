@@ -16,9 +16,19 @@ steps:
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -e
+
+        mkdir -p $(AZURE_DEPLOY_CACHE)
+
         echo $AZURE_DEPLOY_OUTPUTS > $(AZURE_DEPLOY_CACHE)/outputs.json
+
+        # Check if the file was created
+        if [ -f "$(AZURE_DEPLOY_CACHE)/outputs.json" ]; then
+          echo "File outputs.json created with success."
+        else
+          echo "Erro: File outputs.json file not found."
+          exit 1
+        fi        
     displayName: 'Save Deployment Outputs to File'
-    condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
 
   - task: 'AzureCLI@2'
     inputs:
@@ -27,6 +37,7 @@ steps:
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -e
+
         outputs=$(cat $(AZURE_DEPLOY_CACHE)/outputs.json)
         echo "##vso[task.setvariable variable=OUTPUTS]$outputs"
     displayName: 'Read Outputs from file'
@@ -34,11 +45,12 @@ steps:
   - template: './database.yaml'
     parameters:
       PIPELINE_FIREWALL_NAME: $(PIPELINE_FIREWALL_NAME)
-      RESOURCE_GROUP_NAME: $(RESOURCE_GROUP_NAME)
+      RESOURCE_GROUP_NAME: $(resourceGroupName)
       ENVIRONMENT: $(ENVIRONMENT)
       AZM_SERVICE_CONNECTION: $(AZM_SERVICE_CONNECTION)
 
   - script: |
+
       siteName=$(echo $OUTPUTS | jq -r '.siteName.value')
       echo "##vso[task.setvariable variable=siteName]$siteName"
     displayName: 'Getting Pipeline Variables'
@@ -49,6 +61,7 @@ steps:
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -e
+
         SETTINGS=""
         for var in $(compgen -e); do
           if [[ $var == REPLACE_* ]]; then
@@ -65,13 +78,18 @@ steps:
         else
           az functionapp config appsettings set \
             --name "$(siteName)" \
-            --resource-group "$(RESOURCE_GROUP_NAME)" \
+            --resource-group "$(resourceGroupName)" \
             --settings $SETTINGS
         fi
     displayName: 'Replace Azure Function Variables'
 
+  - task: DownloadPipelineArtifact@2
+    inputs:
+      artifact: 'build-output'
+      targetPath: '$(Pipeline.Workspace)/build-output'
+    displayName: 'Download Build Artifact'
+
   - task: 'AzureCLI@2'
-    displayName: 'Publish Function'
     inputs:
       azureSubscription: "$(AZM_SERVICE_CONNECTION)"
       scriptType: 'bash'
@@ -80,6 +98,7 @@ steps:
         set -e
         az functionapp deployment source config-zip \
           --name "$(siteName)" \
-          --resource-group "$(RESOURCE_GROUP_NAME)" \
-          --src "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
+          --resource-group "$(resourceGroupName)" \
+          --src "$(Pipeline.Workspace)/build-output/$(Build.BuildId).zip"
+    displayName: 'Publish Function'
     retryCountOnTaskFailure: 3

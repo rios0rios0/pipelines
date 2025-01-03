@@ -16,9 +16,36 @@ steps:
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -e
+
+        # Exibe o valor da variável AZURE_DEPLOY_OUTPUTS
+        echo "Deployment Outputs:"
+        echo $AZURE_DEPLOY_OUTPUTS
+
+        echo "Deployment Deploy Cache:"
+        echo $(AZURE_DEPLOY_CACHE)
+
+        echo "RESOURCE_GROUP_NAME VALUE:"
+        echo ${RESOURCE_GROUP_NAME}
+        echo "VARIABLE RESOURCE_GROUP_NAME VALUE:"
+        echo $(resourceGroupName)
+
+        mkdir -p $(AZURE_DEPLOY_CACHE)
+
         echo $AZURE_DEPLOY_OUTPUTS > $(AZURE_DEPLOY_CACHE)/outputs.json
+
+        # Verifica se o arquivo foi criado
+        if [ -f "$(AZURE_DEPLOY_CACHE)/outputs.json" ]; then
+          echo "Arquivo outputs.json criado com sucesso."
+          
+          # Exibe o conteúdo do arquivo
+          echo "Conteúdo do outputs.json:"
+          cat $(AZURE_DEPLOY_CACHE)/outputs.json
+        else
+          echo "Erro: Arquivo outputs.json não foi encontrado."
+          exit 1
+        fi        
     displayName: 'Save Deployment Outputs to File'
-    condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
+    # condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
 
   - task: 'AzureCLI@2'
     inputs:
@@ -27,6 +54,21 @@ steps:
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -e
+        filePath="$(AZURE_DEPLOY_CACHE)/outputs.json"
+
+        # Verifica se o arquivo existe
+          if [ -f "$filePath" ]; then
+        echo "File outputs.json found at $filePath"
+        else
+          echo "Error: File outputs.json not found at $filePath"
+          exit 1
+        fi
+
+        # Lê o conteúdo do arquivo e imprime no log
+        outputs=$(cat "$filePath")
+        echo "Contents of outputs.json:"
+        echo "$outputs"
+
         outputs=$(cat $(AZURE_DEPLOY_CACHE)/outputs.json)
         echo "##vso[task.setvariable variable=OUTPUTS]$outputs"
     displayName: 'Read Outputs from file'
@@ -34,11 +76,14 @@ steps:
   - template: './database.yaml'
     parameters:
       PIPELINE_FIREWALL_NAME: $(PIPELINE_FIREWALL_NAME)
-      RESOURCE_GROUP_NAME: $(RESOURCE_GROUP_NAME)
+      RESOURCE_GROUP_NAME: $(resourceGroupName)
       ENVIRONMENT: $(ENVIRONMENT)
       AZM_SERVICE_CONNECTION: $(AZM_SERVICE_CONNECTION)
 
   - script: |
+      echo "RESOURCE_GROUP_NAME VALUE:"
+      echo ${RESOURCE_GROUP_NAME}
+
       siteName=$(echo $OUTPUTS | jq -r '.siteName.value')
       echo "##vso[task.setvariable variable=siteName]$siteName"
     displayName: 'Getting Pipeline Variables'
@@ -49,6 +94,13 @@ steps:
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -e
+
+        echo "CONTENT RESOURCE GROUP NAME:"
+        echo "${RESOURCE_GROUP_NAME}"
+
+        echo "VARIABLE RESOURCE_GROUP_NAME VALUE:"
+        echo $(resourceGroupName)
+
         SETTINGS=""
         for var in $(compgen -e); do
           if [[ $var == REPLACE_* ]]; then
@@ -65,7 +117,7 @@ steps:
         else
           az functionapp config appsettings set \
             --name "$(siteName)" \
-            --resource-group "$(RESOURCE_GROUP_NAME)" \
+            --resource-group "$(resourceGroupName)" \
             --settings $SETTINGS
         fi
     displayName: 'Replace Azure Function Variables'
@@ -80,6 +132,6 @@ steps:
         set -e
         az functionapp deployment source config-zip \
           --name "$(siteName)" \
-          --resource-group "$(RESOURCE_GROUP_NAME)" \
+          --resource-group "$(resourceGroupName)" \
           --src "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
     retryCountOnTaskFailure: 3

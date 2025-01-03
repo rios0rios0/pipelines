@@ -59,7 +59,7 @@ steps:
       echo "##vso[task.setvariable variable=CONNECTION_STRING]$CONNECTION_STRING"
       echo $CONNECTION_STRING
     displayName: 'Set Database Connection String'
-    condition: and(succeeded(), eq(variables['DB_EXISTS'], 'true'))
+    # condition: and(succeeded(), eq(variables['DB_EXISTS'], 'true'))
   - script: |
       set -e
       table_hash=$(psql "$(CONNECTION_STRING)" -t -c \

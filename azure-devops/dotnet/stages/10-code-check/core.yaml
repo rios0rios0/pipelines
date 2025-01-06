@@ -1,0 +1,19 @@
+stages:
+  - stage: 'code_check'
+    displayName: 'code check (style/quality)'
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    jobs:
+      - job: 'quality_resharper'
+        displayName: 'quality:resharper'
+        steps:
+          - template: '../../abstracts/core-sdk6.x.yaml'
+
+          - script: |
+              dotnet tool install --global JetBrains.ReSharper.GlobalTools
+              jb cleanupcode --caches-home=packages/cache $SLN_FILE
+              jb inspectcode --caches-home=packages/cache --format=Html --output=report.html $SLN_FILE
+              git diff --exit-code # this will fail the pipeline
+            continueOnError: true
+
+      #- job: 'quality_roslyn'
+      #  displayName: 'quality:roslyn'

@@ -50,6 +50,6 @@ stages:
               dotnet tool install --global CycloneDX
               dotnet CycloneDX $SLN_FILE -o "$PREFIX$REPORT_PATH" --json -rs
 
-          - template: '../../global/abstracts/scripts-repo.yaml'
+          - template: '../../../global/abstracts/scripts-repo.yaml'
           - script: $(Scripts.Directory)/global/scripts/dependency-track/run.sh
         continueOnError: true

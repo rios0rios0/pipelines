@@ -19,6 +19,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Added
 
 - added a new pipeline in Azure DevOps for Terraform
+- added a new pipeline in Azure DevOps for .NET Core (C#)
 
 ### Changed
 

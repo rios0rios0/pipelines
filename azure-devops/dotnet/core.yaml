@@ -1,0 +1,6 @@
+stages:
+  - template: 'stages/10-code-check/core.yaml'
+  - template: 'stages/20-security/csharp.yaml'
+  - template: 'stages/35-management/core.yaml'
+  #- template: 'stages/40-delivery/core.yaml'
+  #- template: 'stages/50-deployment/core.yaml'

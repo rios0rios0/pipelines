@@ -6,7 +6,6 @@ stages:
       - job: 'style_terraform_fmt'
         displayName: 'style:terraform-fmt'
         steps:
-          # $(Scripts.Directory) was already defined in the line below
           - template: '../../abstracts/terra-terraform1.9.3.yaml'
 
           - script: terraform fmt -check -recursive

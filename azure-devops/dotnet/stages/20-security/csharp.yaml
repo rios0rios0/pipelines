@@ -1,0 +1,9 @@
+stages:
+  - stage: 'security'
+    displayName: 'security (sca/sast)'
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    jobs:
+      - template: '../../../global/stages/20-security/docker.yaml'
+        parameters:
+          SEMGREP_LANGUAGE: 'csharp'
+      # TODO: another .NET Core C# security job

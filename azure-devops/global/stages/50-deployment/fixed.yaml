@@ -11,6 +11,8 @@ parameters:
     type: 'string'
   - name: 'INBOUND_ALLOWED_IPS'
     type: 'string'
+  - name: 'AZURE_DEPLOY_CACHE_HIT'
+    type: 'string'
 
 steps:
   - task: 'AzureCLI@2'
@@ -20,7 +22,7 @@ steps:
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -e
-
+        
         resourceGroupName=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
         echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
         resourceGroupExists=$(az group exists --name $resourceGroupName)
@@ -35,10 +37,10 @@ steps:
       inlineScript: |
         set -e
         outboundIpAddresses="''"
-        if [ "$resourceGroupExists" = true ]; then
-          functionAppName=$(az functionapp list --resource-group $resourceGroupName --query "[].name" --output tsv | tail -n 1)
+        if [ "$(resourceGroupExists)" = true ]; then
+          functionAppName=$(az functionapp list --resource-group $(resourceGroupName) --query "[].name" --output tsv | tail -n 1)
           if [ -n "$functionAppName" ]; then
-            outboundIpAddresses=$(az webapp show --resource-group $resourceGroupName --name $functionAppName --query outboundIpAddresses --output tsv)
+            outboundIpAddresses=$(az webapp show --resource-group $(resourceGroupName) --name $functionAppName --query outboundIpAddresses --output tsv)
           fi
         fi
         echo "##vso[task.setvariable variable=outboundIpAddresses]$outboundIpAddresses"
@@ -56,7 +58,6 @@ steps:
       deploymentMode: 'Incremental'
       deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'
     displayName: 'Deploy Resource Group'
-    condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'))
 
   - template: '../../../global/abstracts/deploy-az-function.yaml'
     parameters:

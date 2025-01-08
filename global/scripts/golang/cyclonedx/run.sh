@@ -21,7 +21,7 @@ if [ -d "pkg" ]; then
   echo "Found 'pkg' directory, using 'cyclonedx-gomod mod' command..."
   "$(go env GOPATH)/bin/cyclonedx-gomod" mod -json -output "$BOM_PATH/bom.json" -licenses
 else
-  [ -d "$(pwd)/cmd" ] && folder="cmd"
+  folder="$(find $(pwd) -type f -name main.go -exec dirname {} \;)"
   if [ -z "$folder" ]; then
     echo "Could not find a directory containing Go files"
     exit 1

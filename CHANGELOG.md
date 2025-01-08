@@ -29,6 +29,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Fixed
 
 - fixed golang pipeline to work with dynamic deploy
+- corrected wrong usage of CycloneDX library for GoLang
 
 ## [2.1.0] - 2024-12-27
 

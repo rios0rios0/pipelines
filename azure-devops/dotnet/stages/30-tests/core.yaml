@@ -1,0 +1,29 @@
+stages:
+  - stage: 'tests'
+    displayName: 'tests'
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    jobs:
+      - job: 'test_all'
+        displayName: 'test:all'
+        steps:
+          - template: '../../abstracts/core-sdk6.x.yaml'
+
+          - script: |
+              set -e
+
+              dotnet build --configuration Release
+              dotnet add package Microsoft.TestPlatform --version 17.9.0
+              dotnet add package Microsoft.CodeCoverage --version 17.9.0
+              dotnet add package ReportGenerator --version 5.2.5
+              apt update && apt install --yes --no-install-recommends mono-complete
+
+              testsDll=$(find ./Tests/bin -name "Tests.dll" -print -quit)
+              dotnet vstest $testsDll /InIsolation /Platform:x86 /Logger:trx /Framework:Framework40 /EnableCodeCoverage
+              coverageFile=$(find ./TestResults -name "*.coverage" -print -quit)
+              dotnet CodeCoverage analyze /output:TestResults/coverage.xml $coverageFile
+              dotnet ReportGenerator -reports:TestResults/coverage.xml -targetdir:TestResults -reporttypes:Cobertura
+              coverageXml=$(cat TestResults/Cobertura.xml)
+              coverageTotal=$(echo "$coverageXml" | grep -oPm1 "(?<=line-rate=\")[^\"]+")
+              coverageTotal=$(printf "%.2f" $(echo "$coverageTotal * 100" | bc -l))
+              echo "COVERAGE_PERCENT=$coverageTotal%"
+            continueOnError: true

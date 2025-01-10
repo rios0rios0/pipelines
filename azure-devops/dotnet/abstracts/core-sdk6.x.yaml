@@ -3,3 +3,12 @@ steps:
     displayName: 'Install .NET Core SDK'
     inputs:
       version: '6.x'
+
+  - script: |
+      set -e
+
+      export SLN_FILE=$(find . -name "*.sln" -print -quit)
+      dotnet restore --packages packages $SLN_FILE
+      echo "##vso[task.setvariable variable=SlnFile;isOutput=true]$SLN_FILE"
+    displayName: 'Restore NuGet Packages'
+    name: 'Restore'

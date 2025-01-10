@@ -9,9 +9,12 @@ stages:
           - template: '../../abstracts/core-sdk6.x.yaml'
 
           - script: |
+              set -e
+
               dotnet tool install --global JetBrains.ReSharper.GlobalTools
-              jb cleanupcode --caches-home=packages/cache $SLN_FILE
-              jb inspectcode --caches-home=packages/cache --format=Html --output=report.html $SLN_FILE
+              jb cleanupcode --caches-home=packages/cache $(Restore.SlnFile)
+              jb inspectcode --caches-home=packages/cache --format=Html --output=report.html $(Restore.SlnFile)
+
               git diff --exit-code # this will fail the pipeline
             continueOnError: true
 

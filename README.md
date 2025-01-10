@@ -85,6 +85,22 @@ stages:
   - template: 'azure-devops/golang/go-arm.yaml@pipelines'
 ```
 
+#### Shared Environment Variables
+Shared between all pipelines, and all projects:
+
+| Variable Name    | Description         |
+|------------------|---------------------|
+| `SONAR_HOST_URL` | SonarQube host URL. |
+| `SONAR_TOKEN`    | SonarQube token.    |
+
+#### Specific Environment Variables (.NET)
+Specific to a .NET project (not shared with other projects):
+
+| Variable Name        | Description             |
+|----------------------|-------------------------|
+| `SONAR_PROJECT_NAME` | SonarQube project name. |
+| `SONAR_PROJECT_KEY`  | SonarQube project key.  |
+
 Example for GoLang:
 
 ![azure-devops-golang](.docs/azure-devops-golang.png)
@@ -99,15 +115,15 @@ curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh |
 ## Tricks to use locally
 
 ```bash
-git clone git@github.com:rios0rios0/pipelines.git ~/pipelines
-ln -s ~/pipelines/global/scripts/golangci-lint/.golangci.yml ~/.golangci.yml
+curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
+ln -s $USER/Development/github.com/rios0rios0/pipelines/global/scripts/golangci-lint/.golangci.yml ~/.golangci.yml
 ```
 
 or
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
-export SCRIPTS_DIR=/home/rios0rios0/Development/github.com/rios0rios0/pipelines
+export SCRIPTS_DIR=/home/$USER/Development/github.com/rios0rios0/pipelines
 $SCRIPTS_DIR/global/scripts/golangci-lint/run.sh # or any other script
 ```
 

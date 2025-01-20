@@ -1,0 +1,26 @@
+stages:
+  - stage: Build
+    displayName: Build and push stage
+    condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
+    jobs:
+      - job: Build
+        displayName: Build job
+        variables:
+          imageName: $(Build.Repository.Name)
+        steps:
+          - task: Docker@2
+            displayName: Login
+            inputs:
+              containerRegistry: '$(DOCKER_REGISTRY_SERVICE_CONNECTION)'
+              command: login
+          - task: CmdLine@2
+            displayName: Build Docker Image
+            inputs:
+              script: |
+                docker run --privileged --rm tonistiigi/binfmt --install arm64
+                docker run --privileged --rm tonistiigi/binfmt
+                docker buildx create --use
+                docker buildx build --platform linux/amd64,linux/arm64 \
+                  -t prdacrcorezestsecurity.azurecr.io/$(imageName):$(Build.SourceBranchName) \
+                  --push \
+                  .

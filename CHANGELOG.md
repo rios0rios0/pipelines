@@ -20,6 +20,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - added a new pipeline in Azure DevOps for Terraform
 - added a new pipeline in Azure DevOps for .NET Core (C#)
+- added a new `stage` to build and deploy `az-devops` hosted `golang` images
 
 ### Changed
 

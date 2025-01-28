@@ -21,12 +21,14 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added a new pipeline in Azure DevOps for Terraform
 - added a new pipeline in Azure DevOps for .NET Core (C#)
 - added a new `stage` to build and deploy `az-devops` hosted `golang` images
+- added `go1.23.4.yaml` template to Golang Docker delivery stage
 
 ### Changed
 
 - changed GitLeaks inside Azure DevOps to clone full repository instead of just shallow clone
 - changed the dynamic deploy to `PublishPipelineArtifact` the files to deploy the Azure Function
 - corrected miss-used template files for .NET in Azure DevOps pipelines
+- updated the image tag for the Golang Docker delivery stage to retrieve the complete tag name from an environment variable.
 
 ### Fixed
 

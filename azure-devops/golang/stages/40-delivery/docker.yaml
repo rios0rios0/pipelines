@@ -3,16 +3,20 @@ stages:
     displayName: Build and push stage
     condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
     jobs:
+
       - job: Build
         displayName: Build job
         variables:
           imageName: $(Build.Repository.Name)
         steps:
+          - template: '../../abstracts/go1.23.4.yaml'
+
           - task: Docker@2
-            displayName: Login
+            displayName: Docker Login
             inputs:
               containerRegistry: '$(DOCKER_REGISTRY_SERVICE_CONNECTION)'
               command: login
+
           - task: CmdLine@2
             displayName: Build Docker Image
             inputs:
@@ -21,6 +25,6 @@ stages:
                 docker run --privileged --rm tonistiigi/binfmt
                 docker buildx create --use
                 docker buildx build --platform linux/amd64,linux/arm64 \
-                  -t prdacrcorezestsecurity.azurecr.io/$(imageName):$(Build.SourceBranchName) \
+                  -t $(IMAGE_TAG) \
                   --push \
                   .

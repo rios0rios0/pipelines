@@ -8,7 +8,12 @@ stages:
         variables:
           GOPATH: "$(Pipeline.Workspace)/.go"
         steps:
-          # $(Scripts.Directory) was already defined in the line below
+          - task: Docker@2
+            displayName: Docker Login
+            inputs:
+              containerRegistry: '$(DOCKER_REGISTRY_SERVICE_CONNECTION)'
+              command: login
+
           - template: '../../abstracts/test.yaml'
 
         continueOnError: false

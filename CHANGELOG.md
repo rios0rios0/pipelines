@@ -22,6 +22,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added a new pipeline in Azure DevOps for .NET Core (C#)
 - added a new `stage` to build and deploy `az-devops` hosted `golang` images
 - added `go1.23.4.yaml` template to Golang Docker delivery stage
+- added another stage's template `acr-container-deployment.yaml`, introduce new test steps' template: `test.yaml` and new test stage: `acr.yaml` to the GoLang pipeline to log in into ACR before running tests
 
 ### Changed
 
@@ -29,6 +30,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed the dynamic deploy to `PublishPipelineArtifact` the files to deploy the Azure Function
 - corrected miss-used template files for .NET in Azure DevOps pipelines
 - updated the image tag for the Golang Docker delivery stage to retrieve the complete tag name from an environment variable.
+- changed `go.yaml` Golang's test stage to use `test.yaml` template
 
 ### Fixed
 

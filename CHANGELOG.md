@@ -23,6 +23,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added a new `stage` to build and deploy `az-devops` hosted `golang` images
 - added `go1.23.4.yaml` template to Golang Docker delivery stage
 - added another stage's template `acr-container-deployment.yaml`, introduce new test steps' template: `test.yaml` and new test stage: `acr.yaml` to the GoLang pipeline to log in into ACR before running tests
+- added `arm-container.yaml` to run container in `azure container instance`
 
 ### Changed
 

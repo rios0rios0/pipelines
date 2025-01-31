@@ -1,0 +1,45 @@
+stages:
+  - stage: Deploy
+    displayName: 'Deploy Container to Azure'
+    condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
+    jobs:
+      - job: DeployContainer
+        displayName: 'Publish Container to Azure'
+        steps:
+          - script: |
+              echo "ENVIRONMENT: $(ENVIRONMENT)"
+              echo "AZM_LOCATION: $(AZM_LOCATION)"
+              echo "IMAGE NAME: $(REGISTRY_SERVER)/$(Build.Repository.Name):$(Build.SourceBranchName)"
+
+              resourceGroupName="$(ENVIRONMENT)-rg-$(RESOURCE_GROUP_NAME)-$(AZM_LOCATION)"
+              echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
+              
+              IMAGE_NAME=$(REGISTRY_SERVER)/$(Build.Repository.Name):$(Build.SourceBranchName)
+              echo "##vso[task.setvariable variable=CONTAINER_IMAGE]$IMAGE_NAME"  
+
+
+              resourceGroupExists=$(az group exists --name $resourceGroupName)
+              echo "##vso[task.setvariable variable=resourceGroupExists]$resourceGroupExists"
+            displayName: 'Set Resource Group Name'
+
+          - task: 'AzureResourceGroupDeployment@2'
+            inputs:
+              location: "$(AZM_LOCATION)"
+              action: 'Create Or Update Resource Group'
+              azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+              resourceGroupName: "$(resourceGroupName)"
+              deploymentMode: 'Incremental'
+              deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'
+              csmFile: 'azuredeploy.json'
+              overrideParameters: >
+                -applicationName $(APPLICATION_NAME)
+                -containerImage $(CONTAINER_IMAGE)
+                -location $(AZM_LOCATION)
+                -port $(PORT)
+                -cpuCores $(CPU_CORES)
+                -memoryInGB $(MEMORY_IN_GB)
+                -environment $(ENVIRONMENT)
+                -registryServer $(REGISTRY_SERVER)
+                -registryUsername $(REGISTRY_USERNAME)
+                -registryPassword $(REGISTRY_PASSWORD)
+            displayName: 'Deploy Container to Azure'

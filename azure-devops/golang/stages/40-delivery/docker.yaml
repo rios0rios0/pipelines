@@ -17,14 +17,23 @@ stages:
               containerRegistry: '$(DOCKER_REGISTRY_SERVICE_CONNECTION)'
               command: login
 
+          - script: |
+              set -e
+              mkdir -p build_output
+              chmod +x config.sh
+              ./config.sh
+              CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o build_output/main ./cmd
+            displayName: "Build Go Application"
+
           - task: CmdLine@2
-            displayName: Build Docker Image
+            displayName: Build and Push Docker Image
             inputs:
               script: |
                 docker run --privileged --rm tonistiigi/binfmt --install arm64
                 docker run --privileged --rm tonistiigi/binfmt
                 docker buildx create --use
                 docker buildx build --platform linux/amd64,linux/arm64 \
-                  -t $(IMAGE_TAG) \
+                  -t $(REGISTRY_SERVER)/$(imageName):$(Build.SourceBranchName) \
                   --push \
-                  .
+                  --file Dockerfile \
+                  --build-context main=./build_output .

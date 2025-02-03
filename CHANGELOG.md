@@ -24,6 +24,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added `go1.23.4.yaml` template to Golang Docker delivery stage
 - added another stage's template `acr-container-deployment.yaml`, introduce new test steps' template: `test.yaml` and new test stage: `acr.yaml` to the GoLang pipeline to log in into ACR before running tests
 - added `arm-container.yaml` to run container in `azure container instance`
+- added Azure global `docker.yaml` delivery template to be used by all languages
 
 ### Changed
 
@@ -32,6 +33,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - corrected miss-used template files for .NET in Azure DevOps pipelines
 - updated the image tag for the Golang Docker delivery stage to retrieve the complete tag name from an environment variable.
 - changed `go.yaml` Golang's test stage to use `test.yaml` template
+- changed `docker.yaml` Azure's Golang delivery stage to use global `docker.yaml` template and remove unnecessary execution of `./config.sh` script since it's already done by the `go1.23.4.yaml` template
+- changed `docker.yaml` Azure's Javascript delivery stage to use global `docker.yaml` template since it was being repeated
 
 ### Fixed
 

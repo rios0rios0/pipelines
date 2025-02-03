@@ -3,37 +3,26 @@ stages:
     displayName: Build and push stage
     condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
     jobs:
-
       - job: Build
         displayName: Build job
         variables:
-          imageName: $(Build.Repository.Name)
+          GOPATH: "$(Pipeline.Workspace)/.go"
+          DOCKER_CACHE_DIR: '$(Agent.TempDirectory)/docker-cache'
         steps:
           - template: '../../abstracts/go1.23.4.yaml'
 
-          - task: Docker@2
-            displayName: Docker Login
-            inputs:
-              containerRegistry: '$(DOCKER_REGISTRY_SERVICE_CONNECTION)'
-              command: login
-
+          #TODO: create a template for this
           - script: |
               set -e
               mkdir -p build_output
-              chmod +x config.sh
-              ./config.sh
-              CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o build_output/main ./cmd
+              CGO_ENABLED=0 GOOS=linux GOARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') go build -o build_output/main ./cmd
             displayName: "Build Go Application"
 
-          - task: CmdLine@2
-            displayName: Build and Push Docker Image
-            inputs:
-              script: |
-                docker run --privileged --rm tonistiigi/binfmt --install arm64
-                docker run --privileged --rm tonistiigi/binfmt
-                docker buildx create --use
-                docker buildx build --platform linux/amd64,linux/arm64 \
-                  -t $(REGISTRY_SERVER)/$(imageName):$(Build.SourceBranchName) \
-                  --push \
-                  --file Dockerfile \
-                  --build-context main=./build_output .
+          - template: '../../../global/abstracts/docker.yaml'
+            parameters:
+              DOCKER_FILE: './Dockerfile'
+              DOCKER_CACHE_DIR: '$(DOCKER_CACHE_DIR)'
+              DOCKER_REGISTRY_SERVICE_CONNECTION: '$(DOCKER_REGISTRY_SERVICE_CONNECTION)'
+              CONTAINER_REGISTRY_SERVER: '$(CONTAINER_REGISTRY_SERVER)'
+
+      - template: '../../../global/stages/40-delivery/release.yaml'

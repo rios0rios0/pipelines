@@ -1,0 +1,48 @@
+parameters:
+  - name: 'DOCKER_FILE'
+    type: 'string'
+  - name: 'DOCKER_CACHE_DIR'
+    type: 'string'
+  - name: 'DOCKER_REGISTRY_SERVICE_CONNECTION'
+    type: 'string'
+  - name : 'CONTAINER_REGISTRY_SERVER'
+    type: 'string'
+
+steps:
+  - task: 'Cache@2'
+    inputs:
+      key: "$(Agent.JobName)|$(DOCKER_FILE)"
+      path: "$(DOCKER_CACHE_DIR)"
+    displayName: 'Cache Docker Buildx'
+    continueOnError: true
+
+  - task: Docker@2
+    displayName: Docker Login
+    inputs:
+      containerRegistry: '$(DOCKER_REGISTRY_SERVICE_CONNECTION)'
+      command: login
+
+  - task: CmdLine@2
+    displayName: Build and Push Docker Image
+    inputs:
+      script: |
+        imageName="$(CONTAINER_REGISTRY_SERVER)/$(Build.Repository.Name)"
+
+        TAGS="$imageName:latest"
+        if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
+          TAGS="$TAGS -t $imageName:$(Build.SourceBranchName)"
+          echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]$(Build.SourceBranchName)"
+        else
+          echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]latest"
+        fi
+
+        echo "image tag: $TAGS"
+
+        docker buildx create --use
+        docker buildx build \
+          --platform linux/amd64,linux/arm64 \
+          --tag $TAGS \
+          --cache-from=type=local,src=$(DOCKER_CACHE_DIR) \
+          --cache-to=type=local,dest=$(DOCKER_CACHE_DIR),mode=max \
+          --file ${{ parameters.DOCKER_FILE }} \
+          --push .

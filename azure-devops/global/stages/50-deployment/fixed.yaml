@@ -22,7 +22,7 @@ steps:
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -e
-        
+
         resourceGroupName=$(ENVIRONMENT)-rg-$(AZM_FUNCTION_NAME)-$(AZM_LOCATION)
         echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
         resourceGroupExists=$(az group exists --name $resourceGroupName)
@@ -61,7 +61,7 @@ steps:
 
   - template: '../../../global/abstracts/deploy-az-function.yaml'
     parameters:
-      RESOURCE_GROUP_NAME: $(resourceGroupName)
-      PIPELINE_FIREWALL_NAME: $(PIPELINE_FIREWALL_NAME)
-      ENVIRONMENT: $(ENVIRONMENT)
-      AZM_SERVICE_CONNECTION: $(AZM_SERVICE_CONNECTION)
+      RESOURCE_GROUP_NAME: "$(resourceGroupName)"
+      PIPELINE_FIREWALL_NAME: "$(PIPELINE_FIREWALL_NAME)"
+      ENVIRONMENT: "$(ENVIRONMENT)"
+      AZM_SERVICE_CONNECTION: "$(AZM_SERVICE_CONNECTION)"

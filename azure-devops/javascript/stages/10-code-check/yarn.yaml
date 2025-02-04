@@ -1,3 +1,9 @@
+parameters:
+  # optional parameter for heavy workloads within JS language
+  - name: 'SELF_HOSTED_POOL'
+    type: 'string'
+    default: "$(SELF_HOSTED_POOL)"
+
 stages:
   - stage: 'code_check'
     displayName: 'code check (style/quality)'
@@ -5,6 +11,9 @@ stages:
     jobs:
       - job: 'style_eslint'
         displayName: 'style:eslint'
+        ${{ if ne(parameters.SELF_HOSTED_POOL, '') }}:
+          pool:
+            name: "${{ parameters.SELF_HOSTED_POOL }}"
         steps:
           - template: '../../abstracts/execute-command-opensearch-dashboards.yaml'
             parameters:

@@ -25,6 +25,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added another stage's template `acr-container-deployment.yaml`, introduce new test steps' template: `test.yaml` and new test stage: `acr.yaml` to the GoLang pipeline to log in into ACR before running tests
 - added `arm-container.yaml` to run container in `azure container instance`
 - added Azure global `docker.yaml` delivery template to be used by all languages
+- added messages to show application states in the `test_e2e` job
 
 ### Changed
 

@@ -11,22 +11,19 @@ parameters:
 steps:
   - task: 'Cache@2'
     inputs:
-      key: "$(Agent.JobName)|$(DOCKER_FILE)"
-      path: "$(DOCKER_CACHE_DIR)"
+      key: "$(Agent.JobName)|${{ parameters.DOCKER_FILE }}"
+      path: "${{ parameters.DOCKER_CACHE_DIR }}"
     displayName: 'Cache Docker Buildx'
     continueOnError: true
 
   - task: Docker@2
     displayName: Docker Login
     inputs:
-      containerRegistry: '$(CONTAINER_REGISTRY_SERVICE_CONNECTION)'
+      containerRegistry: '${{ parameters.CONTAINER_REGISTRY_SERVICE_CONNECTION }}'
       command: login
 
-  - task: CmdLine@2
-    displayName: Build and Push Docker Image
-    inputs:
-      script: |
-        imageName="$(CONTAINER_REGISTRY_SERVER)/$(Build.Repository.Name)"
+  - script: |
+        imageName="${{ parameters.CONTAINER_REGISTRY_SERVER }}/$(Build.Repository.Name)"
 
         TAGS="$imageName:latest"
         if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
@@ -42,7 +39,9 @@ steps:
         docker buildx build \
           --platform linux/amd64,linux/arm64 \
           --tag $TAGS \
-          --cache-from=type=local,src=$(DOCKER_CACHE_DIR) \
-          --cache-to=type=local,dest=$(DOCKER_CACHE_DIR),mode=max \
+          --cache-from=type=local,src=${{ parameters.DOCKER_CACHE_DIR }} \
+          --cache-to=type=local,dest=${{ parameters.DOCKER_CACHE_DIR }},mode=max \
           --file ${{ parameters.DOCKER_FILE }} \
           --push .
+    name: 'build'
+    displayName: Build and Push Docker Image

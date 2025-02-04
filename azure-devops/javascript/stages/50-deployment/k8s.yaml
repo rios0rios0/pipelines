@@ -14,7 +14,7 @@ stages:
               action: 'createSecret'
               secretType: 'dockerRegistry'
               secretName: "$(K8S_IMAGE_PULL_SECRET_NAME)"
-              dockerRegistryEndpoint: "$(DOCKER_REGISTRY_ENDPOINT)"
+              dockerRegistryEndpoint: "$(CONTAINER_REGISTRY_SERVICE_CONNECTION)"
               kubernetesServiceConnection: "$(K8S_ENDPOINT)"
               namespace: "$(K8S_NAMESPACE)"
 

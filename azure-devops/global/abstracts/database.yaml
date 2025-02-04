@@ -3,9 +3,9 @@ parameters:
     type: 'string'
   - name: 'RESOURCE_GROUP_NAME'
     type: 'string'
-  - name: ENVIRONMENT
+  - name: 'ENVIRONMENT'
     type: 'string'
-  - name: AZM_SERVICE_CONNECTION
+  - name: 'AZM_SERVICE_CONNECTION'
     type: 'string'
 
 steps:
@@ -18,7 +18,7 @@ steps:
       scriptLocation: 'inlineScript'
       inlineScript: |
         DATABASE_SERVER_NAME=$(echo $OUTPUTS | jq -r '.databaseServerName.value')
-        
+
         if [[ -z "$DATABASE_SERVER_NAME" || "$DATABASE_SERVER_NAME" == "null" ]]; then
           echo "Invalid database server name: $DATABASE_SERVER_NAME"
           echo "##vso[task.setvariable variable=DB_EXISTS;isOutput=true]false"

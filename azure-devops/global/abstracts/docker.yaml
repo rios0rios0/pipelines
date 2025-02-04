@@ -3,7 +3,7 @@ parameters:
     type: 'string'
   - name: 'DOCKER_CACHE_DIR'
     type: 'string'
-  - name: 'DOCKER_REGISTRY_SERVICE_CONNECTION'
+  - name: 'CONTAINER_REGISTRY_SERVICE_CONNECTION'
     type: 'string'
   - name : 'CONTAINER_REGISTRY_SERVER'
     type: 'string'
@@ -19,7 +19,7 @@ steps:
   - task: Docker@2
     displayName: Docker Login
     inputs:
-      containerRegistry: '$(DOCKER_REGISTRY_SERVICE_CONNECTION)'
+      containerRegistry: '$(CONTAINER_REGISTRY_SERVICE_CONNECTION)'
       command: login
 
   - task: CmdLine@2

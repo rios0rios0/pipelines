@@ -22,7 +22,7 @@ stages:
             parameters:
               DOCKER_FILE: './Dockerfile'
               DOCKER_CACHE_DIR: '$(DOCKER_CACHE_DIR)'
-              DOCKER_REGISTRY_SERVICE_CONNECTION: '$(DOCKER_REGISTRY_SERVICE_CONNECTION)'
               CONTAINER_REGISTRY_SERVER: '$(CONTAINER_REGISTRY_SERVER)'
+              CONTAINER_REGISTRY_SERVICE_CONNECTION: '$(CONTAINER_REGISTRY_SERVICE_CONNECTION)'
 
       - template: '../../../global/stages/40-delivery/release.yaml'

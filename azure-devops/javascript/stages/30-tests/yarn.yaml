@@ -1,3 +1,9 @@
+parameters:
+  # optional parameter for heavy workloads within JS language
+  - name: 'SELF_HOSTED_POOL'
+    type: 'string'
+    default: "$(SELF_HOSTED_POOL)"
+
 stages:
   - stage: 'tests'
     displayName: 'tests'
@@ -5,6 +11,9 @@ stages:
     jobs:
       - job: 'test_all'
         displayName: 'test:all'
+        ${{ if ne(parameters.SELF_HOSTED_POOL, '') }}:
+          pool:
+            name: "${{ parameters.SELF_HOSTED_POOL }}"
         steps:
           - template: '../../abstracts/execute-command-opensearch-dashboards.yaml'
             parameters:
@@ -28,8 +37,9 @@ stages:
       - job: 'test_e2e'
         displayName: 'test:e2e'
         continueOnError: true
-        pool:
-          name: "$(E2E_POOL)"
+        ${{ if ne(parameters.SELF_HOSTED_POOL, '') }}:
+          pool:
+            name: "${{ parameters.SELF_HOSTED_POOL }}"
         steps:
           - template: '../../abstracts/run-test-e2e.yaml'
             parameters:

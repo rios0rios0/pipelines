@@ -1,17 +1,14 @@
-steps:
-  - task: 'UseNode@1'
-    inputs:
-      version: '18.19.0'
-    displayName: 'Use Node.js 18.19.0'
+parameters:
+  - name: 'APP_PATH'
+    type: 'string'
+    default: $(System.DefaultWorkingDirectory)
 
-  - script: |
-      corepack enable
-      corepack prepare yarn@stable --activate
-    displayName: 'Enable Corepack and Install Yarn'
+steps:
+  - template: 'corepack-node18.19.0-no-cache.yaml'
 
   - task: 'Cache@2'
     inputs:
-      key: "$(Agent.JobName)|yarn.lock"
-      path: 'node_modules'
+      key: "$(Agent.JobName)|${{ parameters.APP_PATH }}/yarn.lock"
+      path: "${{ parameters.APP_PATH }}/node_modules"
     displayName: 'Cache for "node_modules"'
     continueOnError: true

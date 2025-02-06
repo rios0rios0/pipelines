@@ -22,9 +22,9 @@ steps:
 
         # Check if the file was created
         if [ -f "$(AZURE_DEPLOY_CACHE)/outputs.json" ]; then
-          echo "File outputs.json created with success."
+          echo "$(date "+%Y-%m-%d %H:%M:%S") - File 'outputs.json' created with success!"
         else
-          echo "Error: File outputs.json file not found."
+          echo "$(date "+%Y-%m-%d %H:%M:%S") - Error: File 'outputs.json' file not found."
           exit 1
         fi
     displayName: 'Save Deployment Outputs to File'
@@ -65,7 +65,7 @@ steps:
         for var in $(compgen -e); do
           if [[ $var == REPLACE_* ]]; then
             if [[ -z ${!var} ]]; then
-              echo "Warning: $var isn't defined"
+              echo "$(date "+%Y-%m-%d %H:%M:%S") - Warning: $var isn't defined..."
             else
               setting_name=${var#REPLACE_}
               SETTINGS+="$setting_name=${!var} "
@@ -73,7 +73,7 @@ steps:
           fi
         done
         if [[ -z $SETTINGS ]]; then
-          echo "Warning: There are no environment variables to update"
+          echo "$(date "+%Y-%m-%d %H:%M:%S") - Warning: There are no environment variables to update..."
         else
           az functionapp config appsettings set \
             --name "$(siteName)" \

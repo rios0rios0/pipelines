@@ -22,18 +22,20 @@ stages:
             displayName: 'Docker Login'
 
           - script: |
-              echo 'Creating Docker Buildx instance'
+              echo "$(date "+%Y-%m-%d %H:%M:%S") - Creating Docker Buildx instance..."
               docker buildx create --use
+
               TAGS="$(DOCKER_CONTAINER_IMAGE):latest"
               if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
                 TAGS="$TAGS -t $(DOCKER_CONTAINER_IMAGE):$(Build.SourceBranchName)"
-                echo "Setting Docker image tag to $(Build.SourceBranchName)"
+                echo "$(date "+%Y-%m-%d %H:%M:%S") - Setting Docker image tag to $(Build.SourceBranchName)."
                 echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]$(Build.SourceBranchName)"
               else
-                echo 'Setting Docker image tag to latest'
+                echo "$(date "+%Y-%m-%d %H:%M:%S") - Setting Docker image tag to latest..."
                 echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]latest"
               fi
-              echo 'Building Docker image'
+
+              echo "$(date "+%Y-%m-%d %H:%M:%S") - Building Docker image..."
               docker buildx build --platform linux/amd64,linux/arm64 -t $TAGS --push .
             name: 'build'
         continueOnError: false

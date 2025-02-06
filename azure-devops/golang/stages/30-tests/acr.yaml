@@ -8,11 +8,11 @@ stages:
         variables:
           GOPATH: "$(Pipeline.Workspace)/.go"
         steps:
-          - task: Docker@2
-            displayName: Docker Login
+          - task: 'Docker@2'
+            displayName: 'Docker Login'
             inputs:
               containerRegistry: '$(CONTAINER_REGISTRY_SERVICE_CONNECTION)'
-              command: login
+              command: 'login'
 
           - template: '../../abstracts/test.yaml'
 

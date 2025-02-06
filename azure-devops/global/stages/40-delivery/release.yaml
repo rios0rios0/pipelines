@@ -5,6 +5,7 @@ jobs:
     steps:
       - script: |
           set -eux
+
           COMMIT_MESSAGE="$(git log -1 --pretty=%B)"
           REGEX="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)'.*$|.*chore\(bump\):.*version to ([0-9]+\.[0-9]+\.[0-9]+).*"
 
@@ -30,5 +31,5 @@ jobs:
                  --header "Content-Type: application/json" \
                  --data "$DATA"
           else
-              echo 'Commit is not a bump, not creating a release'
+              echo "$(date "+%Y-%m-%d %H:%M:%S") - Commit is not a bump, not creating a release..."
           fi

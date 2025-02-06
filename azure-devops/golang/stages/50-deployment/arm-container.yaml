@@ -7,10 +7,6 @@ stages:
         displayName: 'deployment'
         steps:
           - script: |
-              echo "ENVIRONMENT: $(ENVIRONMENT)"
-              echo "AZM_LOCATION: $(AZM_LOCATION)"
-              echo "IMAGE NAME: $(REGISTRY_SERVER)/$(Build.Repository.Name):$(Build.SourceBranchName)"
-
               resourceGroupName="$(ENVIRONMENT)-rg-$(RESOURCE_GROUP_NAME)-$(AZM_LOCATION)"
               echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
 

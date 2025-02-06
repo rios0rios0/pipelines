@@ -11,7 +11,8 @@ stages:
           REPORT_PATH: 'build/reports'
         steps:
           # TODO: see https://www.reddit.com/r/Terraform/comments/1g9go7p/what_do_you_use_to_generate_sbom_for_terraform/
-          - script: echo "missing Cyclonedx for Terraform"
+          - script: echo "$(date "+%Y-%m-%d %H:%M:%S") - Missing Cyclonedx for Terraform..."
+
           - template: '../../../global/abstracts/scripts-repo.yaml'
           - script: $(Scripts.Directory)/global/scripts/dependency-track/run.sh
         continueOnError: true

@@ -52,29 +52,29 @@ steps:
       script: |
         cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
 
-        echo "Starting OpenSearch..."
+        echo "$(date "+%Y-%m-%d %H:%M:%S") - Starting OpenSearch..."
         yarn os snapshot > $(Agent.TempDirectory)/snapshot.log 2>&1 &
         OS_PID=$!
 
-        echo "Waiting for OpenSearch to start..."
+        echo "$(date "+%Y-%m-%d %H:%M:%S") - Waiting for OpenSearch to start..."
         while ! grep -q "recovered \[0\] indices into cluster_state" $(Agent.TempDirectory)/snapshot.log; do
           sleep 1
         done
-        echo "OpenSearch started successfully"
+        echo "$(date "+%Y-%m-%d %H:%M:%S") - OpenSearch started successfully!"
 
-        echo "Starting App..."
+        echo "$(date "+%Y-%m-%d %H:%M:%S") - Starting App..."
         yarn debug > $(Agent.TempDirectory)/debug.log 2>&1 &
         APP_PID=$!
 
-        echo "Waiting for App to start..."
+        echo "$(date "+%Y-%m-%d %H:%M:%S") - Waiting for App to start..."
         while ! grep -q "bundles compiled successfully after" $(Agent.TempDirectory)/debug.log; do
           sleep 1
         done
-        echo "App started successfully"
+        echo "$(date "+%Y-%m-%d %H:%M:%S") - App started successfully!"
 
         export TERM=xterm
 
-        echo "Starting Cypress..."
+        echo "$(date "+%Y-%m-%d %H:%M:%S") - Starting Cypress..."
         yarn cy:parallel
     displayName: 'Run E2E Tests'
     continueOnError: true

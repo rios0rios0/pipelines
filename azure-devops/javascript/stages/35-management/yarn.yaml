@@ -16,7 +16,7 @@ stages:
 
           - task: 'Cache@2'
             inputs:
-              key: "$(Agent.JobName)|sonar"
+              key: "$(Agent.JobName)|$(SONAR_USER_HOME)"
               path: "$(SONAR_USER_HOME)"
             displayName: 'Cache for SonarQube'
             continueOnError: true

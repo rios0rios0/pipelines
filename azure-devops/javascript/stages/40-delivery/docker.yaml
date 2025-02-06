@@ -33,7 +33,7 @@ stages:
               targetPath: 'build'
             displayName: 'Download Build Artifact'
 
-          - template: '../../../global/abstracts/docker.yaml'
+          - template: '../../../global/stages/40-delivery/docker.yaml'
             parameters:
               DOCKER_FILE: '.ci/40-delivery/app.Dockerfile'
               DOCKER_CACHE_DIR: '$(DOCKER_CACHE_DIR)'

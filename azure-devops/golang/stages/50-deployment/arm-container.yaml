@@ -1,10 +1,10 @@
 stages:
-  - stage: Deploy
-    displayName: 'Deploy Container to Azure'
+  - stage: 'deployment'
+    displayName: 'deployment'
     condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
     jobs:
-      - job: DeployContainer
-        displayName: 'Publish Container to Azure'
+      - job: 'deployment'
+        displayName: 'deployment'
         steps:
           - script: |
               echo "ENVIRONMENT: $(ENVIRONMENT)"
@@ -13,10 +13,9 @@ stages:
 
               resourceGroupName="$(ENVIRONMENT)-rg-$(RESOURCE_GROUP_NAME)-$(AZM_LOCATION)"
               echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
-              
-              IMAGE_NAME=$(REGISTRY_SERVER)/$(Build.Repository.Name):$(Build.SourceBranchName)
-              echo "##vso[task.setvariable variable=CONTAINER_IMAGE]$IMAGE_NAME"  
 
+              IMAGE_NAME=$(REGISTRY_SERVER)/$(Build.Repository.Name):$(Build.SourceBranchName)
+              echo "##vso[task.setvariable variable=CONTAINER_IMAGE]$IMAGE_NAME"
 
               resourceGroupExists=$(az group exists --name $resourceGroupName)
               echo "##vso[task.setvariable variable=resourceGroupExists]$resourceGroupExists"

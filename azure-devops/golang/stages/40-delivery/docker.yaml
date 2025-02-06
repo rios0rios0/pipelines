@@ -1,10 +1,10 @@
 stages:
-  - stage: Build
-    displayName: Build and push stage
+  - stage: 'delivery'
+    displayName: 'delivery'
     condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
     jobs:
-      - job: Build
-        displayName: Build job
+      - job: 'delivery'
+        displayName: 'delivery'
         variables:
           GOPATH: "$(Pipeline.Workspace)/.go"
           DOCKER_CACHE_DIR: '$(Agent.TempDirectory)/docker-cache'
@@ -18,7 +18,7 @@ stages:
               CGO_ENABLED=0 GOOS=linux GOARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') go build -o build_output/main ./cmd
             displayName: "Build Go Application"
 
-          - template: '../../../global/abstracts/docker.yaml'
+          - template: '../../../global/stages/40-delivery/docker.yaml'
             parameters:
               DOCKER_FILE: './Dockerfile'
               DOCKER_CACHE_DIR: '$(DOCKER_CACHE_DIR)'

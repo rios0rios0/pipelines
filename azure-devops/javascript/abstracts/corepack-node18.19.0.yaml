@@ -1,7 +1,7 @@
 parameters:
   - name: 'APP_PATH'
     type: 'string'
-    default: $(System.DefaultWorkingDirectory)
+    default: "$(System.DefaultWorkingDirectory)"
 
 steps:
   - template: 'corepack-node18.19.0-no-cache.yaml'

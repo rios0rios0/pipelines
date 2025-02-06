@@ -1,5 +1,4 @@
 steps:
-
   - task: 'UseNode@1'
     inputs:
       version: '18.19.0'

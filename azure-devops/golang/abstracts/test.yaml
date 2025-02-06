@@ -1,5 +1,4 @@
 steps:
-
   - template: 'go1.23.4.yaml'
 
   - script: $(Scripts.Directory)/global/scripts/golang/test/run.sh

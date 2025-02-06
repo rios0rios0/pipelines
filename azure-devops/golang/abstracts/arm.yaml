@@ -48,7 +48,7 @@ steps:
       replaceExistingArchive: true
     displayName: 'Archive Build Output'
 
-  - task: PublishPipelineArtifact@1
+  - task: 'PublishPipelineArtifact@1'
     inputs:
       targetPath: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
       artifact: 'build-output'

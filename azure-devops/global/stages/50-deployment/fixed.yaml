@@ -36,6 +36,7 @@ steps:
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -e
+
         outboundIpAddresses="''"
         if [ "$(resourceGroupExists)" = true ]; then
           functionAppName=$(az functionapp list --resource-group $(resourceGroupName) --query "[].name" --output tsv | tail -n 1)

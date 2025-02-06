@@ -18,14 +18,13 @@ steps:
         set -e
 
         mkdir -p $(AZURE_DEPLOY_CACHE)
-
         echo $AZURE_DEPLOY_OUTPUTS > $(AZURE_DEPLOY_CACHE)/outputs.json
 
         # Check if the file was created
         if [ -f "$(AZURE_DEPLOY_CACHE)/outputs.json" ]; then
           echo "File outputs.json created with success."
         else
-          echo "Erro: File outputs.json file not found."
+          echo "Error: File outputs.json file not found."
           exit 1
         fi
     displayName: 'Save Deployment Outputs to File'
@@ -50,10 +49,10 @@ steps:
       AZM_SERVICE_CONNECTION: "$(AZM_SERVICE_CONNECTION)"
 
   - script: |
-
       siteName=$(echo $OUTPUTS | jq -r '.siteName.value')
       echo "##vso[task.setvariable variable=siteName]$siteName"
     displayName: 'Getting Pipeline Variables'
+
   - task: 'AzureCLI@2'
     inputs:
       azureSubscription: "$(AZM_SERVICE_CONNECTION)"
@@ -83,7 +82,7 @@ steps:
         fi
     displayName: 'Replace Azure Function Variables'
 
-  - task: DownloadPipelineArtifact@2
+  - task: 'DownloadPipelineArtifact@2'
     inputs:
       artifact: 'build-output'
       targetPath: '$(Pipeline.Workspace)/build-output'
@@ -96,6 +95,7 @@ steps:
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -e
+
         az functionapp deployment source config-zip \
           --name "$(siteName)" \
           --resource-group "$(resourceGroupName)" \

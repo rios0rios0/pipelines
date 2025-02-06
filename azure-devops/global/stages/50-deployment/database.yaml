@@ -11,7 +11,7 @@ parameters:
 steps:
   - task: 'AzureCLI@2'
     displayName: 'Check if Database Exists'
-    name: CheckDatabase
+    name: 'CheckDatabase'
     inputs:
       azureSubscription: "$(AZM_SERVICE_CONNECTION)"
       scriptType: 'bash'
@@ -20,7 +20,7 @@ steps:
         DATABASE_SERVER_NAME=$(echo $OUTPUTS | jq -r '.databaseServerName.value')
 
         if [[ -z "$DATABASE_SERVER_NAME" || "$DATABASE_SERVER_NAME" == "null" ]]; then
-          echo "Invalid database server name: $DATABASE_SERVER_NAME"
+          echo "$(date "+%Y-%m-%d %H:%M:%S") - Invalid Database Server Name: $DATABASE_SERVER_NAME."
           echo "##vso[task.setvariable variable=DB_EXISTS;isOutput=true]false"
           exit 0
         fi
@@ -41,9 +41,9 @@ steps:
       inlineScript: |
         set -e
 
+        PIPELINE_IP=$(curl -s ifconfig.me/ip)
         DATABASE_SERVER_NAME=$(echo $OUTPUTS | jq -r '.databaseServerName.value')
 
-        PIPELINE_IP=$(curl -s ifconfig.me/ip)
         az postgres flexible-server firewall-rule create \
             --resource-group "$(resourceGroupName)" \
             --name "$DATABASE_SERVER_NAME" \
@@ -60,15 +60,15 @@ steps:
       SSL=$(echo $OUTPUTS | jq -r '.databaseServerSSL.value')
       CONNECTION_STRING="host=$HOST port=$PORT user=$USER password=$PASSWORD dbname=$DBNAME sslmode=$SSL"
       echo "##vso[task.setvariable variable=CONNECTION_STRING]$CONNECTION_STRING"
-      echo $CONNECTION_STRING
     displayName: 'Set Database Connection String'
     condition: and(succeeded(), eq(variables['CheckDatabase.DB_EXISTS'], 'true'))
   - script: |
       set -e
+
       table_hash=$(psql "$(CONNECTION_STRING)" -t -c \
       "SELECT md5(string_agg(concat_ws('|', version_id::text, is_applied::text), ',' ORDER BY id)) AS table_hash FROM goose_db_version;")
       table_hash=$(echo "$table_hash" | xargs)
-      echo "table_hash: $table_hash"
+      echo "$(date "+%Y-%m-%d %H:%M:%S") - Queried Table Hash: $table_hash."
       echo "##vso[task.setvariable variable=GOOSE_TABLE_HASH]$table_hash"
     displayName: 'Set Goose Table Hash variable'
     condition: and(succeeded(), eq(variables['CheckDatabase.DB_EXISTS'], 'true'))
@@ -100,12 +100,13 @@ steps:
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -e
+
         # TODO: move this "IF" to a file and (or) use an Azure resource to create a condition
         if grep -r 'goose' db/migrations/*.sql; then
           go install github.com/pressly/goose/v3/cmd/goose@v3.17.0
           $(go env GOPATH)/bin/goose -dir db/migrations postgres "$(CONNECTION_STRING)" up
         else
-          echo "No Goose migration files found. Skipping Goose installation and migration."
+          echo "$(date "+%Y-%m-%d %H:%M:%S") - No Goose migration files found. Skipping Goose installation and migration."
         fi
     displayName: 'Execute Migrations'
 
@@ -117,6 +118,7 @@ steps:
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -e
+
         if grep -r 'goose' db/seeders/*.sql; then
           go install github.com/pressly/goose/v3/cmd/goose@v3.22.1
           for dir in "" "dev" "prod"; do
@@ -129,7 +131,7 @@ steps:
               fi
           done
         else
-            echo "No Goose seed files found. Skipping seed"
+            echo "$(date "+%Y-%m-%d %H:%M:%S") - No Goose seed files found. Skipping seed!"
         fi
     displayName: 'Execute Seeders'
 
@@ -142,8 +144,10 @@ steps:
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -e
-        DATABASE_SERVER_NAME=$(echo $OUTPUTS | jq -r '.databaseServerName.value')
+
         PIPELINE_IP=$(curl -s ifconfig.me/ip)
+        DATABASE_SERVER_NAME=$(echo $OUTPUTS | jq -r '.databaseServerName.value')
+
         az postgres flexible-server firewall-rule delete --yes \
           --resource-group "$(resourceGroupName)" \
           --name "$DATABASE_SERVER_NAME" \

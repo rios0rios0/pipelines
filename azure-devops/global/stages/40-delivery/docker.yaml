@@ -33,7 +33,7 @@ steps:
           echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]latest"
         fi
 
-        echo "image tag: $TAGS"
+        echo "$(date "+%Y-%m-%d %H:%M:%S") - Container tags: $TAGS."
 
         docker buildx create --use
         docker buildx build \

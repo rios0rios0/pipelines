@@ -37,6 +37,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed `docker.yaml` Azure's Golang delivery stage to use global `docker.yaml` template and remove unnecessary execution of `./config.sh` script since it's already done by the `go1.23.4.yaml` template
 - changed `docker.yaml` Azure's Javascript delivery stage to use global `docker.yaml` template since it was being repeated
 - changed cache strategy for JS projects using Azure DevOps pipelines
+- changed `go1.23.4.yaml` to compile the dependencies files before search for cache
 
 ### Fixed
 

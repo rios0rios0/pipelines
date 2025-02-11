@@ -22,14 +22,14 @@ steps:
   # $(Agent.HomeDirectory) is "home/vsts/agents/3.246.0/" different from the real home directory
   - task: 'Cache@2'
     inputs:
-      key: '$(Agent.JobName)|$(HOME)/.cache/yarn'
+      key: '$(Agent.JobName)|$(Agent.TempDirectory)/OpenSearch-Dashboards/yarn.lock|$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/yarn.lock'
       path: "$(HOME)/.cache/yarn"
     displayName: 'Cache for Yarn 1.x'
     continueOnError: true
 
   - task: 'Cache@2'
     inputs:
-      key: '$(Agent.JobName)|$(HOME)/.yarn'
+      key: '$(Agent.JobName)|$(Agent.TempDirectory)/OpenSearch-Dashboards/yarn.lock|$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/yarn.lock'
       path: "$(HOME)/.yarn"
     displayName: 'Cache for Yarn 4.5.x'
     continueOnError: true

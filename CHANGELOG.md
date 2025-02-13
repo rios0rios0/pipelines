@@ -26,6 +26,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added `arm-container.yaml` to run container in `azure container instance`
 - added Azure global `docker.yaml` delivery template to be used by all languages
 - added messages to show application states in the `test_e2e` job
+- added new parameters: `RUN_BEFORE_BUILD` and `DOCKER_BUILD_ARGS` to Azure DevOps Golang delivery stage template to allow running a script before the build and passing arguments to the Docker build command
 
 ### Changed
 

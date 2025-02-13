@@ -1,3 +1,11 @@
+parameters:
+  - name: 'DOCKER_BUILD_ARGS'
+    type: 'string'
+    default: ''
+  - name: 'RUN_BEFORE_BUILD'
+    type: 'string'
+    default: ''
+
 stages:
   - stage: 'delivery'
     displayName: 'delivery'
@@ -9,20 +17,13 @@ stages:
           GOPATH: "$(Pipeline.Workspace)/.go"
           DOCKER_CACHE_DIR: '$(Agent.TempDirectory)/docker-cache'
         steps:
-          - template: '../../abstracts/go1.23.4.yaml'
-
-          #TODO: create a template for this
-          - script: |
-              set -e
-              mkdir -p build_output
-              CGO_ENABLED=0 GOOS=linux GOARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') go build -o build_output/main ./cmd
-            displayName: "Build Go Application"
-
           - template: '../../../global/stages/40-delivery/docker.yaml'
             parameters:
               DOCKER_FILE: './Dockerfile'
               DOCKER_CACHE_DIR: '$(DOCKER_CACHE_DIR)'
               CONTAINER_REGISTRY_SERVER: '$(CONTAINER_REGISTRY_SERVER)'
               CONTAINER_REGISTRY_SERVICE_CONNECTION: '$(CONTAINER_REGISTRY_SERVICE_CONNECTION)'
+              DOCKER_BUILD_ARGS: '${{ parameters.DOCKER_BUILD_ARGS }}'
+              RUN_BEFORE_BUILD: '${{ parameters.RUN_BEFORE_BUILD }}'
 
       - template: '../../../global/stages/40-delivery/release.yaml'

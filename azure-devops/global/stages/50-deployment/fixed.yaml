@@ -13,6 +13,8 @@ parameters:
     type: 'string'
   - name: 'AZURE_DEPLOY_CACHE_HIT'
     type: 'string'
+  - name: 'CUSTOM_PARAMETERS'
+    type: 'string'
 
 steps:
   - task: 'AzureCLI@2'
@@ -48,6 +50,25 @@ steps:
         echo "##vso[task.setvariable variable=outboundIpAddresses]$outboundIpAddresses"
     displayName: 'Getting Function Outbound IP Addresses'
 
+  - task: 'AzureCLI@2'
+    inputs:
+      azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        set -e
+        PARAMETERS="\
+          -location $(AZM_LOCATION) \
+          -environment $(ENVIRONMENT) \
+          -functionAppName $(AZM_FUNCTION_NAME)"
+
+        if [ -n "$(CUSTOM_PARAMETERS)" ]; then
+          PARAMETERS="$PARAMETERS $(CUSTOM_PARAMETERS)"
+        fi
+        echo "##vso[task.setvariable variable=OVERRIDE_PARAMETERS]$PARAMETERS"
+        echo "Parameters: $OVERRIDE_PARAMETERS"
+    displayName: 'Prepare Deployment Parameters'
+
   - task: 'AzureResourceGroupDeployment@2'
     inputs:
       location: "$(AZM_LOCATION)"
@@ -55,7 +76,7 @@ steps:
       azureSubscription: "$(AZM_SERVICE_CONNECTION)"
       resourceGroupName: "$(resourceGroupName)"
       csmFile: 'azuredeploy.json'
-      overrideParameters: "-location $(AZM_LOCATION) -environment $(ENVIRONMENT) -functionAppName $(AZM_FUNCTION_NAME) -inboundAllowedIps $(INBOUND_ALLOWED_IPS) -oldOutboundIpAddresses $(outboundIpAddresses)"
+      overrideParameters:  -inboundAllowedIps $(INBOUND_ALLOWED_IPS) -oldOutboundIpAddresses $(outboundIpAddresses) $(OVERRIDE_PARAMETERS)
       templateLocation: 'Linked artifact'
       deploymentMode: 'Incremental'
       deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'

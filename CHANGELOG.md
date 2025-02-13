@@ -26,6 +26,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added `arm-container.yaml` to run container in `azure container instance`
 - added Azure global `docker.yaml` delivery template to be used by all languages
 - added messages to show application states in the `test_e2e` job
+- added a new optional parameter called `CUSTOM_PARAMETERS` in `go-arm-az-function` to add custom parameters in Resource Group deployment
 
 ### Changed
 

@@ -1,3 +1,7 @@
+parameters:
+  - name: 'CUSTOM_PARAMETERS'
+    type: 'string'
+
 stages:
   - stage: 'deployment'
     displayName: 'deployment'
@@ -22,3 +26,4 @@ stages:
               ENVIRONMENT: '$(ENVIRONMENT)'
               INBOUND_ALLOWED_IPS: '$(INBOUND_ALLOWED_IPS)'
               AZURE_DEPLOY_CACHE_HIT: '$(AZURE_DEPLOY_CACHE_HIT)'
+              CUSTOM_PARAMETERS: '$(CUSTOM_PARAMETERS)'

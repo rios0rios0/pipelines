@@ -17,14 +17,14 @@ steps:
   # $(Agent.HomeDirectory) is "home/vsts/agents/3.246.0/" different from the real home directory
   - task: 'Cache@2'
     inputs:
-      key: "$(Agent.JobName)|$(HOME)/.cache/Cypress"
+      key: "$(Agent.JobName)|$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/yarn.lock"
       path: "$(HOME)/.cache/Cypress"
     displayName: 'Cache for Cypress'
     continueOnError: true
 
   - task: 'Cache@2'
     inputs:
-      key: "$(Agent.JobName)|$(Agent.TempDirectory)/OpenSearch-Dashboards/.opensearch"
+      key: "$(Agent.JobName)|$(Agent.TempDirectory)/OpenSearch-Dashboards/yarn.lock"
       path: "$(Agent.TempDirectory)/OpenSearch-Dashboards/.opensearch"
     displayName: 'Cache for OpenSearch Backend'
     continueOnError: true

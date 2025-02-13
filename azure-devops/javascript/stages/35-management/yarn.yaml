@@ -16,7 +16,8 @@ stages:
 
           - task: 'Cache@2'
             inputs:
-              key: "$(Agent.JobName)|$(SONAR_USER_HOME)"
+              # TODO: this key should be better according to sonar version
+              key: "$(Agent.JobName)|yarn.lock"
               path: "$(SONAR_USER_HOME)"
             displayName: 'Cache for SonarQube'
             continueOnError: true

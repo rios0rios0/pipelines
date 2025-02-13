@@ -7,6 +7,12 @@ parameters:
     type: 'string'
   - name: 'CONTAINER_REGISTRY_SERVICE_CONNECTION'
     type: 'string'
+  - name: 'DOCKER_BUILD_ARGS'
+    type: 'string'
+    default: ''
+  - name: 'RUN_BEFORE_BUILD'
+    type: 'string'
+    default: ''
 
 steps:
   - task: 'Cache@2'
@@ -35,8 +41,10 @@ steps:
 
         echo "$(date "+%Y-%m-%d %H:%M:%S") - Container tags: $TAGS."
 
+        ${{ parameters.RUN_BEFORE_BUILD }}
+
         docker buildx create --use
-        docker buildx build \
+        docker buildx build ${{ parameters.DOCKER_BUILD_ARGS }} \
           --platform linux/amd64,linux/arm64 \
           --tag $TAGS \
           --cache-from=type=local,src=${{ parameters.DOCKER_CACHE_DIR }} \

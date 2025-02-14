@@ -1,3 +1,8 @@
+parameters:
+  - name: 'CUSTOM_PARAMETERS'
+    type: 'string'
+    default: ''
+
 stages:
   - template: 'stages/10-code-check/go.yaml'
   - template: 'stages/20-security/go.yaml'
@@ -5,3 +10,5 @@ stages:
   - template: 'stages/35-management/go.yaml'
   - template: 'stages/40-delivery/arm-fixed.yaml'
   - template: 'stages/50-deployment/arm-fixed.yaml'
+    parameters:
+      CUSTOM_PARAMETERS: ${{ parameters.CUSTOM_PARAMETERS }}

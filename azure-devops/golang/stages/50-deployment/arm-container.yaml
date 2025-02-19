@@ -10,13 +10,24 @@ stages:
               resourceGroupName="$(ENVIRONMENT)-rg-$(RESOURCE_GROUP_NAME)-$(AZM_LOCATION)"
               echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
 
-              IMAGE_NAME=$(REGISTRY_SERVER)/$(Build.Repository.Name):$(Build.SourceBranchName)
+              imageName=$(REGISTRY_SERVER)/$(Build.Repository.Name)
+
+              TAG="latest"
+              if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
+                TAG="$(Build.SourceBranchName)"
+              fi
+
+              echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]$TAG"
+              IMAGE_NAME="$imageName:$TAG"
+
               echo "##vso[task.setvariable variable=CONTAINER_IMAGE]$IMAGE_NAME"
 
               resourceGroupExists=$(az group exists --name $resourceGroupName)
               echo "##vso[task.setvariable variable=resourceGroupExists]$resourceGroupExists"
             displayName: 'Set Resource Group Name'
-
+          - template: '../../../global/stages/50-deployment/arm-parameters.yaml'
+            parameters:
+              armTemplateFile: 'azuredeploy.json'
           - task: 'AzureResourceGroupDeployment@2'
             inputs:
               location: "$(AZM_LOCATION)"
@@ -25,16 +36,6 @@ stages:
               resourceGroupName: "$(resourceGroupName)"
               deploymentMode: 'Incremental'
               deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'
-              csmFile: 'azuredeploy.json'
-              overrideParameters: >
-                -applicationName $(APPLICATION_NAME)
-                -containerImage $(CONTAINER_IMAGE)
-                -location $(AZM_LOCATION)
-                -port $(PORT)
-                -cpuCores $(CPU_CORES)
-                -memoryInGB $(MEMORY_IN_GB)
-                -environment $(ENVIRONMENT)
-                -registryServer $(REGISTRY_SERVER)
-                -registryUsername $(REGISTRY_USERNAME)
-                -registryPassword $(REGISTRY_PASSWORD)
+              csmFile: '$(Build.SourcesDirectory)/azuredeploy.json'
+              csmParametersFile: '$(Build.ArtifactStagingDirectory)/azuredeploy.parameters.json'  
             displayName: 'Deploy Container to Azure'

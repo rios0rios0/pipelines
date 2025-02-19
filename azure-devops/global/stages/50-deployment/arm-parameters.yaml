@@ -1,0 +1,52 @@
+parameters:
+  - name: armTemplateFile
+    type: string
+    default: 'azuredeploy.json'
+
+steps:
+  - script: |
+      #!/bin/bash
+      ARM_TEMPLATE="${{ parameters.armTemplateFile }}"
+      PARAMS_FILE="azuredeploy.parameters.json"  # This will be returned
+
+      # Extract parameter names from ARM template
+      PARAMS=$(jq -r '.parameters | keys[]' "$ARM_TEMPLATE")
+
+      # Start building JSON
+      echo '{ "parameters": {' > "$PARAMS_FILE"
+      first=true
+
+      for param in $PARAMS; do
+          # Convert to uppercase and replace dashes with underscores to match env var format
+          ENV_VAR=$(echo "$param" | sed 's/\([a-z0-9]\)\([A-Z]\)/\1_\2/g' | tr '[:lower:]' '[:upper:]')
+
+          # Fetch value from environment variable
+          VALUE=${!ENV_VAR}
+
+          # Detect parameter type
+          TYPE=$(jq -r ".parameters[\"$param\"].type" "$ARM_TEMPLATE")
+          if [[ "$TYPE" == "int" ]]; then
+              JSON_VALUE="$VALUE"
+          else
+              JSON_VALUE="\"$VALUE\""
+          fi
+
+          # Add comma for JSON formatting
+          if [ "$first" = false ]; then
+              echo "," >> "$PARAMS_FILE"
+          fi
+          first=false
+
+          echo "    \"$param\": { \"value\": $JSON_VALUE }" >> "$PARAMS_FILE"
+      done
+
+      echo "}}" >> "$PARAMS_FILE"
+
+      # Set the output variable for the parameters file
+      echo "##vso[task.setvariable variable=generatedParamsFile;isOutput=true]$PARAMS_FILE"
+      mv "$PARAMS_FILE" "$(Build.ArtifactStagingDirectory)/$PARAMS_FILE"
+
+      echo "##vso[artifact.upload artifactname=arm-params]$(Build.ArtifactStagingDirectory)/$PARAMS_FILE"
+      echo "Upload successful!"
+    name: generateParams
+    displayName: "Generate ARM Parameters File"

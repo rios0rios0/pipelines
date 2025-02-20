@@ -29,6 +29,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added new parameters: `RUN_BEFORE_BUILD` and `DOCKER_BUILD_ARGS` to Azure DevOps Golang delivery stage template to allow running a script before the build and passing arguments to the Docker build command
 - added a new optional parameter called `CUSTOM_PARAMETERS` in `go-arm-az-function` to add custom parameters in Resource Group deployment
 - added `arm-parameters.yaml` to generically construct `ARM` `parameters` from `library variables`
+- added new stages template `go-arm-docker-delivery.yaml` removing the deployment stage to avoid conflicting with projects that don't need it
 
 ### Changed
 

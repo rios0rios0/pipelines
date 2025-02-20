@@ -15,3 +15,4 @@ stages:
     parameters:
       DOCKER_BUILD_ARGS: ${{ parameters.DOCKER_BUILD_ARGS }}
       RUN_BEFORE_BUILD: ${{ parameters.RUN_BEFORE_BUILD }}
+  - template: 'stages/50-deployment/arm-container.yaml'

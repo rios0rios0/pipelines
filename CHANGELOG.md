@@ -48,6 +48,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed JavaScript delivery and deployment stages in Azure DevOps by inserting name for the `Build and Push Docker Image` step
 - fixed wrong parameter usage by changing Runtime Expressions to Template Expressions for Azure's Global docker delivery template
 - fixed node modules cache error of azure pipeline for javascript
+- fixed script that kills processes created by OSD
 
 ## [2.1.0] - 2024-12-27
 

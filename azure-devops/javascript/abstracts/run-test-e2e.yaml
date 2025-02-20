@@ -105,13 +105,13 @@ steps:
         PORT_OSD_PID=$(lsof -t -i:${{ parameters.OSD_PORT }})
 
         if [ -n "$PORT_OS_PIDS" ]; then
-          for PID in $PORT_OS_PIDS; do
-            kill -9 $PID
-          done
+          echo "Killing OS processes: $PORT_OS_PIDS"
+          echo "$PORT_OS_PIDS" | xargs kill -9
         fi
 
         if [ -n "$PORT_OSD_PID" ]; then
-          kill -9 $PORT_OSD_PID
+          echo "Killing App process: $PORT_OSD_PID"
+          kill -9 "$PORT_OSD_PID"
         fi
 
         rm -r -f $(Agent.TempDirectory)/snapshot.log $(Agent.TempDirectory)/debug.log $(Agent.TempDirectory)/yarn.log

@@ -1,9 +1,3 @@
-parameters:
-  # optional parameter for heavy workloads within JS language
-  - name: 'SELF_HOSTED_POOL'
-    type: 'string'
-    default: "$(SELF_HOSTED_POOL)"
-
 stages:
   - stage: 'delivery'
     displayName: 'delivery'
@@ -11,9 +5,6 @@ stages:
     jobs:
       - job: 'delivery'
         displayName: 'delivery'
-        ${{ if ne(parameters.SELF_HOSTED_POOL, '') }}:
-          pool:
-            name: "${{ parameters.SELF_HOSTED_POOL }}"
         variables:
           DOCKER_CACHE_DIR: '$(Agent.TempDirectory)/docker-cache'
           BUILD_ARTIFACT_NAME: 'build'

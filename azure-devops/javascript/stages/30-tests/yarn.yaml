@@ -11,9 +11,6 @@ stages:
     jobs:
       - job: 'test_all'
         displayName: 'test:all'
-        ${{ if ne(parameters.SELF_HOSTED_POOL, '') }}:
-          pool:
-            name: "${{ parameters.SELF_HOSTED_POOL }}"
         steps:
           - template: '../../abstracts/execute-command-opensearch-dashboards.yaml'
             parameters:

@@ -74,6 +74,23 @@ steps:
     condition: and(succeeded(), eq(variables['CheckDatabase.DB_EXISTS'], 'true'))
     continueOnError: true
 
+  - script: |
+      set -e
+
+      GOOSE_VERSION=v3.24.0
+      mkdir -p goose
+      curl -o goose/go.sum "https://raw.githubusercontent.com/pressly/goose/refs/tags/$GOOSE_VERSION/go.sum"
+      echo "##vso[task.setvariable variable=GOOSE_VERSION]$GOOSE_VERSION"
+      GOOSE_GOPATH=$(go env GOPATH)
+      echo "##vso[task.setvariable variable=GOOSE_GOPATH]$GOOSE_GOPATH"
+    displayName: 'Set goose version and go.sum'
+  - task: 'Cache@2'
+    displayName: 'Cache for Goose modules'
+    inputs:
+      key: "$(Agent.JobName)|goose/go.sum"
+      path: "$(GOOSE_GOPATH)"
+    continueOnError: true
+
   - task: 'Cache@2'
     displayName: 'Cache for Migrations'
     condition: and(succeeded(), eq(variables['CheckDatabase.DB_EXISTS'], 'true'))
@@ -102,8 +119,8 @@ steps:
         set -e
 
         # TODO: move this "IF" to a file and (or) use an Azure resource to create a condition
-        if grep -r 'goose' db/migrations/*.sql; then
-          go install github.com/pressly/goose/v3/cmd/goose@v3.17.0
+        if grep -r 'goose' db/migrations --include="*.sql"; then
+          go install github.com/pressly/goose/v3/cmd/goose@$GOOSE_VERSION
           $(go env GOPATH)/bin/goose -dir db/migrations postgres "$(CONNECTION_STRING)" up
         else
           echo "$(date "+%Y-%m-%d %H:%M:%S") - No Goose migration files found. Skipping Goose installation and migration."
@@ -120,7 +137,7 @@ steps:
         set -e
 
         if grep -r 'goose' db/seeders --include="*.sql"; then
-          go install github.com/pressly/goose/v3/cmd/goose@v3.22.1
+          go install github.com/pressly/goose/v3/cmd/goose@$GOOSE_VERSION
           for dir in "" "dev" "prod"; do
               if [ -z "$dir" ] || [ "$ENVIRONMENT" == "$dir" ]; then
                 dir_path="db/seeders/$dir"

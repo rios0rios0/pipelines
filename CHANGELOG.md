@@ -51,6 +51,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed wrong parameter usage by changing Runtime Expressions to Template Expressions for Azure's Global docker delivery template
 - fixed node modules cache error of azure pipeline for javascript
 - fixed script that kills processes created by OSD
+- fixed the seeders cache key on the `database.yaml`
+- fixed the seeders and migrations skip condition bug on the `database.yaml`
 
 ## [2.1.0] - 2024-12-27
 

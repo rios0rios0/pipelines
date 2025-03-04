@@ -118,12 +118,16 @@ steps:
       inlineScript: |
         set -e
 
-        # TODO: move this "IF" to a file and (or) use an Azure resource to create a condition
-        if grep -r 'goose' db/migrations --include="*.sql"; then
-          go install github.com/pressly/goose/v3/cmd/goose@$GOOSE_VERSION
-          $(go env GOPATH)/bin/goose -dir db/migrations postgres "$(CONNECTION_STRING)" up
+        if [[ "$MIGRATIONS_CACHE_HIT" == "false" ]]; then
+          # TODO: move this "IF" to a file and (or) use an Azure resource to create a condition
+          if grep -r 'goose' db/migrations --include="*.sql"; then
+            go install github.com/pressly/goose/v3/cmd/goose@$GOOSE_VERSION
+            $(go env GOPATH)/bin/goose -dir db/migrations postgres "$(CONNECTION_STRING)" up
+          else
+            echo "$(date "+%Y-%m-%d %H:%M:%S") - No Goose migration files found. Skipping Goose installation and migration."
+          fi
         else
-          echo "$(date "+%Y-%m-%d %H:%M:%S") - No Goose migration files found. Skipping Goose installation and migration."
+          echo "$(date "+%Y-%m-%d %H:%M:%S") - No changes on migration files. Skipping Goose installation and migration."
         fi
     displayName: 'Execute Migrations'
 
@@ -136,19 +140,23 @@ steps:
       inlineScript: |
         set -e
 
-        if grep -r 'goose' db/seeders --include="*.sql"; then
-          go install github.com/pressly/goose/v3/cmd/goose@$GOOSE_VERSION
-          for dir in "" "dev" "prod"; do
-              if [ -z "$dir" ] || [ "$ENVIRONMENT" == "$dir" ]; then
-                dir_path="db/seeders/$dir"
-                dir_path=${dir_path%/}
-                if grep -q 'goose' $dir_path/*.sql; then
-                    $(go env GOPATH)/bin/goose -dir $dir_path postgres "$(CONNECTION_STRING)" up
+        if [[ "$SEEDERS_CACHE_HIT" == "false" ]]; then
+          if grep -r 'goose' db/seeders --include="*.sql"; then
+            go install github.com/pressly/goose/v3/cmd/goose@$GOOSE_VERSION
+            for dir in "" "dev" "prod"; do
+                if [ -z "$dir" ] || [ "$ENVIRONMENT" == "$dir" ]; then
+                  dir_path="db/seeders/$dir"
+                  dir_path=${dir_path%/}
+                  if grep -q 'goose' $dir_path/*.sql; then
+                      $(go env GOPATH)/bin/goose -dir $dir_path postgres "$(CONNECTION_STRING)" up
+                  fi
                 fi
-              fi
-          done
+            done
+          else
+              echo "$(date "+%Y-%m-%d %H:%M:%S") - No Goose seed files found. Skipping seed!"
+          fi
         else
-            echo "$(date "+%Y-%m-%d %H:%M:%S") - No Goose seed files found. Skipping seed!"
+            echo "$(date "+%Y-%m-%d %H:%M:%S") - No changes on seed files found. Skipping seed!"
         fi
     displayName: 'Execute Seeders'
 

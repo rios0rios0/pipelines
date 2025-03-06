@@ -9,7 +9,7 @@ parameters:
 stages:
   - stage: 'delivery'
     displayName: 'delivery'
-    condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
+    condition: always()
     jobs:
       - job: 'delivery'
         displayName: 'delivery'

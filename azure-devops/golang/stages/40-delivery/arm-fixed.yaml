@@ -10,7 +10,6 @@ stages:
           GOPATH: "$(Pipeline.Workspace)/.go"
           SEEDERS_CACHE: "$(Build.SourcesDirectory)/.seeder"
           AZURE_DEPLOY_CACHE: "$(Build.SourcesDirectory)/.azuredeploy"
-          PIPELINE_FIREWALL_NAME: 'PipelineFirewall_$(date +"%Y%m%d%H%M%S")'
         steps:
           - template: '../../abstracts/arm.yaml'
 

@@ -1,6 +1,4 @@
 parameters:
-  - name: 'PIPELINE_FIREWALL_NAME'
-    type: 'string'
   - name: 'RESOURCE_GROUP_NAME'
     type: 'string'
   - name: 'ENVIRONMENT'
@@ -43,7 +41,6 @@ steps:
 
   - template: './database.yaml'
     parameters:
-      PIPELINE_FIREWALL_NAME: "$(PIPELINE_FIREWALL_NAME)"
       RESOURCE_GROUP_NAME: "$(resourceGroupName)"
       ENVIRONMENT: "$(ENVIRONMENT)"
       AZM_SERVICE_CONNECTION: "$(AZM_SERVICE_CONNECTION)"

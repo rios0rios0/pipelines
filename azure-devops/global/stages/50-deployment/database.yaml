@@ -1,6 +1,4 @@
 parameters:
-  - name: 'PIPELINE_FIREWALL_NAME'
-    type: 'string'
   - name: 'RESOURCE_GROUP_NAME'
     type: 'string'
   - name: 'ENVIRONMENT'
@@ -41,13 +39,17 @@ steps:
       inlineScript: |
         set -e
 
+        pipelineFirewallName="PipelineFirewall_$(date +"%Y%m%d%H%M%S")"
+
+        echo "##vso[task.setvariable variable=pipelineFirewallName]$pipelineFirewallName"
+
         PIPELINE_IP=$(curl -s ifconfig.me/ip)
         DATABASE_SERVER_NAME=$(echo $OUTPUTS | jq -r '.databaseServerName.value')
 
         az postgres flexible-server firewall-rule create \
             --resource-group "$(resourceGroupName)" \
             --name "$DATABASE_SERVER_NAME" \
-            --rule-name "$(PIPELINE_FIREWALL_NAME)" \
+            --rule-name "$pipelineFirewallName" \
             --start-ip-address "$PIPELINE_IP"
   - script: |
       set -e
@@ -170,10 +172,9 @@ steps:
       inlineScript: |
         set -e
 
-        PIPELINE_IP=$(curl -s ifconfig.me/ip)
         DATABASE_SERVER_NAME=$(echo $OUTPUTS | jq -r '.databaseServerName.value')
 
         az postgres flexible-server firewall-rule delete --yes \
           --resource-group "$(resourceGroupName)" \
           --name "$DATABASE_SERVER_NAME" \
-          --rule-name "$(PIPELINE_FIREWALL_NAME)"
+          --rule-name "$(pipelineFirewallName)"

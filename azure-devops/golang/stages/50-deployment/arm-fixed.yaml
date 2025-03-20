@@ -14,12 +14,10 @@ stages:
           GOPATH: "$(Pipeline.Workspace)/.go"
           SEEDERS_CACHE: "$(Build.SourcesDirectory)/.seeder"
           AZURE_DEPLOY_CACHE: "$(Build.SourcesDirectory)/.azuredeploy"
-          PIPELINE_FIREWALL_NAME: 'PipelineFirewall_$(date +"%Y%m%d%H%M%S")'
           AZURE_DEPLOY_CACHE_HIT: $[stageDependencies.delivery.delivery.outputs['cacheStep.AZURE_DEPLOY_CACHE_HIT']]
         steps:
           - template: '../../../global/stages/50-deployment/fixed.yaml'
             parameters:
-              PIPELINE_FIREWALL_NAME: '$(PIPELINE_FIREWALL_NAME)'
               AZM_FUNCTION_NAME: '$(AZM_FUNCTION_NAME)'
               AZM_LOCATION: '$(AZM_LOCATION)'
               AZM_SERVICE_CONNECTION: '$(AZM_SERVICE_CONNECTION)'

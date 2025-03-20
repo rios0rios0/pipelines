@@ -43,6 +43,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed `execute-command-opensearch-dashboards.yaml` yarn cache keys to use the `yarn.lock` of OSD and plugin
 - changed `azure-devops/global/stages/50-deployment/database.yaml` cache keys to include subfolders
 - changed GoLangCI-Lint configuration file to upgrade the `@maratori`'s configuration to `v1.64.7`
+- changed `PIPELINE_FIREWALL_NAME` from a pipeline parameter to a job variable
 
 ### Fixed
 

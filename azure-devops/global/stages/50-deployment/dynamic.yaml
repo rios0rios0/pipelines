@@ -1,6 +1,4 @@
 parameters:
-  - name: 'PIPELINE_FIREWALL_NAME'
-    type: 'string'
   - name: 'GROUP_NAME'
     type: 'string'
   - name: 'ENVIRONMENT'
@@ -65,6 +63,5 @@ steps:
   - template: './deploy-az-function.yaml'
     parameters:
       RESOURCE_GROUP_NAME: "$(resourceGroupName)"
-      PIPELINE_FIREWALL_NAME: "$(PIPELINE_FIREWALL_NAME)"
       ENVIRONMENT: "$(ENVIRONMENT)"
       AZM_SERVICE_CONNECTION: "$(AZM_SERVICE_CONNECTION)"

@@ -1,0 +1,44 @@
+parameters:
+    - name: 'GRADLE_TEST_TASKS'
+      type: 'object'
+      default: []
+
+jobs:
+  - job: 'style_spotless'
+    displayName: 'style:spotless'
+    steps:
+      - template: 'gradle.yaml'
+
+      - task: 'Gradle@3'
+        inputs:
+          tasks: 'spotlessCheck'
+          ${{ if gt(length(parameters.GRADLE_TEST_TASKS), 0) }}:
+            options: "-x ${{ join(' -x ', parameters.GRADLE_TEST_TASKS) }}"
+          publishJUnitResults: false
+        displayName: 'Spotless Check'
+
+  - job: 'style_checkstyle'
+    displayName: 'style:checkstyle'
+    steps:
+      - template: 'gradle.yaml'
+
+      - task: 'Gradle@3'
+        inputs:
+          tasks: 'checkstyleMain'
+          ${{ if gt(length(parameters.GRADLE_TEST_TASKS), 0) }}:
+            options: "-x ${{ join(' -x ', parameters.GRADLE_TEST_TASKS) }}"
+          publishJUnitResults: false
+        displayName: 'Checkstyle'
+
+  - job: 'quality_pmd'
+    displayName: 'quality:pmd'
+    steps:
+      - template: 'gradle.yaml'
+
+      - task: 'Gradle@3'
+        inputs:
+          tasks: 'pmdMain'
+          ${{ if gt(length(parameters.GRADLE_TEST_TASKS), 0) }}:
+            options: "-x ${{ join(' -x ', parameters.GRADLE_TEST_TASKS) }}"
+          publishJUnitResults: false
+        displayName: 'PMD'

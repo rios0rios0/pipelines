@@ -1,0 +1,23 @@
+parameters:
+  - name: 'GRADLE_TEST_TASKS'
+    type: 'object'
+    default: []
+
+stages:
+  - stage: 'tests'
+    displayName: 'tests'
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    jobs:
+      - job: 'test_all'
+        displayName: 'test:all'
+        variables:
+          GRADLE_USER_HOME: "$(Pipeline.Workspace)/.gradle"
+        steps:
+          - template: '../../abstracts/gradle.yaml'
+
+          - task: 'Gradle@3'
+            inputs:
+              tasks: ${{ join(' ', parameters.GRADLE_TEST_TASKS) }}
+              # TODO: correct this
+              publishJUnitResults: false
+            displayName: 'Run tests'

@@ -1,6 +1,6 @@
 parameters:
   - name: 'GRADLE_TEST_TASKS'
-    type: object
+    type: 'object'
     default: []
 
 stages:
@@ -11,9 +11,9 @@ stages:
       - job: 'test_all'
         displayName: 'test:all'
         variables:
-        GRADLE_USER_HOME: "$(Pipeline.Workspace)/.gradle"
+          GRADLE_USER_HOME: "$(Pipeline.Workspace)/.gradle"
         steps:
           - task: 'Gradle@3'
             inputs:
-              tasks: '${{ join(parameters.GRADLE_TEST_TASKS, ' ') }}'
+              tasks: ${{ join(' ', parameters.GRADLE_TEST_TASKS) }}
             displayName: 'Run tests'

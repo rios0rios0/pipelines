@@ -1,9 +1,9 @@
 parameters:
   - name: 'GRADLE_TEST_TASKS'
-    type: object
+    type: 'object'
     default: []
   - name: 'ADDITIONAL_GRADLE_TASKS'
-    type: string
+    type: 'string'
     default: ''
 
 stages:

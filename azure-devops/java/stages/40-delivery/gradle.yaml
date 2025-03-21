@@ -27,7 +27,7 @@ stages:
             inputs:
               tasks: 'build'
               ${{ if gt(length(parameters.GRADLE_TEST_TASKS), 0) }}:
-              options: "-x ${{ join(' -x ', parameters.GRADLE_TEST_TASKS) }}"
+                options: "-x ${{ join(' -x ', parameters.GRADLE_TEST_TASKS) }}"
             displayName: 'Gradle Build'
 
           - task: 'Gradle@3'

@@ -1,0 +1,36 @@
+parameters:
+  - name: 'ADDITIONAL_GRADLE_TASKS'
+    type: string
+    default: ''
+  - name: 'GRADLE_TEST_TASKS'
+    type: object
+    default: []
+
+stages:
+  - stage: 'delivery'
+    displayName: 'delivery'
+    condition: and(not(failed()), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    jobs:
+      - job: 'delivery'
+        displayName: 'delivery'
+        steps:
+          - template: '../../abstracts/gradle.yaml'
+
+          - task: 'Gradle@3'
+            inputs:
+              tasks: 'build'
+              ${{ if gt(length(parameters.GRADLE_TEST_TASKS), 0) }}:
+                options: "-x ${{ join(' -x ', parameters.GRADLE_TEST_TASKS) }}"
+              publishJUnitResults: false
+            displayName: 'Gradle Build'
+
+          - task: 'Gradle@3'
+            inputs:
+              tasks: '${{ parameters.ADDITIONAL_GRADLE_TASKS }}'
+              ${{ if gt(length(parameters.GRADLE_TEST_TASKS), 0) }}:
+                options: "-x ${{ join(' -x ', parameters.GRADLE_TEST_TASKS) }}"
+              publishJUnitResults: false
+            displayName: 'Additional Gradle Tasks'
+            condition: ne(variables['ADDITIONAL_GRADLE_TASKS'], '')
+
+      - template: '../../../global/stages/40-delivery/release.yaml'

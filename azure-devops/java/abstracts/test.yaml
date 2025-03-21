@@ -1,0 +1,11 @@
+PARAMETERS:
+  - name: 'GRADLE_TEST_TASKS'
+    type: object
+    default: []
+
+steps:
+  - script: |
+      formatted_tasks='${{ join(parameters.GRADLE_TEST_TASKS, ' ') }}'
+      echo "Running Gradle test tasks: $formatted_tasks"
+      ./gradlew test $formatted_tasks
+    displayName: 'Run Gradle Test Tasks'

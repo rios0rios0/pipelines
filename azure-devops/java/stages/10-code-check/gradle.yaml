@@ -1,0 +1,25 @@
+stages:
+ - stage: 'code_check'
+   displayName: 'code check (style/quality)'
+   condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+   jobs:
+     - job: 'style_spotless'
+       displayName: 'style:spotless'
+       steps:
+         - script: |
+             ./gradlew spotlessCheck
+           displayName: 'Run Spotless Check'
+
+     - job: 'style_checkstyle'
+       displayName: 'style:checkstyle'
+       steps:
+         - script: |
+             ./gradlew checkstyleMain
+           displayName: 'Run Checkstyle'
+
+     - job: 'quality_pmd'
+       displayName: 'quality:pmd'
+       steps:
+         - script: |
+             ./gradlew pmdMain
+           displayName: 'Run PMD'

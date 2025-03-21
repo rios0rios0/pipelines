@@ -26,7 +26,7 @@ stages:
           - task: 'Gradle@3'
             inputs:
               tasks: 'build'
-            options: ${{ join(parameters.GRADLE_TEST_TASKS, ' -x ') != '' && format('-x {0}', join(parameters.GRADLE_TEST_TASKS, ' -x ')) || '' }}
+              options: ${{ join(parameters.GRADLE_TEST_TASKS, ' -x ') != '' && format('-x {0}', join(parameters.GRADLE_TEST_TASKS, ' -x ')) || '' }}
             displayName: 'Gradle Build'
 
           - task: 'Gradle@3'

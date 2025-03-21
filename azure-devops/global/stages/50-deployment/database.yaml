@@ -51,6 +51,7 @@ steps:
             --name "$DATABASE_SERVER_NAME" \
             --rule-name "$pipelineFirewallName" \
             --start-ip-address "$PIPELINE_IP"
+
   - script: |
       set -e
 
@@ -64,6 +65,7 @@ steps:
       echo "##vso[task.setvariable variable=CONNECTION_STRING]$CONNECTION_STRING"
     displayName: 'Set Database Connection String'
     condition: and(succeeded(), eq(variables['CheckDatabase.DB_EXISTS'], 'true'))
+
   - script: |
       set -e
 

@@ -1,4 +1,4 @@
-PARAMETERS:
+parameters:
   - name: 'ADDITIONAL_GRADLE_TASKS'
     type: string
     default: ''

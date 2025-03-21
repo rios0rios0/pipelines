@@ -1,4 +1,4 @@
-PARAMETERS:
+parameters:
   - name: 'GRADLE_TEST_TASKS'
     type: object
     default: []

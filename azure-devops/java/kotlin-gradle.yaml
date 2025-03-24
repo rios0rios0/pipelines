@@ -1,0 +1,20 @@
+parameters:
+  - name: 'GRADLE_TEST_TASKS'
+    type: 'object'
+    default: []
+  - name: 'ADDITIONAL_GRADLE_TASKS'
+    type: 'string'
+    default: ''
+
+stages:
+  - template: 'stages/10-code-check/java.yaml'
+    parameters:
+      GRADLE_TEST_TASKS: ${{ parameters.GRADLE_TEST_TASKS }}
+  - template: 'stages/20-security/java.yaml'
+  - template: 'stages/30-tests/gradle.yaml'
+    parameters:
+      GRADLE_TEST_TASKS: ${{ parameters.GRADLE_TEST_TASKS }}
+  - template: 'stages/40-delivery/gradle.yaml'
+    parameters:
+      GRADLE_TEST_TASKS: ${{ parameters.GRADLE_TEST_TASKS }}
+      ADDITIONAL_GRADLE_TASKS: ${{ parameters.ADDITIONAL_GRADLE_TASKS }}

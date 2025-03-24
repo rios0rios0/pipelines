@@ -1,0 +1,13 @@
+parameters:
+  - name: 'GRADLE_TEST_TASKS'
+    type: 'object'
+    default: []
+
+stages:
+ - stage: 'code_check'
+   displayName: 'code check (style/quality)'
+   condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+   jobs:
+     - template: '../../abstracts/code-check.yaml'
+       parameters:
+          GRADLE_TEST_TASKS: ${{ parameters.GRADLE_TEST_TASKS }}

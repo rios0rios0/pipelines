@@ -271,7 +271,7 @@ linters:
     - govet # reports suspicious constructs, such as Printf calls whose arguments do not align with the format string
     - ineffassign # detects when assignments to existing variables are not used
     - staticcheck # is a go vet on steroids, applying a ton of static analysis checks
-    - typecheck # like the front-end of a Go compiler, parses and type-checks Go code
+    #- typecheck # like the front-end of a Go compiler, parses and type-checks Go code TODO: it's not working for version 2.0.0
     - unused # checks for unused constants, variables, functions and types
     ## disabled by default
     - asasalint # checks for pass []any as any in variadic func(...any)
@@ -300,7 +300,7 @@ linters:
     - gocritic # provides diagnostics that check for bugs, performance and style issues
     - gocyclo # computes and checks the cyclomatic complexity of functions
     #- godot # checks if comments end in a period
-    - goimports # in addition to fixing imports, goimports also formats your code in the same style as gofmt
+    #- goimports # in addition to fixing imports, goimports also formats your code in the same style as gofmt TODO: it's not working for version 2.0.0
     - gomoddirectives # manages the use of 'replace', 'retract', and 'excludes' directives in go.mod
     - goprintffuncname # checks that printf-like functions are named with f at the end
     - gosec # inspects source code for security problems
@@ -347,7 +347,7 @@ linters:
     ## you may want to enable
     #- decorder # checks declaration order and count of types, constants, variables and functions
     #- exhaustruct # [highly recommend to enable] checks if all structure fields are initialized
-    - gci # controls golang package import order and makes it always deterministic
+    #- gci # controls golang package import order and makes it always deterministic TODO: it's not working for version 2.0.0
     #- ginkgolinter # [if you use ginkgo/gomega] enforces standards of using ginkgo and gomega
     #- godox # detects usage of FIXME, TODO and other keywords inside comments
     #- goheader # checks is file header matches to pattern

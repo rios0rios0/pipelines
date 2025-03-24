@@ -10,6 +10,7 @@
 # If this config helps you, please consider keeping a link to this file (see the next comment).
 
 # Based on https://gist.github.com/maratori/47a4d00457a92aa426dbd48a18776322
+version: "2"
 
 run:
   # Timeout for analysis, e.g. 30s, 5m.
@@ -267,7 +268,7 @@ linters:
   enable:
     ## enabled by default
     - errcheck # checking for unchecked errors, these unchecked errors can be critical bugs in some cases
-    - gosimple # specializes in simplifying a code
+    # - gosimple # specializes in simplifying a code TODO: it's not working for version 2.0.0
     - govet # reports suspicious constructs, such as Printf calls whose arguments do not align with the format string
     - ineffassign # detects when assignments to existing variables are not used
     - staticcheck # is a go vet on steroids, applying a ton of static analysis checks
@@ -332,7 +333,7 @@ linters:
     - sloglint # ensure consistent code style when using log/slog
     - spancheck # checks for mistakes with OpenTelemetry/Census spans
     - sqlclosecheck # checks that sql.Rows and sql.Stmt are closed
-    - stylecheck # is a replacement for golint
+    # - stylecheck # is a replacement for golint TODO: it's not working for version 2.0.0
     - testableexamples # checks if examples are testable (have an expected output)
     - testifylint # checks usage of github.com/stretchr/testify
     - testpackage # makes you use a separate _test package

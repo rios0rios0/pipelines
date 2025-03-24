@@ -55,6 +55,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed script that kills processes created by OSD
 - fixed the seeders cache key on the `database.yaml`
 - fixed the seeders and migrations skip condition bug on the `database.yaml`
+- fixed the blank version error of golangci-lint
 
 ## [2.1.0] - 2024-12-27
 

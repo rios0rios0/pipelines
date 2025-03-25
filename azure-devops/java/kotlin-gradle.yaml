@@ -2,19 +2,28 @@ parameters:
   - name: 'GRADLE_TEST_TASKS'
     type: 'object'
     default: []
-  - name: 'ADDITIONAL_GRADLE_TASKS'
+  - name: 'GRADLE_PUBLISH_TASK'
     type: 'string'
     default: ''
+  - name: 'GRADLE_PROPERTIES'
+    type: object
+    default:
+      - 'javaUsername=$(JAVA_USERNAME)'
+      - 'javaPassword=$(JAVA_PASSWORD)'
 
 stages:
-  - template: 'stages/10-code-check/java.yaml'
+  - template: 'stages/10-code-check/kotlin.yaml'
     parameters:
       GRADLE_TEST_TASKS: ${{ parameters.GRADLE_TEST_TASKS }}
+      GRADLE_PROPERTIES: ${{ parameters.GRADLE_PROPERTIES }}
   - template: 'stages/20-security/java.yaml'
   - template: 'stages/30-tests/gradle.yaml'
     parameters:
       GRADLE_TEST_TASKS: ${{ parameters.GRADLE_TEST_TASKS }}
+      GRADLE_PROPERTIES: ${{ parameters.GRADLE_PROPERTIES }}
+  # TODO: 35-management
   - template: 'stages/40-delivery/gradle.yaml'
     parameters:
       GRADLE_TEST_TASKS: ${{ parameters.GRADLE_TEST_TASKS }}
-      ADDITIONAL_GRADLE_TASKS: ${{ parameters.ADDITIONAL_GRADLE_TASKS }}
+      GRADLE_PUBLISH_TASK: ${{ parameters.GRADLE_PUBLISH_TASK }}
+      GRADLE_PROPERTIES: ${{ parameters.GRADLE_PROPERTIES }}

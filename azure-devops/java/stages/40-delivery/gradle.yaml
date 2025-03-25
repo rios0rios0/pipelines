@@ -1,8 +1,11 @@
 parameters:
-  - name: 'ADDITIONAL_GRADLE_TASKS'
+  - name: 'GRADLE_PUBLISH_TASK'
     type: string
     default: ''
   - name: 'GRADLE_TEST_TASKS'
+    type: object
+    default: []
+  - name: 'GRADLE_PROPERTIES'
     type: object
     default: []
 
@@ -15,22 +18,16 @@ stages:
         displayName: 'delivery'
         steps:
           - template: '../../abstracts/gradle.yaml'
+            parameters:
+              GRADLE_PROPERTIES: ${{ parameters.GRADLE_PROPERTIES }}
 
           - task: 'Gradle@3'
             inputs:
-              tasks: 'build'
+              tasks: '${{ parameters.GRADLE_PUBLISH_TASK }}'
               ${{ if gt(length(parameters.GRADLE_TEST_TASKS), 0) }}:
                 options: "-x ${{ join(' -x ', parameters.GRADLE_TEST_TASKS) }}"
               publishJUnitResults: false
-            displayName: 'Gradle Build'
-
-          - task: 'Gradle@3'
-            inputs:
-              tasks: '${{ parameters.ADDITIONAL_GRADLE_TASKS }}'
-              ${{ if gt(length(parameters.GRADLE_TEST_TASKS), 0) }}:
-                options: "-x ${{ join(' -x ', parameters.GRADLE_TEST_TASKS) }}"
-              publishJUnitResults: false
-            displayName: 'Additional Gradle Tasks'
-            condition: ne(variables['ADDITIONAL_GRADLE_TASKS'], '')
+            displayName: 'Gradle Publish'
+            condition: ne(variables['GRADLE_PUBLISH_TASK'], '')
 
       - template: '../../../global/stages/40-delivery/release.yaml'

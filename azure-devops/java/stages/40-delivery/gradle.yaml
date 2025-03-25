@@ -28,6 +28,5 @@ stages:
                 options: "-x ${{ join(' -x ', parameters.GRADLE_TEST_TASKS) }}"
               publishJUnitResults: false
             displayName: 'Gradle Publish'
-            condition: ne(variables['GRADLE_PUBLISH_TASK'], '')
 
       - template: '../../../global/stages/40-delivery/release.yaml'

@@ -14,6 +14,7 @@ stages:
     - template: '../../abstracts/code-check.yaml'
       parameters:
         GRADLE_PROPERTIES: ${{ parameters.GRADLE_PROPERTIES }}
+        GRADLE_TEST_TASKS: ${{ parameters.GRADLE_TEST_TASKS }}
 
     - job: 'style_ktlint'
       displayName: 'style:ktlint'

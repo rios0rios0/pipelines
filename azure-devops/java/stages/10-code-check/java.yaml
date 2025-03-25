@@ -2,6 +2,9 @@ parameters:
   - name: 'GRADLE_TEST_TASKS'
     type: 'object'
     default: []
+  - name: 'GRADLE_PROPERTIES'
+    type: 'object'
+    default: []
 
 stages:
  - stage: 'code_check'
@@ -11,3 +14,4 @@ stages:
      - template: '../../abstracts/code-check.yaml'
        parameters:
           GRADLE_TEST_TASKS: ${{ parameters.GRADLE_TEST_TASKS }}
+          GRADLE_PROPERTIES: ${{ parameters.GRADLE_PROPERTIES }}

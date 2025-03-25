@@ -1,13 +1,18 @@
 parameters:
-    - name: 'GRADLE_TEST_TASKS'
-      type: 'object'
-      default: []
+  - name: 'GRADLE_TEST_TASKS'
+    type: 'object'
+    default: []
+  - name: 'GRADLE_PROPERTIES'
+    type: 'object'
+    default: []
 
 jobs:
   - job: 'style_spotless'
     displayName: 'style:spotless'
     steps:
       - template: 'gradle.yaml'
+        parameters:
+          GRADLE_PROPERTIES: ${{ parameters.GRADLE_PROPERTIES }}
 
       - task: 'Gradle@3'
         inputs:
@@ -21,6 +26,8 @@ jobs:
     displayName: 'style:checkstyle'
     steps:
       - template: 'gradle.yaml'
+        parameters:
+          GRADLE_PROPERTIES: ${{ parameters.GRADLE_PROPERTIES }}
 
       - task: 'Gradle@3'
         inputs:
@@ -34,6 +41,8 @@ jobs:
     displayName: 'quality:pmd'
     steps:
       - template: 'gradle.yaml'
+        parameters:
+          GRADLE_PROPERTIES: ${{ parameters.GRADLE_PROPERTIES }}
 
       - task: 'Gradle@3'
         inputs:

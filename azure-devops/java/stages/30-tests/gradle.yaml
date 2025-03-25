@@ -2,6 +2,9 @@ parameters:
   - name: 'GRADLE_TEST_TASKS'
     type: 'object'
     default: []
+  - name: 'GRADLE_PROPERTIES'
+    type: object
+    default: []
 
 stages:
   - stage: 'tests'
@@ -14,10 +17,13 @@ stages:
           GRADLE_USER_HOME: "$(Pipeline.Workspace)/.gradle"
         steps:
           - template: '../../abstracts/gradle.yaml'
+            parameters:
+              GRADLE_PROPERTIES: ${{ parameters.GRADLE_PROPERTIES }}
+              GRADLE_USER_HOME: $(Pipeline.Workspace)/.gradle
 
           - task: 'Gradle@3'
             inputs:
               tasks: ${{ join(' ', parameters.GRADLE_TEST_TASKS) }}
-              # TODO: correct this
+              # TODO: fix this to publish
               publishJUnitResults: false
             displayName: 'Run tests'

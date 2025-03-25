@@ -3,13 +3,11 @@ stages:
     displayName: 'deployment'
     condition: and(not(failed()), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
     dependsOn: 'delivery'
-    variables:
-      dockerContainerTag: $[stageDependencies.delivery.delivery.outputs['build.DOCKER_CONTAINER_TAG']]
     jobs:
       - job: 'deployment'
         displayName: 'deployment'
         steps:
-          - task: 'KubernetesManifest@0'
+          - task: 'KubernetesManifest@1'
             inputs:
               action: 'createSecret'
               secretType: 'dockerRegistry'
@@ -32,49 +30,30 @@ stages:
               kubernetesServiceEndpoint: "$(K8S_ENDPOINT)"
               namespace: "$(K8S_NAMESPACE)"
 
-          - task: 'KubernetesManifest@0'
+          - script: |
+              set -e
+
+              echo "##vso[task.setvariable variable=BUILD_REPOSITORY_NAME;isOutput=true]$(Build.Repository.Name)"
+              CONTAINER_TAG=$[stageDependencies.delivery.delivery.outputs['build.DOCKER_CONTAINER_TAG']]
+              echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]$CONTAINER_TAG"
+
+          - template: '../../abstracts/replace-environment-variables.yaml'
+            parameters:
+              FILE: '$(Build.SourcesDirectory)/kubernetes/k8s-patch.json'
+              DISPLAY_NAME: 'Replace Environment Variables (Kubernetes file)'
+
+          - script: |
+              cat "$(Build.SourcesDirectory)/kubernetes/k8s-patch.json"
+
+          - task: Kubernetes@1
+            displayName: 'Patch Deployment Using JSON Patch File'
             inputs:
-              action: 'patch'
-              kind: 'deployment'
-              name: "$(K8S_DEPLOYMENT_NAME)"
-              mergeStrategy: 'strategic'
-              patch: |
-                {
-                  "spec": {
-                    "template": {
-                      "spec": {
-                        "imagePullSecrets": [
-                          {
-                            "name": "$(K8S_IMAGE_PULL_SECRET_NAME)"
-                          }
-                        ],
-                        "volumes": [
-                          {
-                            "name": "$(K8S_DEPLOYMENT_NAME)",
-                            "configMap": {
-                              "name": "$(K8S_CONFIGMAP_NAME)"
-                            }
-                          }
-                        ],
-                        "containers": [
-                          {
-                            "name": "$(K8S_CONTAINER_NAME)",
-                            "volumeMounts": [
-                              {
-                                "name": "$(K8S_DEPLOYMENT_NAME)",
-                                "mountPath": "/usr/share/opensearch-dashboards/config/opensearch_dashboards.yml",
-                                "subPath": "opensearch_dashboards.yml"
-                              }
-                            ],
-                            "image": "$(CONTAINER_REGISTRY_SERVER)/$(Build.Repository.Name):$(dockerContainerTag)"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                }
-              kubernetesServiceConnection: "$(K8S_ENDPOINT)"
+              connectionType: 'Kubernetes Service Connection'
+              kubernetesServiceEndpoint: "$(K8S_ENDPOINT)"
               namespace: "$(K8S_NAMESPACE)"
+              command: 'patch'
+              arguments: >
+                deployment $(K8S_DEPLOYMENT_NAME) --patch-file "$(Build.SourcesDirectory)/kubernetes/k8s-patch.json"
 
           - task: 'Kubernetes@1'
             inputs:

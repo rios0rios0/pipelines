@@ -2,21 +2,30 @@ parameters:
   - name: 'GRADLE_TEST_TASKS'
     type: 'object'
     default: []
+  - name: 'GRADLE_PROPERTIES'
+    type: 'object'
+    default: []
 
-jobs:
-  - template: '../../abstracts/code-check.yaml'
-    parameters:
-      GRADLE_TEST_TASKS: ${{ parameters.GRADLE_TEST_TASKS }}
+stages:
+- stage: 'code_check'
+  displayName: 'code check (style/quality)'
+  condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+  jobs:
+    - template: '../../abstracts/code-check.yaml'
+      parameters:
+        GRADLE_PROPERTIES: ${{ parameters.GRADLE_PROPERTIES }}
 
-  - job: 'style_ktlint'
-    displayName: 'style:ktlint'
-    steps:
-      - template: '../../abstracts/gradle.yaml'
+    - job: 'style_ktlint'
+      displayName: 'style:ktlint'
+      steps:
+        - template: '../../abstracts/gradle.yaml'
+          parameters:
+            GRADLE_PROPERTIES: ${{ parameters.GRADLE_PROPERTIES }}
 
-      - task: 'Gradle@3'
-        inputs:
-          tasks: 'ktlintCheck'
-          ${{ if gt(length(parameters.GRADLE_TEST_TASKS), 0) }}:
-            options: "-x ${{ join(' -x ', parameters.GRADLE_TEST_TASKS) }}"
-          publishJUnitResults: false
-        displayName: 'ktlint'
+        - task: 'Gradle@3'
+          inputs:
+            tasks: 'ktlintCheck'
+            ${{ if gt(length(parameters.GRADLE_TEST_TASKS), 0) }}:
+              options: "-x ${{ join(' -x ', parameters.GRADLE_TEST_TASKS) }}"
+            publishJUnitResults: false
+          displayName: 'ktlint'

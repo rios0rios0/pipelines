@@ -47,6 +47,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed GoLangCI-Lint configuration file to upgrade the `@maratori`'s configuration to `v1.64.7`
 - changed `PIPELINE_FIREWALL_NAME` from a pipeline parameter to a job variable
 - changed the `azure-devops/javascript/stages/50-deployment/k8s.yaml` to run an external kubernetes file
+- updated `.golangci.yml` to the new version format
 
 ### Fixed
 

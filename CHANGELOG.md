@@ -31,6 +31,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added `arm-parameters.yaml` to generically construct `ARM` `parameters` from `library variables`
 - added new language support for Java in Azure DevOps pipelines
 - added `checkstyle.xml` config file for Azure Devops Java pipeline
+- added a new rule to ignore the docs folder in `golangci-lint`
 
 ### Changed
 

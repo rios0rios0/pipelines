@@ -435,3 +435,7 @@ linters:
           - gosec
           - noctx
           - wrapcheck
+      - path: '.*/docs'
+        linters:
+          - gochecknoglobals
+          - gochecknoinits

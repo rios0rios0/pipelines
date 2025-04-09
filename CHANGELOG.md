@@ -32,6 +32,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added new language support for Java in Azure DevOps pipelines
 - added `checkstyle.xml` config file for Azure Devops Java pipeline
 - added a new rule to ignore the docs folder in `golangci-lint`
+- added a new rule to ignore the swagger comments to godot linter in `golangci-lint`
 
 ### Changed
 

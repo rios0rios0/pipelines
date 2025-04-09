@@ -413,7 +413,7 @@ linters:
       - common-false-positives
     # Excluding configuration per-path, per-linter, per-text and per-source.
     rules:
-      - source: 'TODO'
+      - source: '// ?(TODO|@\w)'
         linters: [ godot ]
       - text: 'should have a package comment'
         linters: [ revive ]
@@ -436,6 +436,4 @@ linters:
           - noctx
           - wrapcheck
       - path: '.*/docs'
-        linters:
-          - gochecknoglobals
-          - gochecknoinits
+        linters: [gochecknoglobals, gochecknoinits, godot]

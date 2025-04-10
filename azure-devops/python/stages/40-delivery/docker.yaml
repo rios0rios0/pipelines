@@ -29,10 +29,6 @@ stages:
               if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
                 TAGS="$TAGS -t $(DOCKER_CONTAINER_IMAGE):$(Build.SourceBranchName)"
                 echo "$(date "+%Y-%m-%d %H:%M:%S") - Setting Docker image tag to $(Build.SourceBranchName)."
-                echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]$(Build.SourceBranchName)"
-              else
-                echo "$(date "+%Y-%m-%d %H:%M:%S") - Setting Docker image tag to latest..."
-                echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]latest"
               fi
 
               echo "$(date "+%Y-%m-%d %H:%M:%S") - Building Docker image..."

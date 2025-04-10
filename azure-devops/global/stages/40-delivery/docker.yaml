@@ -34,14 +34,12 @@ steps:
         TAGS="$imageName:latest"
         if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
           TAGS="$TAGS -t $imageName:$(Build.SourceBranchName)"
-          echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]$(Build.SourceBranchName)"
+          containerImageTagName="$imageName:$(Build.SourceBranchName)"
         else
-          echo "##vso[task.setvariable variable=DOCKER_CONTAINER_TAG;isOutput=true]latest"
+          containerImageTagName="$TAGS"
         fi
 
-        echo "$(date "+%Y-%m-%d %H:%M:%S") - Container tags: $TAGS."
-        
-        echo "##vso[task.setvariable variable=CONTAINER_IMAGE;isOutput=true]$TAGS"
+        echo "##vso[task.setvariable variable=CONTAINER_IMAGE;isOutput=true]$containerImageTagName"
 
         ${{ parameters.RUN_BEFORE_BUILD }}
 

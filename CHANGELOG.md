@@ -64,6 +64,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed the blank version error of golangci-lint
 - fixed Java pipeline for Azure DevOps by setting up local gradle.properties file
 - fixed dynamic variable CONTAINER_IMAGE to get value from delivery stage
+- fixed dynamic variable CONTAINER_IMAGE for PROD and DEV environment
+
+### Removed
+
+- removed unused variable DOCKER_CONTAINER_TAG
 
 ## [2.1.0] - 2024-12-27
 

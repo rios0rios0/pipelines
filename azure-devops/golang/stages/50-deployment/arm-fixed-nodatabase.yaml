@@ -16,7 +16,7 @@ stages:
           AZURE_DEPLOY_CACHE: "$(Build.SourcesDirectory)/.azuredeploy"
           AZURE_DEPLOY_CACHE_HIT: $[stageDependencies.delivery.delivery.outputs['cacheStep.AZURE_DEPLOY_CACHE_HIT']]
         steps:
-          - template: '../../../global/stages/50-deployment/fixed.yaml'
+          - template: '../../../global/stages/50-deployment/fixed-nodatabase.yaml'
             parameters:
               AZM_FUNCTION_NAME: '$(AZM_FUNCTION_NAME)'
               AZM_LOCATION: '$(AZM_LOCATION)'

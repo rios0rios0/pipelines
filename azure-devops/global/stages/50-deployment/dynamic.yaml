@@ -60,7 +60,7 @@ steps:
     displayName: 'Update Resource Group'
     condition: and(succeeded(), eq(variables['AZURE_DEPLOY_CACHE_HIT'], 'false'), eq(variables['CUSTOMER_KEY_VAULT_NAME'], ''))
 
-  - template: './deploy-az-function.yaml'
+  - template: './deploy-az-function-database.yaml'
     parameters:
       RESOURCE_GROUP_NAME: "$(resourceGroupName)"
       ENVIRONMENT: "$(ENVIRONMENT)"

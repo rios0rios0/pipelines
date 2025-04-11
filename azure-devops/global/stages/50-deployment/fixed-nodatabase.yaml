@@ -1,0 +1,31 @@
+parameters:
+  - name: 'AZM_FUNCTION_NAME'
+    type: 'string'
+  - name: 'AZM_LOCATION'
+    type: 'string'
+  - name: 'AZM_SERVICE_CONNECTION'
+    type: 'string'
+  - name: 'ENVIRONMENT'
+    type: 'string'
+  - name: 'INBOUND_ALLOWED_IPS'
+    type: 'string'
+  - name: 'AZURE_DEPLOY_CACHE_HIT'
+    type: 'string'
+  - name: 'CUSTOM_PARAMETERS'
+    type: 'string'
+
+steps:
+  - template: '../abstracts/fixed.yaml'
+    parameters:
+      AZM_FUNCTION_NAME: "$(AZM_FUNCTION_NAME)"
+      AZM_LOCATION: "$(AZM_LOCATION)"
+      AZM_SERVICE_CONNECTION: "$(AZM_SERVICE_CONNECTION)"
+      ENVIRONMENT: "$(ENVIRONMENT)"
+      INBOUND_ALLOWED_IPS: "$(INBOUND_ALLOWED_IPS)"
+      CUSTOM_PARAMETERS: "$(CUSTOM_PARAMETERS)"
+
+  - template: '../abstracts/deploy-az-function.yaml'
+    parameters:
+      RESOURCE_GROUP_NAME: "$(resourceGroupName)"
+      ENVIRONMENT: "$(ENVIRONMENT)"
+      AZM_SERVICE_CONNECTION: "$(AZM_SERVICE_CONNECTION)"

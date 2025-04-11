@@ -1,0 +1,59 @@
+parameters:
+  - name: 'AZM_SERVICE_CONNECTION'
+    type: 'string'
+
+steps:
+  - script: |
+      siteName=$(echo $OUTPUTS | jq -r '.siteName.value')
+      echo "##vso[task.setvariable variable=siteName]$siteName"
+    displayName: 'Getting Pipeline Variables'
+
+  - task: 'AzureCLI@2'
+    inputs:
+      azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        set -e
+
+        SETTINGS=""
+        for var in $(compgen -e); do
+          if [[ $var == REPLACE_* ]]; then
+            if [[ -z ${!var} ]]; then
+              echo "$(date "+%Y-%m-%d %H:%M:%S") - Warning: $var isn't defined..."
+            else
+              setting_name=${var#REPLACE_}
+              SETTINGS+="$setting_name=${!var} "
+            fi
+          fi
+        done
+        if [[ -z $SETTINGS ]]; then
+          echo "$(date "+%Y-%m-%d %H:%M:%S") - Warning: There are no environment variables to update..."
+        else
+          az functionapp config appsettings set \
+            --name "$(siteName)" \
+            --resource-group "$(resourceGroupName)" \
+            --settings $SETTINGS
+        fi
+    displayName: 'Replace Azure Function Variables'
+
+  - task: 'DownloadPipelineArtifact@2'
+    inputs:
+      artifact: 'build-output'
+      targetPath: '$(Pipeline.Workspace)/build-output'
+    displayName: 'Download Build Artifact'
+
+  - task: 'AzureCLI@2'
+    inputs:
+      azureSubscription: "$(AZM_SERVICE_CONNECTION)"
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        set -e
+
+        az functionapp deployment source config-zip \
+          --name "$(siteName)" \
+          --resource-group "$(resourceGroupName)" \
+          --src "$(Pipeline.Workspace)/build-output/$(Build.BuildId).zip"
+    displayName: 'Publish Function'
+    retryCountOnTaskFailure: 3

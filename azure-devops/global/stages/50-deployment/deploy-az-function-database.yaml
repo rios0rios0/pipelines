@@ -11,6 +11,12 @@ steps:
     parameters:
       AZM_SERVICE_CONNECTION: ${{ parameters.AZM_SERVICE_CONNECTION }}
 
+  - template: './../abstracts/database.yaml'
+    parameters:
+      RESOURCE_GROUP_NAME: "$(resourceGroupName)"
+      ENVIRONMENT: "$(ENVIRONMENT)"
+      AZM_SERVICE_CONNECTION: "$(AZM_SERVICE_CONNECTION)"
+
   - template: '../../abstracts/deployment-output-setup.yaml'
     parameters:
       RESOURCE_GROUP_NAME: ${{ parameters.RESOURCE_GROUP_NAME }}

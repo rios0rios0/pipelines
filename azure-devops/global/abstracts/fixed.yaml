@@ -9,8 +9,6 @@ parameters:
     type: 'string'
   - name: 'INBOUND_ALLOWED_IPS'
     type: 'string'
-  - name: 'AZURE_DEPLOY_CACHE_HIT'
-    type: 'string'
   - name: 'CUSTOM_PARAMETERS'
     type: 'string'
 
@@ -79,9 +77,3 @@ steps:
       deploymentMode: 'Incremental'
       deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'
     displayName: 'Deploy Resource Group'
-
-  - template: './deploy-az-function.yaml'
-    parameters:
-      RESOURCE_GROUP_NAME: "$(resourceGroupName)"
-      ENVIRONMENT: "$(ENVIRONMENT)"
-      AZM_SERVICE_CONNECTION: "$(AZM_SERVICE_CONNECTION)"

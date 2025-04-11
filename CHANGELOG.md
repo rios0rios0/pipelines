@@ -50,6 +50,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed `PIPELINE_FIREWALL_NAME` from a pipeline parameter to a job variable
 - changed the `azure-devops/javascript/stages/50-deployment/k8s.yaml` to run an external kubernetes file
 - updated `.golangci.yml` to the new version format
+- changed az devops goland deployment templates to separate deployments with database and without database
 
 ### Fixed
 

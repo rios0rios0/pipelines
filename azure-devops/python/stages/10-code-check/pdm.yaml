@@ -5,38 +5,38 @@ stages:
     condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     jobs:
       - job: 'style_isort'
-        displayName: 'Check isort'
+        displayName: 'Check "isort"'
         steps:
           - script: |
               python -m pip install pdm
               pdm install
               pdm run isort --check-only .
-            displayName: 'Run isort check'
+            displayName: 'Run "isort" check'
 
       - job: 'style_black'
-        displayName: 'Check black'
+        displayName: 'Check "black"'
         steps:
           - script: |
               python -m pip install pdm
               pdm install
               pdm run black --check .
-            displayName: 'Run black check'
+            displayName: 'Run "black" check'
 
       - job: 'quality_flake8'
-        displayName: 'Check flake8'
+        displayName: 'Check "flake8"'
         steps:
           - script: |
               python -m pip install pdm
               pdm install
               pdm run flake8 .
-            displayName: 'Run flake8 check'
+            displayName: 'Run "flake8" check'
 
       - job: 'quality_mypy'
-        displayName: 'Check mypy'
+        displayName: 'Check "mypy"'
         steps:
           - script: |
               python -m pip install pdm
               pdm install
               pdm run type-check
-            displayName: 'Run mypy check'
+            displayName: 'Run "mypy" check'
         continueOnError: true

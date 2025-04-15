@@ -1,4 +1,15 @@
+parameters:
+  - name: 'DOCKER_BUILD_ARGS'
+    type: 'string'
+    default: ''
+  - name: 'RUN_BEFORE_BUILD'
+    type: 'string'
+    default: ''
+
 stages:
   - template: 'stages/10-code-check/pdm.yaml'
   - template: 'stages/20-security/pdm.yaml'
   - template: 'stages/40-delivery/docker.yaml'
+    parameters:
+      DOCKER_BUILD_ARGS: ${{ parameters.DOCKER_BUILD_ARGS }}
+      RUN_BEFORE_BUILD: ${{ parameters.RUN_BEFORE_BUILD }}

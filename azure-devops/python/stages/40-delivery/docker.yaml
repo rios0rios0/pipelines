@@ -1,39 +1,28 @@
+parameters:
+  - name: 'DOCKER_BUILD_ARGS'
+    type: 'string'
+    default: ''
+  - name: 'RUN_BEFORE_BUILD'
+    type: 'string'
+    default: ''
+
 stages:
   - stage: 'delivery'
     displayName: 'delivery'
-    condition: and(not(failed()), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
     jobs:
-      - job: 'deliver'
-        displayName: 'Build and Push'
+      - job: 'delivery'
+        displayName: 'delivery'
+        variables:
+          DOCKER_CACHE_DIR: '$(Agent.TempDirectory)/docker-cache'
         steps:
-          - script: |
-              python -m pip install pdm
-              pdm install
-            displayName: 'Install Dependencies'
-
-          - script: |
-              pdm build
-            displayName: 'Build Distribution'
-
-          - task: 'Docker@2'
-            inputs:
-              command: 'login'
-              containerRegistry: "$(CONTAINER_REGISTRY_SERVICE_CONNECTION)"
-            displayName: 'Docker Login'
-
-          - script: |
-              echo "$(date "+%Y-%m-%d %H:%M:%S") - Creating Docker Buildx instance..."
-              docker buildx create --use
-
-              TAGS="$(DOCKER_CONTAINER_IMAGE):latest"
-              if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
-                TAGS="$TAGS -t $(DOCKER_CONTAINER_IMAGE):$(Build.SourceBranchName)"
-                echo "$(date "+%Y-%m-%d %H:%M:%S") - Setting Docker image tag to $(Build.SourceBranchName)."
-              fi
-
-              echo "$(date "+%Y-%m-%d %H:%M:%S") - Building Docker image..."
-              docker buildx build --platform linux/amd64,linux/arm64 -t $TAGS --push .
-            name: 'build'
-        continueOnError: false
+          - template: '../../../global/stages/40-delivery/docker.yaml'
+            parameters:
+              DOCKER_FILE: '.ci/40-delivery/app.Dockerfile'
+              DOCKER_CACHE_DIR: '$(DOCKER_CACHE_DIR)'
+              CONTAINER_REGISTRY_SERVER: '$(CONTAINER_REGISTRY_SERVER)'
+              CONTAINER_REGISTRY_SERVICE_CONNECTION: '$(CONTAINER_REGISTRY_SERVICE_CONNECTION)'
+              DOCKER_BUILD_ARGS: '${{ parameters.DOCKER_BUILD_ARGS }}'
+              RUN_BEFORE_BUILD: '${{ parameters.RUN_BEFORE_BUILD }}'
 
       - template: '../../../global/stages/40-delivery/release.yaml'

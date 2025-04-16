@@ -18,57 +18,56 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added a new pipeline in Azure DevOps for Terraform
-- added a new pipeline in Azure DevOps for .NET Core (C#)
-- added a new `stage` to build and deploy `az-devops` hosted `golang` images
-- added `go1.23.4.yaml` template to Golang Docker delivery stage
-- added another stage's template `acr-container-deployment.yaml`, introduce new test steps' template: `test.yaml` and new test stage: `acr.yaml` to the GoLang pipeline to log in into ACR before running tests
-- added `arm-container.yaml` to run container in `azure container instance`
 - added Azure global `docker.yaml` delivery template to be used by all languages
-- added messages to show application states in the `test_e2e` job
-- added new parameters: `RUN_BEFORE_BUILD` and `DOCKER_BUILD_ARGS` to Azure DevOps Golang delivery stage template to allow running a script before the build and passing arguments to the Docker build command
-- added a new optional parameter called `CUSTOM_PARAMETERS` in `go-arm-az-function` to add custom parameters in Resource Group deployment
-- added `arm-parameters.yaml` to generically construct `ARM` `parameters` from `library variables`
-- added new language support for Java in Azure DevOps pipelines
+- added `arm-container.yaml` to run container in Azure Container Instance
+- added `arm-parameters.yaml` to generically construct `ARM` parameters from library variables
 - added `checkstyle.xml` config file for Azure Devops Java pipeline
+- added `go1.23.4.yaml` template to GoLang Docker delivery stage
+- added a new optional parameter called `CUSTOM_PARAMETERS` in `go-arm-az-function` to add custom parameters in resource group deployment
+- added a new pipeline in Azure DevOps for .NET Core (C#)
+- added a new pipeline in Azure DevOps for Terraform
+- added a new rule to ignore the Swagger comments to godot linter in `golangci-lint`
 - added a new rule to ignore the docs folder in `golangci-lint`
-- added a new rule to ignore the swagger comments to godot linter in `golangci-lint`
+- added another stage's template `acr-container-deployment.yaml`, introduce new test steps' template: `test.yaml` and new test stage: `acr.yaml` to the GoLang pipeline to log in into ACR before running tests
+- added messages to show application states in the `test_e2e` job
+- added new language support for Java in Azure DevOps pipelines
+- added new parameters: `RUN_BEFORE_BUILD` and `DOCKER_BUILD_ARGS` to Azure DevOps GoLang delivery stage template to allow running a script before the build and passing arguments to the Docker build command
 
 ### Changed
 
 - changed GitLeaks inside Azure DevOps to clone full repository instead of just shallow clone
+- changed `.golangci.yml` configuration file to upgrade the `@maratori`'s configuration to `v1.64.7`
+- changed `PIPELINE_FIREWALL_NAME` from a pipeline parameter to a job variable
+- changed `azure-devops/global/stages/50-deployment/database.yaml` cache keys to include subfolders
+- changed `docker.yaml` Azure's GoLang delivery stage to use global `docker.yaml` template and remove unnecessary execution of `./config.sh` script since it's already done by the `go1.23.4.yaml` template
+- changed `docker.yaml` Azure's JavaScript delivery stage to use global `docker.yaml` template since it was being repeated
+- changed `execute-command-opensearch-dashboards.yaml` Yarn cache keys to use the `yarn.lock` of OSD and plugin
+- changed `go.yaml` GoLang's test stage to use `test.yaml` template
+- changed cache strategy for JavaScript projects using Azure DevOps pipelines
+- changed the OSD version to `2.19.1` due to an upgrade request
+- changed the `azure-devops/javascript/stages/50-deployment/k8s.yaml` to run an external Kubernetes file
 - changed the dynamic deploy to `PublishPipelineArtifact` the files to deploy the Azure Function
 - corrected miss-used template files for .NET in Azure DevOps pipelines
-- updated the image tag for the Golang Docker delivery stage to retrieve the complete tag name from an environment variable.
-- changed `go.yaml` Golang's test stage to use `test.yaml` template
-- changed `docker.yaml` Azure's Golang delivery stage to use global `docker.yaml` template and remove unnecessary execution of `./config.sh` script since it's already done by the `go1.23.4.yaml` template
-- changed `docker.yaml` Azure's Javascript delivery stage to use global `docker.yaml` template since it was being repeated
-- changed cache strategy for JS projects using Azure DevOps pipelines
-- changed `execute-command-opensearch-dashboards.yaml` yarn cache keys to use the `yarn.lock` of OSD and plugin
-- changed `azure-devops/global/stages/50-deployment/database.yaml` cache keys to include subfolders
-- changed GoLangCI-Lint configuration file to upgrade the `@maratori`'s configuration to `v1.64.7`
-- changed `PIPELINE_FIREWALL_NAME` from a pipeline parameter to a job variable
-- changed the `azure-devops/javascript/stages/50-deployment/k8s.yaml` to run an external kubernetes file
 - updated `.golangci.yml` to the new version format
+- updated the image tag for the GoLang Docker delivery stage to retrieve the complete tag name from an environment variable
 
 ### Fixed
 
-- fixed golang pipeline to work with dynamic deploy
-- corrected wrong usage of CycloneDX library for GoLang
-- fixed JavaScript delivery and deployment stages in Azure DevOps by inserting name for the `Build and Push Docker Image` step
-- fixed wrong parameter usage by changing Runtime Expressions to Template Expressions for Azure's Global docker delivery template
-- fixed node modules cache error of azure pipeline for javascript
-- fixed script that kills processes created by OSD
-- fixed the seeders cache key on the `database.yaml`
+- fixed wrong usage of CycloneDX library for GoLang
+- fixed GoLang pipeline to work with dynamic deploy
+- fixed Java pipeline for Azure DevOps by setting up local `gradle.properties` file
+- fixed JavaScript delivery and deployment stages in Azure DevOps by inserting name for the build and push step
+- fixed dynamic variable `CONTAINER_IMAGE` for production and development environment
+- fixed dynamic variable `CONTAINER_IMAGE` to get value from delivery stage
+- fixed node modules cache error of azure pipeline for JavaScript
+- fixed script that kills processes created by OpenSearch Dashboards
+- fixed the blank version error of `golangci-lint`
 - fixed the seeders and migrations skip condition bug on the `database.yaml`
-- fixed the blank version error of golangci-lint
-- fixed Java pipeline for Azure DevOps by setting up local gradle.properties file
-- fixed dynamic variable CONTAINER_IMAGE to get value from delivery stage
-- fixed dynamic variable CONTAINER_IMAGE for PROD and DEV environment
+- fixed wrong parameter usage by changing Runtime Expressions to Template Expressions for Azure's Global docker delivery template
 
 ### Removed
 
-- removed unused variable DOCKER_CONTAINER_TAG
+- removed unused variable `DOCKER_CONTAINER_TAG`
 
 ## [2.1.0] - 2024-12-27
 

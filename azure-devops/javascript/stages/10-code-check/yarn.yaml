@@ -8,6 +8,6 @@ stages:
         steps:
           - template: '../../abstracts/execute-command-opensearch-dashboards.yaml'
             parameters:
-              TAG_NAME: '2.18.0'
+              TAG_NAME: '2.19.1'
               PLUGIN_NAME: 'app'
               COMMANDS: 'yarn lint'

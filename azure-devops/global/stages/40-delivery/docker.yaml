@@ -31,13 +31,8 @@ steps:
   - script: |
         imageName="${{ parameters.CONTAINER_REGISTRY_SERVER }}/$(Build.Repository.Name)"
 
-        TAGS="$imageName:latest"
-        if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
-          TAGS="$TAGS -t $imageName:$(Build.SourceBranchName)"
-          containerImageTagName="$imageName:$(Build.SourceBranchName)"
-        else
-          containerImageTagName="$TAGS"
-        fi
+        TAGS="$imageName:test1"
+        containerImageTagName="$TAGS"
 
         echo "##vso[task.setvariable variable=CONTAINER_IMAGE;isOutput=true]$containerImageTagName"
 

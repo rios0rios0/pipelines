@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Removed
+
+- removed Cache task from `database.yaml` template in Azure DevOps GoLang pipeline since it was failing to restore cache with readonly files
+
 ## [2.2.0] - 2025-04-16
 
 ### Added

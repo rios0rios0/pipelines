@@ -85,15 +85,7 @@ steps:
       mkdir -p goose
       curl -o goose/go.sum "https://raw.githubusercontent.com/pressly/goose/refs/tags/$GOOSE_VERSION/go.sum"
       echo "##vso[task.setvariable variable=GOOSE_VERSION]$GOOSE_VERSION"
-      GOOSE_GOPATH=$(go env GOPATH)
-      echo "##vso[task.setvariable variable=GOOSE_GOPATH]$GOOSE_GOPATH"
     displayName: 'Set goose version and go.sum'
-  - task: 'Cache@2'
-    displayName: 'Cache for Goose modules'
-    inputs:
-      key: "$(Agent.JobName)|goose/go.sum"
-      path: "$(GOOSE_GOPATH)"
-    continueOnError: true
 
   - task: 'Cache@2'
     displayName: 'Cache for Migrations'

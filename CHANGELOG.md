@@ -20,6 +20,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - removed Cache task from `database.yaml` template in Azure DevOps GoLang pipeline since it was failing to restore cache with readonly files
 
+### Fixed
+
+- fixed workflow and delivery for github python docker
+
 ## [2.2.0] - 2025-04-16
 
 ### Added

@@ -1,0 +1,203 @@
+parameters:
+  - name: 'THEME_TAG_NAME'
+    type: 'string'
+  - name: 'PLUGIN_NAME'
+    type: 'string'
+
+steps:
+  - script: |
+      git clone --depth 1 --branch ${{ parameters.THEME_TAG_NAME }} https://github.com/opensearch-project/oui.git $(Agent.TempDirectory)/oui
+
+      cd $(Agent.TempDirectory)/oui
+      corepack denable
+      npm i -g yarn
+      yarn install
+      corepack enable
+    displayName: 'Install Oui'
+
+  - script: |
+      cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
+      cp -rf theme/osd/** ../../
+      cp -rf theme/oui/** ../../../oui/src/
+
+      cd $(Agent.TempDirectory)/oui
+      yarn build
+    displayName: 'Moving new theme files to Oui and build'
+
+  - script: |
+      cd $(Agent.TempDirectory)/OpenSearch-Dashboards
+
+      echo "file:/$(Agent.TempDirectory)oui"
+      find . -name 'package.json' -type f -exec sed -i 's|"@elastic/eui": *"[^"]*"|"@elastic/eui": "file:/$(Agent.TempDirectory)oui"|' {} +
+    displayName: 'Replacing the path to the theme'
+
+  - script: |
+      cd $(Agent.TempDirectory)/OpenSearch-Dashboards
+
+      sed -i "/osd-ui-shared-deps\.v9\.light.*css'\],/a\\
+        'osd-ui-shared-deps.arancia.dark': ['@elastic/eui/dist/eui_theme_arancia_dark.css'],\\
+        'osd-ui-shared-deps.arancia.light': ['@elastic/eui/dist/eui_theme_arancia_light.css']," \
+      packages/osd-ui-shared-deps/webpack.config.js
+
+      sed -i '/]).then(done);/i\
+        uiFrameworkCompile('\''src/kui_arancia_light.scss'\'', '\''dist/kui_arancia_light.css'\''),\
+        uiFrameworkCompile('\''src/kui_arancia_dark.scss'\'', '\''dist/kui_arancia_dark.css'\''),' \
+        packages/osd-ui-framework/Gruntfile.js
+    displayName: 'Update the Gruntfile and Webpack config files'
+
+  - script: |
+      cd $(Agent.TempDirectory)/OpenSearch-Dashboards/packages/osd-ui-framework
+
+      npx grunt compileCss
+    displayName: 'Build the KUI css files'
+
+  - script: |
+      cd $(Agent.TempDirectory)/OpenSearch-Dashboards
+
+      sed -i '/const rubik: FontFace = {/,/^  };$/{
+      /^  };$/a\
+      \
+      const montserrat: FontFace = {\
+        family: '\''Montserrat'\'',\
+        variants: [\
+            {\
+              weight: 200,\
+              style: '\''normal'\'',\
+              sources: [`${url}/fonts/montserrat/Montserrat-Thin.woff2`],\
+            },\
+            {\
+              weight: 200,\
+              style: '\''italic'\'',\
+              sources: [`${url}/fonts/montserrat/Montserrat-ThinItalic.woff2`],\
+            },\
+            {\
+              weight: 300,\
+              style: '\''normal'\'',\
+              sources: [`${url}/fonts/montserrat/Montserrat-Light.woff2`],\
+            },\
+            {\
+              weight: 300,\
+              style: '\''italic'\'',\
+              sources: [`${url}/fonts/montserrat/Montserrat-LightItalic.woff2`],\
+            },\
+            {\
+              weight: 400,\
+              style: '\''normal'\'',\
+              sources: [`${url}/fonts/montserrat/Montserrat-Regular.woff2`],\
+            },\
+            {\
+              weight: 400,\
+              style: '\''italic'\'',\
+              sources: [`${url}/fonts/montserrat/Montserrat-Italic.woff2`],\
+            },\
+            {\
+              weight: 500,\
+              style: '\''normal'\'',\
+              sources: [`${url}/fonts/montserrat/Montserrat-Medium.woff2`],\
+            },\
+            {\
+              weight: 500,\
+              style: '\''italic'\'',\
+              sources: [`${url}/fonts/montserrat/Montserrat-MediumItalic.woff2`],\
+            },\
+            {\
+              weight: 600,\
+              style: '\''normal'\'',\
+              sources: [`${url}/fonts/montserrat/Montserrat-SemiBold.woff2`],\
+            },\
+            {\
+              weight: 600,\
+              style: '\''italic'\'',\
+              sources: [`${url}/fonts/montserrat/Montserrat-SemiBoldItalic.woff2`],\
+            },\
+            {\
+              weight: 700,\
+              style: '\''normal'\'',\
+              sources: [`${url}/fonts/montserrat/Montserrat-Bold.woff2`],\
+            },\
+            {\
+              weight: 700,\
+              style: '\''italic'\'',\
+              sources: [`${url}/fonts/montserrat/Montserrat-BoldItalic.woff2`],\
+            },\
+            {\
+              weight: 800,\
+              style: '\''normal'\'',\
+              sources: [`${url}/fonts/montserrat/Montserrat-ExtraBold.woff2`],\
+            },\
+            {\
+              weight: 800,\
+              style: '\''italic'\'',\
+              sources: [`${url}/fonts/montserrat/Montserrat-ExtraBoldItalic.woff2`],\
+            },\
+            {\
+              weight: 900,\
+              style: '\''normal'\'',\
+              sources: [`${url}/fonts/montserrat/Montserrat-Black.woff2`],\
+            },\
+            {\
+              weight: 900,\
+              style: '\''italic'\'',\
+              sources: [`${url}/fonts/montserrat/Montserrat-BlackItalic.woff2`],\
+            },\
+          ],\
+        };
+      }' src/core/server/rendering/views/fonts.tsx
+
+      sed -i -e '/v9: rubik,/a\      arancia: montserrat,' \
+        -e '/v9: sourceCodePro,$/a\      arancia: sourceCodePro,' \
+        -e 's/const fontsDefinitionRules = \[interUi, sourceSans3, roboto, sourceCodePro, rubik\]/const fontsDefinitionRules = [interUi, sourceSans3, roboto, sourceCodePro, rubik, montserrat]/' \
+        src/core/server/rendering/views/fonts.tsx
+    displayName: 'Update the font reference files'
+
+  - script: |
+      cd $(Agent.TempDirectory)/OpenSearch-Dashboards
+
+      sed -i '/v9: '\''v9 (preview)'\'',/a\  arancia: '\''Arancia'\'',' \
+        packages/osd-ui-shared-deps/theme_config.js
+      sed -i "/v9: { dark: 'kui_v9_dark.css', light: 'kui_v9_light.css' },/a\  arancia: { dark: 'kui_arancia_dark.css', light: 'kui_arancia_light.css' }," \
+        packages/osd-ui-shared-deps/theme_config.js
+    displayName: 'Add version, label and `kuiCssDistFilenames` for new theme'
+
+  - script: |
+      cd $(Agent.TempDirectory)/OpenSearch-Dashboards
+
+      sed -i \
+        -e "s/type ThemeVersion = 'v7' | 'v8' | 'v9';/type ThemeVersion = 'v7' | 'v8' | 'v9' | 'arancia';/" \
+        -e "s/export type ThemeTag = 'v7light' | 'v7dark' | 'v8light' | 'v8dark' | 'v9light' | 'v9dark';/export type ThemeTag =\\
+        | 'v7light'\\
+        | 'v7dark'\\
+        | 'v8light'\\
+        | 'v8dark'\\
+        | 'v9light'\\
+        | 'v9dark'\\
+        | 'arancialight'\\
+        | 'aranciadark';/" \
+        packages/osd-ui-shared-deps/theme_config.d.ts
+    displayName: Update `ThemeTag` and `ThemeVersion`'
+
+  - script: |
+      cd $(Agent.TempDirectory)/OpenSearch-Dashboards
+
+      sed -i "/if (themeVersion === 'v7')/,/else {/ s/else {/else if (themeVersion === 'arancia') {\n  euiLightVars = require('@elastic\/eui\/dist\/eui_theme_arancia_light.json');\n  euiDarkVars = require('@elastic\/eui\/dist\/eui_theme_arancia_dark.json');\n}\nelse {/" packages/osd-ui-shared-deps/theme.ts
+    displayName: 'Load variables for new theme in `packages/osd-ui-shared-deps/theme.ts`'
+
+  - script: |
+      cd $(Agent.TempDirectory)/OpenSearch-Dashboards
+
+      sed -i '/\[ThemeColorSchemes\.DARK\]: '\''@elastic\/eui\/dist\/eui_theme_v9_dark\.json'\'',/a\  },\
+        arancia: {\
+          [ThemeColorSchemes.LIGHT]: '\''@elastic/eui/dist/eui_theme_arancia_light.json'\'',\
+          [ThemeColorSchemes.DARK]: '\''@elastic/eui/dist/eui_theme_arancia_dark.json'\'',' \
+          src/core/server/rendering/views/theme.ts
+    displayName: 'Load variables for new theme in `packages/osd-ui-shared-deps/theme.ts`'
+
+  - script: |
+      cd $(Agent.TempDirectory)/OpenSearch-Dashboards
+
+      sed -i '/\[ThemeColorSchemes\.DARK\]: '\''@elastic\/eui\/dist\/eui_theme_v9_dark\.json'\'',/a\  },\
+        arancia: {\
+          [ThemeColorSchemes.LIGHT]: '\''@elastic/eui/dist/eui_theme_arancia_light.json'\'',\
+          [ThemeColorSchemes.DARK]: '\''@elastic/eui/dist/eui_theme_arancia_dark.json'\'',' \
+          src/core/server/rendering/views/theme.ts
+    displayName: 'Load variables for new theme in `packages/osd-ui-shared-deps/theme.ts`'

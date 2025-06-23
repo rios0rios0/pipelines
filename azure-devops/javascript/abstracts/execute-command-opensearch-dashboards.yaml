@@ -12,6 +12,9 @@ parameters:
   - name: 'ARTIFACT_PATH'
     type: 'string'
     default: ''
+  - name: THEME_TAG_NAME
+    type: 'string'
+    default: ''
 
 steps:
   - template: './clone-and-move-opensearch-dashboards.yaml'
@@ -34,11 +37,16 @@ steps:
     displayName: 'Cache for Yarn 4.5.x'
     continueOnError: true
 
+  - template: './replace-environment-variables.yaml'
+    parameters:
+      FILE: '.yarnrc.yml'
+      DISPLAY_NAME: 'Replace Yarn Variable'
+
   - script: |
       set -e
 
       cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
-      yarn && yarn osd bootstrap
+      yarn && yarn setup-theme
     displayName: 'Install Dependencies'
 
   - script: |

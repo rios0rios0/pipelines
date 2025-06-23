@@ -1,7 +1,7 @@
 stages:
   - stage: 'delivery'
     displayName: 'delivery'
-    condition: and(not(failed()), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    # condition: and(not(failed()), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
     jobs:
       - job: 'delivery'
         displayName: 'delivery'
@@ -13,6 +13,7 @@ stages:
           - template: '../../abstracts/execute-command-opensearch-dashboards.yaml'
             parameters:
               TAG_NAME: '2.19.1'
+              THEME_TAG_NAME: '1.19.0'
               PLUGIN_NAME: 'app'
               COMMANDS: 'yarn build'
               ARTIFACT_NAME: "$(BUILD_ARTIFACT_NAME)"

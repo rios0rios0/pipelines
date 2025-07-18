@@ -48,7 +48,7 @@ wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/ins
   --print-resources-usage \
   --allow-parallel-runners \
   --max-issues-per-linter 0 \
-  --max-same-issues 0 ./... || EXIT_CODE=$?
+  --max-same-issues 0 ./... --fix || EXIT_CODE=$?
 
 rm $mergedYamlFile
 exit $EXIT_CODE

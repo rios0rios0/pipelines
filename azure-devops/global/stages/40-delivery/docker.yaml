@@ -31,9 +31,9 @@ steps:
   - script: |
         imageName="${{ parameters.CONTAINER_REGISTRY_SERVER }}/$(Build.Repository.Name)"
 
-        TAGS="$imageName:latest"
+        TAGS="$imageName:test-1"
         if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
-          TAGS="$TAGS -t $imageName:$(Build.SourceBranchName)"
+          TAGS="$TAGS -t $imageName:test-1"
           containerImageTagName="$imageName:$(Build.SourceBranchName)"
         else
           containerImageTagName="$TAGS"

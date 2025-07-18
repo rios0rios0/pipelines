@@ -1,5 +1,5 @@
 .go:
-  image: 'golang:1.23.4-bullseye'
+  image: 'golang:1.24.5-bullseye'
   cache: # relative to the project directory ($CI_PROJECT_DIR)
     key: "$CI_JOB_NAME"
     paths:

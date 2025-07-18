@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- updated golang version to 1.24.5
+
 ### Removed
 
 - removed Cache task from `database.yaml` template in Azure DevOps GoLang pipeline since it was failing to restore cache with readonly files

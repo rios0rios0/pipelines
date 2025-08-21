@@ -7,7 +7,7 @@ on:
 jobs:
   # first stage
   code_check-style_golangci_lint:
-    name: 'code-check > style:golangci-lint'
+    name: 'go / code-check > style:golangci-lint'
     runs-on: 'ubuntu-latest'
     steps:
       - run: sudo apt-get update && sudo apt-get install -y python3 python3-yaml
@@ -18,7 +18,7 @@ jobs:
 
   # second stage
   security-sast_horusec:
-    name: 'security > sast:horusec'
+    name: 'go / security > sast:horusec'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-horusec@main'
@@ -27,7 +27,7 @@ jobs:
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_semgrep:
-    name: 'security > sast:semgrep'
+    name: 'go / security > sast:semgrep'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-semgrep@main'
@@ -37,7 +37,7 @@ jobs:
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_gitleaks:
-    name: 'security > sast:gitleaks'
+    name: 'go / security > sast:gitleaks'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-gitleaks@main'
@@ -47,7 +47,7 @@ jobs:
 
   # third stage
   tests-test_all:
-    name: 'tests > test:all'
+    name: 'go / tests > test:all'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/golang/stages/30-tests/all@main'
@@ -57,7 +57,7 @@ jobs:
 
   # fourth stage
   delivery-release:
-    name: 'delivery > release'
+    name: 'go / delivery > release'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'

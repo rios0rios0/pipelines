@@ -12,7 +12,7 @@ stages:
             fetchDepth: 0
             fetchTags: true
 
-          - template: '../../abstracts/corepack-node18.19.0.yaml'
+          - template: '../../abstracts/corepack-node20.18.3.yaml'
 
           - task: 'Cache@2'
             inputs:
@@ -37,7 +37,7 @@ stages:
         variables:
           REPORT_PATH: 'build/reports'
         steps:
-          - template: '../../abstracts/corepack-node18.19.0.yaml'
+          - template: '../../abstracts/corepack-node20.18.3.yaml'
 
           - script: yarn && yarn sbom
 

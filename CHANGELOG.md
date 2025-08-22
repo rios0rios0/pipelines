@@ -2,14 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 When a new release is proposed:
 
 1. Create a new branch `bump/x.x.x` (this isn't a long-lived branch!!!);
 2. The Unreleased section on `CHANGELOG.md` gets a version number and date;
 3. Open a Pull Request with the bump version changes targeting the `main` branch;
-4. When the Pull Request is merged, a new git tag must be created using [GitHub environment](https://github.com/rios0rios0/pipelines/tags).
+4. When the Pull Request is merged, a new Git tag must be created using [GitHub environment](https://github.com/rios0rios0/pipelines/tags).
 
 Releases to productive environments should run from a tagged version.
 Exceptions are acceptable depending on the circumstances (critical bug fixes that can be cherry-picked, etc.).
@@ -18,9 +18,9 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
-- updated golang version to 1.24.5
-- changed the OSD version to `3.2.0` due to an upgrade request
-- changed Node version from `18.19.0` to `20.18.3`
+- changed the Node version from `18.19.0` to `20.18.3` on Azure DevOps modules
+- changed the OSD version to `3.2.0` due to an upgrade request on Azure DevOps modules
+- updated GoLang version to `1.24.5` on Azure DevOps modules
 
 ### Removed
 
@@ -28,7 +28,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
-- fixed workflow and delivery for github python docker
+- fixed workflow and delivery for GitHub Python Docker
 
 ## [2.2.0] - 2025-04-16
 
@@ -62,23 +62,23 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed the OSD version to `2.19.1` due to an upgrade request
 - changed the `.golangci.yml` configuration file to upgrade the `@maratori`'s configuration to `v1.64.7`
 - changed the `azure-devops/javascript/stages/50-deployment/k8s.yaml` to run an external Kubernetes file
-- changed the dynamic deploy to `PublishPipelineArtifact` the files to deploy the Azure Function
+- changed the dynamic deployment to `PublishPipelineArtifact` the files to deploy the Azure Function
 - corrected miss-used template files for .NET in Azure DevOps pipelines
 - updated `.golangci.yml` to the new version format
 - updated the image tag for the GoLang Docker delivery stage to retrieve the complete tag name from an environment variable
 
 ### Fixed
 
-- fixed GoLang pipeline to work with dynamic deploy
+- fixed GoLang pipeline to work with dynamic deployment
 - fixed Java pipeline for Azure DevOps by setting up local `gradle.properties` file
-- fixed JavaScript delivery and deployment stages in Azure DevOps by inserting name for the build and push step
+- fixed JavaScript delivery and deployment stages in Azure DevOps by inserting the name for the build and push step
 - fixed dynamic variable `CONTAINER_IMAGE` for production and development environment
 - fixed dynamic variable `CONTAINER_IMAGE` to get value from the delivery stage
-- fixed node modules cache error of Azure pipeline for JavaScript
+- fixed node modules cache error of the Azure pipeline for JavaScript
 - fixed script that kills processes created by OpenSearch Dashboards
 - fixed the blank version error of `golangci-lint`
 - fixed the seeders and migrations skip condition bug on the `database.yaml`
-- fixed wrong parameter usage by changing Runtime Expressions to Template Expressions for Azure's Global docker delivery template
+- fixed the wrong parameter usage by changing Runtime Expressions to Template Expressions for Azure's Global docker delivery template
 - fixed wrong usage of CycloneDX library for GoLang
 
 ### Removed
@@ -100,7 +100,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added artifact upload for SAST pipelines in GitHub Actions
 - added building tests for GoLang inside GitLab pipelines
 - added cache for `execute-command-opensearch-dashboards.yaml` template to cache the node modules and speed up the pipeline
-- added cache for tests and delivery stages in Azure DevOps JavaScript pipeline
+- added cache for tests and delivery stages in the Azure DevOps JavaScript pipeline
 - added command to run end-to-end tests for JS projects
 - added management step for Azure DevOps environment
 
@@ -111,13 +111,13 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed GoLang test script to install docker used by test containers in integration tests
 - changed GoLang test script to run integration tests separately and one per time
 - changed GoLang to version `1.23.4`
-- changed Horusec JSON configuration file to ignore `pipelines_*` directory created by GitHub Actions
+- changed the Horusec JSON configuration file to ignore `pipelines_*` directory created by GitHub Actions
 - changed JavaScript pipeline for Azure DevOps to publish the code coverage in Sonarqube
 - changed all display names and conditions to obey a certain position for all Azure DevOps tasks
-- changed end-to-end test job to receive a different pool
-- changed search location of folder generated by Cypress
+- changed the end-to-end test job to receive a different pool
+- changed the search location of the folder generated by Cypress
 - changed stages for GoLang in Azure DevOps to be called after configuration
-- changed task that publishes artifact from `PublishBuildArtifact` to `PublishPipelineArtifact` in Azure DevOps JS's `execute-command-opensearch-dashboards.yaml` template
+- changed a task that publishes artifact from `PublishBuildArtifact` to `PublishPipelineArtifact` in Azure DevOps JS's `execute-command-opensearch-dashboards.yaml` template
 - changed the Azure DevOps to execute the migrations and seeders in different tasks
 - changed the C# pipeline to run tests with the debug configuration instead of release
 - changed the OSD version to `2.18.0` due to an upgrade request
@@ -139,7 +139,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed Python management step to install the necessary package before executing the command
 - fixed artifact generation for end-to-end tests
 - fixed cache keys in the GoLang delivery stage for Azure DevOps
-- fixed dependency track stage in the GoLang Azure DevOps pipeline to set up the correct environment
+- fixed the dependency track stage in the GoLang Azure DevOps pipeline to set up the correct environment
 - fixed the Azure DevOps delivery stage for GoLang by adding a `goose-db` version table hash for the migrations and seeders caches to work based on properly versioning
 - fixed the Azure DevOps delivery stages by adding one more condition to run only when previous stages succeeded
 - fixed the Azure DevOps delivery stages conditions to run only when there were no errors in the earlier stages instead of checking for success
@@ -185,7 +185,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added skeleton for .NET project pipelines with basic steps
 - added step to create and delete firewall rule to run migrations
 - added step to run migrations in Azure Pipelines
-- added task in GoLang stage delivery to replace the value of Azure function settings variables with library variables
+- added a task in GoLang stage delivery to replace the value of Azure function settings variables with library variables
 - added tasks to publish all security reports as Azure artifacts in Azure DevOps
 - added the JavaScript rules to test, monitor, and deploy
 - added the `goreleaser` pipelines
@@ -198,11 +198,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - **BREAKING CHANGE:** changed the structure to support more than one CI/CD platform
 - changed JavaScript deployment to continue tasks with error
-- changed Node version from `16.20.0` to `18.19.0`
+- changed the Node version from `16.20.0` to `18.19.0`
 - changed Semgrep only to use the default `.semgrepignore` file if custom is not available
 - changed SonarQube to be inside the management step instead of the delivery step
-- changed gradle version from `8.1` to `8.7`
-- changed release code in every step to have a regex more flexible to catch in any merge case
+- changed the Gradle version from `8.1` to `8.7`
+- changed release code at every step to have a regex more flexible to catch in any merge case
 - changed the GoLang code to have multiple standards to run testing
 - changed the GoLang linter configuration to use the project-specific config
 - changed the GoLang pipeline to match with the GitHub merge commit message
@@ -247,8 +247,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - added GoLang support with the formatting basic checking
 - added SAM delivery and deployment as independent approaches
-- added the capability to merge config files in the `golanglint-ci`
-- added the capability to run customized scripts in Debian-based images
+- added the ability to merge config files in the `golanglint-ci`
+- added the ability to run customized scripts in Debian-based images
 
 ### Changed
 

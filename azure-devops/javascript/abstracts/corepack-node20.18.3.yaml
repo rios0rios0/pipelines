@@ -4,7 +4,7 @@ parameters:
     default: "$(System.DefaultWorkingDirectory)"
 
 steps:
-  - template: 'corepack-node18.19.0-no-cache.yaml'
+  - template: 'corepack-node20.18.3-no-cache.yaml'
 
   - task: 'Cache@2'
     inputs:

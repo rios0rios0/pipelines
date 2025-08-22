@@ -1,8 +1,8 @@
 steps:
   - task: 'UseNode@1'
     inputs:
-      version: '18.19.0'
-    displayName: 'Use Node.js 18.19.0'
+      version: '20.18.3'
+    displayName: 'Use Node.js 20.18.3'
 
   - script: |
       corepack enable

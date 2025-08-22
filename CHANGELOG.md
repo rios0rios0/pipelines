@@ -19,6 +19,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Changed
 
 - updated golang version to 1.24.5
+- changed the OSD version to `3.2.0` due to an upgrade request
+- changed Node version from `18.19.0` to `20.18.3`
 
 ### Removed
 

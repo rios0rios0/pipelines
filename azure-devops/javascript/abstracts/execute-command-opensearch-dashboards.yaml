@@ -17,9 +17,36 @@ steps:
   - template: './clone-and-move-opensearch-dashboards.yaml'
     parameters:
       TAG_NAME: "${{ parameters.TAG_NAME }}"
-      PLUGIN_NAME: "${{ parameters.PLUGIN_NAME }}"
 
   # $(Agent.HomeDirectory) is "home/vsts/agents/3.246.0/" different from the real home directory
+  - script: |
+      set -e
+
+      cd $(Agent.TempDirectory)/OpenSearch-Dashboards
+      yarn osd bootstrap
+    displayName: 'Install OSD Dependencies'
+
+  - task: 'CopyFiles@2'
+    inputs:
+      SourceFolder: "$(Build.Repository.LocalPath)"
+      Contents: '**'
+      TargetFolder: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}"
+    displayName: 'Copy Plugin to Plugins folder'
+
+  - task: 'Cache@2'
+    inputs:
+      key: "$(Agent.JobName)|$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/yarn.lock"
+      path: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/node_modules"
+    displayName: 'Cache for "node_modules" (Plugin)'
+    continueOnError: true
+
+  - script: |
+      set -e
+
+      cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
+      yarn install
+    displayName: 'Install App Dependencies'
+
   - task: 'Cache@2'
     inputs:
       key: '$(Agent.JobName)|$(Agent.TempDirectory)/OpenSearch-Dashboards/yarn.lock|$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/yarn.lock'
@@ -33,13 +60,6 @@ steps:
       path: "$(HOME)/.yarn"
     displayName: 'Cache for Yarn 4.5.x'
     continueOnError: true
-
-  - script: |
-      set -e
-
-      cd $(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}
-      yarn && yarn osd bootstrap
-    displayName: 'Install Dependencies'
 
   - script: |
       set -e

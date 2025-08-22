@@ -12,7 +12,7 @@ stages:
         steps:
           - template: '../../abstracts/execute-command-opensearch-dashboards.yaml'
             parameters:
-              TAG_NAME: '2.19.1'
+              TAG_NAME: '3.2.0'
               PLUGIN_NAME: 'app'
               COMMANDS: 'yarn build'
               ARTIFACT_NAME: "$(BUILD_ARTIFACT_NAME)"

@@ -12,7 +12,7 @@ jobs:
 
   # fourth stage
   delivery-binary:
-    name: 'delivery > binary'
+    name: 'go / delivery > binary'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/binary@main'

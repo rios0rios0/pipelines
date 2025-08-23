@@ -6,7 +6,7 @@ on:
 jobs:
   # first stage
   code_check-style_isort:
-    name: 'code-check > style:isort'
+    name: 'python / code-check > style:isort'
     runs-on: 'ubuntu-latest'
     container:
       image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
@@ -18,7 +18,7 @@ jobs:
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   code_check-style_black:
-    name: 'code-check > style:black'
+    name: 'python / code-check > style:black'
     runs-on: 'ubuntu-latest'
     container:
       image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
@@ -30,7 +30,7 @@ jobs:
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   code_check-quality_flake8:
-    name: 'code-check > style:flake8'
+    name: 'python / code-check > style:flake8'
     runs-on: 'ubuntu-latest'
     container:
       image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
@@ -42,7 +42,7 @@ jobs:
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   code_check-quality_mypy:
-    name: 'code-check > style:mypy'
+    name: 'python / code-check > style:mypy'
     runs-on: 'ubuntu-latest'
     container:
       image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
@@ -56,7 +56,7 @@ jobs:
 
   # second stage
   security-sast_horusec:
-    name: 'security > sast:horusec'
+    name: 'python / security > sast:horusec'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-horusec@main'
@@ -65,7 +65,7 @@ jobs:
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_semgrep:
-    name: 'security > sast:semgrep'
+    name: 'python / security > sast:semgrep'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-semgrep@main'
@@ -75,7 +75,7 @@ jobs:
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_gitleaks:
-    name: 'security > sast:gitleaks'
+    name: 'python / security > sast:gitleaks'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-gitleaks@main'
@@ -83,7 +83,7 @@ jobs:
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sca_safety:
-    name: 'security > sca:safety'
+    name: 'python / security > sca:safety'
     runs-on: 'ubuntu-latest'
     container:
       image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
@@ -98,7 +98,7 @@ jobs:
 
   # third stage
   tests-test_all:
-    name: 'tests > test:all'
+    name: 'python / tests > test:all'
     runs-on: 'ubuntu-latest'
     container:
       image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
@@ -113,7 +113,7 @@ jobs:
 
   # fourth stage
   delivery-release:
-    name: 'delivery > release'
+    name: 'python / delivery > release'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'

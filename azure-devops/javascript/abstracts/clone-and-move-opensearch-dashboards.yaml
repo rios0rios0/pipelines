@@ -1,6 +1,8 @@
 parameters:
   - name: 'TAG_NAME'
     type: 'string'
+  - name: 'PLUGIN_NAME'
+    type: 'string'
 
 steps:
   - template: 'corepack-node20.18.3-no-cache.yaml'
@@ -9,9 +11,23 @@ steps:
       git clone --depth 1 --branch ${{ parameters.TAG_NAME }} https://github.com/opensearch-project/OpenSearch-Dashboards.git $(Agent.TempDirectory)/OpenSearch-Dashboards
     displayName: 'Clone OpenSearch Dashboards repository'
 
+  - task: 'CopyFiles@2'
+    inputs:
+      SourceFolder: "$(Build.Repository.LocalPath)"
+      Contents: '**'
+      TargetFolder: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}"
+    displayName: 'Copy Plugin to Plugins folder'
+
   - task: 'Cache@2'
     inputs:
       key: "$(Agent.JobName)|$(Agent.TempDirectory)/OpenSearch-Dashboards/yarn.lock"
       path: "$(Agent.TempDirectory)/OpenSearch-Dashboards/node_modules"
     displayName: 'Cache for "node_modules" (OpenSearch Dashboards)'
+    continueOnError: true
+
+  - task: 'Cache@2'
+    inputs:
+      key: "$(Agent.JobName)|$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/yarn.lock"
+      path: "$(Agent.TempDirectory)/OpenSearch-Dashboards/plugins/${{ parameters.PLUGIN_NAME }}/node_modules"
+    displayName: 'Cache for "node_modules" (Plugin)'
     continueOnError: true

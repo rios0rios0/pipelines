@@ -1,3 +1,11 @@
+parameters:
+  - name: 'RUN_BEFORE_DELIVERY'
+    type: 'string'
+    default: 'echo "No before script"'
+  - name: 'RUN_AFTER_DELIVERY'
+    type: 'string'
+    default: 'echo "No after script"'
+
 stages:
   - stage: 'delivery'
     displayName: 'delivery'
@@ -10,13 +18,15 @@ stages:
           BUILD_ARTIFACT_NAME: 'build'
           BUILD_ARTIFACT_PATH: 'build'
         steps:
-          - template: '../../abstracts/execute-command-opensearch-dashboards.yaml'
-            parameters:
-              TAG_NAME: '3.2.0'
-              PLUGIN_NAME: 'app'
-              COMMANDS: 'yarn build'
-              ARTIFACT_NAME: "$(BUILD_ARTIFACT_NAME)"
-              ARTIFACT_PATH: "$(BUILD_ARTIFACT_PATH)"
+          - script: |
+              ${{ parameters.RUN_BEFORE_DELIVERY }}
+            displayName: 'Run Before'
+
+          - script: yarn build
+
+          - script: |
+              ${{ parameters.RUN_AFTER_DELIVERY }}
+            displayName: 'Run After'
 
           - task: 'DownloadPipelineArtifact@2'
             inputs:

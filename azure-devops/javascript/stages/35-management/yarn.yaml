@@ -1,3 +1,11 @@
+parameters:
+  - name: 'RUN_BEFORE_MANAGEMENT'
+    type: 'string'
+    default: 'echo "No before script"'
+  - name: 'RUN_AFTER_MANAGEMENT'
+    type: 'string'
+    default: 'echo "No after script"'
+
 stages:
   - stage: 'management'
     displayName: 'management'
@@ -29,8 +37,14 @@ stages:
             displayName: 'Download Coverage File'
 
           - script: |
-              sed -i "s/\"extends\": \"\.\.\/\.\.\/tsconfig\.json\",/ /g" tsconfig.json
-              yarn && yarn sonar
+              ${{ parameters.RUN_BEFORE_MANAGEMENT }}
+            displayName: 'Run Before'
+
+          - script: yarn && yarn sonar
+
+          - script: |
+              ${{ parameters.RUN_AFTER_MANAGEMENT }}
+            displayName: 'Run After'
 
       - job: 'report_dependency_track'
         displayName: 'report:dependency-track'

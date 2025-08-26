@@ -1,3 +1,11 @@
+parameters:
+  - name: 'RUN_BEFORE_DEPLOYMENT'
+    type: 'string'
+    default: 'echo "No before script"'
+  - name: 'RUN_AFTER_DEPLOYMENT'
+    type: 'string'
+    default: 'echo "No after script"'
+
 stages:
   - stage: 'deployment'
     displayName: 'deployment'
@@ -9,38 +17,11 @@ stages:
       - job: 'deployment'
         displayName: 'deployment'
         steps:
-          - task: 'KubernetesManifest@1'
-            inputs:
-              action: 'createSecret'
-              secretType: 'dockerRegistry'
-              secretName: "$(K8S_IMAGE_PULL_SECRET_NAME)"
-              dockerRegistryEndpoint: "$(CONTAINER_REGISTRY_SERVICE_CONNECTION)"
-              kubernetesServiceConnection: "$(K8S_ENDPOINT)"
-              namespace: "$(K8S_NAMESPACE)"
-
-          - template: '../../abstracts/replace-environment-variables.yaml'
-            parameters:
-              FILE: '.ci/40-delivery/config/opensearch_dashboards.yml'
-              DISPLAY_NAME: 'Replace Environment Variables'
+          - script: |
+              ${{ parameters.RUN_BEFORE_DELIVERY }}
+            displayName: 'Run Before'
 
           - task: 'Kubernetes@1'
-            inputs:
-              connectionType: 'Kubernetes Service Connection'
-              configMapName: "$(K8S_CONFIGMAP_NAME)"
-              forceUpdateConfigMap: true
-              configMapArguments: '--from-file=.ci/40-delivery/config/opensearch_dashboards.yml'
-              kubernetesServiceEndpoint: "$(K8S_ENDPOINT)"
-              namespace: "$(K8S_NAMESPACE)"
-
-          - template: '../../abstracts/replace-environment-variables.yaml'
-            parameters:
-              FILE: '$(Build.SourcesDirectory)/kubernetes/k8s-patch.json'
-              DISPLAY_NAME: 'Replace Environment Variables (Kubernetes file)'
-
-          - script: |
-              cat "$(Build.SourcesDirectory)/kubernetes/k8s-patch.json"
-
-          - task: Kubernetes@1
             displayName: 'Patch Deployment Using JSON Patch File'
             inputs:
               connectionType: 'Kubernetes Service Connection'
@@ -57,3 +38,7 @@ stages:
               namespace: "$(K8S_NAMESPACE)"
               command: 'rollout'
               arguments: "restart deployment/$(K8S_DEPLOYMENT_NAME)"
+
+          - script: |
+              ${{ parameters.RUN_AFTER_DELIVERY }}
+            displayName: 'Run After'

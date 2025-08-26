@@ -1,8 +1,13 @@
 parameters:
-  # optional parameter for heavy workloads within JS language
-  - name: 'SELF_HOSTED_POOL'
+  - name: 'SELF_HOSTED_POOL' # optional parameter for heavy workloads within JS language
     type: 'string'
     default: "$(SELF_HOSTED_POOL)"
+  - name: 'RUN_BEFORE_TESTS'
+    type: 'string'
+    default: 'echo "No before script"'
+  - name: 'RUN_AFTER_TESTS'
+    type: 'string'
+    default: 'echo "No after script"'
 
 stages:
   - stage: 'tests'
@@ -12,13 +17,15 @@ stages:
       - job: 'test_all'
         displayName: 'test:all'
         steps:
-          - template: '../../abstracts/execute-command-opensearch-dashboards.yaml'
-            parameters:
-              TAG_NAME: '3.2.0'
-              PLUGIN_NAME: 'app'
-              COMMANDS: 'yarn test:coverage'
-              ARTIFACT_NAME: 'coverage'
-              ARTIFACT_PATH: 'coverage'
+          - script: |
+              ${{ parameters.RUN_BEFORE_TESTS }}
+            displayName: 'Run Before'
+
+          - script: yarn test:coverage
+
+          - script: |
+              ${{ parameters.RUN_AFTER_TESTS }}
+            displayName: 'Run After'
 
           - task: 'PublishTestResults@2'
             inputs:
@@ -38,13 +45,15 @@ stages:
           pool:
             name: "${{ parameters.SELF_HOSTED_POOL }}"
         steps:
-          - template: '../../abstracts/run-test-e2e.yaml'
-            parameters:
-              TAG_NAME: '3.2.0'
-              PLUGIN_NAME: 'app'
-              # TODO: set the ports as an array of strings
-              OS_PORT: '9200'
-              OSD_PORT: '5603'
+          - script: |
+              ${{ parameters.RUN_BEFORE_TESTS }}
+            displayName: 'Run Before'
+
+          - script: yarn cy:parallel
+
+          - script: |
+              ${{ parameters.RUN_AFTER_TESTS }}
+            displayName: 'Run After'
 
           - task: 'PublishTestResults@2'
             inputs:

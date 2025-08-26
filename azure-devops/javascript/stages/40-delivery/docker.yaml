@@ -1,3 +1,14 @@
+parameters:
+  - name: 'WORKING_DIRECTORY'
+    type: 'string'
+    default: ''
+  - name: 'RUN_BEFORE_DELIVERY'
+    type: 'string'
+    default: 'echo "No before script"'
+  - name: 'RUN_AFTER_DELIVERY'
+    type: 'string'
+    default: 'echo "No after script"'
+
 stages:
   - stage: 'delivery'
     displayName: 'delivery'
@@ -10,26 +21,11 @@ stages:
           BUILD_ARTIFACT_NAME: 'build'
           BUILD_ARTIFACT_PATH: 'build'
         steps:
-          - template: '../../abstracts/execute-command-opensearch-dashboards.yaml'
+          - template: 'steps/delivery.yaml'
             parameters:
-              TAG_NAME: '3.2.0'
-              PLUGIN_NAME: 'app'
-              COMMANDS: 'yarn build'
-              ARTIFACT_NAME: "$(BUILD_ARTIFACT_NAME)"
-              ARTIFACT_PATH: "$(BUILD_ARTIFACT_PATH)"
-
-          - task: 'DownloadPipelineArtifact@2'
-            inputs:
-              artifactName: "$(BUILD_ARTIFACT_NAME)"
-              targetPath: 'build'
-            displayName: 'Download Build Artifact'
-
-          - template: '../../../global/stages/40-delivery/docker.yaml'
-            parameters:
-              DOCKER_FILE: '.ci/40-delivery/app.Dockerfile'
-              DOCKER_CACHE_DIR: '$(DOCKER_CACHE_DIR)'
-              CONTAINER_REGISTRY_SERVER: '$(CONTAINER_REGISTRY_SERVER)'
-              CONTAINER_REGISTRY_SERVICE_CONNECTION: '$(CONTAINER_REGISTRY_SERVICE_CONNECTION)'
-
+              WORKING_DIRECTORY: "${{ parameters.WORKING_DIRECTORY }}"
+              RUN_BEFORE_DELIVERY: ${{ parameters.RUN_BEFORE_DELIVERY }}
+              RUN_AFTER_DELIVERY: ${{ parameters.RUN_AFTER_DELIVERY }}
         continueOnError: false
+
       - template: '../../../global/stages/40-delivery/release.yaml'

@@ -1,0 +1,53 @@
+parameters:
+  - name: 'WORKING_DIRECTORY'
+    type: 'string'
+    default: ''
+  - name: 'RUN_BEFORE_TESTS'
+    type: 'string'
+    default: 'echo "No before script"'
+  - name: 'RUN_AFTER_TESTS'
+    type: 'string'
+    default: 'echo "No after script"'
+  - name: 'JUNIT_RELATIVE_PATH'
+    type: 'string'
+    default: 'junit.xml'
+  - name: 'COBERTURA_RELATIVE_PATH'
+    type: 'string'
+    default: 'cobertura.xml'
+
+steps:
+  - script: ${{ parameters.RUN_BEFORE_TESTS }}
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+    displayName: 'Run Before'
+
+  - script: yarn test:coverage
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+    displayName: 'Run Tests'
+
+  - script: ${{ parameters.RUN_AFTER_TESTS }}
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+    displayName: 'Run After'
+
+  - task: 'PublishPipelineArtifact@1'
+    inputs:
+      targetPath: "${{ parameters.WORKING_DIRECTORY }}/${{ parameters.JUNIT_RELATIVE_PATH }}"
+      artifact: 'junit-coverage'
+      publishLocation: 'pipeline'
+
+  - task: 'PublishTestResults@2'
+    inputs:
+      testResultsFormat: 'JUnit'
+      testResultsFiles: "${{ parameters.WORKING_DIRECTORY }}/${{ parameters.JUNIT_RELATIVE_PATH }}"
+    displayName: 'Publish Test Results'
+
+  - task: 'PublishPipelineArtifact@1'
+    inputs:
+      targetPath: "${{ parameters.WORKING_DIRECTORY }}/${{ parameters.COBERTURA_RELATIVE_PATH }}"
+      artifact: 'cobertura-coverage'
+      publishLocation: 'pipeline'
+
+  - task: 'PublishCodeCoverageResults@2'
+    inputs:
+      summaryFileLocation: "${{ parameters.WORKING_DIRECTORY }}/${{ parameters.COBERTURA_RELATIVE_PATH }}"
+      failIfCoverageEmpty: true
+    displayName: 'Publish Code Coverage Results'

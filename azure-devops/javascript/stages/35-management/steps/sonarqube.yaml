@@ -1,0 +1,37 @@
+parameters:
+  - name: 'RUN_BEFORE_MANAGEMENT'
+    type: 'string'
+    default: 'echo "No before script"'
+  - name: 'RUN_AFTER_MANAGEMENT'
+    type: 'string'
+    default: 'echo "No after script"'
+
+steps:
+  - checkout: 'self'
+    fetchDepth: 0
+    fetchTags: true
+
+  - template: '../../../abstracts/corepack-node20.18.3.yaml'
+
+  - task: 'Cache@2'
+    inputs:
+      # TODO: this key should be better according to sonar version
+      key: "$(Agent.JobName)|yarn.lock"
+      path: "$(SONAR_USER_HOME)"
+    displayName: 'Cache for SonarQube'
+    continueOnError: true
+
+  - task: 'DownloadPipelineArtifact@2'
+    inputs:
+      artifactName: 'cobertura-coverage'
+      targetPath: "$(Build.SourcesDirectory)/coverage"
+    displayName: 'Download Cobertura Coverage File'
+
+  - script: ${{ parameters.RUN_BEFORE_MANAGEMENT }}
+    displayName: 'Run Before'
+
+  - script: yarn && yarn sonar
+    displayName: 'Run SonarQube'
+
+  - script: ${{ parameters.RUN_AFTER_MANAGEMENT }}
+    displayName: 'Run After'

@@ -1,3 +1,11 @@
+parameters:
+  - name: 'RUN_BEFORE_MANAGEMENT'
+    type: 'string'
+    default: 'echo "No before script"'
+  - name: 'RUN_AFTER_MANAGEMENT'
+    type: 'string'
+    default: 'echo "No after script"'
+
 stages:
   - stage: 'management'
     displayName: 'management'
@@ -8,39 +16,18 @@ stages:
         variables:
           SONAR_USER_HOME: "$(Build.SourcesDirectory)/.sonar"
         steps:
-          - checkout: 'self'
-            fetchDepth: 0
-            fetchTags: true
-
-          - template: '../../abstracts/corepack-node20.18.3.yaml'
-
-          - task: 'Cache@2'
-            inputs:
-              # TODO: this key should be better according to sonar version
-              key: "$(Agent.JobName)|yarn.lock"
-              path: "$(SONAR_USER_HOME)"
-            displayName: 'Cache for SonarQube'
-            continueOnError: true
-
-          - task: 'DownloadPipelineArtifact@2'
-            inputs:
-              artifactName: 'coverage'
-              targetPath: "$(Build.SourcesDirectory)/coverage"
-            displayName: 'Download Coverage File'
-
-          - script: |
-              sed -i "s/\"extends\": \"\.\.\/\.\.\/tsconfig\.json\",/ /g" tsconfig.json
-              yarn && yarn sonar
+          - template: 'steps/sonarqube.yaml'
+            parameters:
+              RUN_BEFORE_MANAGEMENT: ${{ parameters.RUN_BEFORE_MANAGEMENT }}
+              RUN_AFTER_MANAGEMENT: ${{ parameters.RUN_AFTER_MANAGEMENT }}
 
       - job: 'report_dependency_track'
         displayName: 'report:dependency-track'
         variables:
           REPORT_PATH: 'build/reports'
         steps:
-          - template: '../../abstracts/corepack-node20.18.3.yaml'
-
-          - script: yarn && yarn sbom
-
-          - template: '../../../global/abstracts/scripts-repo.yaml'
-          - script: $(Scripts.Directory)/global/scripts/dependency-track/run.sh
+          - template: 'steps/dependency-track.yaml'
+            parameters:
+              RUN_BEFORE_MANAGEMENT: ${{ parameters.RUN_BEFORE_MANAGEMENT }}
+              RUN_AFTER_MANAGEMENT: ${{ parameters.RUN_AFTER_MANAGEMENT }}
         continueOnError: true

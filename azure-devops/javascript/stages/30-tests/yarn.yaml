@@ -1,58 +1,41 @@
 parameters:
-  # optional parameter for heavy workloads within JS language
-  - name: 'SELF_HOSTED_POOL'
+  - name: 'SELF_HOSTED_POOL' # optional parameter for heavy workloads within JS language
     type: 'string'
     default: "$(SELF_HOSTED_POOL)"
+  - name: 'WORKING_DIRECTORY'
+    type: 'string'
+    default: ''
+  - name: 'RUN_BEFORE_TESTS'
+    type: 'string'
+    default: 'echo "No before script"'
+  - name: 'RUN_AFTER_TESTS'
+    type: 'string'
+    default: 'echo "No after script"'
 
 stages:
   - stage: 'tests'
     displayName: 'tests'
     condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
     jobs:
-      - job: 'test_all'
-        displayName: 'test:all'
-        steps:
-          - template: '../../abstracts/execute-command-opensearch-dashboards.yaml'
-            parameters:
-              TAG_NAME: '3.2.0'
-              PLUGIN_NAME: 'app'
-              COMMANDS: 'yarn test:coverage'
-              ARTIFACT_NAME: 'coverage'
-              ARTIFACT_PATH: 'coverage'
+      jobs:
+        - job: 'test_all'
+          displayName: 'test:all'
+          steps:
+            - template: 'steps/test-all.yaml'
+              parameters:
+                WORKING_DIRECTORY: "${{ parameters.WORKING_DIRECTORY }}"
+                RUN_BEFORE_TESTS: ${{ parameters.RUN_BEFORE_TESTS }}
+                RUN_AFTER_TESTS: ${{ parameters.RUN_AFTER_TESTS }}
 
-          - task: 'PublishTestResults@2'
-            inputs:
-              testResultsFormat: 'JUnit'
-              testResultsFiles: '**/junit.xml'
-            displayName: 'Publish Test Results'
-
-          - task: 'PublishCodeCoverageResults@2'
-            inputs:
-              summaryFileLocation: 'cobertura.xml'
-            displayName: 'Publish Code Coverage Results'
-
-      - job: 'test_e2e'
-        displayName: 'test:e2e'
-        continueOnError: true
-        ${{ if ne(parameters.SELF_HOSTED_POOL, '') }}:
-          pool:
-            name: "${{ parameters.SELF_HOSTED_POOL }}"
-        steps:
-          - template: '../../abstracts/run-test-e2e.yaml'
-            parameters:
-              TAG_NAME: '3.2.0'
-              PLUGIN_NAME: 'app'
-              # TODO: set the ports as an array of strings
-              OS_PORT: '9200'
-              OSD_PORT: '5603'
-
-          - task: 'PublishTestResults@2'
-            inputs:
-              testResultsFormat: 'JUnit'
-              testResultsFiles: '**/junit.xml'
-            displayName: 'Publish Test Results'
-
-          - task: 'PublishCodeCoverageResults@2'
-            inputs:
-              summaryFileLocation: 'cobertura.xml'
-            displayName: 'Publish Code Coverage Results'
+        - job: 'test_e2e'
+          displayName: 'test:e2e'
+          continueOnError: true
+          ${{ if ne(parameters.SELF_HOSTED_POOL, '') }}:
+            pool:
+              name: "${{ parameters.SELF_HOSTED_POOL }}"
+          steps:
+            - template: 'jobs/test-e2e.yaml'
+              parameters:
+                WORKING_DIRECTORY: "${{ parameters.WORKING_DIRECTORY }}"
+                RUN_BEFORE_TESTS: ${{ parameters.RUN_BEFORE_TESTS }}
+                RUN_AFTER_TESTS: ${{ parameters.RUN_AFTER_TESTS }}

@@ -10,6 +10,9 @@ parameters:
   - name: 'DOCKER_BUILD_ARGS'
     type: 'string'
     default: ''
+  - name: 'WORKING_DIRECTORY'
+    type: 'string'
+    default: ''
   - name: 'RUN_BEFORE_BUILD'
     type: 'string'
     default: ''
@@ -17,8 +20,8 @@ parameters:
 steps:
   - task: 'Cache@2'
     inputs:
-      key: "$(Agent.JobName)|${{ parameters.DOCKER_FILE }}"
-      path: "${{ parameters.DOCKER_CACHE_DIR }}"
+      key: "$(Agent.JobName)|${{ parameters.WORKING_DIRECTORY }}/${{ parameters.DOCKER_FILE }}"
+      path: "${{ parameters.WORKING_DIRECTORY }}/${{ parameters.DOCKER_CACHE_DIR }}"
     displayName: 'Cache Docker Buildx'
     continueOnError: true
 
@@ -52,4 +55,5 @@ steps:
           --file ${{ parameters.DOCKER_FILE }} \
           --push .
     name: 'build'
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
     displayName: 'Build and Push Docker Image'

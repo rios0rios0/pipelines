@@ -1,3 +1,14 @@
+parameters:
+  - name: 'RUN_BEFORE_CODE_CHECK'
+    type: 'string'
+    default: 'echo "No before script"'
+  - name: 'RUN_AFTER_CODE_CHECK'
+    type: 'string'
+    default: 'echo "No after script"'
+  - name: 'WORKING_DIRECTORY'
+    type: 'string'
+    default: ''
+
 stages:
   - stage: 'code_check'
     displayName: 'code check (style/quality)'
@@ -6,8 +17,8 @@ stages:
       - job: 'style_eslint'
         displayName: 'style:eslint'
         steps:
-          - template: '../../abstracts/execute-command-opensearch-dashboards.yaml'
+          - template: 'steps/eslint.yaml'
             parameters:
-              TAG_NAME: '3.2.0'
-              PLUGIN_NAME: 'app'
-              COMMANDS: 'yarn lint'
+              WORKING_DIRECTORY: "${{ parameters.WORKING_DIRECTORY }}"
+              RUN_BEFORE_CODE_CHECK: ${{ parameters.RUN_BEFORE_CODE_CHECK }}
+              RUN_AFTER_CODE_CHECK: ${{ parameters.RUN_AFTER_CODE_CHECK }}

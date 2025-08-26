@@ -1,0 +1,33 @@
+parameters:
+  - name: 'RUN_BEFORE_DEPLOYMENT'
+    type: 'string'
+    default: 'echo "No before script"'
+  - name: 'RUN_AFTER_DEPLOYMENT'
+    type: 'string'
+    default: 'echo "No after script"'
+
+steps:
+  - script: ${{ parameters.RUN_BEFORE_DEPLOYMENT }}
+    displayName: 'Run Before'
+
+  - task: 'Kubernetes@1'
+    inputs:
+      connectionType: 'Kubernetes Service Connection'
+      kubernetesServiceEndpoint: "$(K8S_ENDPOINT)"
+      namespace: "$(K8S_NAMESPACE)"
+      command: 'patch'
+      arguments: >
+        deployment $(K8S_DEPLOYMENT_NAME) --patch-file "$(Build.SourcesDirectory)/kubernetes/k8s-patch.json"
+    displayName: 'Patch Deployment Using JSON Patch File'
+
+  - task: 'Kubernetes@1'
+    inputs:
+      connectionType: 'Kubernetes Service Connection'
+      kubernetesServiceEndpoint: "$(K8S_ENDPOINT)"
+      namespace: "$(K8S_NAMESPACE)"
+      command: 'rollout'
+      arguments: "restart deployment/$(K8S_DEPLOYMENT_NAME)"
+    displayName: 'Restart Deployment'
+
+  - script: ${{ parameters.RUN_AFTER_DEPLOYMENT }}
+    displayName: 'Run After'

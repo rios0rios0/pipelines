@@ -1,0 +1,23 @@
+parameters:
+  - name: 'WORKING_DIRECTORY'
+    type: 'string'
+    default: ''
+  - name: 'RUN_BEFORE_CODE_CHECK'
+    type: 'string'
+    default: 'echo "No before script"'
+  - name: 'RUN_AFTER_CODE_CHECK'
+    type: 'string'
+    default: 'echo "No after script"'
+
+steps:
+  - script: ${{ parameters.RUN_BEFORE_CODE_CHECK }}
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+    displayName: 'Run Before'
+
+  - script: yarn lint
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+    displayName: 'Run ESLint'
+
+  - script: ${{ parameters.RUN_AFTER_CODE_CHECK }}
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+    displayName: 'Run After'

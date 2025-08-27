@@ -1,4 +1,7 @@
 parameters:
+  - name: 'WORKING_DIRECTORY'
+    type: 'string'
+    default: ''
   - name: 'RUN_BEFORE_MANAGEMENT'
     type: 'string'
     default: 'echo "No before script"'
@@ -7,10 +10,19 @@ parameters:
     default: 'echo "No after script"'
 
 steps:
-  - template: '../../../abstracts/corepack-node20.18.3.yaml'
+  - script: ${{ parameters.RUN_BEFORE_MANAGEMENT }}
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+    displayName: 'Run Before'
 
-  - script: yarn && yarn sbom
+  - script: yarn sbom
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
     displayName: 'Generate SBOM'
 
   - template: '../../../../global/abstracts/scripts-repo.yaml'
   - script: $(Scripts.Directory)/global/scripts/dependency-track/run.sh
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+    displayName: "Send SBOM to Dependency Track"
+
+  - script: ${{ parameters.RUN_AFTER_MANAGEMENT }}
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+    displayName: 'Run After'

@@ -1,4 +1,7 @@
 parameters:
+  - name: 'WORKING_DIRECTORY'
+    type: 'string'
+    default: ''
   - name: 'RUN_BEFORE_MANAGEMENT'
     type: 'string'
     default: 'echo "No before script"'
@@ -16,8 +19,15 @@ stages:
         variables:
           SONAR_USER_HOME: "$(Build.SourcesDirectory)/.sonar"
         steps:
+          - checkout: 'self'
+            fetchDepth: 0
+            fetchTags: true
+
+          - template: '../../abstracts/corepack-node20.18.3.yaml'
+
           - template: 'steps/sonarqube.yaml'
             parameters:
+              WORKING_DIRECTORY: "${{ parameters.WORKING_DIRECTORY }}"
               RUN_BEFORE_MANAGEMENT: ${{ parameters.RUN_BEFORE_MANAGEMENT }}
               RUN_AFTER_MANAGEMENT: ${{ parameters.RUN_AFTER_MANAGEMENT }}
 
@@ -26,8 +36,11 @@ stages:
         variables:
           REPORT_PATH: 'build/reports'
         steps:
+          - template: '../../abstracts/corepack-node20.18.3.yaml'
+
           - template: 'steps/dependency-track.yaml'
             parameters:
+              WORKING_DIRECTORY: "${{ parameters.WORKING_DIRECTORY }}"
               RUN_BEFORE_MANAGEMENT: ${{ parameters.RUN_BEFORE_MANAGEMENT }}
               RUN_AFTER_MANAGEMENT: ${{ parameters.RUN_AFTER_MANAGEMENT }}
         continueOnError: true

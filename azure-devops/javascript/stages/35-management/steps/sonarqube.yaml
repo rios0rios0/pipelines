@@ -1,4 +1,7 @@
 parameters:
+  - name: 'WORKING_DIRECTORY'
+    type: 'string'
+    default: ''
   - name: 'RUN_BEFORE_MANAGEMENT'
     type: 'string'
     default: 'echo "No before script"'
@@ -7,16 +10,10 @@ parameters:
     default: 'echo "No after script"'
 
 steps:
-  - checkout: 'self'
-    fetchDepth: 0
-    fetchTags: true
-
-  - template: '../../../abstracts/corepack-node20.18.3.yaml'
-
   - task: 'Cache@2'
     inputs:
       # TODO: this key should be better according to sonar version
-      key: "$(Agent.JobName)|yarn.lock"
+      key: "$(Agent.JobName)|${{ parameters.WORKING_DIRECTORY }}/yarn.lock"
       path: "$(SONAR_USER_HOME)"
     displayName: 'Cache for SonarQube'
     continueOnError: true
@@ -24,14 +21,17 @@ steps:
   - task: 'DownloadPipelineArtifact@2'
     inputs:
       artifactName: 'cobertura-coverage'
-      targetPath: "$(Build.SourcesDirectory)/coverage"
+      targetPath: "${{ parameters.WORKING_DIRECTORY }}/coverage"
     displayName: 'Download Cobertura Coverage File'
 
   - script: ${{ parameters.RUN_BEFORE_MANAGEMENT }}
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
     displayName: 'Run Before'
 
-  - script: yarn && yarn sonar
+  - script: yarn sonar
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
     displayName: 'Run SonarQube'
 
   - script: ${{ parameters.RUN_AFTER_MANAGEMENT }}
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
     displayName: 'Run After'

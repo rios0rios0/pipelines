@@ -21,7 +21,7 @@ steps:
   - task: 'Cache@2'
     inputs:
       key: "$(Agent.JobName)|${{ parameters.WORKING_DIRECTORY }}/${{ parameters.DOCKER_FILE }}"
-      path: "${{ parameters.WORKING_DIRECTORY }}/${{ parameters.DOCKER_CACHE_DIR }}"
+      path: "${{ parameters.DOCKER_CACHE_DIR }}"
     displayName: 'Cache Docker Buildx'
     continueOnError: true
 

@@ -29,6 +29,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
+- fixed the `Cache` task in `azure-devops/global/stages/40-delivery/docker.yaml` to create the Buildx cache
 - fixed workflow and delivery for GitHub Python Docker
 
 ## [2.2.0] - 2025-04-16

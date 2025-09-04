@@ -12,7 +12,7 @@ parameters:
     default: ''
   - name: 'WORKING_DIRECTORY'
     type: 'string'
-    default: ''
+    default: "$(Build.SourcesDirectory)" # or $(System.DefaultWorkingDirectory)
   - name: 'RUN_BEFORE_BUILD'
     type: 'string'
     default: ''

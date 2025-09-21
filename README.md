@@ -125,6 +125,11 @@ or
 curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
 export SCRIPTS_DIR=/home/$USER/Development/github.com/rios0rios0/pipelines
 $SCRIPTS_DIR/global/scripts/golangci-lint/run.sh # or any other script
+
+# Run golangci-lint with automatic fixing enabled
+$SCRIPTS_DIR/global/scripts/golangci-lint/run.sh fix
+# or alternatively
+$SCRIPTS_DIR/global/scripts/golangci-lint/run.sh --fix
 ```
 
 ## Running Dev/Testing Branches

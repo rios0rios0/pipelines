@@ -1,5 +1,19 @@
 #!/usr/bin/env sh
 
+# Parse command line arguments
+FIX_FLAG=""
+for arg in "$@"; do
+  case $arg in
+    fix|--fix)
+      FIX_FLAG="--fix"
+      shift
+      ;;
+    *)
+      # Unknown option, ignore for now to maintain compatibility
+      ;;
+  esac
+done
+
 if [ -z "$SCRIPTS_DIR" ]; then
   export SCRIPTS_DIR="$(echo $(dirname "$(realpath "$0")") | sed 's|\(.*pipelines\).*|\1|')"
 fi
@@ -48,7 +62,7 @@ wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/ins
   --print-resources-usage \
   --allow-parallel-runners \
   --max-issues-per-linter 0 \
-  --max-same-issues 0 ./... || EXIT_CODE=$?
+  --max-same-issues 0 $FIX_FLAG ./... || EXIT_CODE=$?
 
 rm $mergedYamlFile
 exit $EXIT_CODE

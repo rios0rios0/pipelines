@@ -34,19 +34,64 @@ go install github.com/wadey/gocovmerge@latest
 go install github.com/boumenot/gocover-cobertura@latest
 go install github.com/jstemmer/go-junit-report/v2@latest
 
-# run the tests
-go test -v -tags test,unit \
-  -coverpkg="$(echo $directories | tr ' ' ',')" \
-  -covermode=count \
-  -coverprofile=unit_coverage.txt \
-  $directories
+# Check if covdata tool is available for cross-package coverage
+COVDATA_AVAILABLE=false
+set +e  # Temporarily disable exit on error for the covdata check
+go tool covdata >/dev/null 2>&1
+COVDATA_EXIT_CODE=$?
+set -e  # Re-enable exit on error
+if [ $COVDATA_EXIT_CODE -eq 2 ]; then
+  COVDATA_AVAILABLE=true
+  echo "covdata tool is available, using cross-package coverage"
+else
+  echo "covdata tool not available (exit code: $COVDATA_EXIT_CODE), using individual package coverage"
+fi
 
-# TODO: this should be in another step to run in parallel along the unit tests
-go test -p 1 -v -tags integration \
-  -coverpkg="$(echo $directories | tr ' ' ',')" \
-  -covermode=count \
-  -coverprofile=integration_coverage.txt \
-  $directories
+# Check Go version for compatibility
+GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
+GO_MAJOR=$(echo $GO_VERSION | cut -d. -f1)
+GO_MINOR=$(echo $GO_VERSION | cut -d. -f2)
+
+echo "Detected Go version: $GO_VERSION"
+
+# Determine coverage strategy based on Go version and covdata availability
+USE_CROSS_PACKAGE_COVERAGE=true
+if [ "$GO_MAJOR" -gt 1 ] || ([ "$GO_MAJOR" -eq 1 ] && [ "$GO_MINOR" -ge 25 ]); then
+  if [ "$COVDATA_AVAILABLE" = "false" ]; then
+    echo "Go 1.25+ detected but covdata not available, using individual package coverage"
+    USE_CROSS_PACKAGE_COVERAGE=false
+  fi
+fi
+
+if [ "$USE_CROSS_PACKAGE_COVERAGE" = "true" ]; then
+  echo "Using cross-package coverage collection..."
+  # run the tests with cross-package coverage
+  go test -v -tags test,unit \
+    -coverpkg="$(echo $directories | tr ' ' ',')" \
+    -covermode=count \
+    -coverprofile=unit_coverage.txt \
+    $directories
+
+  # TODO: this should be in another step to run in parallel along the unit tests
+  go test -p 1 -v -tags integration \
+    -coverpkg="$(echo $directories | tr ' ' ',')" \
+    -covermode=count \
+    -coverprofile=integration_coverage.txt \
+    $directories
+else
+  echo "Using individual package coverage collection..."
+  # run the tests with individual package coverage (avoids covdata dependency)
+  go test -v -tags test,unit \
+    -covermode=count \
+    -coverprofile=unit_coverage.txt \
+    $directories
+
+  # TODO: this should be in another step to run in parallel along the unit tests
+  go test -p 1 -v -tags integration \
+    -covermode=count \
+    -coverprofile=integration_coverage.txt \
+    $directories
+fi
 
 $(go env GOPATH)/bin/gocovmerge unit_coverage.txt integration_coverage.txt > coverage.txt && \
   rm unit_coverage.txt integration_coverage.txt

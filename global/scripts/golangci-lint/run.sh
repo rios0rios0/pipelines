@@ -59,7 +59,7 @@ wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/ins
   --config "merged.yml" \
   --color "always" \
   --timeout "10m" \
-  --print-resources-usage \
+  --verbose \
   --allow-parallel-runners \
   --max-issues-per-linter 0 \
   --max-same-issues 0 $FIX_FLAG ./... || EXIT_CODE=$?

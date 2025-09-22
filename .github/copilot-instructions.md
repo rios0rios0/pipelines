@@ -142,6 +142,8 @@ ln -s $SCRIPTS_DIR/global/scripts/golangci-lint/.golangci.yml ~/.golangci.yml
 - **Always test across all three platforms** (GitHub, GitLab, Azure DevOps)
 - **Validate security scanning tools work** in target environments
 - **Test container builds** with proper authentication
+- **Run validation tests**: Execute `make test` before submitting changes
+- **Verify coverage completeness**: Ensure coverage includes all packages, not just tested ones
 
 ### Manual Validation Steps
 1. **Clone repository using provided scripts**
@@ -149,6 +151,25 @@ ln -s $SCRIPTS_DIR/global/scripts/golangci-lint/.golangci.yml ~/.golangci.yml
 3. **Validate pipeline templates** by including them in test projects
 4. **Verify Docker container builds** (may require network access)
 5. **Check security scanning tools** download and run correctly
+6. **Run test suite**: Execute `make test-go-script` for Go script changes
+
+### Test Suite Usage
+```bash
+# Run all validation tests
+make test
+
+# Run Go script validation specifically
+make test-go-script
+
+# Validate changes manually
+./test-go-validation.sh
+```
+
+### Coverage Testing Requirements
+- Coverage reports MUST include all packages with Go files
+- Untested packages MUST appear as 0% covered in reports
+- Overall coverage percentage MUST reflect complete codebase visibility
+- Test scenarios MUST validate comprehensive coverage behavior
 
 ### Environment Requirements
 - Docker (for container builds and security tools)

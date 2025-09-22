@@ -27,7 +27,15 @@ all_packages=""
 for go_file in $(find . -name "*.go" -not -name "*_test.go" -not -path "./.go/*"); do
   pkg_dir=$(dirname "$go_file" | sed 's|^\./||')
   if [ "$pkg_dir" != "." ]; then
-    all_packages="$all_packages ./$pkg_dir"
+    # Exclude common test directory names from coverage
+    case "$pkg_dir" in
+      test|tests|testing|testdata|*/test|*/tests|*/testing|*/testdata)
+        # Skip test directories
+        ;;
+      *)
+        all_packages="$all_packages ./$pkg_dir"
+        ;;
+    esac
   fi
 done
 
@@ -38,16 +46,24 @@ all_packages=$(echo $all_packages | tr ' ' '\n' | sort -u | tr '\n' ' ' | sed 's
 for test_file in $(find . -path "./.go" -prune -o -name "*_test.go" -print); do
   pkg_dir=$(dirname "$test_file" | sed 's|^\./||')
   if [ "$pkg_dir" != "." ]; then
-    # Check for unit build tag
-    if grep -q "//go:build unit" "$test_file" 2>/dev/null; then
-      unit_test_packages="$unit_test_packages ./$pkg_dir"
-    # Check for integration build tag  
-    elif grep -q "//go:build integration" "$test_file" 2>/dev/null; then
-      integration_test_packages="$integration_test_packages ./$pkg_dir"
-    # For backward compatibility, include test files without build tags as unit tests
-    elif ! grep -q "//go:build" "$test_file" 2>/dev/null; then
-      unit_test_packages="$unit_test_packages ./$pkg_dir"
-    fi
+    # Exclude common test directory names from test execution
+    case "$pkg_dir" in
+      test|tests|testing|testdata|*/test|*/tests|*/testing|*/testdata)
+        # Skip test directories
+        ;;
+      *)
+        # Check for unit build tag
+        if grep -q "//go:build unit" "$test_file" 2>/dev/null; then
+          unit_test_packages="$unit_test_packages ./$pkg_dir"
+        # Check for integration build tag  
+        elif grep -q "//go:build integration" "$test_file" 2>/dev/null; then
+          integration_test_packages="$integration_test_packages ./$pkg_dir"
+        # For backward compatibility, include test files without build tags as unit tests
+        elif ! grep -q "//go:build" "$test_file" 2>/dev/null; then
+          unit_test_packages="$unit_test_packages ./$pkg_dir"
+        fi
+        ;;
+    esac
   fi
 done
 

@@ -67,7 +67,9 @@ echo "Integration test packages: $integration_test_packages"
 echo ""
 echo "=========================================="
 echo "PHASE 1: RUNNING UNIT TESTS"
+echo "Started at: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "=========================================="
+unit_start_time=$(date +%s)
 if [ -n "$unit_test_packages" ]; then
   echo "Running unit tests with coverage for all packages..."
   if [ -n "$all_packages" ]; then
@@ -86,13 +88,17 @@ else
   echo "No unit test packages found, creating empty coverage file"
   touch unit_coverage.txt
 fi
-echo "✓ Unit tests phase completed"
+unit_end_time=$(date +%s)
+unit_duration=$((unit_end_time - unit_start_time))
+echo "✓ Unit tests phase completed at $(date '+%Y-%m-%d %H:%M:%S') (took ${unit_duration}s)"
 echo ""
 
 # Run integration tests
 echo "=========================================="
 echo "PHASE 2: RUNNING INTEGRATION TESTS"
+echo "Started at: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "=========================================="
+integration_start_time=$(date +%s)
 if [ -n "$integration_test_packages" ]; then
   echo "Running integration tests with coverage for all packages..."
   if [ -n "$all_packages" ]; then
@@ -111,12 +117,16 @@ else
   echo "No integration test packages found, creating empty coverage file"
   touch integration_coverage.txt
 fi
-echo "✓ Integration tests phase completed"
+integration_end_time=$(date +%s)
+integration_duration=$((integration_end_time - integration_start_time))
+echo "✓ Integration tests phase completed at $(date '+%Y-%m-%d %H:%M:%S') (took ${integration_duration}s)"
 echo ""
 
 echo "=========================================="
 echo "PHASE 3: GENERATING COVERAGE REPORTS"
+echo "Started at: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "=========================================="
+reports_start_time=$(date +%s)
 # Merge coverage files
 $(go env GOPATH)/bin/gocovmerge unit_coverage.txt integration_coverage.txt > coverage.txt && \
   rm unit_coverage.txt integration_coverage.txt
@@ -126,5 +136,7 @@ $(go env GOPATH)/bin/go-junit-report -in coverage.txt -out junit.xml
 go tool cover -func coverage.txt
 $(go env GOPATH)/bin/gocover-cobertura < coverage.txt > cobertura.xml
 
-echo "✓ Coverage reports generated successfully"
+reports_end_time=$(date +%s)
+reports_duration=$((reports_end_time - reports_start_time))
+echo "✓ Coverage reports generated successfully at $(date '+%Y-%m-%d %H:%M:%S') (took ${reports_duration}s)"
 echo "=========================================="

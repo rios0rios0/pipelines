@@ -64,6 +64,10 @@ echo "Unit test packages: $unit_test_packages"
 echo "Integration test packages: $integration_test_packages"
 
 # Run unit tests
+echo ""
+echo "=========================================="
+echo "PHASE 1: RUNNING UNIT TESTS"
+echo "=========================================="
 if [ -n "$unit_test_packages" ]; then
   echo "Running unit tests with coverage for all packages..."
   if [ -n "$all_packages" ]; then
@@ -82,8 +86,13 @@ else
   echo "No unit test packages found, creating empty coverage file"
   touch unit_coverage.txt
 fi
+echo "✓ Unit tests phase completed"
+echo ""
 
 # Run integration tests
+echo "=========================================="
+echo "PHASE 2: RUNNING INTEGRATION TESTS"
+echo "=========================================="
 if [ -n "$integration_test_packages" ]; then
   echo "Running integration tests with coverage for all packages..."
   if [ -n "$all_packages" ]; then
@@ -102,7 +111,12 @@ else
   echo "No integration test packages found, creating empty coverage file"
   touch integration_coverage.txt
 fi
+echo "✓ Integration tests phase completed"
+echo ""
 
+echo "=========================================="
+echo "PHASE 3: GENERATING COVERAGE REPORTS"
+echo "=========================================="
 # Merge coverage files
 $(go env GOPATH)/bin/gocovmerge unit_coverage.txt integration_coverage.txt > coverage.txt && \
   rm unit_coverage.txt integration_coverage.txt
@@ -111,3 +125,6 @@ $(go env GOPATH)/bin/gocovmerge unit_coverage.txt integration_coverage.txt > cov
 $(go env GOPATH)/bin/go-junit-report -in coverage.txt -out junit.xml
 go tool cover -func coverage.txt
 $(go env GOPATH)/bin/gocover-cobertura < coverage.txt > cobertura.xml
+
+echo "✓ Coverage reports generated successfully"
+echo "=========================================="

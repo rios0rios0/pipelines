@@ -31,6 +31,13 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - fixed the `Cache` task in `azure-devops/global/stages/40-delivery/docker.yaml` to create the Buildx cache
 - fixed workflow and delivery for GitHub Python Docker
+- fixed Go 1.25.1 compatibility issue in `global/scripts/golang/test/run.sh` by implementing comprehensive coverage reporting
+- fixed coverage reporting to include all packages with Go files, not just packages with tests
+- fixed untested packages now appearing as 0% covered instead of being excluded from coverage reports
+- added complete test validation suite with `test-go-validation.sh` script
+- added `make test` and `make test-go-script` targets for automated testing
+- updated CONTRIBUTING.md and copilot-instructions.md with mandatory testing requirements
+- enhanced coverage accuracy by using `-coverpkg` with all packages when tests are available
 
 ## [2.2.0] - 2025-04-16
 

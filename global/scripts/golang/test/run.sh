@@ -21,6 +21,18 @@ go install github.com/jstemmer/go-junit-report/v2@latest
 # Find packages that actually have test files
 unit_test_packages=""
 integration_test_packages=""
+all_packages=""
+
+# Find all packages with Go files (for complete coverage reporting)
+for go_file in $(find . -name "*.go" -not -name "*_test.go" -not -path "./.go/*"); do
+  pkg_dir=$(dirname "$go_file" | sed 's|^\./||')
+  if [ "$pkg_dir" != "." ]; then
+    all_packages="$all_packages ./$pkg_dir"
+  fi
+done
+
+# Remove duplicates and sort all packages
+all_packages=$(echo $all_packages | tr ' ' '\n' | sort -u | tr '\n' ' ' | sed 's/^ *//;s/ *$//')
 
 # Look for packages with unit tests (build tag: unit OR no specific build tags for backward compatibility)
 for test_file in $(find . -path "./.go" -prune -o -name "*_test.go" -print); do
@@ -47,16 +59,25 @@ integration_test_packages=$(echo $integration_test_packages | tr ' ' '\n' | sort
 unit_test_packages=$(echo $unit_test_packages | sed 's/^ *//;s/ *$//')
 integration_test_packages=$(echo $integration_test_packages | sed 's/^ *//;s/ *$//')
 
+echo "All packages with Go files: $all_packages"
 echo "Unit test packages: $unit_test_packages"
 echo "Integration test packages: $integration_test_packages"
 
 # Run unit tests
 if [ -n "$unit_test_packages" ]; then
-  echo "Running unit tests..."
-  go test -v -tags test,unit \
-    -covermode=count \
-    -coverprofile=unit_coverage.txt \
-    $unit_test_packages
+  echo "Running unit tests with coverage for all packages..."
+  if [ -n "$all_packages" ]; then
+    go test -v -tags test,unit \
+      -coverpkg="$(echo $all_packages | tr ' ' ',')" \
+      -covermode=count \
+      -coverprofile=unit_coverage.txt \
+      $unit_test_packages
+  else
+    go test -v -tags test,unit \
+      -covermode=count \
+      -coverprofile=unit_coverage.txt \
+      $unit_test_packages
+  fi
 else
   echo "No unit test packages found, creating empty coverage file"
   touch unit_coverage.txt
@@ -64,11 +85,19 @@ fi
 
 # Run integration tests
 if [ -n "$integration_test_packages" ]; then
-  echo "Running integration tests..."
-  go test -p 1 -v -tags integration \
-    -covermode=count \
-    -coverprofile=integration_coverage.txt \
-    $integration_test_packages
+  echo "Running integration tests with coverage for all packages..."
+  if [ -n "$all_packages" ]; then
+    go test -p 1 -v -tags integration \
+      -coverpkg="$(echo $all_packages | tr ' ' ',')" \
+      -covermode=count \
+      -coverprofile=integration_coverage.txt \
+      $integration_test_packages
+  else
+    go test -p 1 -v -tags integration \
+      -covermode=count \
+      -coverprofile=integration_coverage.txt \
+      $integration_test_packages
+  fi
 else
   echo "No integration test packages found, creating empty coverage file"
   touch integration_coverage.txt

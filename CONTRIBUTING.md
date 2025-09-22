@@ -35,6 +35,24 @@ We welcome suggestions for new features or improvements. Please open an issue on
 
 Update documentation to reflect any changes or new features you add. This includes updating README files, comments, and any other relevant documentation.
 
+### Testing Requirements
+
+Before submitting any changes to pipeline scripts or templates:
+
+1. **Run the test suite**: Execute `make test` to run all validation tests
+2. **Test Go script changes**: For changes to `global/scripts/golang/test/run.sh`, run `make test-go-script`
+3. **Create test scenarios**: When adding new features, create corresponding test scenarios in the validation scripts
+4. **Validate across platforms**: Test pipeline templates across GitHub Actions, GitLab CI, and Azure DevOps
+5. **Coverage verification**: Ensure that coverage reporting includes all packages, not just those with tests
+
+### Required Documentation Updates
+
+**MANDATORY**: When making any changes, you MUST update the following:
+
+1. **CHANGELOG.md**: Add your changes to the appropriate version section
+2. **Documentation**: Update relevant README files and comments
+3. **Test scenarios**: Update or add test cases for new functionality
+
 ## Review Process
 
 All contributions will be reviewed by project maintainers. We aim to provide feedback within a week. Please be patient as we review your contributions.

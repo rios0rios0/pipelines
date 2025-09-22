@@ -1,0 +1,163 @@
+name: 'CI - Pipeline Templates Validation'
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-templates:
+    name: 'Validate Pipeline Templates'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'Set up Go'
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          
+      - name: 'Install dependencies'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-yaml make
+          
+      - name: 'Validate Go test script'
+        run: make test-go-script
+        
+      - name: 'Run all validation tests'
+        run: make test
+        
+      - name: 'Check repository structure'
+        run: |
+          echo "Checking required files..."
+          test -f CONTRIBUTING.md
+          test -f CHANGELOG.md
+          test -f README.md
+          test -f Makefile
+          test -f test-go-validation.sh
+          echo "✓ All required files found"
+          
+      - name: 'Validate workflow templates'
+        run: |
+          echo "Validating GitHub Actions workflow templates..."
+          for workflow in .github/workflows/*.yaml; do
+            if [ -f "$workflow" ]; then
+              echo "Checking $workflow..."
+              # Basic YAML syntax validation
+              python3 -c "import yaml; yaml.safe_load(open('$workflow'))"
+              echo "✓ $workflow is valid YAML"
+            fi
+          done
+          
+      - name: 'Validate GitLab CI templates'
+        run: |
+          echo "Validating GitLab CI templates..."
+          for template in gitlab/*/*.yaml; do
+            if [ -f "$template" ]; then
+              echo "Checking $template..."
+              # Basic YAML syntax validation
+              python3 -c "import yaml; yaml.safe_load(open('$template'))"
+              echo "✓ $template is valid YAML"
+            fi
+          done
+          
+      - name: 'Validate Azure DevOps templates'
+        run: |
+          echo "Validating Azure DevOps templates..."
+          for template in azure-devops/*/*.yaml azure-devops/*/*.yml; do
+            if [ -f "$template" ]; then
+              echo "Checking $template..."
+              # Basic YAML syntax validation
+              python3 -c "import yaml; yaml.safe_load(open('$template'))"
+              echo "✓ $template is valid YAML"
+            fi
+          done
+          
+      - name: 'Validate script permissions'
+        run: |
+          echo "Checking script permissions..."
+          for script in global/scripts/*/run.sh; do
+            if [ -f "$script" ]; then
+              if [ ! -x "$script" ]; then
+                echo "⚠️  $script is not executable"
+                chmod +x "$script"
+                echo "✓ Fixed permissions for $script"
+              else
+                echo "✓ $script has correct permissions"
+              fi
+            fi
+          done
+          
+  security-validation:
+    name: 'Security Validation'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'Check for secrets in code'
+        run: |
+          echo "Checking for potential secrets..."
+          # Look for common secret patterns
+          if grep -r -E "(password|secret|key|token).*=" global/ --include="*.sh" --include="*.yaml" --include="*.yml" | grep -v "#"; then
+            echo "⚠️  Potential secrets found in code"
+            exit 1
+          else
+            echo "✓ No obvious secrets found"
+          fi
+          
+      - name: 'Validate Dockerfile security'
+        run: |
+          echo "Checking Dockerfiles for security best practices..."
+          for dockerfile in global/containers/*/Dockerfile; do
+            if [ -f "$dockerfile" ]; then
+              echo "Checking $dockerfile..."
+              # Check for USER instruction
+              if grep -q "^USER " "$dockerfile"; then
+                echo "✓ $dockerfile uses non-root user"
+              else
+                echo "⚠️  $dockerfile might run as root"
+              fi
+            fi
+          done
+          
+  documentation-check:
+    name: 'Documentation Check'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'Check documentation completeness'
+        run: |
+          echo "Checking documentation..."
+          
+          # Check README files
+          for dir in global gitlab azure-devops; do
+            if [ -d "$dir" ] && [ ! -f "$dir/README.md" ]; then
+              echo "⚠️  Missing README.md in $dir"
+            fi
+          done
+          
+          # Check for script documentation
+          for script in global/scripts/*/run.sh; do
+            if [ -f "$script" ]; then
+              if ! head -10 "$script" | grep -q "#"; then
+                echo "⚠️  $script lacks documentation comments"
+              else
+                echo "✓ $script has documentation"
+              fi
+            fi
+          done
+          
+          echo "✓ Documentation check completed"

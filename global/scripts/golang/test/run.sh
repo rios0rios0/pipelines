@@ -80,8 +80,5 @@ $(go env GOPATH)/bin/gocovmerge unit_coverage.txt integration_coverage.txt > cov
 
 # Generate reports
 $(go env GOPATH)/bin/go-junit-report -in coverage.txt -out junit.xml
-echo
-echo "=== Coverage Summary ==="
-go tool cover -func coverage.txt | tail -1
-echo "=========================="
+go tool cover -func coverage.txt
 $(go env GOPATH)/bin/gocover-cobertura < coverage.txt > cobertura.xml

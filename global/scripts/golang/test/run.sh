@@ -116,23 +116,60 @@ reports_start_time=$(date +%s)
 if ! $(go env GOPATH)/bin/gocovmerge unit_coverage.txt integration_coverage.txt > coverage.txt 2>/dev/null; then
   echo "⚠ gocovmerge failed due to overlapping coverage blocks - using fallback strategy"
   
-  # Fallback: Use just the unit coverage file as base and add non-conflicting integration coverage
-  # This preserves the most important coverage data while avoiding merge conflicts
-  cp unit_coverage.txt coverage.txt
-  
-  # Try to add non-overlapping lines from integration coverage
-  if [ -f integration_coverage.txt ] && [ -s integration_coverage.txt ]; then
-    # Get the mode from unit coverage
+  # Fallback: Merge coverage files manually, selecting the highest coverage for each block
+  if [ -f unit_coverage.txt ] && [ -f integration_coverage.txt ] && [ -s unit_coverage.txt ] && [ -s integration_coverage.txt ]; then
+    # Get the mode from the first file
     unit_mode=$(head -n 1 unit_coverage.txt)
     integration_mode=$(head -n 1 integration_coverage.txt)
     
     if [ "$unit_mode" = "$integration_mode" ]; then
-      echo "⚠ Using unit test coverage as primary source, integration coverage may be incomplete"
-      echo "⚠ This is due to overlapping coverage blocks that cannot be safely merged"
+      echo "$unit_mode" > coverage.txt
+      
+      # Extract coverage lines (skip mode line) and merge intelligently
+      (tail -n +2 unit_coverage.txt; tail -n +2 integration_coverage.txt) | sort | awk '
+      BEGIN { FS=" "; OFS=" " }
+      {
+        # Extract file:start.startcol,end.endcol as the key
+        file_block = $1
+        num_stmt = $(NF-1)
+        count = $NF
+        
+        if (file_block in blocks) {
+          # If we have seen this block before, keep the one with higher coverage
+          if (count > blocks[file_block]) {
+            blocks[file_block] = count
+            statements[file_block] = num_stmt
+            full_lines[file_block] = $0
+          }
+        } else {
+          # New block, store it
+          blocks[file_block] = count
+          statements[file_block] = num_stmt
+          full_lines[file_block] = $0
+        }
+      }
+      END {
+        # Output all blocks sorted by filename and position
+        for (block in blocks) {
+          print full_lines[block]
+        }
+      }' | sort >> coverage.txt
+      
+      echo "✓ Coverage files merged using intelligent fallback (highest coverage per block)"
     else
       echo "⚠ Coverage modes differ between unit and integration tests"
       echo "⚠ Using unit test coverage only"
+      cp unit_coverage.txt coverage.txt
     fi
+  elif [ -f unit_coverage.txt ] && [ -s unit_coverage.txt ]; then
+    echo "⚠ Using unit test coverage only (integration coverage missing or empty)"
+    cp unit_coverage.txt coverage.txt
+  elif [ -f integration_coverage.txt ] && [ -s integration_coverage.txt ]; then
+    echo "⚠ Using integration test coverage only (unit coverage missing or empty)"
+    cp integration_coverage.txt coverage.txt
+  else
+    echo "⚠ No valid coverage files found, creating empty coverage report"
+    echo "mode: count" > coverage.txt
   fi
   
   echo "✓ Coverage report generated using fallback strategy"

@@ -127,7 +127,7 @@ if ! $(go env GOPATH)/bin/gocovmerge unit_coverage.txt integration_coverage.txt 
     if [ "$unit_mode" = "$integration_mode" ]; then
       echo "$unit_mode" > coverage.txt
       
-      # Extract coverage lines (skip mode line) and merge intelligently
+      # Extract coverage lines (skip mode line) and merge by summing coverage
       (tail -n +2 unit_coverage.txt; tail -n +2 integration_coverage.txt) | sort | awk '
       BEGIN { FS=" "; OFS=" " }
       {
@@ -137,27 +137,27 @@ if ! $(go env GOPATH)/bin/gocovmerge unit_coverage.txt integration_coverage.txt 
         count = $NF
         
         if (file_block in blocks) {
-          # If we have seen this block before, keep the one with higher coverage
-          if (count > blocks[file_block]) {
-            blocks[file_block] = count
-            statements[file_block] = num_stmt
-            full_lines[file_block] = $0
-          }
+          # If we have seen this block before, sum the coverage counts
+          blocks[file_block] = blocks[file_block] + count
         } else {
           # New block, store it
           blocks[file_block] = count
           statements[file_block] = num_stmt
-          full_lines[file_block] = $0
+          # Store the original line structure for reconstruction
+          split($0, parts, " ")
+          for (i = 1; i < NF-1; i++) {
+            line_parts[file_block] = line_parts[file_block] parts[i] " "
+          }
         }
       }
       END {
-        # Output all blocks sorted by filename and position
+        # Output all blocks with summed coverage
         for (block in blocks) {
-          print full_lines[block]
+          print line_parts[block] statements[block] " " blocks[block]
         }
       }' | sort >> coverage.txt
       
-      echo "✓ Coverage files merged using intelligent fallback (highest coverage per block)"
+      echo "✓ Coverage files merged using intelligent fallback (summed coverage per block)"
     else
       echo "⚠ Coverage modes differ between unit and integration tests"
       echo "⚠ Using unit test coverage only"

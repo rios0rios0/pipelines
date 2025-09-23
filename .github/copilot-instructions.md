@@ -4,6 +4,23 @@
 
 This repository provides comprehensive SDLC pipeline templates for GitHub Actions, GitLab CI, and Azure DevOps across multiple programming languages including GoLang, Java, Python, JavaScript, and .NET.
 
+## Quick Reference
+
+**Essential Commands:**
+- `make test` - Run all validation tests
+- `make test-go-script` - Test Go script changes specifically
+- `bash global/scripts/shared/cleanup.sh` - Clean up build reports
+- `docker --version && make --version && go version` - Check dependencies
+
+**Common Pipeline Usage:**
+- **GitHub Actions:** Use `.github/workflows/go-docker.yaml@main`
+- **GitLab CI:** Include `gitlab/golang/go-docker.yaml` from this repo
+- **Azure DevOps:** Template `azure-devops/golang/go-docker.yaml@pipelines`
+
+**Security Tools:** Gitleaks, Horusec, Semgrep, SonarQube, Dependency Track  
+**Performance:** Security scans 2-10min, Container builds 5-30min  
+**Architecture:** 5-stage pipeline (Code Check → Security → Tests → Management → Delivery)
+
 ## Working Effectively
 
 ### Bootstrap and Setup

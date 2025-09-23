@@ -143,9 +143,64 @@ echo "PHASE 3: GENERATING COVERAGE REPORTS"
 echo "Started at: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "=========================================="
 reports_start_time=$(date +%s)
-# Merge coverage files
-$(go env GOPATH)/bin/gocovmerge unit_coverage.txt integration_coverage.txt > coverage.txt && \
-  rm unit_coverage.txt integration_coverage.txt
+
+# Check if we have any coverage data or need to generate synthetic coverage
+unit_size=$(wc -c < unit_coverage.txt 2>/dev/null || echo 0)
+integration_size=$(wc -c < integration_coverage.txt 2>/dev/null || echo 0)
+
+if [ "$unit_size" -eq 0 ] && [ "$integration_size" -eq 0 ] && [ -n "$all_packages" ]; then
+  echo "No test coverage found but packages exist. Generating synthetic coverage for complete visibility..."
+  
+  # Create synthetic coverage file that includes all packages
+  echo "mode: set" > coverage.txt
+  
+  # Get the module name from go.mod
+  module_name=$(go list -m 2>/dev/null || echo "unknown")
+  
+  # For each package, find all Go files and add synthetic coverage entries
+  for pkg in $all_packages; do
+    # Find all .go files in this package (not test files)
+    for go_file in $(find "$pkg" -name "*.go" -not -name "*_test.go" 2>/dev/null || true); do
+      if [ -f "$go_file" ]; then
+        # Get just the filename from the path
+        filename=$(basename "$go_file")
+        # Convert package path to module-relative path (remove leading ./)
+        pkg_clean=$(echo "$pkg" | sed 's|^\./||')
+        
+        # Parse the Go file to find function declarations and add synthetic entries
+        awk -v file="$filename" -v module="$module_name" -v pkg="$pkg_clean" '
+        /^func [A-Z]/ {
+          # Find function declarations (exported functions starting with capital letter)
+          match($0, /^func [A-Za-z_][A-Za-z0-9_]*/)
+          if (RSTART > 0) {
+            func_name = substr($0, RSTART+5)
+            gsub(/[^A-Za-z0-9_].*/, "", func_name)
+            if (func_name != "main" && func_name != "") {
+              # Add a synthetic coverage entry for this function (0 coverage)
+              print module "/" pkg "/" file ":" NR ".1," (NR+1) ".1 1 0"
+            }
+          }
+        }
+        /^func main\(/ {
+          # Handle main function specially
+          print module "/" pkg "/" file ":" NR ".1," (NR+1) ".1 1 0"
+        }
+        ' "$go_file" >> coverage.txt 2>/dev/null || true
+      fi
+    done
+  done
+  
+  # If no synthetic entries were added, ensure we have a minimal valid coverage file
+  if [ "$(wc -l < coverage.txt)" -eq 1 ]; then
+    echo "# No functions found to generate synthetic coverage" >> coverage.txt
+  fi
+else
+  # Merge existing coverage files
+  $(go env GOPATH)/bin/gocovmerge unit_coverage.txt integration_coverage.txt > coverage.txt
+fi
+
+# Clean up temporary coverage files
+rm -f unit_coverage.txt integration_coverage.txt
 
 # Generate reports
 $(go env GOPATH)/bin/go-junit-report -in coverage.txt -out junit.xml

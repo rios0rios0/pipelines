@@ -34,6 +34,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed Go 1.25.1 compatibility issue in `global/scripts/golang/test/run.sh` by implementing comprehensive coverage reporting
 - fixed coverage reporting to include all packages with Go files, not just packages with tests
 - fixed untested packages now appearing as 0% covered instead of being excluded from coverage reports
+- fixed synthetic coverage generation for projects with packages but no tests
 - added complete test validation suite with `test-go-validation.sh` script
 - added `make test` and `make test-go-script` targets for automated testing
 - updated CONTRIBUTING.md and copilot-instructions.md with mandatory testing requirements

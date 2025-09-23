@@ -4,6 +4,23 @@
 
 This repository provides comprehensive SDLC pipeline templates for GitHub Actions, GitLab CI, and Azure DevOps across multiple programming languages including GoLang, Java, Python, JavaScript, and .NET.
 
+## Quick Reference
+
+**Essential Commands:**
+- `make test` - Run all validation tests
+- `make test-go-script` - Test Go script changes specifically
+- `bash global/scripts/shared/cleanup.sh` - Clean up build reports
+- `docker --version && make --version && go version` - Check dependencies
+
+**Common Pipeline Usage:**
+- **GitHub Actions:** Use `.github/workflows/go-docker.yaml@main`
+- **GitLab CI:** Include `gitlab/golang/go-docker.yaml` from this repo
+- **Azure DevOps:** Template `azure-devops/golang/go-docker.yaml@pipelines`
+
+**Security Tools:** Gitleaks, Horusec, Semgrep, SonarQube, Dependency Track  
+**Performance:** Security scans 2-10min, Container builds 5-30min  
+**Architecture:** 5-stage pipeline (Code Check → Security → Tests → Management → Delivery)
+
 ## Working Effectively
 
 ### Bootstrap and Setup
@@ -65,7 +82,40 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - **semgrep/run.sh** - May run for 10+ minutes, downloads large Docker image
 - **golang/test/run.sh** - Requires Go project with cmd/, pkg/, or internal/ directories
 
-## Repository Structure
+## Available Tools & Scripts
+
+### Security & Analysis Tools
+
+| Tool                 | Purpose                 | Script Location                    | Configuration         |
+|----------------------|-------------------------|------------------------------------|-----------------------|
+| **Gitleaks**         | Secret detection        | `global/scripts/gitleaks/`         | `.gitleaks.toml`      |
+| **Horusec**          | SAST security scanning  | `global/scripts/horusec/`          | `horusec*.json`       |
+| **Semgrep**          | Static analysis         | `global/scripts/semgrep/`          | Auto-configured       |
+| **SonarQube**        | Code quality & security | `global/scripts/sonarqube/`        | Project settings      |
+| **Dependency Track** | SCA analysis            | `global/scripts/dependency-track/` | Environment variables |
+
+### Language-Specific Tools
+
+#### Go Tools
+
+| Tool               | Purpose               | Script Location                    |
+|--------------------|-----------------------|------------------------------------|
+| **golangci-lint**  | Go linting suite      | `global/scripts/golangci-lint/`    |
+| **Go Test Runner** | Comprehensive testing | `global/scripts/golang/test/`      |
+| **CycloneDX**      | SBOM generation       | `global/scripts/golang/cyclonedx/` |
+
+### Container Images
+
+**Available Pre-built Images:**
+
+| Image                      | Purpose                         | Registry                       |
+|----------------------------|---------------------------------|--------------------------------|
+| `golang.1.18-awscli`       | Go 1.18 + AWS CLI               | `ghcr.io/rios0rios0/pipelines` |
+| `golang.1.19-awscli`       | Go 1.19 + AWS CLI               | `ghcr.io/rios0rios0/pipelines` |
+| `python.3.9-pdm-buster`    | Python 3.9 + PDM                | `ghcr.io/rios0rios0/pipelines` |
+| `python.3.10-pdm-bullseye` | Python 3.10 + PDM               | `ghcr.io/rios0rios0/pipelines` |
+| `awscli.latest`            | AWS CLI tools                   | `ghcr.io/rios0rios0/pipelines` |
+| `tor-proxy.latest`         | Network proxy with health check | `ghcr.io/rios0rios0/pipelines` |
 
 ### Key Directories
 - `.github/workflows/` - Reusable GitHub Actions workflows
@@ -75,10 +125,81 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `global/containers/` - Docker container definitions
 - `global/configs/` - Configuration files
 
-### Pipeline Templates Available
+## Repository Structure
+```
+pipelines/
+├── .github/workflows/          # GitHub Actions reusable workflows
+│   ├── go-docker.yaml         # Go with Docker delivery
+│   ├── go-binary.yaml         # Go binary compilation
+│   ├── python-docker.yaml     # Python with Docker
+│   └── ...
+├── gitlab/                     # GitLab CI pipeline templates
+│   ├── golang/                # Go language pipelines
+│   ├── java/                  # Java language pipelines
+│   ├── python/                # Python language pipelines
+│   ├── javascript/            # JavaScript/Node.js pipelines
+│   ├── dotnet/                # .NET language pipelines
+│   └── global/                # Shared GitLab configurations
+├── azure-devops/              # Azure DevOps pipeline templates
+│   ├── golang/                # Go language pipelines
+│   ├── java/                  # Java language pipelines
+│   ├── python/                # Python language pipelines
+│   ├── javascript/            # JavaScript/Node.js pipelines
+│   ├── dotnet/                # .NET language pipelines
+│   ├── terraform/             # Terraform pipelines
+│   └── global/                # Shared Azure DevOps templates
+├── global/                     # Shared resources across platforms
+│   ├── scripts/               # Automation scripts
+│   │   ├── golang/            # Go-specific scripts (test, cyclonedx)
+│   │   ├── golangci-lint/     # Go linting configuration
+│   │   ├── gitleaks/          # Secret scanning
+│   │   ├── horusec/           # Security scanning
+│   │   ├── semgrep/           # Static analysis
+│   │   ├── sonarqube/         # Code quality
+│   │   ├── dependency-track/  # SCA analysis
+│   │   └── shared/            # Common utilities
+│   ├── containers/            # Custom Docker images
+│   │   ├── golang.*/          # Go development images
+│   │   ├── python.*/          # Python development images
+│   │   ├── awscli.latest/     # AWS CLI tools
+│   │   └── tor-proxy.latest/  # Network proxy tools
+│   └── configs/               # Configuration files
+└── docs/                      # Documentation and examples
+```
+
+### Pipeline Architecture
+
+Each platform follows a consistent **5-stage pipeline architecture**:
+
+1. **🔍 Code Check (Style/Quality)** - Linting, formatting, code quality
+2. **🔒 Security (SCA/SAST)** - Vulnerability scanning, secret detection
+3. **🧪 Tests** - Unit tests, integration tests, coverage reporting
+4. **📊 Management** - Dependency tracking, SBOM generation
+5. **🚀 Delivery** - Build artifacts, container images, deployments
+
+### Platform and Language Support Matrix
+
+**Platforms:**
+| Platform           | Status         | Documentation                  |
+|--------------------|----------------|--------------------------------|
+| **GitHub Actions** | ✅ Full Support | [Usage Guide](#github-actions) |
+| **GitLab CI**      | ✅ Full Support | [Usage Guide](#gitlab-ci)      |
+| **Azure DevOps**   | ✅ Full Support | [Usage Guide](#azure-devops)   |
+
+**Programming Languages:**
+| Language               | GitHub Actions | GitLab CI | Azure DevOps | Features                       |
+|------------------------|----------------|-----------|--------------|--------------------------------|
+| **GoLang**             | ✅              | ✅         | ✅            | Binary, Docker, ARM deployment |
+| **Python**             | ✅              | ✅         | ✅            | PDM, Docker, K8s deployment    |
+| **Java**               | ❌              | ✅         | ✅            | Maven, Gradle, Docker          |
+| **JavaScript/Node.js** | ❌              | ✅         | ✅            | Yarn, Docker, K8s deployment   |
+| **.NET/C#**            | ❌              | ✅         | ✅            | Framework, Core, Docker        |
+| **Terraform**          | ❌              | ❌         | ✅            | Infrastructure as Code         |
+
+**Pipeline Templates Available:**
 - **GitHub Actions:** `go.yaml`, `go-docker.yaml`, `go-binary.yaml`, `python.yaml`, `python-docker.yaml`
-- **GitLab CI:** GoLang, Java, Python, JavaScript, .NET pipelines
-- **Azure DevOps:** GoLang, Java, Python, JavaScript, .NET, Terraform pipelines
+- **GitLab CI:** `go-docker.yaml`, `go-debian.yaml`, `go-sam.yaml`, `gradle-docker.yaml`, `maven-docker.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `framework.yaml`
+- **Azure DevOps:** `go-docker.yaml`, `go-arm.yaml`, `go-function-arm.yaml`, `gradle-docker.yaml`, `maven-docker.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `framework.yaml`, plus Terraform templates
 
 ## Common Tasks
 
@@ -104,17 +225,80 @@ jobs:
 ```yaml
 include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/golang/go-docker.yaml'
+
+# Optional: Override delivery stage for custom Docker build
+.delivery:
+  script:
+    - docker build -t "$REGISTRY_PATH$IMAGE_SUFFIX:$TAG" -f .ci/40-delivery/Dockerfile .
+  cache:
+    key: 'test:all'
+    paths: !reference [ .go, cache, paths ]
+    policy: 'pull'
+
+# Required GitLab Variables (configure in project settings):
+# SONAR_HOST_URL     - SonarQube server URL
+# SONAR_TOKEN        - SonarQube authentication token  
+# DOCKER_REGISTRY    - Container registry URL
+# DOCKER_USERNAME    - Registry username
+# DOCKER_PASSWORD    - Registry password
 ```
 
 **Azure DevOps:**
 ```yaml
+trigger:
+  branches:
+    include: [ main ]
+  tags:
+    include: [ '*' ]
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
+      - group: 'production-variables'
+  - ${{ else }}:
+      - group: 'development-variables'
+
 resources:
   repositories:
     - repository: pipelines
       type: github
       name: rios0rios0/pipelines
+      endpoint: 'YOUR_GITHUB_SERVICE_CONNECTION'  # Configure this
+
 stages:
   - template: azure-devops/golang/go-arm.yaml@pipelines
+    parameters:
+      DOCKER_BUILD_ARGS: '--build-arg VERSION=$(Build.BuildNumber)'
+      RUN_BEFORE_BUILD: 'echo "Preparing build environment"'
+
+# Required Variable Groups (create in Azure DevOps Library):
+# Shared Variables: SONAR_HOST_URL, SONAR_TOKEN
+# Project Variables: SONAR_PROJECT_NAME, SONAR_PROJECT_KEY
+```
+
+### Language-Specific Examples
+
+#### Python with PDM (GitLab CI)
+```yaml
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/python/pdm-docker.yaml'
+
+variables:
+  PYTHON_VERSION: "3.11"  # Optional: specify Python version
+```
+
+#### Java with Maven (GitLab CI)
+```yaml
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/java/maven-docker.yaml'
+```
+
+#### JavaScript with Yarn (GitLab CI)
+```yaml
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/javascript/yarn-docker.yaml'
 ```
 
 ### Testing Pipeline Changes in Development Branches
@@ -133,6 +317,50 @@ $SCRIPTS_DIR/global/scripts/golangci-lint/run.sh
 
 # Link golangci-lint config globally
 ln -s $SCRIPTS_DIR/global/scripts/golangci-lint/.golangci.yml ~/.golangci.yml
+```
+
+### Comprehensive Local Development Examples
+
+#### Configure Go Development
+```bash
+# Link global Go linting configuration
+ln -s $SCRIPTS_DIR/global/scripts/golangci-lint/.golangci.yml ~/.golangci.yml
+
+# Run linting in your project
+$SCRIPTS_DIR/global/scripts/golangci-lint/run.sh
+
+# Run with auto-fix
+$SCRIPTS_DIR/global/scripts/golangci-lint/run.sh --fix
+```
+
+#### Run Security Scanning Locally
+```bash
+# Run secret detection
+$SCRIPTS_DIR/global/scripts/gitleaks/run.sh
+
+# Run SAST security scanning (requires horusec config)
+$SCRIPTS_DIR/global/scripts/horusec/run.sh
+
+# Run static analysis (can take 10+ minutes)
+$SCRIPTS_DIR/global/scripts/semgrep/run.sh
+```
+
+#### Run Tests and Coverage
+```bash
+# Run comprehensive Go tests
+$SCRIPTS_DIR/global/scripts/golang/test/run.sh
+
+# Generate SBOM for Go projects
+$SCRIPTS_DIR/global/scripts/golang/cyclonedx/run.sh
+```
+
+#### Build and Test Container Images
+```bash
+# Build specific containers (may fail due to SSL in sandbox environments)
+make build-and-push NAME=awscli TAG=latest
+
+# Local build test
+docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/containers/awscli.latest/
 ```
 
 ## Validation and Testing
@@ -192,6 +420,21 @@ make test-go-script
 - Container builds: **5-30 minutes** depending on base image and dependencies
 - **NEVER CANCEL** operations that appear to be hanging - they may be downloading large images
 
+### Detailed Performance Table
+
+| Operation                    | Expected Duration | Notes                                  |
+|------------------------------|-------------------|----------------------------------------|
+| Script downloads             | 1-5 seconds       | First-time tool downloads              |
+| Go linting (golangci-lint)   | 10-30 seconds     | Depends on codebase size               |
+| Security scanning (Gitleaks) | 2-5 minutes       | Depends on repository size             |
+| Security scanning (Horusec)  | 3-7 minutes       | SAST analysis                          |
+| Security scanning (Semgrep)  | 5-15 minutes      | Downloads large rule sets              |
+| Container builds             | 5-30 minutes      | Depends on base image and dependencies |
+| Go testing with coverage     | 10-60 seconds     | Depends on test suite size             |
+| SonarQube analysis          | 2-10 minutes      | Depends on codebase size               |
+
+**Important:** Never cancel operations that appear to be hanging - they may be downloading large Docker images or security rule sets.
+
 ### Known Limitations in Sandbox Environments
 - Container builds may fail due to SSL certificate issues
 - Security tools require Docker daemon access
@@ -203,5 +446,60 @@ make test-go-script
 - If container builds fail with SSL errors, this is expected in restricted environments
 - If security scans timeout, increase timeout values and wait for completion
 - If Go scripts fail, ensure you're in a directory with proper Go module structure
+
+#### Platform-Specific Issues
+
+**GitHub Actions:**
+- **Issue:** Workflow doesn't trigger
+- **Solution:** Check repository permissions, ensure workflow file is in `.github/workflows/`
+- **Required Permissions:** `checks: write`, `contents: write`, `packages: write`
+
+**GitLab CI:**
+- **Issue:** "Remote file could not be fetched"
+- **Solution:** Verify the remote URL is accessible, check branch name in URL
+- **Issue:** Pipeline variables not recognized
+- **Solution:** Configure required variables in GitLab project settings
+
+**Azure DevOps:**
+- **Issue:** "Template not found"
+- **Solution:** Ensure GitHub service connection is configured correctly
+- **Issue:** Variable group not found
+- **Solution:** Create required variable groups in Azure DevOps Library
+
+#### Security Tool Issues
+
+**Issue: Horusec exits with code 101**
+- **Cause:** No horusec configuration files found
+- **Solution:** Create `horusec-config.json` in your project root or let the script use defaults
+
+**Issue: Gitleaks takes too long or fails**
+- **Cause:** Large repository or network issues
+- **Solution:** Increase timeout values, ensure Docker daemon is accessible
+
+**Issue: Semgrep timeout or hangs**
+- **Cause:** Large codebase, downloading security rules
+- **Solution:** Allow 10+ minutes for completion, don't cancel the operation
+
+**Issue: SonarQube analysis fails**
+- **Cause:** Missing SonarQube configuration or network issues
+- **Solution:** Verify `SONAR_HOST_URL` and `SONAR_TOKEN` are correctly configured
+
+**Issue: Dependency Track fails**
+- **Cause:** Missing environment variables
+- **Solution:** Ensure `DEPENDENCY_TRACK_TOKEN` and `DEPENDENCY_TRACK_HOST_URL` are set
+
+#### Pipeline-Specific Issues
+
+**Issue: "No directories found to test it" (Go projects)**
+- **Cause:** Go project structure doesn't match expected layout
+- **Solution:** Ensure your project has `cmd/`, `pkg/`, or `internal/` directories
+
+**Issue: "golangci-lint: command not found"**
+- **Cause:** golangci-lint not installed or not in PATH
+- **Solution:** The script automatically downloads golangci-lint, ensure Docker is available
+
+**Issue: Docker build fails with SSL certificate errors**
+- **Cause:** Network restrictions in CI environment
+- **Solution:** This is expected in restricted environments; contact platform administrator
 
 Always validate changes by testing the pipeline templates in actual projects rather than testing the repository in isolation.

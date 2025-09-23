@@ -174,7 +174,7 @@ if [ -n "$all_packages" ]; then
     pkg_clean=$(echo "$pkg" | sed 's|^\./||')
     
     # Check if this package is already covered in the coverage file
-    if ! grep -q "^$module_name/$pkg_clean/" coverage.txt 2>/dev/null; then
+    if ! grep -F -q "$module_name/$pkg_clean/" coverage.txt 2>/dev/null; then
       echo "  Adding synthetic coverage for package: $pkg_clean"
       
       # Find all .go files in this package (not test files)

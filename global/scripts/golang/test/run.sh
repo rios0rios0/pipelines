@@ -166,7 +166,7 @@ if [ -n "$all_packages" ]; then
   module_name=$(go list -m 2>/dev/null || echo "unknown")
   
   # Create a temporary file for synthetic coverage
-  temp_synthetic_coverage="/tmp/synthetic_coverage_$$.txt"
+  temp_synthetic_coverage="$(mktemp /tmp/synthetic_coverage_XXXXXX.txt)"
   echo "mode: set" > "$temp_synthetic_coverage"
   
   # For each package, check if it appears in the existing coverage file

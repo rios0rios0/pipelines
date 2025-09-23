@@ -105,13 +105,13 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 
 #### Available Workflows
 
-| Workflow             | Purpose                           | Languages |
-|----------------------|-----------------------------------|-----------|
-| `go.yaml`            | Go testing and quality checks     | Go        |
-| `go-docker.yaml`     | Go with Docker image delivery     | Go        |
-| `go-binary.yaml`     | Go binary compilation and release | Go        |
-| `python.yaml`        | Python testing and quality checks | Python    |
-| `python-docker.yaml` | Python with Docker image delivery | Python    |
+| Workflow             | Purpose                           | Languages | Features |
+|----------------------|-----------------------------------|-----------|----------|
+| `go.yaml`            | Go testing and quality checks     | Go        | Testing, Security, Linting |
+| `go-docker.yaml`     | Go with Docker image delivery     | Go        | Docker build and push |
+| `go-binary.yaml`     | Go binary compilation and release | Go        | **Cross-platform binaries, Version bumping, GitHub releases** |
+| `python.yaml`        | Python testing and quality checks | Python    | Testing, Security, Linting |
+| `python-docker.yaml` | Python with Docker image delivery | Python    | Docker build and push |
 
 #### Usage Example (Go with Docker)
 
@@ -134,6 +134,51 @@ jobs:
   pipeline:
     uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'
 ```
+
+#### Usage Example (Go Binary with Release)
+
+```yaml
+name: 'GoLang Binary Release'
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write      # Required for creating releases and tags
+  packages: write      # Required for GitHub packages
+
+jobs:
+  release:
+    uses: 'rios0rios0/pipelines/.github/workflows/go-binary.yaml@main'
+    with:
+      binary_name: 'myapp'           # Your binary name (must match cmd/myapp/)
+      bump_type: '${{ inputs.bump_type || "patch" }}'
+      use_goreleaser: true           # Use GoReleaser for cross-platform builds
+```
+
+**Features:**
+- **Automatic version bumping**: Manually trigger to create new version tags
+- **Cross-platform builds**: Linux, macOS, Windows (amd64, arm64)
+- **GitHub releases**: Automatic release creation with binaries
+- **Version injection**: Embeds version info into binaries
+- **Changelog generation**: Auto-generated from commit messages
+
+See [complete example](docs/examples/golang-binary-release.md) for detailed usage.
 
 #### Usage Example (Python with Docker)
 
@@ -315,6 +360,13 @@ Our pipeline templates include a comprehensive suite of tools for security, qual
 | **golangci-lint**  | Go linting suite      | `global/scripts/golangci-lint/`    |
 | **Go Test Runner** | Comprehensive testing | `global/scripts/golang/test/`      |
 | **CycloneDX**      | SBOM generation       | `global/scripts/golang/cyclonedx/` |
+| **GoReleaser**     | Cross-platform builds & releases | `global/scripts/golang/goreleaser/` |
+
+### Version Management Tools
+
+| Tool               | Purpose               | Script Location                    |
+|--------------------|----------------------|------------------------------------|
+| **Version Bump**   | Automatic version bumping | `global/scripts/shared/bump-version.sh` |
 
 ### Usage Examples
 

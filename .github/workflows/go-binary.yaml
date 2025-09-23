@@ -5,18 +5,60 @@ on:
         type: 'string'
         description: 'Binary name to be used as default source'
         required: true
+      bump_type:
+        type: 'string'
+        description: 'Type of version bump (patch, minor, major)'
+        required: false
+        default: 'patch'
+      use_goreleaser:
+        type: 'boolean'
+        description: 'Use GoReleaser for cross-platform builds'
+        required: false
+        default: true
+
+permissions:
+  contents: write
+  packages: write
 
 jobs:
+  # Base Go pipeline (tests, security, etc.)
   go:
     uses: 'rios0rios0/pipelines/.github/workflows/go.yaml@main'
 
-  # fourth stage
+  # Version bump step - only on workflow_dispatch
+  version-bump:
+    name: 'version > bump'
+    runs-on: 'ubuntu-latest'
+    if: "github.event_name == 'workflow_dispatch'"
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/00-bump@main'
+        with:
+          bump_type: '${{ inputs.bump_type }}'
+          github_token: '${{ secrets.GITHUB_TOKEN }}'
+    outputs:
+      new_version: '${{ steps.bump.outputs.new_version }}'
+      new_tag: '${{ steps.bump.outputs.new_tag }}'
+
+  # Cross-platform binary build and release using GoReleaser
+  delivery-goreleaser:
+    name: 'delivery > goreleaser'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/golang/stages/40-delivery/goreleaser@main'
+        with:
+          binary_name: '${{ inputs.binary_name }}'
+          github_token: '${{ secrets.GITHUB_TOKEN }}'
+    needs: [ 'go' ]
+    if: "!failure() && startsWith(github.ref, 'refs/tags/') && inputs.use_goreleaser"
+
+  # Simple binary build and release (fallback)
   delivery-binary:
     name: 'delivery > binary'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/binary@main'
         with:
-          binary_name: '${{ github.event.inputs.binary_name }}'
+          binary_name: '${{ inputs.binary_name }}'
+          github_token: '${{ secrets.GITHUB_TOKEN }}'
     needs: [ 'go' ]
-    if: "!failure() && startsWith(github.ref, 'refs/tags/')"
+    if: "!failure() && startsWith(github.ref, 'refs/tags/') && !inputs.use_goreleaser"

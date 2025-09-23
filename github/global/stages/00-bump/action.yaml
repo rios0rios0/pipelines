@@ -1,0 +1,47 @@
+name: 'Version Bump'
+description: 'Bump version and create git tag'
+
+inputs:
+  bump_type:
+    type: 'string'
+    description: 'Type of version bump (patch, minor, major)'
+    required: false
+    default: 'patch'
+  github_token:
+    type: 'string'
+    description: 'GitHub token for pushing tags'
+    required: true
+
+outputs:
+  new_version:
+    description: 'The new version number'
+    value: '${{ steps.bump.outputs.NEW_VERSION }}'
+  new_tag:
+    description: 'The new git tag'
+    value: '${{ steps.bump.outputs.NEW_TAG }}'
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: 'actions/checkout@v4'
+      with:
+        fetch-depth: 0
+        token: '${{ inputs.github_token }}'
+    
+    - name: 'Configure git'
+      shell: 'bash'
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+    
+    - id: 'bump'
+      name: 'Bump version'
+      shell: 'bash'
+      env:
+        GITHUB_TOKEN: '${{ inputs.github_token }}'
+      run: |
+        # Get scripts directory
+        SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
+        
+        # Run the bump script
+        "$SCRIPTS_DIR/global/scripts/shared/bump-version.sh" "${{ inputs.bump_type }}"

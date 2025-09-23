@@ -170,6 +170,35 @@ if [ "$unit_size" -eq 0 ] && [ "$integration_size" -eq 0 ] && [ -n "$all_package
 else
   # Merge existing coverage files
   $(go env GOPATH)/bin/gocovmerge unit_coverage.txt integration_coverage.txt > coverage.txt
+  
+  # Check for packages that were included in -coverpkg but have no coverage entries
+  # This happens when packages exist but no tests exercise any code from them
+  if [ -n "$all_packages" ]; then
+    module_name=$(go list -m 2>/dev/null || echo "unknown")
+    missing_packages=""
+    
+    for pkg in $all_packages; do
+      pkg_clean=$(echo "$pkg" | sed 's|^\./||')
+      if ! grep -q "$module_name/$pkg_clean/" coverage.txt; then
+        missing_packages="$missing_packages $pkg"
+      fi
+    done
+    
+    # Add synthetic coverage entries for missing packages to ensure they show as 0% covered
+    if [ -n "$missing_packages" ]; then
+      echo "Adding coverage entries for packages with no test coverage: $missing_packages"
+      for pkg in $missing_packages; do
+        # Find the first .go file in the package to add a synthetic entry
+        first_go_file=$(find "$pkg" -name "*.go" -not -name "*_test.go" 2>/dev/null | head -1)
+        if [ -n "$first_go_file" ] && [ -f "$first_go_file" ]; then
+          filename=$(basename "$first_go_file")
+          pkg_clean=$(echo "$pkg" | sed 's|^\./||')
+          # Add a minimal synthetic coverage entry (line 1, 0 hits)
+          echo "$module_name/$pkg_clean/$filename:1.1,1.1 1 0" >> coverage.txt
+        fi
+      done
+    fi
+  fi
 fi
 
 # Clean up temporary coverage files

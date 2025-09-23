@@ -16,12 +16,29 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added GoReleaser integration for cross-platform Go binary builds
+- added automatic version bumping functionality with `bump-version.sh` script
+- added GitHub release creation with binary assets for GoLang projects
+- added enhanced `go-binary.yaml` workflow with version bumping and cross-platform builds
+- added GoReleaser action for GitHub Actions workflows
+- added version bump action for GitHub Actions workflows
+- added comprehensive documentation and examples for GoLang binary releases
+
 ### Changed
 
 - **BREAKING CHANGE:** changed the structure on Azure DevOps to have files for each step inside each stage
+- **BREAKING CHANGE:** enhanced `go-binary.yaml` workflow with new inputs (`bump_type`, `use_goreleaser`)
 - changed the Node version from `18.19.0` to `20.18.3` on Azure DevOps modules
 - changed the OSD version to `3.2.0` due to an upgrade request on Azure DevOps modules
 - updated GoLang version to `1.24.5` on Azure DevOps modules
+- improved binary delivery action to properly handle GitHub releases
+
+### Fixed
+
+- fixed binary delivery action to create releases and upload assets correctly
+- fixed missing GitHub token handling in binary workflows
 
 ### Removed
 

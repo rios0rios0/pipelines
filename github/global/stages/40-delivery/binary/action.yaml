@@ -1,37 +1,55 @@
-on:
-  workflow_call:
+name: 'Binary Build'
+description: 'Build Go binary for single platform'
 
 inputs:
   binary_name:
     type: 'string'
     description: 'Binary name to be used as default source'
     required: true
+  github_token:
+    type: 'string'
+    description: 'GitHub token for creating releases'
+    required: true
 
 runs:
   using: 'composite'
   steps:
     - uses: 'actions/checkout@v4'
-    - run: |
+    
+    - uses: 'actions/setup-go@v5'
+      with:
+        go-version: '1.22'
+    
+    - name: 'Set package name'
+      shell: 'bash'
+      run: |
         echo "PACKAGE_NAME=$(echo '${{ inputs.binary_name }}-${{ github.ref }}' | sed 's/refs\/tags\///')" >> $GITHUB_ENV
+    
+    - name: 'Build binary'
       shell: 'bash'
-    - run: |
-        make build
-        strip -s bin/${{ inputs.binary_name }}
+      run: |
+        mkdir -p bin
+        go build -o bin/${{ inputs.binary_name }} ./cmd/${{ inputs.binary_name }}
+        strip -s bin/${{ inputs.binary_name }} || true
+    
+    - name: 'Create archive'
       shell: 'bash'
-    - run: |
+      run: |
         cd bin
         zip -9 $PACKAGE_NAME.zip ${{ inputs.binary_name }}
+    
+    - name: 'Create release and upload asset'
       shell: 'bash'
-    - uses: 'actions/upload-artifact@v2'
-      with:
-        name: '${{ inputs.binary_name }}'
-        path: 'bin/${{ env.PACKAGE_NAME }}.zip'
-    - uses: 'actions/download-artifact@v2'
-      with:
-        name: '${{ inputs.binary_name }}'
-    - uses: 'actions/upload-release-asset@v1'
-      with:
-        upload_url: '${{ steps.create_release.outputs.upload_url }}'
-        asset_path: '${{ env.PACKAGE_NAME }}.zip'
-        asset_name: '${{ env.PACKAGE_NAME }}.zip'
-        asset_content_type: 'application/zip'
+      env:
+        GITHUB_TOKEN: '${{ inputs.github_token }}'
+      run: |
+        # Create release if it doesn't exist
+        TAG_NAME=$(echo '${{ github.ref }}' | sed 's/refs\/tags\///')
+        
+        # Check if release exists
+        if ! gh release view "$TAG_NAME" >/dev/null 2>&1; then
+          gh release create "$TAG_NAME" --title "Release $TAG_NAME" --notes "Release $TAG_NAME"
+        fi
+        
+        # Upload asset
+        gh release upload "$TAG_NAME" "bin/$PACKAGE_NAME.zip" --clobber

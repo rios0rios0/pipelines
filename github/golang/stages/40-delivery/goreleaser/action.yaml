@@ -1,0 +1,50 @@
+name: 'GoReleaser Build'
+description: 'Build cross-platform Go binaries using GoReleaser'
+
+inputs:
+  binary_name:
+    type: 'string'
+    description: 'Binary name to be used as default source'
+    required: true
+  github_token:
+    type: 'string'
+    description: 'GitHub token for creating releases'
+    required: true
+  goreleaser_version:
+    type: 'string'
+    description: 'GoReleaser version to use'
+    required: false
+    default: '1.26.2'
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: 'actions/checkout@v4'
+      with:
+        fetch-depth: 0
+    
+    - uses: 'actions/setup-go@v5'
+      with:
+        go-version: '1.22'
+    
+    - name: 'Setup environment'
+      shell: 'bash'
+      run: |
+        echo "BINARY_NAME=${{ inputs.binary_name }}" >> $GITHUB_ENV
+        echo "GORELEASER_VERSION=${{ inputs.goreleaser_version }}" >> $GITHUB_ENV
+        echo "GITHUB_TOKEN=${{ inputs.github_token }}" >> $GITHUB_ENV
+        
+        # Extract repository owner and name from GITHUB_REPOSITORY
+        echo "GITHUB_REPOSITORY_OWNER=${GITHUB_REPOSITORY%/*}" >> $GITHUB_ENV
+        echo "GITHUB_REPOSITORY_NAME=${GITHUB_REPOSITORY#*/}" >> $GITHUB_ENV
+    
+    - name: 'Run GoReleaser'
+      shell: 'bash'
+      env:
+        GITHUB_TOKEN: '${{ inputs.github_token }}'
+      run: |
+        # Get scripts directory
+        SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
+        
+        # Run the GoReleaser script
+        "$SCRIPTS_DIR/global/scripts/golang/goreleaser/run.sh"

@@ -16,29 +16,32 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added `make test` and `make test-go-script` targets for automated testing
+- added complete test validation suite with `test-go-validation.sh` script
+
 ### Changed
 
 - **BREAKING CHANGE:** changed the structure on Azure DevOps to have files for each step inside each stage
 - changed the Node version from `18.19.0` to `20.18.3` on Azure DevOps modules
 - changed the OSD version to `3.2.0` due to an upgrade request on Azure DevOps modules
+- enhanced coverage accuracy by using `-coverpkg` with all packages when tests are available
 - updated GoLang version to `1.24.5` on Azure DevOps modules
+
+### Fixed
+
+- fixed Go `1.25.1` compatibility issue in `global/scripts/golang/test/run.sh` by implementing comprehensive coverage reporting
+- fixed coverage reporting to include all packages with Go files, not just packages with tests
+- fixed synthetic coverage generation for projects with packages but no tests
+- fixed the `Cache` task in `azure-devops/global/stages/40-delivery/docker.yaml` to create the Buildx cache
+- fixed untested packages now appear as 0% covered instead of being excluded from coverage reports
+- fixed workflow and delivery for GitHub Python Docker
+- updated `CONTRIBUTING.md` and `copilot-instructions.md` with mandatory testing requirements
 
 ### Removed
 
 - removed Cache task from `database.yaml` template in Azure DevOps GoLang pipeline since it was failing to restore cache with readonly files
-
-### Fixed
-
-- fixed the `Cache` task in `azure-devops/global/stages/40-delivery/docker.yaml` to create the Buildx cache
-- fixed workflow and delivery for GitHub Python Docker
-- fixed Go 1.25.1 compatibility issue in `global/scripts/golang/test/run.sh` by implementing comprehensive coverage reporting
-- fixed coverage reporting to include all packages with Go files, not just packages with tests
-- fixed untested packages now appearing as 0% covered instead of being excluded from coverage reports
-- fixed synthetic coverage generation for projects with packages but no tests
-- added complete test validation suite with `test-go-validation.sh` script
-- added `make test` and `make test-go-script` targets for automated testing
-- updated CONTRIBUTING.md and copilot-instructions.md with mandatory testing requirements
-- enhanced coverage accuracy by using `-coverpkg` with all packages when tests are available
 
 ## [2.2.0] - 2025-04-16
 

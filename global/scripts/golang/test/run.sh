@@ -66,7 +66,8 @@ if [ -n "$UNIT_EXIT_CODE" ] && [ "$UNIT_EXIT_CODE" -ne 0 ]; then
   fi
 fi
 
-rm unit_test_output.tmp
+# Keep unit test output for JUnit report generation
+mv unit_test_output.tmp unit_test_output.txt
 echo "✓ Unit tests phase completed at $(date '+%Y-%m-%d %H:%M:%S') (took ${unit_duration}s)"
 echo ""
 
@@ -102,7 +103,8 @@ if [ -n "$INTEGRATION_EXIT_CODE" ] && [ "$INTEGRATION_EXIT_CODE" -ne 0 ]; then
   fi
 fi
 
-rm integration_test_output.tmp
+# Keep integration test output for JUnit report generation
+mv integration_test_output.tmp integration_test_output.txt
 echo "✓ Integration tests phase completed at $(date '+%Y-%m-%d %H:%M:%S') (took ${integration_duration}s)"
 echo ""
 
@@ -177,12 +179,14 @@ else
   echo "✓ Coverage files merged successfully with gocovmerge"
 fi
 
-$(go env GOPATH)/bin/go-junit-report -in coverage.txt -out junit.xml
+# Combine test outputs for JUnit report generation
+cat unit_test_output.txt integration_test_output.txt > combined_test_output.txt
+$(go env GOPATH)/bin/go-junit-report < combined_test_output.txt > junit.xml
 go tool cover -func coverage.txt
 $(go env GOPATH)/bin/gocover-cobertura < coverage.txt > cobertura.xml
 
-# clean up temporary coverage files
-rm unit_coverage.txt integration_coverage.txt
+# clean up temporary coverage and test output files
+rm unit_coverage.txt integration_coverage.txt unit_test_output.txt integration_test_output.txt combined_test_output.txt
 
 reports_end_time=$(date +%s)
 reports_duration=$((reports_end_time - reports_start_time))

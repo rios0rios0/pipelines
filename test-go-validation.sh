@@ -303,6 +303,120 @@ else
   exit 1
 fi
 
+# Test 4: Project with test folder that should be excluded from coverage
+echo ""
+echo "Test 4: Project with test folder exclusion"
+echo "=========================================="
+
+TEST_DIR_WITH_TEST_FOLDER="/tmp/go-test-validation-with-test-folder"
+rm -rf "$TEST_DIR_WITH_TEST_FOLDER"
+mkdir -p "$TEST_DIR_WITH_TEST_FOLDER/cmd/app" "$TEST_DIR_WITH_TEST_FOLDER/internal/service" "$TEST_DIR_WITH_TEST_FOLDER/test/domain/command_doubles" "$TEST_DIR_WITH_TEST_FOLDER/test/domain/entity_builders" "$TEST_DIR_WITH_TEST_FOLDER/test/infrastructure/repository_builders"
+
+cat > "$TEST_DIR_WITH_TEST_FOLDER/go.mod" << 'EOF'
+module github.com/test/validation-with-test-folder
+
+go 1.25.1
+EOF
+
+cat > "$TEST_DIR_WITH_TEST_FOLDER/cmd/app/main.go" << 'EOF'
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Test application")
+}
+
+func Calculate(a, b int) int {
+	return a + b
+}
+EOF
+
+cat > "$TEST_DIR_WITH_TEST_FOLDER/cmd/app/main_test.go" << 'EOF'
+package main
+
+import "testing"
+
+func TestCalculate(t *testing.T) {
+	result := Calculate(5, 3)
+	if result != 8 {
+		t.Errorf("Calculate(5, 3) = %d; want 8", result)
+	}
+}
+EOF
+
+cat > "$TEST_DIR_WITH_TEST_FOLDER/internal/service/processor.go" << 'EOF'
+package service
+
+func Process(data string) string {
+	return "processed: " + data
+}
+EOF
+
+# Create test files that should NOT be included in coverage
+cat > "$TEST_DIR_WITH_TEST_FOLDER/test/domain/command_doubles/doubles.go" << 'EOF'
+package command_doubles
+
+func CreateDouble() string {
+	return "double"
+}
+
+func AnotherDoubleFunction() bool {
+	return true
+}
+EOF
+
+cat > "$TEST_DIR_WITH_TEST_FOLDER/test/domain/entity_builders/builder.go" << 'EOF'
+package entity_builders
+
+func BuildEntity() interface{} {
+	return nil
+}
+
+func AnotherBuilderFunction() string {
+	return "builder"
+}
+EOF
+
+cat > "$TEST_DIR_WITH_TEST_FOLDER/test/infrastructure/repository_builders/builder.go" << 'EOF'
+package repository_builders
+
+func BuildRepository() interface{} {
+	return nil
+}
+
+func RepositoryHelper() bool {
+	return false
+}
+EOF
+
+cd "$TEST_DIR_WITH_TEST_FOLDER"
+echo "Running test with test folder (should exclude test packages from coverage)..."
+if /home/runner/work/pipelines/pipelines/global/scripts/golang/test/run.sh; then
+  echo "✓ Test 4 PASSED: Test folder exclusion scenario"
+  
+  # Verify that test packages are NOT included in coverage
+  if cat coverage.txt | grep -q "/test/domain/\|/test/infrastructure/\|\.go:.*test/"; then
+    echo "✗ ERROR: Test packages incorrectly included in coverage report"
+    echo "Coverage content:"
+    cat coverage.txt
+    exit 1
+  else
+    echo "✓ Test packages correctly excluded from coverage report"
+  fi
+  
+  # Verify that only production packages are in the coverage output
+  if cat coverage.txt | grep -q "/cmd/app/\|/internal/service/"; then
+    echo "✓ Production packages correctly included in coverage report"
+  else
+    echo "✗ ERROR: Production packages missing from coverage report"
+    exit 1
+  fi
+else
+  echo "✗ Test 4 FAILED: Test folder exclusion scenario"
+  exit 1
+fi
+
 echo ""
 echo "=== All Tests Completed Successfully ==="
 echo "The modified Go test script correctly:"
@@ -312,6 +426,7 @@ echo "✓ Provides accurate overall coverage percentage"
 echo "✓ Maintains compatibility with build tags (unit/integration separation)"
 echo "✓ Maintains backward compatibility for projects without build tags"
 echo "✓ Handles projects with no test files gracefully"
+echo "✓ Excludes test folders and their subdirectories from coverage"
 echo "✓ Avoids Go 1.25.1 covdata tool dependency issues"
 echo ""
 echo "Coverage now provides complete visibility into codebase coverage!"

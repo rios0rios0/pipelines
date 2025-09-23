@@ -29,7 +29,7 @@ for go_file in $(find . -name "*.go" -not -name "*_test.go" -not -path "./.go/*"
   if [ "$pkg_dir" != "." ]; then
     # Exclude common test directory names from coverage
     case "$pkg_dir" in
-      test|tests|testing|testdata|*/test|*/tests|*/testing|*/testdata)
+      test|tests|testing|testdata|*/test|*/tests|*/testing|*/testdata|test/*|tests/*|testing/*|testdata/*)
         # Skip test directories
         ;;
       *)
@@ -48,7 +48,7 @@ for test_file in $(find . -path "./.go" -prune -o -name "*_test.go" -print); do
   if [ "$pkg_dir" != "." ]; then
     # Exclude common test directory names from test execution
     case "$pkg_dir" in
-      test|tests|testing|testdata|*/test|*/tests|*/testing|*/testdata)
+      test|tests|testing|testdata|*/test|*/tests|*/testing|*/testdata|test/*|tests/*|testing/*|testdata/*)
         # Skip test directories
         ;;
       *)

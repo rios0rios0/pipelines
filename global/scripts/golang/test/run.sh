@@ -118,7 +118,7 @@ reports_start_time=$(date +%s)
 if ! $(go env GOPATH)/bin/gocovmerge unit_coverage.txt integration_coverage.txt > coverage.txt 2>/dev/null; then
   echo "⚠ gocovmerge failed due to overlapping coverage blocks - using fallback strategy"
   
-  # Fallback: Merge coverage files manually, selecting the highest coverage for each block
+  # Fallback: Merge coverage files by summing coverage counts for overlapping blocks
   if [ -f unit_coverage.txt ] && [ -f integration_coverage.txt ] && [ -s unit_coverage.txt ] && [ -s integration_coverage.txt ]; then
     # Get the mode from the first file
     unit_mode=$(head -n 1 unit_coverage.txt)

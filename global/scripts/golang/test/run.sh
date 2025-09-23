@@ -149,51 +149,24 @@ unit_size=$(wc -c < unit_coverage.txt 2>/dev/null || echo 0)
 integration_size=$(wc -c < integration_coverage.txt 2>/dev/null || echo 0)
 
 if [ "$unit_size" -eq 0 ] && [ "$integration_size" -eq 0 ] && [ -n "$all_packages" ]; then
-  echo "No test coverage found but packages exist. Generating synthetic coverage for complete visibility..."
-  
-  # Create synthetic coverage file that includes all packages
-  echo "mode: set" > coverage.txt
+  echo "No test coverage found but packages exist. Generating package-level coverage report..."
   
   # Get the module name from go.mod
   module_name=$(go list -m 2>/dev/null || echo "unknown")
   
-  # For each package, find all Go files and add synthetic coverage entries
+  # Generate package-level coverage summaries instead of function-level synthetic coverage
+  echo "Package-level coverage report for untested packages:"
   for pkg in $all_packages; do
-    # Find all .go files in this package (not test files)
-    for go_file in $(find "$pkg" -name "*.go" -not -name "*_test.go" 2>/dev/null || true); do
-      if [ -f "$go_file" ]; then
-        # Get just the filename from the path
-        filename=$(basename "$go_file")
-        # Convert package path to module-relative path (remove leading ./)
-        pkg_clean=$(echo "$pkg" | sed 's|^\./||')
-        
-        # Parse the Go file to find function declarations and add synthetic entries
-        awk -v file="$filename" -v module="$module_name" -v pkg="$pkg_clean" '
-        /^func [A-Z]/ {
-          # Find function declarations (exported functions starting with capital letter)
-          match($0, /^func [A-Za-z_][A-Za-z0-9_]*/)
-          if (RSTART > 0) {
-            func_name = substr($0, RSTART+5)
-            gsub(/[^A-Za-z0-9_].*/, "", func_name)
-            if (func_name != "main" && func_name != "") {
-              # Add a synthetic coverage entry for this function (0 coverage)
-              print module "/" pkg "/" file ":" NR ".1," (NR+1) ".1 1 0"
-            }
-          }
-        }
-        /^func main\(/ {
-          # Handle main function specially
-          print module "/" pkg "/" file ":" NR ".1," (NR+1) ".1 1 0"
-        }
-        ' "$go_file" >> coverage.txt 2>/dev/null || true
-      fi
-    done
+    # Convert package path to module-relative path (remove leading ./)
+    pkg_clean=$(echo "$pkg" | sed 's|^\./||')
+    # Output package-level coverage summary in the expected format
+    printf "%-50s coverage: 0.0%% of statements\n" "$module_name/$pkg_clean"
   done
   
-  # If no synthetic entries were added, ensure we have a minimal valid coverage file
-  if [ "$(wc -l < coverage.txt)" -eq 1 ]; then
-    echo "# No functions found to generate synthetic coverage" >> coverage.txt
-  fi
+  # Create a minimal valid coverage file for other tools
+  echo "mode: set" > coverage.txt
+  # Add a single minimal entry to make the coverage file valid
+  echo "# No test coverage available" >> coverage.txt
 else
   # Merge existing coverage files
   $(go env GOPATH)/bin/gocovmerge unit_coverage.txt integration_coverage.txt > coverage.txt
@@ -202,10 +175,16 @@ fi
 # Clean up temporary coverage files
 rm -f unit_coverage.txt integration_coverage.txt
 
-# Generate reports
-$(go env GOPATH)/bin/go-junit-report -in coverage.txt -out junit.xml
-go tool cover -func coverage.txt
-$(go env GOPATH)/bin/gocover-cobertura < coverage.txt > cobertura.xml
+# Generate reports only if we have real coverage data
+if [ "$unit_size" -gt 0 ] || [ "$integration_size" -gt 0 ]; then
+  $(go env GOPATH)/bin/go-junit-report -in coverage.txt -out junit.xml
+  go tool cover -func coverage.txt
+  $(go env GOPATH)/bin/gocover-cobertura < coverage.txt > cobertura.xml
+else
+  # For no-test cases, create minimal report files
+  echo '<?xml version="1.0" encoding="UTF-8"?><testsuite tests="0" failures="0" errors="0" time="0"></testsuite>' > junit.xml
+  echo '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd"><coverage line-rate="0" branch-rate="0" version="1.9" timestamp="'$(date +%s)'"><sources></sources><packages></packages></coverage>' > cobertura.xml
+fi
 
 reports_end_time=$(date +%s)
 reports_duration=$((reports_end_time - reports_start_time))

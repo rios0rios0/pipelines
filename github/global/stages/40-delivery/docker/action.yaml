@@ -18,7 +18,7 @@ runs:
         password: '${{ inputs.github_token }}'
     - uses: 'docker/build-push-action@v5'
       with:
-        file: '.ci/40-delivery/Dockerfile'
+        file: '.ci/stages/40-delivery/Dockerfile'
         context: '.'
         push: true
         tags: '${{ inputs.tags }}'

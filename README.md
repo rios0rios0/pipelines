@@ -179,7 +179,7 @@ include:
 # Optional: Override delivery stage for custom Docker build
 .delivery:
   script:
-    - docker build -t "$REGISTRY_PATH$IMAGE_SUFFIX:$TAG" -f .ci/40-delivery/Dockerfile .
+    - docker build -t "$REGISTRY_PATH$IMAGE_SUFFIX:$TAG" -f .ci/stages/40-delivery/Dockerfile .
   cache:
     key: 'test:all'
     paths: !reference [ .go, cache, paths ]

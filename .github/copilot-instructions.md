@@ -17,8 +17,8 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - **GitLab CI:** Include `gitlab/golang/go-docker.yaml` from this repo
 - **Azure DevOps:** Template `azure-devops/golang/go-docker.yaml@pipelines`
 
-**Security Tools:** Gitleaks, Horusec, Semgrep, SonarQube, Dependency Track  
-**Performance:** Security scans 2-10min, Container builds 5-30min  
+**Security Tools:** Gitleaks, Horusec, Semgrep, SonarQube, Dependency Track
+**Performance:** Security scans 2-10min, Container builds 5-30min
 **Architecture:** 5-stage pipeline (Code Check → Security → Tests → Management → Delivery)
 
 ## Working Effectively
@@ -30,7 +30,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
   cd $HOME/Development/github.com/rios0rios0
   git clone https://github.com/rios0rios0/pipelines.git
   ```
-  
+
 - **Alternative: Use the provided clone script:**
   ```bash
   mkdir -p $HOME/Development/github.com/rios0rios0
@@ -41,7 +41,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - **Basic dependency check:**
   ```bash
   docker --version  # Available - 0.01s
-  make --version    # Available - 0.04s 
+  make --version    # Available - 0.04s
   python3 --version # Available - 0.002s
   go version        # Available - 0.67s
   ```
@@ -50,11 +50,11 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
   ```bash
   # Clean up build reports directory
   bash global/scripts/shared/cleanup.sh  # Works - 0.004s
-  
+
   # Run GoLang linting (downloads and runs golangci-lint)
   bash global/scripts/golangci-lint/run.sh  # Works - 1.8s, exits with code 7 (no Go modules)
-  
-  # Run security scanning with Gitleaks  
+
+  # Run security scanning with Gitleaks
   bash global/scripts/gitleaks/run.sh  # Works - 2.0s (downloads Docker image)
   ```
 
@@ -62,7 +62,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
   ```bash
   # Build specific containers (may fail due to SSL in sandbox environments)
   make build-and-push NAME=awscli TAG=latest  # Requires Docker registry authentication
-  
+
   # Local build test (will likely fail on SSL certificate issues in sandbox)
   docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/containers/awscli.latest/
   ```
@@ -119,7 +119,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 
 ### Key Directories
 - `.github/workflows/` - Reusable GitHub Actions workflows
-- `gitlab/` - GitLab CI pipeline templates  
+- `gitlab/` - GitLab CI pipeline templates
 - `azure-devops/` - Azure DevOps pipeline templates
 - `global/scripts/` - Shared scripts for linting, security scanning, testing
 - `global/containers/` - Docker container definitions
@@ -229,7 +229,7 @@ include:
 # Optional: Override delivery stage for custom Docker build
 .delivery:
   script:
-    - docker build -t "$REGISTRY_PATH$IMAGE_SUFFIX:$TAG" -f .ci/40-delivery/Dockerfile .
+    - docker build -t "$REGISTRY_PATH$IMAGE_SUFFIX:$TAG" -f .ci/stages/40-delivery/Dockerfile .
   cache:
     key: 'test:all'
     paths: !reference [ .go, cache, paths ]
@@ -237,7 +237,7 @@ include:
 
 # Required GitLab Variables (configure in project settings):
 # SONAR_HOST_URL     - SonarQube server URL
-# SONAR_TOKEN        - SonarQube authentication token  
+# SONAR_TOKEN        - SonarQube authentication token
 # DOCKER_REGISTRY    - Container registry URL
 # DOCKER_USERNAME    - Registry username
 # DOCKER_PASSWORD    - Registry password

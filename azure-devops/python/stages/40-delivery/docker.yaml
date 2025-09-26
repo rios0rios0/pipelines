@@ -18,7 +18,7 @@ stages:
         steps:
           - template: '../../../global/stages/40-delivery/docker.yaml'
             parameters:
-              DOCKER_FILE: '.ci/40-delivery/app.Dockerfile'
+              DOCKER_FILE: '.ci/stages/40-delivery/app.Dockerfile'
               DOCKER_CACHE_DIR: '$(DOCKER_CACHE_DIR)'
               CONTAINER_REGISTRY_SERVER: '$(CONTAINER_REGISTRY_SERVER)'
               CONTAINER_REGISTRY_SERVICE_CONNECTION: '$(CONTAINER_REGISTRY_SERVICE_CONNECTION)'

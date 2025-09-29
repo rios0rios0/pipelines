@@ -7,7 +7,7 @@ runs:
     - uses: 'actions/checkout@v4'
     - uses: 'actions/setup-go@v5'
       with:
-        go-version: '1.24.5'
+        go-version: '1.25.0'
         cache-dependency-path: go.sum
     - uses: 'rios0rios0/pipelines/github/golang/abstracts/scripts-repo@main'
     - run: $SCRIPTS_DIR/global/scripts/golang/test/run.sh

@@ -28,6 +28,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed the OSD version to `3.2.0` due to an upgrade request on Azure DevOps modules
 - enhanced coverage accuracy by using `-coverpkg` with all packages when tests are available
 - updated GoLang version to `1.24.5` on Azure DevOps modules
+- updated GoLang version to `1.25.0` on all pipelines and modules
 
 ### Fixed
 

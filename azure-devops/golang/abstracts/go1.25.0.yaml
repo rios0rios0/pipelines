@@ -12,6 +12,6 @@ steps:
 
   - task: 'GoTool@0'
     inputs:
-      version: '1.24.5'
+      version: '1.25.0'
       architecture: 'amd64'
       goArguments: 'mod tidy'

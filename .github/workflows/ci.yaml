@@ -14,27 +14,27 @@ jobs:
   validate-templates:
     name: 'Validate Pipeline Templates'
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: 'Checkout code'
         uses: actions/checkout@v4
-        
+
       - name: 'Set up Go'
         uses: actions/setup-go@v4
         with:
           go-version: '1.21'
-          
+
       - name: 'Install dependencies'
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3 python3-yaml make
-          
+          sudo apt-get install -y make
+
       - name: 'Validate Go test script'
         run: make test-go-script
-        
+
       - name: 'Run all validation tests'
         run: make test
-        
+
       - name: 'Check repository structure'
         run: |
           echo "Checking required files..."
@@ -44,7 +44,7 @@ jobs:
           test -f Makefile
           test -f test-go-validation.sh
           echo "✓ All required files found"
-          
+
       - name: 'Validate workflow templates'
         run: |
           echo "Validating GitHub Actions workflow templates..."
@@ -56,7 +56,7 @@ jobs:
               echo "✓ $workflow is valid YAML"
             fi
           done
-          
+
       - name: 'Validate GitLab CI templates'
         run: |
           echo "Validating GitLab CI templates..."
@@ -68,7 +68,7 @@ jobs:
               echo "✓ $template is valid YAML"
             fi
           done
-          
+
       - name: 'Validate Azure DevOps templates'
         run: |
           echo "Validating Azure DevOps templates..."
@@ -80,7 +80,7 @@ jobs:
               echo "✓ $template is valid YAML"
             fi
           done
-          
+
       - name: 'Validate script permissions'
         run: |
           echo "Checking script permissions..."
@@ -95,15 +95,15 @@ jobs:
               fi
             fi
           done
-          
+
   security-validation:
     name: 'Security Validation'
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: 'Checkout code'
         uses: actions/checkout@v4
-        
+
       - name: 'Check for secrets in code'
         run: |
           echo "Checking for potential secrets..."
@@ -114,7 +114,7 @@ jobs:
           else
             echo "✓ No obvious secrets found"
           fi
-          
+
       - name: 'Validate Dockerfile security'
         run: |
           echo "Checking Dockerfiles for security best practices..."
@@ -129,26 +129,26 @@ jobs:
               fi
             fi
           done
-          
+
   documentation-check:
     name: 'Documentation Check'
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: 'Checkout code'
         uses: actions/checkout@v4
-        
+
       - name: 'Check documentation completeness'
         run: |
           echo "Checking documentation..."
-          
+
           # Check README files
           for dir in global gitlab azure-devops; do
             if [ -d "$dir" ] && [ ! -f "$dir/README.md" ]; then
               echo "⚠️  Missing README.md in $dir"
             fi
           done
-          
+
           # Check for script documentation
           for script in global/scripts/*/run.sh; do
             if [ -f "$script" ]; then
@@ -159,5 +159,5 @@ jobs:
               fi
             fi
           done
-          
+
           echo "✓ Documentation check completed"

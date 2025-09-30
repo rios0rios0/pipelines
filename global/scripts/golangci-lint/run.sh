@@ -56,13 +56,14 @@ fi
 
 wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh
 ./bin/golangci-lint run \
+  ./... $FIX_FLAG \
   --config "merged.yml" \
   --color "always" \
-  --timeout "10m" \
+  --timeout "20m" \
   --verbose \
   --allow-parallel-runners \
   --max-issues-per-linter 0 \
-  --max-same-issues 0 $FIX_FLAG ./... || EXIT_CODE=$?
+  --max-same-issues 0 || EXIT_CODE=$?
 
 rm $mergedYamlFile
 exit $EXIT_CODE

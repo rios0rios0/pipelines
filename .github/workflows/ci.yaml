@@ -22,7 +22,7 @@ jobs:
       - name: 'Set up Go'
         uses: actions/setup-go@v4
         with:
-          go-version: '1.21'
+          go-version: '1.25.0'
 
       - name: 'Install dependencies'
         run: |
@@ -31,6 +31,11 @@ jobs:
 
       - name: 'Validate Go test script'
         run: make test-go-script
+
+      - name: 'Validate YAML merge functionality'
+        run: |
+          echo "Testing golangci-lint YAML merge logic..."
+          ./test-yaml-merge.sh
 
       - name: 'Run all validation tests'
         run: make test

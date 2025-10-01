@@ -4,4 +4,11 @@ include:
 .scripts-repo-debian:
   extends: '.scripts-repo'
   before_script:
+    - |
+      apt-get update && \
+      apt-get install -y --no-install-recommends \
+          git jq wget
+      # Install yq for golangci-lint config merging
+      wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+      chmod +x /usr/local/bin/yq
     - !reference [ .scripts-repo, before_script ]

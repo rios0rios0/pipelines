@@ -10,7 +10,6 @@ jobs:
     name: 'code-check > style:golangci-lint'
     runs-on: 'ubuntu-latest'
     steps:
-      - run: sudo apt-get update && sudo apt-get install -y python3 python3-yaml
       - uses: 'rios0rios0/pipelines/github/golang/stages/10-code-check/golangci-lint@main'
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"

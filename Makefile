@@ -4,8 +4,12 @@ CONTAINER_REGISTRY = ghcr.io/rios0rios0/pipelines
 
 build-and-push:
 	docker login ${CONTAINER_REGISTRY}
-	docker build -t "${CONTAINER_REGISTRY}/$(NAME):$(TAG)" -f "${ROOT}/$(NAME).$(TAG)/Dockerfile" "${ROOT}/$(NAME).$(TAG)"
-	docker push "${CONTAINER_REGISTRY}/$(NAME):$(TAG)"
+	docker buildx create --use
+	docker buildx build \
+		--platform linux/amd64,linux/arm64 \
+		--tag "${CONTAINER_REGISTRY}/$(NAME):$(TAG)" \
+		--file "${ROOT}/$(NAME).$(TAG)/Dockerfile" \
+		--push "${ROOT}/$(NAME).$(TAG)"
 
 # Test targets
 test-go-script:

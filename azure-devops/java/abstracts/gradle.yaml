@@ -1,10 +1,10 @@
 parameters:
   - name: 'GRADLE_PROPERTIES'
-    type: object
+    type: 'object'
     default: []
   - name: 'GRADLE_USER_HOME'
-    type: string
-    default: '$(HOME)/.gradle'
+    type: 'string'
+    default: "$(HOME)/.gradle"
 
 steps:
   - task: 'JavaToolInstaller@0'

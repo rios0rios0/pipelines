@@ -16,5 +16,9 @@ test-go-script:
 	@echo "Running Go test script validation..."
 	@./test-go-validation.sh
 
-test: test-go-script
+test-yaml-merge:
+	@echo "Running YAML merge validation..."
+	@./test-yaml-merge.sh
+
+test: test-go-script test-yaml-merge
 	@echo "All tests completed successfully!"

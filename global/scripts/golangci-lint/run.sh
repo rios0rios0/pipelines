@@ -22,36 +22,45 @@ mergedYamlFile="merged.yml"
 defaultYamlFile="$SCRIPTS_DIR/global/scripts/golangci-lint/.golangci.yml"
 
 if [ -f ".golangci.yml" ]; then
-  python3 - "$defaultYamlFile" "$mergedYamlFile" << EOF
-import sys, yaml
-
-with open(sys.argv[1], "r") as default_config_file:
-    default_config = yaml.safe_load(default_config_file)
-with open(".golangci.yml", "r") as repo_config_file:
-    repo_config = yaml.safe_load(repo_config_file)
-
-# Merge enabled linters
-for linter in repo_config["linters"].get("enable", []):
-    if linter not in default_config["linters"]["enable"]:
-        default_config["linters"]["enable"].append(linter)
-
-# Merge disabled linters
-for linter in repo_config["linters"].get("disable", []):
-    if linter in default_config["linters"]["enable"]:
-        default_config["linters"]["enable"].remove(linter)
-
-# Merge linter settings
-for linter, settings in repo_config.get("linters-settings", {}).items():
-    if settings is not None:
-        if default_config.get("linters-settings") is None:
-            default_config["linters-settings"] = {}
-        default_config["linters-settings"][linter] = settings
-
-with open(sys.argv[2], "w") as merged_config_file:
-    yaml.dump(default_config, merged_config_file)
-EOF
+  # Start with the default config
+  cp "$defaultYamlFile" "$mergedYamlFile"
+  
+  # Get enabled linters from repo config and add them to default
+  repo_enabled=$(yq eval '.linters.enable[]?' ".golangci.yml" 2>/dev/null || true)
+  if [ -n "$repo_enabled" ]; then
+    echo "$repo_enabled" | while IFS= read -r linter; do
+      if [ -n "$linter" ]; then
+        # Check if linter is already in the default config
+        if ! yq eval ".linters.enable | contains([\"$linter\"])" "$mergedYamlFile" | grep -q true; then
+          # Add the linter to the enabled list
+          yq eval ".linters.enable += [\"$linter\"]" -i "$mergedYamlFile"
+        fi
+      fi
+    done
+  fi
+  
+  # Handle disabled linters - remove them from enabled list
+  repo_disabled=$(yq eval '.linters.disable[]?' ".golangci.yml" 2>/dev/null || true)
+  if [ -n "$repo_disabled" ]; then
+    echo "$repo_disabled" | while IFS= read -r linter; do
+      if [ -n "$linter" ]; then
+        # Remove the linter from the enabled list
+        yq eval ".linters.enable = (.linters.enable | map(select(. != \"$linter\")))" -i "$mergedYamlFile"
+      fi
+    done
+  fi
+  
+  # Merge linter settings using yq merge operation
+  if yq eval '.linters-settings' ".golangci.yml" >/dev/null 2>&1; then
+    # Ensure linters-settings section exists in output file
+    yq eval '.linters-settings = (.linters-settings // {})' -i "$mergedYamlFile"
+    # Use yq to merge the linters-settings from repo file into output file
+    temp_file=$(mktemp)
+    yq eval-all 'select(fileIndex == 0) * {"linters-settings": select(fileIndex == 1).linters-settings}' "$mergedYamlFile" ".golangci.yml" > "$temp_file"
+    mv "$temp_file" "$mergedYamlFile"
+  fi
 else
-  cp "$defaultYamlFile" $mergedYamlFile
+  cp "$defaultYamlFile" "$mergedYamlFile"
 fi
 
 wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh

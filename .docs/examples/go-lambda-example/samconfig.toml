@@ -1,0 +1,38 @@
+version = 0.1
+
+[default]
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+resolve_s3 = true
+stack_name = "go-lambda-example"
+s3_prefix = "go-lambda-example"
+region = "us-east-1"
+
+[dev]
+[dev.build.parameters]
+cached = true
+parallel = true
+
+[dev.deploy.parameters]
+stack_name = "go-lambda-example-dev"
+capabilities = "CAPABILITY_IAM"
+region = "us-east-1"
+s3_bucket = "my-sam-deployments-dev"
+s3_prefix = "dev/go-lambda-example"
+
+[prod]
+[prod.build.parameters]
+cached = true
+parallel = true
+
+[prod.deploy.parameters]
+stack_name = "go-lambda-example-prod"
+capabilities = "CAPABILITY_IAM"
+region = "us-east-1"
+s3_bucket = "my-sam-deployments-prod"
+s3_prefix = "prod/go-lambda-example"

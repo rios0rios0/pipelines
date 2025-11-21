@@ -20,6 +20,9 @@ parameters:
   - name: 'S3_KEY_PREFIX'
     type: 'string'
     default: ''
+  - name: 'RESOLVE_S3'
+    type: 'boolean'
+    default: false
 
 stages:
   - stage: 'delivery'
@@ -73,14 +76,19 @@ stages:
                 sam build
                 
                 echo "Packaging with AWS SAM..."
+                SAM_PACKAGE_ARGS="--output-template-file packaged.yaml"
+                RESOLVE_S3="${{ parameters.RESOLVE_S3 }}"
+
                 if [ -n "${{ parameters.S3_BUCKET }}" ]; then
-                  SAM_PACKAGE_ARGS="--output-template-file packaged.yaml --s3-bucket ${{ parameters.S3_BUCKET }}"
+                  SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-bucket ${{ parameters.S3_BUCKET }}"
                   if [ -n "${{ parameters.S3_KEY_PREFIX }}" ]; then
                     SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-prefix ${{ parameters.S3_KEY_PREFIX }}"
                   fi
                   sam package $SAM_PACKAGE_ARGS
+                elif [ "$RESOLVE_S3" = "true" ]; then
+                  sam package $SAM_PACKAGE_ARGS --resolve-s3
                 else
-                  echo "ERROR: S3_BUCKET is required for SAM deployment strategy"
+                  echo "ERROR: Provide S3_BUCKET or set RESOLVE_S3=true to enable --resolve-s3"
                   exit 1
                 fi
               displayName: 'Package with AWS SAM'

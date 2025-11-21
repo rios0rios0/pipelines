@@ -1,0 +1,114 @@
+parameters:
+  - name: 'LAMBDA_HANDLER'
+    type: 'string'
+    default: 'bootstrap'
+  - name: 'LAMBDA_RUNTIME'
+    type: 'string'
+    default: 'provided.al2023'
+  - name: 'GOARCH'
+    type: 'string'
+    default: 'amd64'
+  - name: 'BUILD_FLAGS'
+    type: 'string'
+    default: "-ldflags='-w -s'"
+  - name: 'DEPLOY_STRATEGY'
+    type: 'string'
+    default: 'zip'
+  - name: 'S3_BUCKET'
+    type: 'string'
+    default: ''
+  - name: 'S3_KEY_PREFIX'
+    type: 'string'
+    default: ''
+
+stages:
+  - stage: 'delivery'
+    displayName: 'delivery'
+    condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
+    jobs:
+      - job: 'delivery'
+        displayName: 'delivery'
+        container: 'ghcr.io/rios0rios0/pipelines/golang:1.19-awscli'
+        variables:
+          GOPATH: "$(Pipeline.Workspace)/.go"
+          LAMBDA_ARTIFACT_DIR: "$(Build.SourcesDirectory)/lambda-artifact"
+        steps:
+          - template: '../../../global/abstracts/scripts-repo.yaml'
+
+          - script: $(Scripts.Directory)/global/scripts/golang/init/run.sh
+            displayName: 'Load Custom Configuration'
+            continueOnError: true
+
+          - task: 'Cache@2'
+            inputs:
+              key: "$(Agent.JobName)|$(Agent.OS)|go.sum"
+              path: "$(GOPATH)"
+            displayName: 'Cache for Go modules'
+            continueOnError: true
+
+          - ${{ if ne(parameters.DEPLOY_STRATEGY, 'sam') }}:
+            - script: |
+                set -e
+
+                echo "Building Go Lambda function..."
+                export CGO_ENABLED=0
+                export GOOS=linux
+                export GOARCH=${{ parameters.GOARCH }}
+                export BUILD_FLAGS="${{ parameters.BUILD_FLAGS }}"
+
+                mkdir -p $(LAMBDA_ARTIFACT_DIR)
+
+                # Build the Lambda handler
+                go build $BUILD_FLAGS -o $(LAMBDA_ARTIFACT_DIR)/${{ parameters.LAMBDA_HANDLER }} .
+
+                echo "Lambda binary built successfully"
+                ls -lah $(LAMBDA_ARTIFACT_DIR)/
+              displayName: 'Build Go Lambda Function'
+
+          - ${{ if eq(parameters.DEPLOY_STRATEGY, 'sam') }}:
+            - script: |
+                set -e
+                
+                echo "Building with AWS SAM..."
+                sam build
+                
+                echo "Packaging with AWS SAM..."
+                if [ -n "${{ parameters.S3_BUCKET }}" ]; then
+                  SAM_PACKAGE_ARGS="--output-template-file packaged.yaml --s3-bucket ${{ parameters.S3_BUCKET }}"
+                  if [ -n "${{ parameters.S3_KEY_PREFIX }}" ]; then
+                    SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-prefix ${{ parameters.S3_KEY_PREFIX }}"
+                  fi
+                  sam package $SAM_PACKAGE_ARGS
+                else
+                  echo "ERROR: S3_BUCKET is required for SAM deployment strategy"
+                  exit 1
+                fi
+              displayName: 'Package with AWS SAM'
+
+          - ${{ if eq(parameters.DEPLOY_STRATEGY, 'zip') }}:
+            - task: 'ArchiveFiles@2'
+              inputs:
+                rootFolderOrFile: '$(LAMBDA_ARTIFACT_DIR)'
+                includeRootFolder: false
+                archiveType: 'zip'
+                archiveFile: '$(Build.ArtifactStagingDirectory)/lambda-function.zip'
+                replaceExistingArchive: true
+              displayName: 'Create Lambda ZIP Package'
+
+          - ${{ if eq(parameters.DEPLOY_STRATEGY, 'sam') }}:
+            - task: 'PublishPipelineArtifact@1'
+              inputs:
+                targetPath: '$(Build.SourcesDirectory)/packaged.yaml'
+                artifact: 'lambda-sam-template'
+                publishLocation: 'pipeline'
+              displayName: 'Publish SAM Template Artifact'
+
+          - ${{ if eq(parameters.DEPLOY_STRATEGY, 'zip') }}:
+            - task: 'PublishPipelineArtifact@1'
+              inputs:
+                targetPath: '$(Build.ArtifactStagingDirectory)/lambda-function.zip'
+                artifact: 'lambda-function-zip'
+                publishLocation: 'pipeline'
+              displayName: 'Publish Lambda ZIP Artifact'
+
+      - template: '../../../global/stages/40-delivery/release.yaml'

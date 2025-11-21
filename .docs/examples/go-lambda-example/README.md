@@ -102,6 +102,6 @@ curl http://localhost:3000/hello
 
 ## Additional Resources
 
-- [Full Documentation](.docs/azure-devops-go-lambda.md)
+- [Full Documentation](../../azure-devops-go-lambda.md)
 - [AWS SAM Documentation](https://docs.aws.amazon.com/serverless-application-model/)
 - [Azure DevOps Pipelines](https://docs.microsoft.com/en-us/azure/devops/pipelines/)

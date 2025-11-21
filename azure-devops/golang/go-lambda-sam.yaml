@@ -13,6 +13,9 @@ parameters:
   - name: 'SAM_CONFIG_ENV'
     type: 'string'
     default: 'default'
+  - name: 'RESOLVE_S3'
+    type: 'boolean'
+    default: false
   - name: 'LAMBDA_HANDLER'
     type: 'string'
     default: 'bootstrap'
@@ -40,6 +43,7 @@ stages:
       DEPLOY_STRATEGY: 'sam'
       S3_BUCKET: ${{ parameters.S3_BUCKET }}
       S3_KEY_PREFIX: ${{ parameters.S3_KEY_PREFIX }}
+      RESOLVE_S3: ${{ parameters.RESOLVE_S3 }}
   - template: 'stages/50-deployment/lambda.yaml'
     parameters:
       LAMBDA_FUNCTION_NAME: ''  # Not needed for SAM, uses stack name from samconfig.toml

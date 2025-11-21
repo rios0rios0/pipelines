@@ -1,6 +1,9 @@
 parameters:
+  # LAMBDA_FUNCTION_NAME is only required for ZIP deployments.
+  # For SAM deployments, leave as '' (empty string).
   - name: 'LAMBDA_FUNCTION_NAME'
     type: 'string'
+    default: ''
   - name: 'AWS_REGION'
     type: 'string'
     default: 'us-east-1'

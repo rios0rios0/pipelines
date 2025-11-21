@@ -1,6 +1,7 @@
 parameters:
   - name: 'LAMBDA_FUNCTION_NAME'
     type: 'string'
+    default: ''
   - name: 'AWS_REGION'
     type: 'string'
     default: 'us-east-1'
@@ -55,19 +56,109 @@ stages:
                 path: '$(Build.SourcesDirectory)'
               displayName: 'Download SAM Template Artifact'
 
-          - ${{ if ne(parameters.AWS_SERVICE_CONNECTION, '') }}:
-            - task: 'AWSShellScript@1'
-              displayName: 'Deploy Lambda Function (AWS Service Connection)'
-              inputs:
-                awsCredentials: '${{ parameters.AWS_SERVICE_CONNECTION }}'
-                regionName: '${{ parameters.AWS_REGION }}'
-                scriptType: 'inline'
-                inlineScript: |
+          # ZIP Deployment Strategy
+          - ${{ if eq(parameters.DEPLOY_STRATEGY, 'zip') }}:
+            - ${{ if ne(parameters.AWS_SERVICE_CONNECTION, '') }}:
+              - task: 'AWSShellScript@1'
+                displayName: 'Deploy Lambda Function via ZIP (AWS Service Connection)'
+                inputs:
+                  awsCredentials: '${{ parameters.AWS_SERVICE_CONNECTION }}'
+                  regionName: '${{ parameters.AWS_REGION }}'
+                  scriptType: 'inline'
+                  inlineScript: |
+                    set -e
+                    
+                    # Validate LAMBDA_FUNCTION_NAME is provided for ZIP deployment
+                    if [ -z "${{ parameters.LAMBDA_FUNCTION_NAME }}" ]; then
+                      echo "ERROR: LAMBDA_FUNCTION_NAME is required for ZIP deployment"
+                      exit 1
+                    fi
+                    
+                    echo "Deploying Lambda function via AWS CLI..."
+
+                    # Check if function exists
+                    if aws lambda get-function --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} --region ${{ parameters.AWS_REGION }} 2>/dev/null; then
+                      echo "Updating existing Lambda function: ${{ parameters.LAMBDA_FUNCTION_NAME }}"
+                      aws lambda update-function-code \
+                        --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
+                        --zip-file fileb://$(Build.SourcesDirectory)/lambda-function.zip \
+                        --region ${{ parameters.AWS_REGION }}
+
+                      # Update configuration if environment variables are provided
+                      if [ -n "${{ parameters.LAMBDA_ENV_VARS }}" ]; then
+                        aws lambda update-function-configuration \
+                          --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
+                          --timeout ${{ parameters.LAMBDA_TIMEOUT }} \
+                          --memory-size ${{ parameters.LAMBDA_MEMORY_SIZE }} \
+                          --environment "Variables={${{ parameters.LAMBDA_ENV_VARS }}}" \
+                          --region ${{ parameters.AWS_REGION }}
+                      else
+                        aws lambda update-function-configuration \
+                          --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
+                          --timeout ${{ parameters.LAMBDA_TIMEOUT }} \
+                          --memory-size ${{ parameters.LAMBDA_MEMORY_SIZE }} \
+                          --region ${{ parameters.AWS_REGION }}
+                      fi
+                    else
+                      # Only create if CREATE_IF_MISSING is true
+                      if [ "${{ parameters.CREATE_IF_MISSING }}" = "true" ]; then
+                        echo "Creating new Lambda function: ${{ parameters.LAMBDA_FUNCTION_NAME }}"
+
+                        # Note: Creating a Lambda function requires IAM role ARN
+                        # This should be provided via environment variables or parameters
+                        if [ -z "$LAMBDA_ROLE_ARN" ]; then
+                          echo "ERROR: LAMBDA_ROLE_ARN environment variable is required to create a new Lambda function"
+                          exit 1
+                        fi
+
+                        if [ -n "${{ parameters.LAMBDA_ENV_VARS }}" ]; then
+                          aws lambda create-function \
+                            --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
+                            --runtime ${{ parameters.LAMBDA_RUNTIME }} \
+                            --handler ${{ parameters.LAMBDA_HANDLER }} \
+                            --role "$LAMBDA_ROLE_ARN" \
+                            --zip-file fileb://$(Build.SourcesDirectory)/lambda-function.zip \
+                            --timeout ${{ parameters.LAMBDA_TIMEOUT }} \
+                            --memory-size ${{ parameters.LAMBDA_MEMORY_SIZE }} \
+                            --environment "Variables={${{ parameters.LAMBDA_ENV_VARS }}}" \
+                            --region ${{ parameters.AWS_REGION }}
+                        else
+                          aws lambda create-function \
+                            --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
+                            --runtime ${{ parameters.LAMBDA_RUNTIME }} \
+                            --handler ${{ parameters.LAMBDA_HANDLER }} \
+                            --role "$LAMBDA_ROLE_ARN" \
+                            --zip-file fileb://$(Build.SourcesDirectory)/lambda-function.zip \
+                            --timeout ${{ parameters.LAMBDA_TIMEOUT }} \
+                            --memory-size ${{ parameters.LAMBDA_MEMORY_SIZE }} \
+                            --region ${{ parameters.AWS_REGION }}
+                        fi
+                      else
+                        echo "ERROR: Lambda function ${{ parameters.LAMBDA_FUNCTION_NAME }} does not exist and CREATE_IF_MISSING is false"
+                        exit 1
+                      fi
+                    fi
+
+                    echo "Lambda function deployed successfully"
+
+            - ${{ if eq(parameters.AWS_SERVICE_CONNECTION, '') }}:
+              - script: |
                   set -e
+
+                  # Validate AWS credentials are set via environment variables
+                  if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+                    echo "ERROR: AWS credentials not found. Please configure AWS_SERVICE_CONNECTION or set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
+                    exit 1
+                  fi
+
+                  # Validate LAMBDA_FUNCTION_NAME is provided for ZIP deployment
+                  if [ -z "${{ parameters.LAMBDA_FUNCTION_NAME }}" ]; then
+                    echo "ERROR: LAMBDA_FUNCTION_NAME is required for ZIP deployment"
+                    exit 1
+                  fi
                   
-                  ${{ if eq(parameters.DEPLOY_STRATEGY, 'zip') }}:
                   echo "Deploying Lambda function via AWS CLI..."
-                  
+
                   # Check if function exists
                   if aws lambda get-function --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} --region ${{ parameters.AWS_REGION }} 2>/dev/null; then
                     echo "Updating existing Lambda function: ${{ parameters.LAMBDA_FUNCTION_NAME }}"
@@ -75,125 +166,97 @@ stages:
                       --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
                       --zip-file fileb://$(Build.SourcesDirectory)/lambda-function.zip \
                       --region ${{ parameters.AWS_REGION }}
-                    
+
                     # Update configuration if parameters are provided
-                    ${{ if ne(parameters.LAMBDA_ENV_VARS, '') }}:
-                    aws lambda update-function-configuration \
-                      --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
-                      --timeout ${{ parameters.LAMBDA_TIMEOUT }} \
-                      --memory-size ${{ parameters.LAMBDA_MEMORY_SIZE }} \
-                      --environment "Variables={${{ parameters.LAMBDA_ENV_VARS }}}" \
-                      --region ${{ parameters.AWS_REGION }}
-                    ${{ else }}:
-                    aws lambda update-function-configuration \
-                      --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
-                      --timeout ${{ parameters.LAMBDA_TIMEOUT }} \
-                      --memory-size ${{ parameters.LAMBDA_MEMORY_SIZE }} \
-                      --region ${{ parameters.AWS_REGION }}
-                  ${{ if eq(parameters.CREATE_IF_MISSING, true) }}:
-                  elif [ "${{ parameters.CREATE_IF_MISSING }}" = "true" ]; then
-                    echo "Creating new Lambda function: ${{ parameters.LAMBDA_FUNCTION_NAME }}"
-                    
-                    # Note: Creating a Lambda function requires IAM role ARN
-                    # This should be provided via environment variables or parameters
-                    if [ -z "$LAMBDA_ROLE_ARN" ]; then
-                      echo "ERROR: LAMBDA_ROLE_ARN environment variable is required to create a new Lambda function"
+                    # Update configuration if environment variables are provided
+                    if [ -n "${{ parameters.LAMBDA_ENV_VARS }}" ]; then
+                      aws lambda update-function-configuration \
+                        --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
+                        --timeout ${{ parameters.LAMBDA_TIMEOUT }} \
+                        --memory-size ${{ parameters.LAMBDA_MEMORY_SIZE }} \
+                        --environment "Variables={${{ parameters.LAMBDA_ENV_VARS }}}" \
+                        --region ${{ parameters.AWS_REGION }}
+                    else
+                      aws lambda update-function-configuration \
+                        --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
+                        --timeout ${{ parameters.LAMBDA_TIMEOUT }} \
+                        --memory-size ${{ parameters.LAMBDA_MEMORY_SIZE }} \
+                        --region ${{ parameters.AWS_REGION }}
+                    fi
+                  else
+                    # If function does not exist, check if we should create it
+                    if [ "${{ parameters.CREATE_IF_MISSING }}" = "true" ]; then
+                      echo "Creating new Lambda function: ${{ parameters.LAMBDA_FUNCTION_NAME }}"
+
+                      # Note: Creating a Lambda function requires IAM role ARN
+                      # This should be provided via environment variables or parameters
+                      if [ -z "$LAMBDA_ROLE_ARN" ]; then
+                        echo "ERROR: LAMBDA_ROLE_ARN environment variable is required to create a new Lambda function"
+                        exit 1
+                      fi
+
+                      if [ -n "${{ parameters.LAMBDA_ENV_VARS }}" ]; then
+                        aws lambda create-function \
+                          --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
+                          --runtime ${{ parameters.LAMBDA_RUNTIME }} \
+                          --handler ${{ parameters.LAMBDA_HANDLER }} \
+                          --role "$LAMBDA_ROLE_ARN" \
+                          --zip-file fileb://$(Build.SourcesDirectory)/lambda-function.zip \
+                          --timeout ${{ parameters.LAMBDA_TIMEOUT }} \
+                          --memory-size ${{ parameters.LAMBDA_MEMORY_SIZE }} \
+                          --environment "Variables={${{ parameters.LAMBDA_ENV_VARS }}}" \
+                          --region ${{ parameters.AWS_REGION }}
+                      else
+                        aws lambda create-function \
+                          --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
+                          --runtime ${{ parameters.LAMBDA_RUNTIME }} \
+                          --handler ${{ parameters.LAMBDA_HANDLER }} \
+                          --role "$LAMBDA_ROLE_ARN" \
+                          --zip-file fileb://$(Build.SourcesDirectory)/lambda-function.zip \
+                          --timeout ${{ parameters.LAMBDA_TIMEOUT }} \
+                          --memory-size ${{ parameters.LAMBDA_MEMORY_SIZE }} \
+                          --region ${{ parameters.AWS_REGION }}
+                      fi
+                    else
+                      echo "ERROR: Lambda function ${{ parameters.LAMBDA_FUNCTION_NAME }} does not exist and CREATE_IF_MISSING is false"
                       exit 1
                     fi
+                  echo "Lambda function deployed successfully"
+                displayName: 'Deploy Lambda Function via ZIP (Environment Variables)'
+
+          # SAM Deployment Strategy
+          - ${{ if eq(parameters.DEPLOY_STRATEGY, 'sam') }}:
+            - ${{ if ne(parameters.AWS_SERVICE_CONNECTION, '') }}:
+              - task: 'AWSShellScript@1'
+                displayName: 'Deploy Lambda Function via SAM (AWS Service Connection)'
+                inputs:
+                  awsCredentials: '${{ parameters.AWS_SERVICE_CONNECTION }}'
+                  regionName: '${{ parameters.AWS_REGION }}'
+                  scriptType: 'inline'
+                  inlineScript: |
+                    set -e
                     
-                    aws lambda create-function \
-                      --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
-                      --runtime ${{ parameters.LAMBDA_RUNTIME }} \
-                      --handler ${{ parameters.LAMBDA_HANDLER }} \
-                      --role "$LAMBDA_ROLE_ARN" \
-                      --zip-file fileb://$(Build.SourcesDirectory)/lambda-function.zip \
-                      --timeout ${{ parameters.LAMBDA_TIMEOUT }} \
-                      --memory-size ${{ parameters.LAMBDA_MEMORY_SIZE }} \
-                      ${{ if ne(parameters.LAMBDA_ENV_VARS, '') }} \
-                      --environment "Variables={${{ parameters.LAMBDA_ENV_VARS }}}" \
+                    echo "Deploying Lambda function via AWS SAM..."
+                    sam deploy \
+                      --template-file $(Build.SourcesDirectory)/packaged.yaml \
+                      --config-env ${{ parameters.SAM_CONFIG_ENV }} \
+                      --no-confirm-changeset \
                       --region ${{ parameters.AWS_REGION }}
-                  else
-                    echo "ERROR: Lambda function ${{ parameters.LAMBDA_FUNCTION_NAME }} does not exist and CREATE_IF_MISSING is false"
+
+            - ${{ if eq(parameters.AWS_SERVICE_CONNECTION, '') }}:
+              - script: |
+                  set -e
+
+                  # Validate AWS credentials are set via environment variables
+                  if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+                    echo "ERROR: AWS credentials not found. Please configure AWS_SERVICE_CONNECTION or set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
                     exit 1
                   fi
-                  
-                  echo "Lambda function deployed successfully"
-                  ${{ if eq(parameters.DEPLOY_STRATEGY, 'sam') }}:
+
                   echo "Deploying Lambda function via AWS SAM..."
                   sam deploy \
                     --template-file $(Build.SourcesDirectory)/packaged.yaml \
                     --config-env ${{ parameters.SAM_CONFIG_ENV }} \
                     --no-confirm-changeset \
                     --region ${{ parameters.AWS_REGION }}
-
-          - ${{ if eq(parameters.AWS_SERVICE_CONNECTION, '') }}:
-            - script: |
-                set -e
-                
-                # Validate AWS credentials are set via environment variables
-                if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-                  echo "ERROR: AWS credentials not found. Please configure AWS_SERVICE_CONNECTION or set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
-                  exit 1
-                fi
-                
-                ${{ if eq(parameters.DEPLOY_STRATEGY, 'zip') }}:
-                echo "Deploying Lambda function via AWS CLI..."
-                
-                # Check if function exists
-                if aws lambda get-function --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} --region ${{ parameters.AWS_REGION }} 2>/dev/null; then
-                  echo "Updating existing Lambda function: ${{ parameters.LAMBDA_FUNCTION_NAME }}"
-                  aws lambda update-function-code \
-                    --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
-                    --zip-file fileb://$(Build.SourcesDirectory)/lambda-function.zip \
-                    --region ${{ parameters.AWS_REGION }}
-                  
-                  # Update configuration if parameters are provided
-                  ${{ if ne(parameters.LAMBDA_ENV_VARS, '') }}:
-                  aws lambda update-function-configuration \
-                    --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
-                    --timeout ${{ parameters.LAMBDA_TIMEOUT }} \
-                    --memory-size ${{ parameters.LAMBDA_MEMORY_SIZE }} \
-                    --environment "Variables={${{ parameters.LAMBDA_ENV_VARS }}}" \
-                    --region ${{ parameters.AWS_REGION }}
-                  ${{ else }}:
-                  aws lambda update-function-configuration \
-                    --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
-                    --timeout ${{ parameters.LAMBDA_TIMEOUT }} \
-                    --memory-size ${{ parameters.LAMBDA_MEMORY_SIZE }} \
-                    --region ${{ parameters.AWS_REGION }}
-                ${{ if eq(parameters.CREATE_IF_MISSING, true) }}:
-                elif [ "${{ parameters.CREATE_IF_MISSING }}" = "true" ]; then
-                  echo "Creating new Lambda function: ${{ parameters.LAMBDA_FUNCTION_NAME }}"
-                  
-                  # Note: Creating a Lambda function requires IAM role ARN
-                  # This should be provided via environment variables or parameters
-                  if [ -z "$LAMBDA_ROLE_ARN" ]; then
-                    echo "ERROR: LAMBDA_ROLE_ARN environment variable is required to create a new Lambda function"
-                    exit 1
-                  fi
-                  
-                  aws lambda create-function \
-                    --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
-                    --runtime ${{ parameters.LAMBDA_RUNTIME }} \
-                    --handler ${{ parameters.LAMBDA_HANDLER }} \
-                    --role "$LAMBDA_ROLE_ARN" \
-                    --zip-file fileb://$(Build.SourcesDirectory)/lambda-function.zip \
-                    --timeout ${{ parameters.LAMBDA_TIMEOUT }} \
-                    --memory-size ${{ parameters.LAMBDA_MEMORY_SIZE }} \
-                    ${{ if ne(parameters.LAMBDA_ENV_VARS, '') }} \
-                    --environment "Variables={${{ parameters.LAMBDA_ENV_VARS }}}" \
-                    --region ${{ parameters.AWS_REGION }}
-                else
-                  echo "ERROR: Lambda function ${{ parameters.LAMBDA_FUNCTION_NAME }} does not exist and CREATE_IF_MISSING is false"
-                  exit 1
-                fi
-                
-                echo "Lambda function deployed successfully"
-                ${{ if eq(parameters.DEPLOY_STRATEGY, 'sam') }}:
-                echo "Deploying Lambda function via AWS SAM..."
-                sam deploy \
-                  --template-file $(Build.SourcesDirectory)/packaged.yaml \
-                  --config-env ${{ parameters.SAM_CONFIG_ENV }} \
-                  --no-confirm-changeset \
-                  --region ${{ parameters.AWS_REGION }}
-              displayName: 'Deploy Lambda Function (Environment Variables)'
+                displayName: 'Deploy Lambda Function via SAM (Environment Variables)'

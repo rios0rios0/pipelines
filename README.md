@@ -216,17 +216,19 @@ Azure DevOps templates are located in the `azure-devops/` directory and use temp
 
 #### Available Templates
 
-| Language       | Template               | Purpose                      |
-|----------------|------------------------|------------------------------|
-| **Go**         | `go-docker.yaml`       | Go with Docker delivery      |
-| **Go**         | `go-arm.yaml`          | Go with Azure ARM deployment |
-| **Go**         | `go-function-arm.yaml` | Go Azure Functions           |
-| **Java**       | `gradle-docker.yaml`   | Gradle with Docker           |
-| **Java**       | `maven-docker.yaml`    | Maven with Docker            |
-| **Python**     | `pdm-docker.yaml`      | Python PDM with Docker       |
-| **JavaScript** | `yarn-docker.yaml`     | Node.js Yarn with Docker     |
-| **.NET**       | `framework.yaml`       | .NET Framework pipeline      |
-| **Terraform**  | Various ARM templates  | Infrastructure as Code       |
+| Language       | Template               | Purpose                           |
+|----------------|------------------------|-----------------------------------|
+| **Go**         | `go-docker.yaml`       | Go with Docker delivery           |
+| **Go**         | `go-arm.yaml`          | Go with Azure ARM deployment      |
+| **Go**         | `go-function-arm.yaml` | Go Azure Functions                |
+| **Go**         | `go-lambda.yaml`       | Go AWS Lambda deployment (ZIP)    |
+| **Go**         | `go-lambda-sam.yaml`   | Go AWS Lambda deployment (SAM)    |
+| **Java**       | `gradle-docker.yaml`   | Gradle with Docker                |
+| **Java**       | `maven-docker.yaml`    | Maven with Docker                 |
+| **Python**     | `pdm-docker.yaml`      | Python PDM with Docker            |
+| **JavaScript** | `yarn-docker.yaml`     | Node.js Yarn with Docker          |
+| **.NET**       | `framework.yaml`       | .NET Framework pipeline           |
+| **Terraform**  | Various ARM templates  | Infrastructure as Code            |
 
 #### Usage Example (Go with Docker)
 
@@ -274,6 +276,55 @@ stages:
       RUN_BEFORE_BUILD: 'echo "Preparing build environment"'
 ```
 
+#### Usage Example (Go with AWS Lambda)
+
+```yaml
+trigger:
+  branches:
+    include: [ main ]
+  tags:
+    include: [ '*' ]
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
+      - group: 'production-variables'
+  - ${{ else }}:
+      - group: 'development-variables'
+
+resources:
+  repositories:
+    - repository: 'pipelines'
+      type: 'github'
+      name: 'rios0rios0/pipelines'
+      endpoint: 'YOUR_GITHUB_SERVICE_CONNECTION'
+
+stages:
+  - template: 'azure-devops/golang/go-lambda.yaml@pipelines'
+    parameters:
+      LAMBDA_FUNCTION_NAME: 'my-go-lambda-function'
+      AWS_REGION: 'us-east-1'
+      AWS_SERVICE_CONNECTION: 'AWS-Service-Connection'  # Configure in Azure DevOps
+      DEPLOY_STRATEGY: 'zip'  # or 'sam'
+      GOARCH: 'amd64'  # or 'arm64'
+      LAMBDA_TIMEOUT: '30'
+      LAMBDA_MEMORY_SIZE: '128'
+```
+
+**For SAM-based deployments:**
+
+```yaml
+stages:
+  - template: 'azure-devops/golang/go-lambda-sam.yaml@pipelines'
+    parameters:
+      S3_BUCKET: 'my-deployment-bucket'
+      AWS_REGION: 'us-east-1'
+      AWS_SERVICE_CONNECTION: 'AWS-Service-Connection'
+      SAM_CONFIG_ENV: 'default'  # References samconfig.toml environment
+```
+
 #### Required Variable Groups
 
 Create these variable groups in Azure DevOps Library:
@@ -289,6 +340,15 @@ Create these variable groups in Azure DevOps Library:
 |----------|-------------|
 | `SONAR_PROJECT_NAME` | SonarQube project display name |
 | `SONAR_PROJECT_KEY` | SonarQube project unique key |
+
+**AWS Lambda Deployment Variables (Optional):**
+| Variable | Description | Required For |
+|----------|-------------|--------------|
+| `AWS_ACCESS_KEY_ID` | AWS access key (if not using service connection) | Lambda deployment |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key (if not using service connection) | Lambda deployment |
+| `LAMBDA_ROLE_ARN` | IAM role ARN for Lambda function | Creating new functions |
+
+**Note:** For AWS deployments, it's recommended to use Azure DevOps AWS Service Connection instead of storing credentials in variable groups. Configure the service connection in Azure DevOps Project Settings → Service Connections.
 
 ![Azure DevOps Example](.docs/azure-devops-golang.png)
 

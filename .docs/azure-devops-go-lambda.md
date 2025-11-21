@@ -21,12 +21,13 @@ The pipeline templates provide two main approaches for deploying Go Lambda funct
 1. **ZIP-based deployment** (`go-lambda.yaml`) - Direct deployment using AWS CLI
 2. **SAM-based deployment** (`go-lambda-sam.yaml`) - Deployment using AWS SAM (Serverless Application Model)
 
-Both templates include the full 5-stage pipeline:
+Both templates include the full 6-stage pipeline:
 1. 🔍 Code Check (linting, formatting)
 2. 🔒 Security (SAST, secret scanning)
 3. 🧪 Tests (unit tests, coverage)
 4. 📊 Management (dependency tracking, SBOM)
-5. 🚀 Delivery & Deployment (build and deploy to AWS Lambda)
+5. 🚀 Delivery (build artifacts)
+6. 🚀 Deployment (deploy to AWS Lambda)
 
 ## Prerequisites
 

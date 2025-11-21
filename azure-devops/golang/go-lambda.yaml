@@ -1,0 +1,76 @@
+parameters:
+  # LAMBDA_FUNCTION_NAME is only required for ZIP deployments.
+  # For SAM deployments, leave as '' (empty string).
+  - name: 'LAMBDA_FUNCTION_NAME'
+    type: 'string'
+    default: ''
+  - name: 'AWS_REGION'
+    type: 'string'
+    default: 'us-east-1'
+  - name: 'LAMBDA_HANDLER'
+    type: 'string'
+    default: 'bootstrap'
+  - name: 'LAMBDA_RUNTIME'
+    type: 'string'
+    default: 'provided.al2023'
+  - name: 'GOARCH'
+    type: 'string'
+    default: 'amd64'
+  - name: 'BUILD_FLAGS'
+    type: 'string'
+    default: "-ldflags='-w -s'"
+  - name: 'DEPLOY_STRATEGY'
+    type: 'string'
+    default: 'zip'
+  - name: 'S3_BUCKET'
+    type: 'string'
+    default: ''
+  - name: 'S3_KEY_PREFIX'
+    type: 'string'
+    default: ''
+  - name: 'AWS_SERVICE_CONNECTION'
+    type: 'string'
+    default: ''
+  - name: 'LAMBDA_TIMEOUT'
+    type: 'string'
+    default: '30'
+  - name: 'LAMBDA_MEMORY_SIZE'
+    type: 'string'
+    default: '128'
+  - name: 'LAMBDA_ENV_VARS'
+    type: 'string'
+    default: ''
+  - name: 'CREATE_IF_MISSING'
+    type: 'boolean'
+    default: false
+  - name: 'SAM_CONFIG_ENV'
+    type: 'string'
+    default: 'default'
+
+stages:
+  - template: 'stages/10-code-check/go.yaml'
+  - template: 'stages/20-security/go.yaml'
+  - template: 'stages/30-tests/go.yaml'
+  - template: 'stages/35-management/go.yaml'
+  - template: 'stages/40-delivery/lambda.yaml'
+    parameters:
+      LAMBDA_HANDLER: ${{ parameters.LAMBDA_HANDLER }}
+      LAMBDA_RUNTIME: ${{ parameters.LAMBDA_RUNTIME }}
+      GOARCH: ${{ parameters.GOARCH }}
+      BUILD_FLAGS: ${{ parameters.BUILD_FLAGS }}
+      DEPLOY_STRATEGY: ${{ parameters.DEPLOY_STRATEGY }}
+      S3_BUCKET: ${{ parameters.S3_BUCKET }}
+      S3_KEY_PREFIX: ${{ parameters.S3_KEY_PREFIX }}
+  - template: 'stages/50-deployment/lambda.yaml'
+    parameters:
+      LAMBDA_FUNCTION_NAME: ${{ parameters.LAMBDA_FUNCTION_NAME }}
+      AWS_REGION: ${{ parameters.AWS_REGION }}
+      DEPLOY_STRATEGY: ${{ parameters.DEPLOY_STRATEGY }}
+      AWS_SERVICE_CONNECTION: ${{ parameters.AWS_SERVICE_CONNECTION }}
+      LAMBDA_RUNTIME: ${{ parameters.LAMBDA_RUNTIME }}
+      LAMBDA_HANDLER: ${{ parameters.LAMBDA_HANDLER }}
+      LAMBDA_TIMEOUT: ${{ parameters.LAMBDA_TIMEOUT }}
+      LAMBDA_MEMORY_SIZE: ${{ parameters.LAMBDA_MEMORY_SIZE }}
+      LAMBDA_ENV_VARS: ${{ parameters.LAMBDA_ENV_VARS }}
+      CREATE_IF_MISSING: ${{ parameters.CREATE_IF_MISSING }}
+      SAM_CONFIG_ENV: ${{ parameters.SAM_CONFIG_ENV }}

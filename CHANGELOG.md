@@ -42,6 +42,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed workflow and delivery for GitHub Python Docker
 - updated `CONTRIBUTING.md` and `copilot-instructions.md` with mandatory testing requirements
 - fixed multi-platform builds failing for go1.x-awscli containers
+- fixed Azure DevOps Go SAM delivery to normalize `RESOLVE_S3` booleans so `--resolve-s3` works with Azure True/False values
 
 ### Removed
 

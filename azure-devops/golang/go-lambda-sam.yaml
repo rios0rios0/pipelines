@@ -1,6 +1,7 @@
 parameters:
   - name: 'S3_BUCKET'
     type: 'string'
+    default: ''
   - name: 'AWS_REGION'
     type: 'string'
     default: 'us-east-1'

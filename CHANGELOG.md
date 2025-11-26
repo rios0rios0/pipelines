@@ -21,6 +21,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added `make test` and `make test-go-script` targets for automated testing
 - added complete test validation suite with `test-go-validation.sh` script
 - added optional RESOLVE_S3 flag to Azure DevOps Go SAM delivery to support bucket auto resolving
+- added support for building golang 1.25
 
 ### Changed
 

@@ -77,7 +77,7 @@ stages:
                 
                 echo "Packaging with AWS SAM..."
                 SAM_PACKAGE_ARGS="--output-template-file packaged.yaml"
-                RESOLVE_S3="${{ parameters.RESOLVE_S3 }}"
+                RESOLVE_S3=$(echo "${{ parameters.RESOLVE_S3 }}" | tr '[:upper:]' '[:lower:]')
 
                 if [ -n "${{ parameters.S3_BUCKET }}" ]; then
                   SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-bucket ${{ parameters.S3_BUCKET }}"

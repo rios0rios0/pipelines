@@ -41,6 +41,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed untested packages now appear as 0% covered instead of being excluded from coverage reports
 - fixed workflow and delivery for GitHub Python Docker
 - updated `CONTRIBUTING.md` and `copilot-instructions.md` with mandatory testing requirements
+- fixed multi-platform builds failing for go1.x-awscli containers
 
 ### Removed
 

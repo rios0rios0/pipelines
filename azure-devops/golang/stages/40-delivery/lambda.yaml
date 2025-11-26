@@ -31,7 +31,7 @@ stages:
     jobs:
       - job: 'delivery'
         displayName: 'delivery'
-        container: 'ghcr.io/rios0rios0/pipelines/golang:1.19-awscli'
+        container: 'ghcr.io/rios0rios0/pipelines/golang:1.25-awscli'
         variables:
           GOPATH: "$(Pipeline.Workspace)/.go"
           LAMBDA_ARTIFACT_DIR: "$(Build.SourcesDirectory)/lambda-artifact"

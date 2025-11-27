@@ -32,6 +32,11 @@ parameters:
   - name: 'SAM_CONFIG_ENV'
     type: 'string'
     default: 'default'
+  - name: 'PARAMETER_OVERRIDES'
+    type: 'string'
+    default: ''
+  - name: 'STACK_NAME'
+    type: 'string'
 
 stages:
   - stage: 'deployment'
@@ -40,7 +45,7 @@ stages:
     jobs:
       - job: 'deployment'
         displayName: 'deployment'
-        container: 'ghcr.io/rios0rios0/pipelines/awscli:latest'
+        container: 'ghcr.io/rios0rios0/pipelines/golang:1.25-awscli'
         steps:
           - ${{ if eq(parameters.DEPLOY_STRATEGY, 'zip') }}:
             - task: 'DownloadPipelineArtifact@2'
@@ -67,13 +72,13 @@ stages:
                   scriptType: 'inline'
                   inlineScript: |
                     set -e
-                    
+
                     # Validate LAMBDA_FUNCTION_NAME is provided for ZIP deployment
                     if [ -z "${{ parameters.LAMBDA_FUNCTION_NAME }}" ]; then
                       echo "ERROR: LAMBDA_FUNCTION_NAME is required for ZIP deployment"
                       exit 1
                     fi
-                    
+
                     echo "Deploying Lambda function via AWS CLI..."
 
                     # Check if function exists
@@ -156,7 +161,7 @@ stages:
                     echo "ERROR: LAMBDA_FUNCTION_NAME is required for ZIP deployment"
                     exit 1
                   fi
-                  
+
                   echo "Deploying Lambda function via AWS CLI..."
 
                   # Check if function exists
@@ -235,13 +240,23 @@ stages:
                   scriptType: 'inline'
                   inlineScript: |
                     set -e
-                    
+
                     echo "Deploying Lambda function via AWS SAM..."
-                    sam deploy \
+                    
+                    # Build sam deploy command
+                    SAM_DEPLOY_CMD="sam deploy \
                       --template-file $(Build.SourcesDirectory)/packaged.yaml \
                       --config-env ${{ parameters.SAM_CONFIG_ENV }} \
+                      --stack-name ${{ parameters.STACK_NAME }} \
                       --no-confirm-changeset \
-                      --region ${{ parameters.AWS_REGION }}
+                      --region ${{ parameters.AWS_REGION }}"
+                    
+                    # Add parameter overrides if they exist
+                    if [ -n "${{ parameters.PARAMETER_OVERRIDES }}" ]; then
+                      SAM_DEPLOY_CMD="$SAM_DEPLOY_CMD --parameter-overrides ${{ parameters.PARAMETER_OVERRIDES }}"
+                    fi
+
+                    eval $SAM_DEPLOY_CMD
 
             - ${{ if eq(parameters.AWS_SERVICE_CONNECTION, '') }}:
               - script: |
@@ -254,9 +269,19 @@ stages:
                   fi
 
                   echo "Deploying Lambda function via AWS SAM..."
-                  sam deploy \
+                  
+                  # Build sam deploy command
+                  SAM_DEPLOY_CMD="sam deploy \
                     --template-file $(Build.SourcesDirectory)/packaged.yaml \
                     --config-env ${{ parameters.SAM_CONFIG_ENV }} \
+                    --stack-name ${{ parameters.STACK_NAME }} \
                     --no-confirm-changeset \
-                    --region ${{ parameters.AWS_REGION }}
+                    --region ${{ parameters.AWS_REGION }}"
+                  
+                  # Add parameter overrides if they exist
+                  if [ -n "${{ parameters.PARAMETER_OVERRIDES }}" ]; then
+                    SAM_DEPLOY_CMD="$SAM_DEPLOY_CMD --parameter-overrides ${{ parameters.PARAMETER_OVERRIDES }}"
+                  fi
+                  
+                  eval $SAM_DEPLOY_CMD
                 displayName: 'Deploy Lambda Function via SAM (Environment Variables)'

@@ -34,6 +34,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
+- fixed deployment issue to deploy an AWS Lambda with SAM CLI
 - fixed Go `1.25.1` compatibility issue in `global/scripts/golang/test/run.sh` by implementing comprehensive coverage reporting
 - fixed coverage reporting to include all packages with Go files, not just packages with tests
 - fixed synthetic coverage generation for projects with packages but no tests

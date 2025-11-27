@@ -37,6 +37,8 @@ stages:
   - template: 'stages/35-management/go.yaml'
   - template: 'stages/40-delivery/lambda.yaml'
     parameters:
+      AWS_REGION: ${{ parameters.AWS_REGION }}
+      AWS_SERVICE_CONNECTION: ${{ parameters.AWS_SERVICE_CONNECTION }}
       LAMBDA_HANDLER: ${{ parameters.LAMBDA_HANDLER }}
       LAMBDA_RUNTIME: ${{ parameters.LAMBDA_RUNTIME }}
       GOARCH: ${{ parameters.GOARCH }}

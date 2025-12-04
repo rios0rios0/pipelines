@@ -29,6 +29,11 @@ parameters:
   - name: 'BUILD_FLAGS'
     type: 'string'
     default: "-ldflags='-w -s'"
+  - name: 'PARAMETER_OVERRIDES'
+    type: 'string'
+    default: ''
+  - name: 'STACK_NAME'
+    type: 'string'
 
 stages:
   - template: 'stages/10-code-check/go.yaml'
@@ -37,6 +42,8 @@ stages:
   - template: 'stages/35-management/go.yaml'
   - template: 'stages/40-delivery/lambda.yaml'
     parameters:
+      AWS_REGION: ${{ parameters.AWS_REGION }}
+      AWS_SERVICE_CONNECTION: ${{ parameters.AWS_SERVICE_CONNECTION }}
       LAMBDA_HANDLER: ${{ parameters.LAMBDA_HANDLER }}
       LAMBDA_RUNTIME: ${{ parameters.LAMBDA_RUNTIME }}
       GOARCH: ${{ parameters.GOARCH }}
@@ -54,3 +61,5 @@ stages:
       SAM_CONFIG_ENV: ${{ parameters.SAM_CONFIG_ENV }}
       LAMBDA_RUNTIME: ${{ parameters.LAMBDA_RUNTIME }}
       LAMBDA_HANDLER: ${{ parameters.LAMBDA_HANDLER }}
+      PARAMETER_OVERRIDES: ${{ parameters.PARAMETER_OVERRIDES }}
+      STACK_NAME: ${{ parameters.STACK_NAME }}

@@ -46,6 +46,10 @@ parameters:
   - name: 'SAM_CONFIG_ENV'
     type: 'string'
     default: 'default'
+  - name: 'PARAMETER_OVERRIDES'
+    type: 'string'
+  - name: 'STACK_NAME'
+    type: 'string'
 
 stages:
   - template: 'stages/10-code-check/go.yaml'
@@ -74,3 +78,5 @@ stages:
       LAMBDA_ENV_VARS: ${{ parameters.LAMBDA_ENV_VARS }}
       CREATE_IF_MISSING: ${{ parameters.CREATE_IF_MISSING }}
       SAM_CONFIG_ENV: ${{ parameters.SAM_CONFIG_ENV }}
+      PARAMETER_OVERRIDES: ${{ parameters.PARAMETER_OVERRIDES }}
+      STACK_NAME: ${{ parameters.STACK_NAME }}

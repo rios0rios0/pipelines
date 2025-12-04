@@ -23,6 +23,12 @@ parameters:
   - name: 'RESOLVE_S3'
     type: 'boolean'
     default: false
+  - name: 'AWS_REGION'
+    type: 'string'
+    default: 'us-east-1'
+  - name: 'AWS_SERVICE_CONNECTION'
+    type: 'string'
+    default: ''
 
 stages:
   - stage: 'delivery'
@@ -69,29 +75,70 @@ stages:
               displayName: 'Build Go Lambda Function'
 
           - ${{ if eq(parameters.DEPLOY_STRATEGY, 'sam') }}:
-            - script: |
-                set -e
-                
-                echo "Building with AWS SAM..."
-                sam build
-                
-                echo "Packaging with AWS SAM..."
-                SAM_PACKAGE_ARGS="--output-template-file packaged.yaml"
-                RESOLVE_S3=$(echo "${{ parameters.RESOLVE_S3 }}" | tr '[:upper:]' '[:lower:]')
+            - ${{ if ne(parameters.AWS_SERVICE_CONNECTION, '') }}:
+              - task: 'AWSShellScript@1'
+                displayName: 'Build and Package with AWS SAM (AWS Service Connection)'
+                inputs:
+                  awsCredentials: '${{ parameters.AWS_SERVICE_CONNECTION }}'
+                  regionName: '${{ parameters.AWS_REGION }}'
+                  scriptType: 'inline'
+                  inlineScript: |
+                    set -e
 
-                if [ -n "${{ parameters.S3_BUCKET }}" ]; then
-                  SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-bucket ${{ parameters.S3_BUCKET }}"
-                  if [ -n "${{ parameters.S3_KEY_PREFIX }}" ]; then
-                    SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-prefix ${{ parameters.S3_KEY_PREFIX }}"
+                    echo "Building with AWS SAM..."
+                    sam build
+
+                    echo "Packaging with AWS SAM..."
+                    SAM_PACKAGE_ARGS="--output-template-file packaged.yaml --region ${{ parameters.AWS_REGION }}"
+                    RESOLVE_S3=$(echo "${{ parameters.RESOLVE_S3 }}" | tr '[:upper:]' '[:lower:]')
+                    echo "RESOLVE_S3 (normalized): '$RESOLVE_S3'"
+
+                    if [ -n "${{ parameters.S3_BUCKET }}" ]; then
+                      SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-bucket ${{ parameters.S3_BUCKET }}"
+                      if [ -n "${{ parameters.S3_KEY_PREFIX }}" ]; then
+                        SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-prefix ${{ parameters.S3_KEY_PREFIX }}"
+                      fi
+                      sam package $SAM_PACKAGE_ARGS
+                    elif [ "$RESOLVE_S3" = "true" ]; then
+                      sam package $SAM_PACKAGE_ARGS --resolve-s3
+                    else
+                      echo "ERROR: Provide S3_BUCKET or set RESOLVE_S3=true to enable --resolve-s3"
+                      exit 1
+                    fi
+
+            - ${{ if eq(parameters.AWS_SERVICE_CONNECTION, '') }}:
+              - script: |
+                  set -e
+
+                  # Validate AWS credentials are set via environment variables
+                  if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+                    echo "ERROR: AWS credentials not found. Configure AWS_SERVICE_CONNECTION or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY"
+                    exit 1
                   fi
-                  sam package $SAM_PACKAGE_ARGS
-                elif [ "$RESOLVE_S3" = "true" ]; then
-                  sam package $SAM_PACKAGE_ARGS --resolve-s3
-                else
-                  echo "ERROR: Provide S3_BUCKET or set RESOLVE_S3=true to enable --resolve-s3"
-                  exit 1
-                fi
-              displayName: 'Package with AWS SAM'
+
+                  export AWS_REGION="${{ parameters.AWS_REGION }}"
+
+                  echo "Building with AWS SAM..."
+                  sam build
+
+                  echo "Packaging with AWS SAM..."
+                  SAM_PACKAGE_ARGS="--output-template-file packaged.yaml --region ${{ parameters.AWS_REGION }}"
+                  RESOLVE_S3=$(echo "${{ parameters.RESOLVE_S3 }}" | tr '[:upper:]' '[:lower:]')
+                  echo "RESOLVE_S3 (normalized): '$RESOLVE_S3'"
+
+                  if [ -n "${{ parameters.S3_BUCKET }}" ]; then
+                    SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-bucket ${{ parameters.S3_BUCKET }}"
+                    if [ -n "${{ parameters.S3_KEY_PREFIX }}" ]; then
+                      SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-prefix ${{ parameters.S3_KEY_PREFIX }}"
+                    fi
+                    sam package $SAM_PACKAGE_ARGS
+                  elif [ "$RESOLVE_S3" = "true" ]; then
+                    sam package $SAM_PACKAGE_ARGS --resolve-s3
+                  else
+                    echo "ERROR: Provide S3_BUCKET or set RESOLVE_S3=true to enable --resolve-s3"
+                    exit 1
+                  fi
+                displayName: 'Build and Package with AWS SAM'
 
           - ${{ if eq(parameters.DEPLOY_STRATEGY, 'zip') }}:
             - task: 'ArchiveFiles@2'

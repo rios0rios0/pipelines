@@ -23,7 +23,7 @@ stages:
 
           - task: 'Gradle@3'
             inputs:
-              tasks: '${{ parameters.GRADLE_PUBLISH_TASK }}'
+              tasks: "${{ parameters.GRADLE_PUBLISH_TASK }}"
               ${{ if gt(length(parameters.GRADLE_TEST_TASKS), 0) }}:
                 options: "-x ${{ join(' -x ', parameters.GRADLE_TEST_TASKS) }}"
               publishJUnitResults: false

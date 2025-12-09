@@ -51,14 +51,14 @@ stages:
             - task: 'DownloadPipelineArtifact@2'
               inputs:
                 artifact: 'lambda-function-zip'
-                path: '$(Build.SourcesDirectory)'
+                path: "$(Build.SourcesDirectory)"
               displayName: 'Download Lambda ZIP Artifact'
 
           - ${{ if eq(parameters.DEPLOY_STRATEGY, 'sam') }}:
             - task: 'DownloadPipelineArtifact@2'
               inputs:
                 artifact: 'lambda-sam-template'
-                path: '$(Build.SourcesDirectory)'
+                path: "$(Build.SourcesDirectory)"
               displayName: 'Download SAM Template Artifact'
 
           # ZIP Deployment Strategy
@@ -67,8 +67,8 @@ stages:
               - task: 'AWSShellScript@1'
                 displayName: 'Deploy Lambda Function via ZIP (AWS Service Connection)'
                 inputs:
-                  awsCredentials: '${{ parameters.AWS_SERVICE_CONNECTION }}'
-                  regionName: '${{ parameters.AWS_REGION }}'
+                  awsCredentials: "${{ parameters.AWS_SERVICE_CONNECTION }}"
+                  regionName: "${{ parameters.AWS_REGION }}"
                   scriptType: 'inline'
                   inlineScript: |
                     set -e
@@ -235,14 +235,14 @@ stages:
               - task: 'AWSShellScript@1'
                 displayName: 'Deploy Lambda Function via SAM (AWS Service Connection)'
                 inputs:
-                  awsCredentials: '${{ parameters.AWS_SERVICE_CONNECTION }}'
-                  regionName: '${{ parameters.AWS_REGION }}'
+                  awsCredentials: "${{ parameters.AWS_SERVICE_CONNECTION }}"
+                  regionName: "${{ parameters.AWS_REGION }}"
                   scriptType: 'inline'
                   inlineScript: |
                     set -e
 
                     echo "Deploying Lambda function via AWS SAM..."
-                    
+
                     # Build sam deploy command
                     SAM_DEPLOY_CMD="sam deploy \
                       --template-file $(Build.SourcesDirectory)/packaged.yaml \
@@ -250,7 +250,7 @@ stages:
                       --stack-name ${{ parameters.STACK_NAME }} \
                       --no-confirm-changeset \
                       --region ${{ parameters.AWS_REGION }}"
-                    
+
                     # Add parameter overrides if they exist
                     if [ -n "${{ parameters.PARAMETER_OVERRIDES }}" ]; then
                       SAM_DEPLOY_CMD="$SAM_DEPLOY_CMD --parameter-overrides ${{ parameters.PARAMETER_OVERRIDES }}"
@@ -269,7 +269,7 @@ stages:
                   fi
 
                   echo "Deploying Lambda function via AWS SAM..."
-                  
+
                   # Build sam deploy command
                   SAM_DEPLOY_CMD="sam deploy \
                     --template-file $(Build.SourcesDirectory)/packaged.yaml \
@@ -277,11 +277,11 @@ stages:
                     --stack-name ${{ parameters.STACK_NAME }} \
                     --no-confirm-changeset \
                     --region ${{ parameters.AWS_REGION }}"
-                  
+
                   # Add parameter overrides if they exist
                   if [ -n "${{ parameters.PARAMETER_OVERRIDES }}" ]; then
                     SAM_DEPLOY_CMD="$SAM_DEPLOY_CMD --parameter-overrides ${{ parameters.PARAMETER_OVERRIDES }}"
                   fi
-                  
+
                   eval $SAM_DEPLOY_CMD
                 displayName: 'Deploy Lambda Function via SAM (Environment Variables)'

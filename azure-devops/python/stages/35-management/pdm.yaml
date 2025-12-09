@@ -11,7 +11,7 @@ stages:
           REPORT_PATH: 'build/reports'
         steps:
           # $(Scripts.Directory) was already defined in the line below
-          - template: '../../abstracts/pdm-python3.10.yaml'
+          - template: '../../abstracts/pdm-python3.11.yaml'
 
           - script: pdm run sbom
 

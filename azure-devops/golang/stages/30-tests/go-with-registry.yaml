@@ -11,7 +11,7 @@ stages:
           - task: 'Docker@2'
             displayName: 'Docker Login'
             inputs:
-              containerRegistry: '$(CONTAINER_REGISTRY_SERVICE_CONNECTION)'
+              containerRegistry: "$(CONTAINER_REGISTRY_SERVICE_CONNECTION)"
               command: 'login'
 
           - template: '../../abstracts/test.yaml'

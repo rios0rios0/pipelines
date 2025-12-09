@@ -1,42 +1,37 @@
-# TODO: needs to be reviewed to use same configuration across jobs via templates or other implementation
 stages:
   - stage: 'code_check'
-    displayName: 'Code Check (Style/Quality)'
+    displayName: 'code check (style/quality)'
     condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     jobs:
       - job: 'style_isort'
-        displayName: 'Check "isort"'
+        displayName: 'style:isort'
         steps:
+          - template: '../../abstracts/pdm-python3.11.yaml'
           - script: |
-              python -m pip install pdm
-              pdm install
               pdm run isort --check-only .
             displayName: 'Run "isort" check'
 
       - job: 'style_black'
-        displayName: 'Check "black"'
+        displayName: 'style:black'
         steps:
+          - template: '../../abstracts/pdm-python3.11.yaml'
           - script: |
-              python -m pip install pdm
-              pdm install
               pdm run black --check .
             displayName: 'Run "black" check'
 
       - job: 'quality_flake8'
-        displayName: 'Check "flake8"'
+        displayName: 'quality:flake8'
         steps:
+          - template: '../../abstracts/pdm-python3.11.yaml'
           - script: |
-              python -m pip install pdm
-              pdm install
               pdm run flake8 .
             displayName: 'Run "flake8" check'
 
       - job: 'quality_mypy'
-        displayName: 'Check "mypy"'
+        displayName: 'quality:mypy'
         steps:
+          - template: '../../abstracts/pdm-python3.11.yaml'
           - script: |
-              python -m pip install pdm
-              pdm install
               pdm run type-check
             displayName: 'Run "mypy" check'
         continueOnError: true

@@ -1,0 +1,14 @@
+stages:
+  - stage: 'tests'
+    displayName: 'tests'
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    jobs:
+      - job: 'test_all'
+        displayName: 'test:all'
+        steps:
+          - template: '../../abstracts/pdm-python3.11.yaml'
+          - script: |
+              pdm tests
+            displayName: 'Run "isort" check'
+
+        continueOnError: false

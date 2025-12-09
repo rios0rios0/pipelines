@@ -50,7 +50,7 @@ steps:
 
   - task: 'PublishPipelineArtifact@1'
     inputs:
-      targetPath: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+      targetPath: "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
       artifact: 'build-output'
       publishLocation: 'pipeline'
     displayName: 'Publish Build Artifact'

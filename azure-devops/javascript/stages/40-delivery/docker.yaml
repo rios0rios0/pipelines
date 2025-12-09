@@ -17,7 +17,7 @@ stages:
       - job: 'delivery'
         displayName: 'delivery'
         variables:
-          DOCKER_CACHE_DIR: '$(Agent.TempDirectory)/docker-cache'
+          DOCKER_CACHE_DIR: "$(Agent.TempDirectory)/docker-cache"
           BUILD_ARTIFACT_NAME: 'build'
           BUILD_ARTIFACT_PATH: 'build'
         steps:

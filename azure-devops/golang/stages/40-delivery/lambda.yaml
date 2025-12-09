@@ -79,8 +79,8 @@ stages:
               - task: 'AWSShellScript@1'
                 displayName: 'Build and Package with AWS SAM (AWS Service Connection)'
                 inputs:
-                  awsCredentials: '${{ parameters.AWS_SERVICE_CONNECTION }}'
-                  regionName: '${{ parameters.AWS_REGION }}'
+                  awsCredentials: "${{ parameters.AWS_SERVICE_CONNECTION }}"
+                  regionName: "${{ parameters.AWS_REGION }}"
                   scriptType: 'inline'
                   inlineScript: |
                     set -e
@@ -143,17 +143,17 @@ stages:
           - ${{ if eq(parameters.DEPLOY_STRATEGY, 'zip') }}:
             - task: 'ArchiveFiles@2'
               inputs:
-                rootFolderOrFile: '$(LAMBDA_ARTIFACT_DIR)'
+                rootFolderOrFile: "$(LAMBDA_ARTIFACT_DIR)"
                 includeRootFolder: false
                 archiveType: 'zip'
-                archiveFile: '$(Build.ArtifactStagingDirectory)/lambda-function.zip'
+                archiveFile: "$(Build.ArtifactStagingDirectory)/lambda-function.zip"
                 replaceExistingArchive: true
               displayName: 'Create Lambda ZIP Package'
 
           - ${{ if eq(parameters.DEPLOY_STRATEGY, 'sam') }}:
             - task: 'PublishPipelineArtifact@1'
               inputs:
-                targetPath: '$(Build.SourcesDirectory)/packaged.yaml'
+                targetPath: "$(Build.SourcesDirectory)/packaged.yaml"
                 artifact: 'lambda-sam-template'
                 publishLocation: 'pipeline'
               displayName: 'Publish SAM Template Artifact'
@@ -161,7 +161,7 @@ stages:
           - ${{ if eq(parameters.DEPLOY_STRATEGY, 'zip') }}:
             - task: 'PublishPipelineArtifact@1'
               inputs:
-                targetPath: '$(Build.ArtifactStagingDirectory)/lambda-function.zip'
+                targetPath: "$(Build.ArtifactStagingDirectory)/lambda-function.zip"
                 artifact: 'lambda-function-zip'
                 publishLocation: 'pipeline'
               displayName: 'Publish Lambda ZIP Artifact'

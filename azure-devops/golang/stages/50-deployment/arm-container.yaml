@@ -35,6 +35,6 @@ stages:
               resourceGroupName: "$(resourceGroupName)"
               deploymentMode: 'Incremental'
               deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'
-              csmFile: '$(Build.SourcesDirectory)/azuredeploy.json'
-              csmParametersFile: '$(Build.ArtifactStagingDirectory)/azuredeploy.parameters.json'  
+              csmFile: "$(Build.SourcesDirectory)/azuredeploy.json"
+              csmParametersFile: "$(Build.ArtifactStagingDirectory)/azuredeploy.parameters.json"
             displayName: 'Deploy Container to Azure'

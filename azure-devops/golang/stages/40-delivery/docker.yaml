@@ -15,15 +15,15 @@ stages:
         displayName: 'delivery'
         variables:
           GOPATH: "$(Pipeline.Workspace)/.go"
-          DOCKER_CACHE_DIR: '$(Agent.TempDirectory)/docker-cache'
+          DOCKER_CACHE_DIR: "$(Agent.TempDirectory)/docker-cache"
         steps:
           - template: '../../../global/stages/40-delivery/docker.yaml'
             parameters:
               DOCKER_FILE: './Dockerfile'
-              DOCKER_CACHE_DIR: '$(DOCKER_CACHE_DIR)'
-              CONTAINER_REGISTRY_SERVER: '$(CONTAINER_REGISTRY_SERVER)'
-              CONTAINER_REGISTRY_SERVICE_CONNECTION: '$(CONTAINER_REGISTRY_SERVICE_CONNECTION)'
-              DOCKER_BUILD_ARGS: '${{ parameters.DOCKER_BUILD_ARGS }}'
-              RUN_BEFORE_BUILD: '${{ parameters.RUN_BEFORE_BUILD }}'
+              DOCKER_CACHE_DIR: "$(DOCKER_CACHE_DIR)"
+              CONTAINER_REGISTRY_SERVER: "$(CONTAINER_REGISTRY_SERVER)"
+              CONTAINER_REGISTRY_SERVICE_CONNECTION: "$(CONTAINER_REGISTRY_SERVICE_CONNECTION)"
+              DOCKER_BUILD_ARGS: ${{ parameters.DOCKER_BUILD_ARGS }}
+              RUN_BEFORE_BUILD: ${{ parameters.RUN_BEFORE_BUILD }}
 
       - template: '../../../global/stages/40-delivery/release.yaml'

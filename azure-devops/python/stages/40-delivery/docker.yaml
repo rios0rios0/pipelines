@@ -14,15 +14,15 @@ stages:
       - job: 'delivery'
         displayName: 'delivery'
         variables:
-          DOCKER_CACHE_DIR: '$(Agent.TempDirectory)/docker-cache'
+          DOCKER_CACHE_DIR: "$(Agent.TempDirectory)/docker-cache"
         steps:
           - template: '../../../global/stages/40-delivery/docker.yaml'
             parameters:
               DOCKER_FILE: '.ci/stages/40-delivery/app.Dockerfile'
-              DOCKER_CACHE_DIR: '$(DOCKER_CACHE_DIR)'
-              CONTAINER_REGISTRY_SERVER: '$(CONTAINER_REGISTRY_SERVER)'
-              CONTAINER_REGISTRY_SERVICE_CONNECTION: '$(CONTAINER_REGISTRY_SERVICE_CONNECTION)'
-              DOCKER_BUILD_ARGS: '${{ parameters.DOCKER_BUILD_ARGS }}'
-              RUN_BEFORE_BUILD: '${{ parameters.RUN_BEFORE_BUILD }}'
+              DOCKER_CACHE_DIR: "$(DOCKER_CACHE_DIR)"
+              CONTAINER_REGISTRY_SERVER: "$(CONTAINER_REGISTRY_SERVER)"
+              CONTAINER_REGISTRY_SERVICE_CONNECTION: "$(CONTAINER_REGISTRY_SERVICE_CONNECTION)"
+              DOCKER_BUILD_ARGS: "${{ parameters.DOCKER_BUILD_ARGS }}"
+              RUN_BEFORE_BUILD: "${{ parameters.RUN_BEFORE_BUILD }}"
 
       - template: '../../../global/stages/40-delivery/release.yaml'

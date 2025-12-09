@@ -15,7 +15,7 @@ jobs:
       - task: 'DownloadPipelineArtifact@2'
         inputs:
           artifactName: 'coverage'
-          targetPath: '$(Build.SourcesDirectory)'
+          targetPath: "$(Build.SourcesDirectory)"
         displayName: 'Download Coverage File'
         continueOnError: true
 

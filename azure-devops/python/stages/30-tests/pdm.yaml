@@ -6,7 +6,7 @@ stages:
       - job: 'test_all'
         displayName: 'test:all'
         steps:
-          - template: '../../abstracts/pdm-python3.11.yaml'
+          - template: '../../abstracts/pdm-python3.13.yaml'
           - script: |
               pdm tests
             displayName: 'Run "isort" check'

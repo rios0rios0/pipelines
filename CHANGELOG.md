@@ -25,6 +25,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
+- changed the lambda deployment to use env vars instead of parameters in delivery and deployment steps
 - **BREAKING CHANGE:** changed the structure on Azure DevOps to have files for each step inside each stage
 - changed the Node version from `18.19.0` to `20.18.3` on Azure DevOps modules
 - changed the OSD version to `3.2.0` due to an upgrade request on Azure DevOps modules

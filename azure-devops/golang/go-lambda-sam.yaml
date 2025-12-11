@@ -2,13 +2,7 @@ parameters:
   - name: 'S3_BUCKET'
     type: 'string'
     default: ''
-  - name: 'AWS_REGION'
-    type: 'string'
-    default: 'us-east-1'
   - name: 'S3_KEY_PREFIX'
-    type: 'string'
-    default: ''
-  - name: 'AWS_SERVICE_CONNECTION'
     type: 'string'
     default: ''
   - name: 'SAM_CONFIG_ENV'
@@ -29,11 +23,6 @@ parameters:
   - name: 'BUILD_FLAGS'
     type: 'string'
     default: "-ldflags='-w -s'"
-  - name: 'PARAMETER_OVERRIDES'
-    type: 'string'
-    default: ''
-  - name: 'STACK_NAME'
-    type: 'string'
 
 stages:
   - template: 'stages/10-code-check/go.yaml'
@@ -42,24 +31,16 @@ stages:
   - template: 'stages/35-management/go.yaml'
   - template: 'stages/40-delivery/lambda.yaml'
     parameters:
-      AWS_REGION: ${{ parameters.AWS_REGION }}
-      AWS_SERVICE_CONNECTION: ${{ parameters.AWS_SERVICE_CONNECTION }}
       LAMBDA_HANDLER: ${{ parameters.LAMBDA_HANDLER }}
       LAMBDA_RUNTIME: ${{ parameters.LAMBDA_RUNTIME }}
       GOARCH: ${{ parameters.GOARCH }}
       BUILD_FLAGS: ${{ parameters.BUILD_FLAGS }}
-      DEPLOY_STRATEGY: 'sam'
       S3_BUCKET: ${{ parameters.S3_BUCKET }}
       S3_KEY_PREFIX: ${{ parameters.S3_KEY_PREFIX }}
       RESOLVE_S3: ${{ parameters.RESOLVE_S3 }}
   - template: 'stages/50-deployment/lambda.yaml'
     parameters:
       LAMBDA_FUNCTION_NAME: ''  # Not needed for SAM, uses stack name from samconfig.toml
-      AWS_REGION: ${{ parameters.AWS_REGION }}
-      DEPLOY_STRATEGY: 'sam'
-      AWS_SERVICE_CONNECTION: ${{ parameters.AWS_SERVICE_CONNECTION }}
       SAM_CONFIG_ENV: ${{ parameters.SAM_CONFIG_ENV }}
       LAMBDA_RUNTIME: ${{ parameters.LAMBDA_RUNTIME }}
       LAMBDA_HANDLER: ${{ parameters.LAMBDA_HANDLER }}
-      PARAMETER_OVERRIDES: ${{ parameters.PARAMETER_OVERRIDES }}
-      STACK_NAME: ${{ parameters.STACK_NAME }}

@@ -11,9 +11,6 @@ parameters:
   - name: 'BUILD_FLAGS'
     type: 'string'
     default: "-ldflags='-w -s'"
-  - name: 'DEPLOY_STRATEGY'
-    type: 'string'
-    default: 'zip'
   - name: 'S3_BUCKET'
     type: 'string'
     default: ''
@@ -23,12 +20,6 @@ parameters:
   - name: 'RESOLVE_S3'
     type: 'boolean'
     default: false
-  - name: 'AWS_REGION'
-    type: 'string'
-    default: 'us-east-1'
-  - name: 'AWS_SERVICE_CONNECTION'
-    type: 'string'
-    default: ''
 
 stages:
   - stage: 'delivery'
@@ -55,115 +46,112 @@ stages:
             displayName: 'Cache for Go modules'
             continueOnError: true
 
-          - ${{ if ne(parameters.DEPLOY_STRATEGY, 'sam') }}:
-            - script: |
+          - script: |
+              set -e
+
+              echo "Building Go Lambda function..."
+              export CGO_ENABLED=0
+              export GOOS=linux
+              export GOARCH=${{ parameters.GOARCH }}
+              export BUILD_FLAGS="${{ parameters.BUILD_FLAGS }}"
+
+              mkdir -p $(LAMBDA_ARTIFACT_DIR)
+
+              # Build the Lambda handler
+              go build $BUILD_FLAGS -o $(LAMBDA_ARTIFACT_DIR)/${{ parameters.LAMBDA_HANDLER }} .
+
+              echo "Lambda binary built successfully"
+              ls -lah $(LAMBDA_ARTIFACT_DIR)/
+            displayName: 'Build Go Lambda Function'
+            condition: ne(variables['DEPLOY_STRATEGY'], 'sam')
+
+          - task: 'AWSShellScript@1'
+            displayName: 'Build and Package with AWS SAM (AWS Service Connection)'
+            condition: and(eq(variables['DEPLOY_STRATEGY'], 'sam'), ne(variables['AWS_SERVICE_CONNECTION'], ''))
+            inputs:
+              awsCredentials: "$(AWS_SERVICE_CONNECTION)"
+              regionName: "$(AWS_REGION)"
+              scriptType: 'inline'
+              inlineScript: |
                 set -e
 
-                echo "Building Go Lambda function..."
-                export CGO_ENABLED=0
-                export GOOS=linux
-                export GOARCH=${{ parameters.GOARCH }}
-                export BUILD_FLAGS="${{ parameters.BUILD_FLAGS }}"
+                echo "Building with AWS SAM..."
+                sam build
 
-                mkdir -p $(LAMBDA_ARTIFACT_DIR)
+                echo "Packaging with AWS SAM..."
+                SAM_PACKAGE_ARGS="--output-template-file packaged.yaml --region $(AWS_REGION)"
+                RESOLVE_S3=$(echo "${{ parameters.RESOLVE_S3 }}" | tr '[:upper:]' '[:lower:]')
+                echo "RESOLVE_S3 (normalized): '$RESOLVE_S3'"
 
-                # Build the Lambda handler
-                go build $BUILD_FLAGS -o $(LAMBDA_ARTIFACT_DIR)/${{ parameters.LAMBDA_HANDLER }} .
-
-                echo "Lambda binary built successfully"
-                ls -lah $(LAMBDA_ARTIFACT_DIR)/
-              displayName: 'Build Go Lambda Function'
-
-          - ${{ if eq(parameters.DEPLOY_STRATEGY, 'sam') }}:
-            - ${{ if ne(parameters.AWS_SERVICE_CONNECTION, '') }}:
-              - task: 'AWSShellScript@1'
-                displayName: 'Build and Package with AWS SAM (AWS Service Connection)'
-                inputs:
-                  awsCredentials: "${{ parameters.AWS_SERVICE_CONNECTION }}"
-                  regionName: "${{ parameters.AWS_REGION }}"
-                  scriptType: 'inline'
-                  inlineScript: |
-                    set -e
-
-                    echo "Building with AWS SAM..."
-                    sam build
-
-                    echo "Packaging with AWS SAM..."
-                    SAM_PACKAGE_ARGS="--output-template-file packaged.yaml --region ${{ parameters.AWS_REGION }}"
-                    RESOLVE_S3=$(echo "${{ parameters.RESOLVE_S3 }}" | tr '[:upper:]' '[:lower:]')
-                    echo "RESOLVE_S3 (normalized): '$RESOLVE_S3'"
-
-                    if [ -n "${{ parameters.S3_BUCKET }}" ]; then
-                      SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-bucket ${{ parameters.S3_BUCKET }}"
-                      if [ -n "${{ parameters.S3_KEY_PREFIX }}" ]; then
-                        SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-prefix ${{ parameters.S3_KEY_PREFIX }}"
-                      fi
-                      sam package $SAM_PACKAGE_ARGS
-                    elif [ "$RESOLVE_S3" = "true" ]; then
-                      sam package $SAM_PACKAGE_ARGS --resolve-s3
-                    else
-                      echo "ERROR: Provide S3_BUCKET or set RESOLVE_S3=true to enable --resolve-s3"
-                      exit 1
-                    fi
-
-            - ${{ if eq(parameters.AWS_SERVICE_CONNECTION, '') }}:
-              - script: |
-                  set -e
-
-                  # Validate AWS credentials are set via environment variables
-                  if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-                    echo "ERROR: AWS credentials not found. Configure AWS_SERVICE_CONNECTION or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY"
-                    exit 1
+                if [ -n "${{ parameters.S3_BUCKET }}" ]; then
+                  SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-bucket ${{ parameters.S3_BUCKET }}"
+                  if [ -n "${{ parameters.S3_KEY_PREFIX }}" ]; then
+                    SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-prefix ${{ parameters.S3_KEY_PREFIX }}"
                   fi
+                  sam package $SAM_PACKAGE_ARGS
+                elif [ "$RESOLVE_S3" = "true" ]; then
+                  sam package $SAM_PACKAGE_ARGS --resolve-s3
+                else
+                  echo "ERROR: Provide S3_BUCKET or set RESOLVE_S3=true to enable --resolve-s3"
+                  exit 1
+                fi
 
-                  export AWS_REGION="${{ parameters.AWS_REGION }}"
+          - script: |
+              set -e
 
-                  echo "Building with AWS SAM..."
-                  sam build
+              # Validate AWS credentials are set via environment variables
+              if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+                echo "ERROR: AWS credentials not found. Configure AWS_SERVICE_CONNECTION or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY"
+                exit 1
+              fi
 
-                  echo "Packaging with AWS SAM..."
-                  SAM_PACKAGE_ARGS="--output-template-file packaged.yaml --region ${{ parameters.AWS_REGION }}"
-                  RESOLVE_S3=$(echo "${{ parameters.RESOLVE_S3 }}" | tr '[:upper:]' '[:lower:]')
-                  echo "RESOLVE_S3 (normalized): '$RESOLVE_S3'"
+              echo "Building with AWS SAM..."
+              sam build
 
-                  if [ -n "${{ parameters.S3_BUCKET }}" ]; then
-                    SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-bucket ${{ parameters.S3_BUCKET }}"
-                    if [ -n "${{ parameters.S3_KEY_PREFIX }}" ]; then
-                      SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-prefix ${{ parameters.S3_KEY_PREFIX }}"
-                    fi
-                    sam package $SAM_PACKAGE_ARGS
-                  elif [ "$RESOLVE_S3" = "true" ]; then
-                    sam package $SAM_PACKAGE_ARGS --resolve-s3
-                  else
-                    echo "ERROR: Provide S3_BUCKET or set RESOLVE_S3=true to enable --resolve-s3"
-                    exit 1
-                  fi
-                displayName: 'Build and Package with AWS SAM'
+              echo "Packaging with AWS SAM..."
+              SAM_PACKAGE_ARGS="--output-template-file packaged.yaml --region $(AWS_REGION)"
+              RESOLVE_S3=$(echo "${{ parameters.RESOLVE_S3 }}" | tr '[:upper:]' '[:lower:]')
+              echo "RESOLVE_S3 (normalized): '$RESOLVE_S3'"
 
-          - ${{ if eq(parameters.DEPLOY_STRATEGY, 'zip') }}:
-            - task: 'ArchiveFiles@2'
-              inputs:
-                rootFolderOrFile: "$(LAMBDA_ARTIFACT_DIR)"
-                includeRootFolder: false
-                archiveType: 'zip'
-                archiveFile: "$(Build.ArtifactStagingDirectory)/lambda-function.zip"
-                replaceExistingArchive: true
-              displayName: 'Create Lambda ZIP Package'
+              if [ -n "${{ parameters.S3_BUCKET }}" ]; then
+                SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-bucket ${{ parameters.S3_BUCKET }}"
+                if [ -n "${{ parameters.S3_KEY_PREFIX }}" ]; then
+                  SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-prefix ${{ parameters.S3_KEY_PREFIX }}"
+                fi
+                sam package $SAM_PACKAGE_ARGS
+              elif [ "$RESOLVE_S3" = "true" ]; then
+                sam package $SAM_PACKAGE_ARGS --resolve-s3
+              else
+                echo "ERROR: Provide S3_BUCKET or set RESOLVE_S3=true to enable --resolve-s3"
+                exit 1
+              fi
+            displayName: 'Build and Package with AWS SAM'
+            condition: and(eq(variables['DEPLOY_STRATEGY'], 'sam'), eq(variables['AWS_SERVICE_CONNECTION'], ''))
 
-          - ${{ if eq(parameters.DEPLOY_STRATEGY, 'sam') }}:
-            - task: 'PublishPipelineArtifact@1'
-              inputs:
-                targetPath: "$(Build.SourcesDirectory)/packaged.yaml"
-                artifact: 'lambda-sam-template'
-                publishLocation: 'pipeline'
-              displayName: 'Publish SAM Template Artifact'
+          - task: 'ArchiveFiles@2'
+            inputs:
+              rootFolderOrFile: "$(LAMBDA_ARTIFACT_DIR)"
+              includeRootFolder: false
+              archiveType: 'zip'
+              archiveFile: "$(Build.ArtifactStagingDirectory)/lambda-function.zip"
+              replaceExistingArchive: true
+            displayName: 'Create Lambda ZIP Package'
+            condition: eq(variables['DEPLOY_STRATEGY'], 'zip')
 
-          - ${{ if eq(parameters.DEPLOY_STRATEGY, 'zip') }}:
-            - task: 'PublishPipelineArtifact@1'
-              inputs:
-                targetPath: "$(Build.ArtifactStagingDirectory)/lambda-function.zip"
-                artifact: 'lambda-function-zip'
-                publishLocation: 'pipeline'
-              displayName: 'Publish Lambda ZIP Artifact'
+          - task: 'PublishPipelineArtifact@1'
+            inputs:
+              targetPath: "$(Build.SourcesDirectory)/packaged.yaml"
+              artifact: 'lambda-sam-template'
+              publishLocation: 'pipeline'
+            displayName: 'Publish SAM Template Artifact'
+            condition: eq(variables['DEPLOY_STRATEGY'], 'sam')
+
+          - task: 'PublishPipelineArtifact@1'
+            inputs:
+              targetPath: "$(Build.ArtifactStagingDirectory)/lambda-function.zip"
+              artifact: 'lambda-function-zip'
+              publishLocation: 'pipeline'
+            displayName: 'Publish Lambda ZIP Artifact'
+            condition: eq(variables['DEPLOY_STRATEGY'], 'zip')
 
       - template: '../../../global/stages/40-delivery/release.yaml'

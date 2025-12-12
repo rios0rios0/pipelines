@@ -8,7 +8,7 @@ stages:
         steps:
           - template: '../../abstracts/pdm-python3.13.yaml'
           - script: |
-              pdm tests
-            displayName: 'Run "isort" check'
+              pdm run test
+            displayName: 'Run Tests'
 
         continueOnError: false

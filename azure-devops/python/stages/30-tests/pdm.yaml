@@ -11,4 +11,21 @@ stages:
               pdm run test
             displayName: 'Run Tests'
 
+          - task: 'PublishTestResults@2'
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: 'build/reports/junit.xml'
+            displayName: 'Publish JUnit XML Results'
+
+          - task: 'PublishCodeCoverageResults@2'
+            inputs:
+              summaryFileLocation: 'build/reports/cobertura.xml'
+            displayName: 'Publish Cobertura XML Results'
+
+          - task: 'PublishPipelineArtifact@1'
+            inputs:
+              artifactName: 'coverage'
+              targetPath: 'build/reports'
+            displayName: 'Publish Coverage Files'
+
         continueOnError: false

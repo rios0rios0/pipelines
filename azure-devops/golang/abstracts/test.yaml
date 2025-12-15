@@ -8,15 +8,15 @@ steps:
     inputs:
       testResultsFormat: 'JUnit'
       testResultsFiles: '**/junit.xml'
-    displayName: 'Publish Test Results'
+    displayName: 'Publish JUnit XML Results'
 
   - task: 'PublishCodeCoverageResults@2'
     inputs:
       summaryFileLocation: 'cobertura.xml'
-    displayName: 'Publish Code Coverage Results'
+    displayName: 'Publish Cobertura XML Results'
 
   - task: 'PublishPipelineArtifact@1'
     inputs:
+      artifactName: 'coverage'
       targetPath: "$(System.DefaultWorkingDirectory)/coverage.txt"
-      artifact: 'coverage'
-    displayName: 'Publish Coverage File'
+    displayName: 'Publish Coverage Files'

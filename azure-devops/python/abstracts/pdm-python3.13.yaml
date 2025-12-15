@@ -10,6 +10,7 @@ steps:
     inputs:
       versionSpec: '3.13'
       architecture: 'x64'
+    displayName: 'Use Python 3.13'
 
   - script: |
       python -m pip install pdm

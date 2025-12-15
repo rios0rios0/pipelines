@@ -12,9 +12,8 @@ jobs:
 
       - task: 'PublishPipelineArtifact@1'
         inputs:
+          artifactName: 'horusec'
           targetPath: 'build/reports'
-          artifact: 'HorusecReport'
-          publishLocation: 'pipeline'
 
   - job: 'sast_semgrep'
     displayName: 'sast:semgrep'
@@ -25,9 +24,8 @@ jobs:
 
       - task: 'PublishPipelineArtifact@1'
         inputs:
+          artifactName: 'semgrep'
           targetPath: 'build/reports'
-          artifact: 'SemgrepReport'
-          publishLocation: 'pipeline'
 
   - job: 'sast_gitleaks'
     displayName: 'sast:gitleaks'
@@ -42,6 +40,5 @@ jobs:
 
       - task: 'PublishPipelineArtifact@1'
         inputs:
+          artifactName: 'gitleaks'
           targetPath: 'build/reports'
-          artifact: 'GitLeaksReport'
-          publishLocation: 'pipeline'

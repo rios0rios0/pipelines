@@ -140,17 +140,15 @@ stages:
 
           - task: 'PublishPipelineArtifact@1'
             inputs:
+              artifactName: 'lambda-sam-template'
               targetPath: "$(Build.SourcesDirectory)/packaged.yaml"
-              artifact: 'lambda-sam-template'
-              publishLocation: 'pipeline'
             displayName: 'Publish SAM Template Artifact'
             condition: eq(variables['DEPLOY_STRATEGY'], 'sam')
 
           - task: 'PublishPipelineArtifact@1'
             inputs:
+              artifactName: 'lambda-function-zip'
               targetPath: "$(Build.ArtifactStagingDirectory)/lambda-function.zip"
-              artifact: 'lambda-function-zip'
-              publishLocation: 'pipeline'
             displayName: 'Publish Lambda ZIP Artifact'
             condition: eq(variables['DEPLOY_STRATEGY'], 'zip')
 

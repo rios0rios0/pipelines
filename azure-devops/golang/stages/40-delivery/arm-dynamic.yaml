@@ -22,16 +22,14 @@ stages:
 
           - task: 'PublishPipelineArtifact@1'
             inputs:
-              targetPath: "$(Build.SourcesDirectory)/build/templates/azuredeploy.json"
               artifactName: 'AzureDeployFile'
-              publishLocation: 'pipeline'
+              targetPath: "$(Build.SourcesDirectory)/build/templates/azuredeploy.json"
             displayName: 'Publish azuredeploy.json Artifact'
 
           - task: 'PublishPipelineArtifact@1'
             inputs:
-              targetPath: "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
               artifactName: 'BuildArtifact'
-              publishLocation: 'pipeline'
+              targetPath: "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip"
             displayName: 'Publish ZIP Artifact'
 
       - template: '../../../global/stages/40-delivery/release.yaml'

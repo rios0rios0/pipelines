@@ -28,26 +28,26 @@ steps:
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
     displayName: 'Run After'
 
-  - task: 'PublishPipelineArtifact@1'
-    inputs:
-      targetPath: "${{ parameters.WORKING_DIRECTORY }}/${{ parameters.JUNIT_RELATIVE_PATH }}"
-      artifact: 'junit-coverage'
-      publishLocation: 'pipeline'
-
   - task: 'PublishTestResults@2'
     inputs:
       testResultsFormat: 'JUnit'
       testResultsFiles: "${{ parameters.WORKING_DIRECTORY }}/${{ parameters.JUNIT_RELATIVE_PATH }}"
-    displayName: 'Publish Test Results'
-
-  - task: 'PublishPipelineArtifact@1'
-    inputs:
-      targetPath: "${{ parameters.WORKING_DIRECTORY }}/${{ parameters.COBERTURA_RELATIVE_PATH }}"
-      artifact: 'cobertura-coverage'
-      publishLocation: 'pipeline'
+    displayName: 'Publish JUnit XML Results'
 
   - task: 'PublishCodeCoverageResults@2'
     inputs:
       summaryFileLocation: "${{ parameters.WORKING_DIRECTORY }}/${{ parameters.COBERTURA_RELATIVE_PATH }}"
       failIfCoverageEmpty: true
-    displayName: 'Publish Code Coverage Results'
+    displayName: 'Publish Cobertura XML Results'
+
+  - task: 'PublishPipelineArtifact@1'
+    inputs:
+      artifactName: 'coverage-junit'
+      targetPath: "${{ parameters.WORKING_DIRECTORY }}/${{ parameters.JUNIT_RELATIVE_PATH }}"
+    displayName: 'Publish JUnit File'
+
+  - task: 'PublishPipelineArtifact@1'
+    inputs:
+      artifactName: 'coverage-cobertura'
+      targetPath: "${{ parameters.WORKING_DIRECTORY }}/${{ parameters.COBERTURA_RELATIVE_PATH }}"
+    displayName: 'Publish Cobertura File'

@@ -2,23 +2,26 @@ name: 'Docker Delivery Step'
 description: 'Build and push Docker image to GHCR'
 inputs:
     github_token:
+      type: 'string'
       required: true
-      type: string
     tags:
+      type: 'string'
       required: true
-      type: string
 
 runs:
   using: 'composite'
   steps:
-    - uses: 'docker/login-action@v3'
+    - name: 'Login to Registry'
+      uses: 'docker/login-action@v3'
       with:
         registry: 'ghcr.io'
         username: '${{ github.actor }}'
         password: '${{ inputs.github_token }}'
-    - uses: 'docker/build-push-action@v5'
+
+    - name: 'Build and Push'
+      uses: 'docker/build-push-action@v6'
       with:
-        file: '.ci/stages/40-delivery/Dockerfile'
+        file: '.ci/stages/40-delivery/app.Dockerfile'
         context: '.'
         push: true
         tags: '${{ inputs.tags }}'

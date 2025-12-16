@@ -15,13 +15,11 @@ runs:
       shell: 'bash'
 
     - name: 'Build Binary'
-      run: |
-        make build
+      run: make build
       shell: 'bash'
 
     - name: 'Compress Binary'
-      run: |
-        zip -9 "bin/$PACKAGE_NAME.zip" ${{ inputs.binary_name }}
+      run: cd bin && zip -9 "$PACKAGE_NAME.zip" "${{ inputs.binary_name }}"
       shell: 'bash'
 
     - name: 'Upload Binary'

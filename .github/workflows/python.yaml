@@ -134,15 +134,15 @@ jobs:
 
 
 # 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations
-# 2- the recommended events to trigger this workflow and permissions are:
-#on:
-#  push:
-#    branches:
-#      - 'main'
-#    tags:
-#      - '*'
-#  pull_request:
-#    branches:
-#      - 'main'
-#  workflow_dispatch:
+# 2 - the recommended events to trigger this workflow and permissions are:
+#   on:
+#     push:
+#       branches:
+#         - 'main'
+#       tags:
+#         - '*'
+#     pull_request:
+#       branches:
+#         - 'main'
+#     workflow_dispatch:
 #

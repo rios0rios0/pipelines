@@ -17,14 +17,14 @@ runs:
         echo "PACKAGE_NAME=$(echo '${{ inputs.binary_name }}-${{ github.ref }}' | sed 's/refs\/tags\///')" >> $GITHUB_ENV
       shell: 'bash'
 
-    - run: |
+    - name: 'Build Binary'
+      run: |
         make build
-        strip -s bin/${{ inputs.binary_name }}
       shell: 'bash'
 
-    - run: |
-        cd bin
-        zip -9 $PACKAGE_NAME.zip ${{ inputs.binary_name }}
+    - name: 'Compress Binary'
+      run: |
+        zip -9 "bin/$PACKAGE_NAME.zip" ${{ inputs.binary_name }}
       shell: 'bash'
 
     - name: 'Upload Binary'

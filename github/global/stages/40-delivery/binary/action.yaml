@@ -1,11 +1,8 @@
-on:
-  workflow_call:
-
 inputs:
   binary_name:
     type: 'string'
-    description: 'Binary name to be used as default source'
     required: true
+    description: 'Binary name to be used as default source'
 
 runs:
   using: 'composite'

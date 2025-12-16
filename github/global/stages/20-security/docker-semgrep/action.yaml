@@ -1,6 +1,3 @@
-on:
-  workflow_call:
-
 inputs:
   semgrep_lang:
     description: 'Sempgrep language to be used as default source'

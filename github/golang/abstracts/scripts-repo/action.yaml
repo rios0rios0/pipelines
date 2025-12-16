@@ -8,7 +8,9 @@ runs:
         echo "SCRIPTS_DIR=${{ github.workspace }}/pipelines_$(date +%Y%m%d%H%M%S)" >> $GITHUB_ENV
         echo "SCRIPTS_REPO=https://github.com/rios0rios0/pipelines.git" >> $GITHUB_ENV
       shell: 'bash'
-    - uses: 'actions/checkout@v4'
+
+    - name: 'Checkout scripts'
+      uses: 'actions/checkout@v6'
       with:
         repository: 'rios0rios0/pipelines'
         path: '${{ env.SCRIPTS_DIR }}'

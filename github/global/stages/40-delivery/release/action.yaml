@@ -1,7 +1,7 @@
 runs:
   using: 'composite'
   steps:
-    - id: 'create_release'
+    - name: 'Create a Release'
       uses: 'softprops/action-gh-release@v2'
       with:
         draft: false

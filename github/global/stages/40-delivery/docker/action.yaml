@@ -1,12 +1,10 @@
-name: 'Docker Delivery Step'
-description: 'Build and push Docker image to GHCR'
 inputs:
-    github_token:
-      type: 'string'
-      required: true
-    tags:
-      type: 'string'
-      required: true
+  github_token:
+    type: 'string'
+    required: true
+  tags:
+    type: 'string'
+    required: true
 
 runs:
   using: 'composite'

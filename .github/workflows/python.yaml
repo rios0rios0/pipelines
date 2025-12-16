@@ -11,7 +11,9 @@ jobs:
     container:
       image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
     steps:
-      - uses: 'actions/checkout@v4'
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+
       - run: |
           pdm install -v
           pdm run isort --check-only .
@@ -23,7 +25,9 @@ jobs:
     container:
       image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
     steps:
-      - uses: 'actions/checkout@v4'
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+
       - run: |
           pdm install -v
           pdm run black --check .
@@ -35,7 +39,9 @@ jobs:
     container:
       image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
     steps:
-      - uses: 'actions/checkout@v4'
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+
       - run: |
           pdm install -v
           pdm run flake8 .
@@ -47,7 +53,9 @@ jobs:
     container:
       image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
     steps:
-      - uses: 'actions/checkout@v4'
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+
       - run: |
           pdm install -v
           pdm run type-check
@@ -88,7 +96,9 @@ jobs:
     container:
       image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
     steps:
-      - uses: 'actions/checkout@v4'
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+
       - run: |
           pdm install -v
           pdm run safety-check
@@ -103,7 +113,9 @@ jobs:
     container:
       image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bullseye'
     steps:
-      - uses: 'actions/checkout@v3'
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+
       - run: |
           pdm install -v
           pdm run test

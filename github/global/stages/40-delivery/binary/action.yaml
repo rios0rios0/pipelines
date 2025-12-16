@@ -34,9 +34,6 @@ runs:
         name: '${{ inputs.binary_name }}'
 
     - name: 'Upload to Release'
-      uses: 'actions/upload-release-asset@v1'
+      uses: 'softprops/action-gh-release@v2'
       with:
-        upload_url: '${{ steps.create_release.outputs.upload_url }}'
-        asset_path: '${{ env.PACKAGE_NAME }}.zip'
-        asset_name: '${{ env.PACKAGE_NAME }}.zip'
-        asset_content_type: 'application/zip'
+        files: ${{ env.PACKAGE_NAME }}.zip

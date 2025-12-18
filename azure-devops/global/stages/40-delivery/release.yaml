@@ -1,7 +1,14 @@
+parameters:
+  - name: 'VERSION_PREFIX'
+    type: 'string'
+    default: ''
+
 jobs:
   - job: 'release'
     displayName: 'release'
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), or(contains(variables['Build.SourceVersionMessage'], 'origin/chore/bump-'), contains(variables['Build.SourceVersionMessage'], 'chore(bump)')))
+    variables:
+      VERSION_PREFIX: ${{ parameters.VERSION_PREFIX }}
     steps:
       - script: |
           set -eux
@@ -19,7 +26,7 @@ jobs:
             fi
 
             DATA="{
-              \"name\": \"$VERSION\",
+              \"name\": \"$(VERSION_PREFIX)$VERSION\",
               \"taggedObject\": {
                 \"objectId\": \"$(Build.SourceVersion)\"
               },

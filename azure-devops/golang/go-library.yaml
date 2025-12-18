@@ -1,0 +1,13 @@
+stages:
+  - template: 'stages/10-code-check/go.yaml'
+  - template: 'stages/20-security/go.yaml'
+  - template: 'stages/30-tests/go.yaml'
+  - template: 'stages/35-management/go.yaml'
+  - stage: 'delivery'
+    displayName: 'delivery'
+    condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
+    jobs:
+      - template: '../global/stages/40-delivery/release.yaml'
+      - template: '../global/stages/40-delivery/release.yaml'
+        parameters:
+          VERSION_PREFIX: 'v'

@@ -1,0 +1,53 @@
+.docker-retag:
+  image: 'docker:latest'
+  services:
+    - 'docker:dind'
+  variables:
+    REGISTRY_PATH: "$CI_REGISTRY_IMAGE"
+    IMAGE_SUFFIX: ''
+    SOURCE_TAG: 'latest'
+    TARGET_TAG: "$CI_COMMIT_TAG"
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - |
+      set -e
+      IMAGE_NAME="${REGISTRY_PATH}${IMAGE_SUFFIX}"
+      
+      echo "Pulling ${IMAGE_NAME}:${SOURCE_TAG}..."
+      docker pull "${IMAGE_NAME}:${SOURCE_TAG}"
+      
+      # Verify the image was pulled successfully
+      if ! docker image inspect "${IMAGE_NAME}:${SOURCE_TAG}" > /dev/null 2>&1; then
+        echo "Error: Failed to pull ${IMAGE_NAME}:${SOURCE_TAG}"
+        echo "Please ensure the source image exists before creating a release tag."
+        exit 1
+      fi
+      
+      # Get and display the image digest
+      DIGEST=$(docker image inspect "${IMAGE_NAME}:${SOURCE_TAG}" --format='{{index .RepoDigests 0}}' || echo "digest unavailable")
+      echo "Source image digest: ${DIGEST}"
+      
+      echo "Tagging ${IMAGE_NAME}:${SOURCE_TAG} as ${IMAGE_NAME}:${TARGET_TAG}..."
+      docker tag "${IMAGE_NAME}:${SOURCE_TAG}" "${IMAGE_NAME}:${TARGET_TAG}"
+      
+      echo "Pushing ${IMAGE_NAME}:${TARGET_TAG}..."
+      docker push "${IMAGE_NAME}:${TARGET_TAG}"
+      
+      # Verify the pushed image has the same digest
+      PUSHED_DIGEST=$(docker image inspect "${IMAGE_NAME}:${TARGET_TAG}" --format='{{index .RepoDigests 0}}' || echo "digest unavailable")
+      echo "Pushed image digest: ${PUSHED_DIGEST}"
+      
+      if [ "$DIGEST" != "$PUSHED_DIGEST" ] && [ "$DIGEST" != "digest unavailable" ]; then
+        echo "Warning: Digest mismatch detected"
+        echo "  Source: $DIGEST"
+        echo "  Pushed: $PUSHED_DIGEST"
+      else
+        echo "✓ Successfully retagged image"
+      fi
+
+delivery:prod:
+  extends: '.docker-retag'
+  stage: 'delivery'
+  rules:
+    - if: "$CI_COMMIT_TAG"

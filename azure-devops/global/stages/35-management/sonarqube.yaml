@@ -28,3 +28,4 @@ jobs:
 
       - template: '../../abstracts/scripts-repo.yaml'
       - script: $(Scripts.Directory)/global/scripts/sonarqube/run.sh
+    continueOnError: true

@@ -10,4 +10,4 @@ stages:
       - template: '../global/stages/40-delivery/release.yaml'
       - template: '../global/stages/40-delivery/release.yaml'
         parameters:
-          VERSION_PREFIX: 'v'
+          TAG_PREFIXES: ['', 'v']

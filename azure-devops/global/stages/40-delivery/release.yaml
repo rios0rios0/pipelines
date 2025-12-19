@@ -1,14 +1,13 @@
 parameters:
-  - name: 'VERSION_PREFIX'
-    type: 'string'
-    default: ''
+  - name: 'TAG_PREFIXES'
+    type: 'object'
+    default:
+      - ''
 
 jobs:
   - job: 'release'
     displayName: 'release'
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), or(contains(variables['Build.SourceVersionMessage'], 'origin/chore/bump-'), contains(variables['Build.SourceVersionMessage'], 'chore(bump)')))
-    variables:
-      VERSION_PREFIX: ${{ parameters.VERSION_PREFIX }}
     steps:
       - script: |
           set -eux
@@ -18,6 +17,22 @@ jobs:
 
           if echo -n "$COMMIT_MESSAGE" | grep -Eq "$REGEX"; then
             VERSION=$(echo "$COMMIT_MESSAGE" | sed -En "s/$REGEX/\3\4/p" | head -n 1)
+            echo "##vso[task.setvariable variable=RELEASE_VERSION]$VERSION"
+          else
+            echo "$(date "+%Y-%m-%d %H:%M:%S") - Commit is not a bump, not creating a release..."
+            echo "##vso[task.setvariable variable=SKIP_RELEASE]true"
+          fi
+        displayName: 'Extract Release Version'
+
+      - ${{ each prefix in parameters.TAG_PREFIXES }}:
+        - script: |
+            set -eux
+
+            # only run if extraction found a version
+            if [ "${SKIP_RELEASE:-}" = "true" ]; then
+              echo "Skipping tag creation for prefix '${VERSION_PREFIX:-}' because no bump commit was detected."
+              exit 0
+            fi
 
             RELEASE_NOTES=""
             if [ -f CHANGELOG.md ]; then
@@ -26,7 +41,7 @@ jobs:
             fi
 
             DATA="{
-              \"name\": \"$(VERSION_PREFIX)$VERSION\",
+              \"name\": \"${VERSION_PREFIX}${RELEASE_VERSION}\",
               \"taggedObject\": {
                 \"objectId\": \"$(Build.SourceVersion)\"
               },
@@ -37,6 +52,6 @@ jobs:
                  --header "Authorization: Bearer $(System.AccessToken)" \
                  --header "Content-Type: application/json" \
                  --data "$DATA"
-          else
-              echo "$(date "+%Y-%m-%d %H:%M:%S") - Commit is not a bump, not creating a release..."
-          fi
+          displayName: "Create Tag w/ Prefix '${{ prefix }}'"
+          env:
+            VERSION_PREFIX: "${{ prefix }}"

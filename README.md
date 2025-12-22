@@ -17,6 +17,8 @@ Choose your platform and language:
 
 - [Supported Platforms & Languages](#supported-platforms--languages)
 - [Project Structure](#project-structure)
+- [Pipeline Architecture](#pipeline-architecture)
+- [Optimized Docker Image Tagging](#-optimized-docker-image-tagging)
 - [Platform Usage](#platform-usage)
 - [Available Tools & Scripts](#available-tools--scripts)
 - [Container Images](#container-images)
@@ -96,6 +98,39 @@ Each platform follows a consistent **5-stage pipeline architecture**:
 3. **🧪 Tests** - Unit tests, integration tests, coverage reporting
 4. **📊 Management** - Dependency tracking, SBOM generation
 5. **🚀 Delivery** - Build artifacts, container images, deployments
+
+### 🚢 Optimized Docker Image Tagging
+
+Our Docker pipelines use an optimized approach to reduce build time and ensure consistency:
+
+#### How It Works
+
+- **On `main` branch push**: Build the Docker image and push it with the `:latest` tag
+- **On tag push** (e.g., `v1.0.0`): Pull the existing `:latest` image, retag it with the release tag, and push
+
+#### Benefits
+
+✅ **Faster releases** - Tag releases complete in under 2 minutes (vs 5-30 minutes for full builds)  
+✅ **Lower CI costs** - No redundant builds for identical code  
+✅ **Guaranteed consistency** - Release tags point to the exact same image as `:latest`  
+✅ **Digest verification** - Built-in checks ensure image integrity  
+✅ **Multi-arch support** - Works with multi-platform images (amd64, arm64)
+
+#### Implementation Details
+
+**GitHub Actions**: Uses the `docker-retag` action to pull, tag, and push images  
+**GitLab CI**: Separate `delivery:qa` (build) and `delivery:prod` (retag) jobs  
+**Azure DevOps**: Split into `delivery_build` and `delivery_retag` jobs
+
+#### Example Flow
+
+```
+1. Push to main → Build image → Push as :latest
+2. Create tag v1.0.0 → Pull :latest → Tag as :v1.0.0 → Push
+3. Result: Both :latest and :v1.0.0 have identical digest
+```
+
+**Note**: Ensure the `:latest` image exists before creating release tags. The pipeline will fail with a clear error message if the source image is missing.
 
 ## 💻 Platform Usage
 

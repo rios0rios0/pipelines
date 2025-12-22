@@ -11,8 +11,9 @@ stages:
     displayName: 'delivery'
     condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
     jobs:
-      - job: 'delivery'
-        displayName: 'delivery'
+      - job: 'delivery_build'
+        displayName: 'delivery > build'
+        condition: startsWith(variables['Build.SourceBranch'], 'refs/heads/main')
         variables:
           DOCKER_CACHE_DIR: "$(Agent.TempDirectory)/docker-cache"
         steps:
@@ -24,5 +25,16 @@ stages:
               CONTAINER_REGISTRY_SERVICE_CONNECTION: "$(CONTAINER_REGISTRY_SERVICE_CONNECTION)"
               DOCKER_BUILD_ARGS: "${{ parameters.DOCKER_BUILD_ARGS }}"
               RUN_BEFORE_BUILD: "${{ parameters.RUN_BEFORE_BUILD }}"
+
+      - job: 'delivery_retag'
+        displayName: 'delivery > retag'
+        condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/')
+        steps:
+          - template: '../../../global/stages/40-delivery/docker-retag.yaml'
+            parameters:
+              CONTAINER_REGISTRY_SERVER: "$(CONTAINER_REGISTRY_SERVER)"
+              CONTAINER_REGISTRY_SERVICE_CONNECTION: "$(CONTAINER_REGISTRY_SERVICE_CONNECTION)"
+              SOURCE_TAG: 'latest'
+              TARGET_TAG: '$(Build.SourceBranchName)'
 
       - template: '../../../global/stages/40-delivery/release.yaml'

@@ -39,6 +39,7 @@ jobs:
     name: 'delivery > docker'
     runs-on: 'ubuntu-latest'
     needs: [ 'python-build' ]
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
       - name: 'Checkout code'
         uses: 'actions/checkout@v6'
@@ -54,6 +55,16 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/docker@fix/github-docker'
         with:
             github_token: ${{ secrets.GITHUB_TOKEN }}
-            tags: |
-              ghcr.io/${{ github.repository }}:latest
-              ghcr.io/${{ github.repository }}:${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}
+            tags: ghcr.io/${{ github.repository }}:latest
+
+  # fourth stage - retag :latest as release tag on tag push
+  delivery-docker-retag:
+    name: 'delivery > docker retag'
+    runs-on: 'ubuntu-latest'
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/docker-retag@main'
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          source_tag: 'latest'
+          target_tag: ${{ github.ref_name }}

@@ -23,6 +23,9 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added complete test validation suite with `test-go-validation.sh` script
 - added optional `RESOLVE_S3` flag to Azure DevOps Go SAM delivery to support bucket auto resolving
 - added support for building GoLang version `1.25`
+- added optimized Docker image retagging for all platforms (GitHub Actions, GitLab CI, Azure DevOps)
+- added `docker-retag` action/template for efficient image tagging without rebuilds
+- added digest verification in Docker retag operations to ensure image integrity
 
 ### Changed
 
@@ -34,6 +37,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - updated GoLang version to `1.24.5` on Azure DevOps modules
 - updated GoLang version to `1.25.0` on all pipelines and modules
 - updated `CONTRIBUTING.md` and `copilot-instructions.md` with mandatory testing requirements
+- changed Docker delivery pipelines to retag existing `:latest` images on tag push instead of rebuilding
+- split Docker delivery into separate jobs for build (main branch) and retag (tag push) across all platforms
 
 ### Fixed
 
@@ -46,6 +51,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed the cache task in `azure-devops/global/stages/40-delivery/docker.yaml` to create the Buildx cache
 - fixed untested packages now appear as 0% covered instead of being excluded from coverage reports
 - fixed workflow and delivery for GitHub Python Docker
+- fixed redundant Docker builds on tag push reducing CI time and costs
 
 ### Removed
 

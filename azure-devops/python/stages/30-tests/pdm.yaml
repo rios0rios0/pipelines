@@ -6,7 +6,7 @@ stages:
       - job: 'test_all'
         displayName: 'test:all'
         steps:
-          - template: '../../abstracts/pdm-python3.13.yaml'
+          - template: '../../abstracts/pdm-python3.14.yaml'
           - script: |
               pdm run test
             displayName: 'Run Tests'

@@ -13,6 +13,8 @@ jobs:
           set -eux
 
           COMMIT_MESSAGE="$(git log -1 --pretty=%B)"
+          # Azure DevOps format: "Merge branch 'chore/bump-X.X.X'"
+          # Conventional commit format: "chore(bump): bumped version to X.X.X"
           REGEX="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)'.*$|.*chore\(bump\):.*version to ([0-9]+\.[0-9]+\.[0-9]+).*"
 
           if echo -n "$COMMIT_MESSAGE" | grep -Eq "$REGEX"; then

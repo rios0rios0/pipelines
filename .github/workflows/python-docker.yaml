@@ -21,10 +21,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install build
 
-      - name: Build wheel
-        id: build-wheel
-        run: |
-          python -m build
+      - id: 'build-wheel'
+        name: 'Build wheel'
+        run: python -m build
 
       - run: ls -la dist
 
@@ -53,7 +52,7 @@ jobs:
 
       - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/docker@fix/github-docker'
         with:
-            github_token: ${{ secrets.GITHUB_TOKEN }}
-            tags: |
-              ghcr.io/${{ github.repository }}:latest
-              ghcr.io/${{ github.repository }}:${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}

@@ -6,7 +6,7 @@ stages:
       - job: 'style_isort'
         displayName: 'style:isort'
         steps:
-          - template: '../../abstracts/pdm-python3.13.yaml'
+          - template: '../../abstracts/pdm-python3.14.yaml'
           - script: |
               pdm run isort --check-only .
             displayName: 'Run "isort" check'
@@ -14,7 +14,7 @@ stages:
       - job: 'style_black'
         displayName: 'style:black'
         steps:
-          - template: '../../abstracts/pdm-python3.13.yaml'
+          - template: '../../abstracts/pdm-python3.14.yaml'
           - script: |
               pdm run black --check .
             displayName: 'Run "black" check'
@@ -22,7 +22,7 @@ stages:
       - job: 'quality_flake8'
         displayName: 'quality:flake8'
         steps:
-          - template: '../../abstracts/pdm-python3.13.yaml'
+          - template: '../../abstracts/pdm-python3.14.yaml'
           - script: |
               pdm run flake8 .
             displayName: 'Run "flake8" check'
@@ -30,7 +30,7 @@ stages:
       - job: 'quality_mypy'
         displayName: 'quality:mypy'
         steps:
-          - template: '../../abstracts/pdm-python3.13.yaml'
+          - template: '../../abstracts/pdm-python3.14.yaml'
           - script: |
               pdm run type-check
             displayName: 'Run "mypy" check'

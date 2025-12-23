@@ -1,8 +1,41 @@
 runs:
   using: 'composite'
   steps:
-    - name: 'Create a Release'
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - id: 'extract'
+      name: 'Extract Release Version'
+      shell: 'bash'
+      run: |
+        set -eu
+
+        COMMIT_MESSAGE="$(git log -1 --pretty=%B)"
+        # GitHub PR merge format: "Merge pull request #XX from repository/chore/bump-X.X.X"
+        # Conventional commit format: "chore(bump): bumped version to X.X.X"
+
+        VERSION=""
+
+        # Try GitHub PR merge format: chore/bump-X.X.X
+        if echo "$COMMIT_MESSAGE" | grep -Eq "chore/bump-[0-9]+\.[0-9]+\.[0-9]+"; then
+          VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE "chore/bump-[0-9]+\.[0-9]+\.[0-9]+" | head -n 1 | sed 's/chore\/bump-//')
+        # Try conventional commit format: version to X.X.X
+        elif echo "$COMMIT_MESSAGE" | grep -Eq "chore\(bump\):.*version to [0-9]+\.[0-9]+\.[0-9]+"; then
+          VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE "version to [0-9]+\.[0-9]+\.[0-9]+" | head -n 1 | sed 's/version to //')
+        fi
+
+        if [ -n "$VERSION" ]; then
+          echo "tag_name=$VERSION" >> $GITHUB_OUTPUT
+        else
+          echo "$(date "+%Y-%m-%d %H:%M:%S") - Commit is not a bump, not creating a release..."
+          echo "skip_release=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: 'Create Release'
       uses: 'softprops/action-gh-release@v2'
       with:
         draft: false
         prerelease: false
+        tag_name: "${{ steps.extract.outputs.tag_name }}"
+        generate_release_notes: true
+      if: "steps.extract.outputs.skip_release != 'true'"

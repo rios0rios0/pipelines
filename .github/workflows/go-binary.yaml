@@ -7,10 +7,17 @@ on:
         type: 'string'
         required: true
         description: 'Binary name to be used as default source'
+      tag_prefixes:
+        type: 'string'
+        required: false
+        default: '[""]'
+        description: 'JSON array of tag prefixes (e.g., ''["", "v"]''). Use ''[""]'' for no prefix.'
 
 jobs:
   go:
     uses: 'rios0rios0/pipelines/.github/workflows/go.yaml@main'
+    with:
+      tag_prefixes: "${{ inputs.tag_prefixes }}"
 
   # fourth stage
   delivery-binary:

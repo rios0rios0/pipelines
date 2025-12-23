@@ -2,6 +2,12 @@
 # the parent workflow is responsible for setting up the call events²
 on:
   workflow_call:
+    inputs:
+      tag_prefixes:
+        type: 'string'
+        required: false
+        default: '[""]'
+        description: 'JSON array of tag prefixes (e.g., ''["", "v"]''). Use ''[""]'' for no prefix.'
 
 # it wasn't needed to set up anything for GoLang because 'ubuntu-latest' has all dependencies
 jobs:
@@ -59,8 +65,13 @@ jobs:
   delivery-release:
     name: 'delivery > release'
     runs-on: 'ubuntu-latest'
+    strategy:
+      matrix:
+        prefix: "${{ fromJSON(inputs.tag_prefixes) }}"
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
+        with:
+          tag_prefix: ${{ matrix.prefix }}
     needs: [ 'tests-test_all' ]
     if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore/bump-')"
 

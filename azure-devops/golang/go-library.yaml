@@ -8,6 +8,5 @@ stages:
     condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
     jobs:
       - template: '../global/stages/40-delivery/release.yaml'
-      - template: '../global/stages/40-delivery/release.yaml'
         parameters:
           TAG_PREFIXES: ['', 'v']

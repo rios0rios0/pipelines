@@ -1,3 +1,9 @@
+inputs:
+  tag_prefix:
+    required: false
+    default: ''
+    description: 'Tag prefix to use for this release (e.g., "v", "app/"). Leave empty for no prefix.'
+
 outputs:
   tag_name:
     description: 'The tag name created by the release'
@@ -41,6 +47,6 @@ runs:
       with:
         draft: false
         prerelease: false
-        tag_name: "${{ steps.extract.outputs.tag_name }}"
+        tag_name: "${{ inputs.tag_prefix }}${{ steps.extract.outputs.tag_name }}"
         generate_release_notes: true
       if: "steps.extract.outputs.skip_release != 'true'"

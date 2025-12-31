@@ -38,6 +38,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
+- fixed missing `Scripts.Directory` configuration in `pdm-python3.14.yaml` by including the required `scripts-repo.yaml` template
 - fixed the duplicated entry in `go-library`
 - fixed Azure DevOps Go SAM delivery to normalize `RESOLVE_S3` booleans so `--resolve-s3` works with Azure `True/False` (capitalized) values
 - fixed GoLang `1.25.1` compatibility issue in `global/scripts/golang/test/run.sh` by implementing comprehensive coverage reporting

@@ -18,6 +18,11 @@ jobs:
           targetPath: "$(Build.SourcesDirectory)"
         displayName: 'Download Coverage File'
         continueOnError: true
+      
+      - script: |
+          echo "Find the coverage file"
+          set -e
+          ls -la $(Build.SourcesDirectory)
 
       - task: 'Cache@2'
         inputs:

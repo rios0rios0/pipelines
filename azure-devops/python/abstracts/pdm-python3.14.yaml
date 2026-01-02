@@ -6,6 +6,8 @@ steps:
     displayName: 'Cache for Python modules'
     continueOnError: true
 
+  - template: '../../global/abstracts/scripts-repo.yaml'
+
   - task: 'UsePythonVersion@0'
     inputs:
       versionSpec: '3.14'

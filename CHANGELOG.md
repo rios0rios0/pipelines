@@ -21,6 +21,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added `go-library.yaml` pipeline with Azure DevOps to deliver Go libraries
 - added `make test` and `make test-go-script` targets for automated testing
 - added complete test validation suite with `test-go-validation.sh` script
+- added optional `IMAGE_NAME` parameter to Azure DevOps global docker delivery template to allow custom image names (defaults to repository name if not provided)
 - added optional `RESOLVE_S3` flag to Azure DevOps Go SAM delivery to support bucket auto resolving
 - added support for building GoLang version `1.25`
 

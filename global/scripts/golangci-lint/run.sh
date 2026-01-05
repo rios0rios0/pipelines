@@ -55,7 +55,7 @@ else
 fi
 
 wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh
-./bin/golangci-lint run \
+./bin/golangci-lint run --fix \
   --config "merged.yml" \
   --color "always" \
   --timeout "10m" \

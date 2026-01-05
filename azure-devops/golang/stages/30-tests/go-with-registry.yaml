@@ -9,6 +9,12 @@ stages:
           GOPATH: "$(Pipeline.Workspace)/.go"
         steps:
           - task: 'Docker@2'
+            displayName: 'Docker DHI Login'
+            condition: ne(variables['CONTAINER_REGISTRY_DHI_CONNECTION'], '')
+            inputs:
+              containerRegistry: "$(CONTAINER_REGISTRY_DHI_CONNECTION)"
+              command: 'login'
+          - task: 'Docker@2'
             displayName: 'Docker Login'
             inputs:
               containerRegistry: "$(CONTAINER_REGISTRY_SERVICE_CONNECTION)"

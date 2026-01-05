@@ -29,7 +29,15 @@ steps:
     continueOnError: true
 
   - task: 'Docker@2'
+    displayName: 'Docker Login in dhi.io'
+    condition: and(succeeded(), ne(variables['CONTAINER_REGISTRY_DHI_CONNECTION'], ''))
+    inputs:
+      command: 'login'
+      containerRegistry: "$(CONTAINER_REGISTRY_DHI_CONNECTION)"
+
+  - task: 'Docker@2'
     displayName: 'Docker Login'
+    condition: ne('${{ parameters.CONTAINER_REGISTRY_SERVICE_CONNECTION }}', '')
     inputs:
       containerRegistry: "${{ parameters.CONTAINER_REGISTRY_SERVICE_CONNECTION }}"
       command: 'login'
@@ -43,24 +51,48 @@ steps:
 
         TAGS="$imageName:latest"
         if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
-          TAGS="$TAGS -t $imageName:$(Build.SourceBranchName)"
+          TAGS="$imageName:latest $imageName:$(Build.SourceBranchName)"
           containerImageTagName="$imageName:$(Build.SourceBranchName)"
         else
           containerImageTagName="$TAGS"
         fi
 
-        echo "##vso[task.setvariable variable=CONTAINER_IMAGE;isOutput=true]$containerImageTagName"
+        echo "##vso[task.setvariable variable=IMAGE_NAME]$imageName"
+        echo "##vso[task.setvariable variable=TAGS]$TAGS"
+    displayName: 'Configure image name and tags'
+
+  - script: |
+        export DOCKER_BUILDKIT=1
+        docker buildx create --driver docker-container --use
+        docker buildx inspect --bootstrap
+    displayName: 'Create Buildx Builder'
+
+  - script: |
+        PLATFORMS="linux/amd64,linux/arm64"
 
         ${{ parameters.RUN_BEFORE_BUILD }}
 
-        docker buildx create --use
+        TAG_ARGS=""
+        for tag in $(TAGS); do
+          TAG_ARGS="$TAG_ARGS --tag $tag"
+        done
+
         docker buildx build ${{ parameters.DOCKER_BUILD_ARGS }} \
-          --platform linux/amd64,linux/arm64 \
-          --tag $TAGS \
+          --platform $PLATFORMS \
+          --progress=plain \
+          $TAG_ARGS \
           --cache-from=type=local,src=${{ parameters.DOCKER_CACHE_DIR }} \
           --cache-to=type=local,dest=${{ parameters.DOCKER_CACHE_DIR }},mode=max \
           --file ${{ parameters.DOCKER_FILE }} \
           --push .
-    name: 'build'
+    displayName: 'Build and push the image'
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
-    displayName: 'Build and Push Docker Image'
+    env:
+      BUILDKIT_PROGRESS: plain
+      DOCKER_CONFIG: /home/vsts/.docker
+    # TODO: retryCountOnTaskFailure is set to 2 because on the first execution,
+    # the application sometimes can't find the base image in DHI registry.
+    # This appears to be a transient issue that resolves on retry, likely due to
+    # registry propagation delay or authentication timing. Retrying allows the
+    # build to succeed after the base image becomes available.
+    retryCountOnTaskFailure: 2

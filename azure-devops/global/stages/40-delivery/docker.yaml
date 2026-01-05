@@ -16,6 +16,9 @@ parameters:
   - name: 'RUN_BEFORE_BUILD'
     type: 'string'
     default: ''
+  - name: 'IMAGE_NAME'
+    type: 'string'
+    default: ''
 
 steps:
   - task: 'Cache@2'
@@ -32,7 +35,11 @@ steps:
       command: 'login'
 
   - script: |
-        imageName="${{ parameters.CONTAINER_REGISTRY_SERVER }}/$(Build.Repository.Name)"
+        dockerImageName=$(Build.Repository.Name)
+        if [ -n "${{ parameters.IMAGE_NAME }}" ]; then
+          dockerImageName="${{ parameters.IMAGE_NAME }}"
+        fi
+        imageName="${{ parameters.CONTAINER_REGISTRY_SERVER }}/$dockerImageName"
 
         TAGS="$imageName:latest"
         if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then

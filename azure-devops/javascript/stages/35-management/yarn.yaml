@@ -30,6 +30,7 @@ stages:
               WORKING_DIRECTORY: "${{ parameters.WORKING_DIRECTORY }}"
               RUN_BEFORE_MANAGEMENT: ${{ parameters.RUN_BEFORE_MANAGEMENT }}
               RUN_AFTER_MANAGEMENT: ${{ parameters.RUN_AFTER_MANAGEMENT }}
+        continueOnError: true
 
       - job: 'report_dependency_track'
         displayName: 'report:dependency-track'

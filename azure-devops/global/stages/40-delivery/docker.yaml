@@ -1,12 +1,13 @@
 parameters:
   - name: 'DOCKER_FILE'
     type: 'string'
-  - name: 'DOCKER_CACHE_DIR'
-    type: 'string'
-  - name : 'CONTAINER_REGISTRY_SERVER'
+  - name: 'CONTAINER_REGISTRY_SERVER'
     type: 'string'
   - name: 'CONTAINER_REGISTRY_SERVICE_CONNECTION'
     type: 'string'
+  - name: 'DOCKER_CACHE_DIR'
+    type: 'string'
+    default: ''
   - name: 'DOCKER_BUILD_ARGS'
     type: 'string'
     default: ''
@@ -21,12 +22,13 @@ parameters:
     default: ''
 
 steps:
-  - task: 'Cache@2'
-    inputs:
-      key: "$(Agent.JobName)|${{ parameters.WORKING_DIRECTORY }}/${{ parameters.DOCKER_FILE }}"
-      path: "${{ parameters.DOCKER_CACHE_DIR }}"
-    displayName: 'Cache Docker Buildx'
-    continueOnError: true
+  - ${{ if ne(parameters.DOCKER_CACHE_DIR, '') }}:
+    - task: 'Cache@2'
+      inputs:
+        key: "$(Agent.JobName)|${{ parameters.WORKING_DIRECTORY }}/${{ parameters.DOCKER_FILE }}"
+        path: "${{ parameters.DOCKER_CACHE_DIR }}"
+      displayName: 'Cache Docker Buildx'
+      continueOnError: true
 
   - task: 'Docker@2'
     displayName: 'Docker Login'
@@ -35,32 +37,39 @@ steps:
       command: 'login'
 
   - script: |
-        dockerImageName=$(Build.Repository.Name)
-        if [ -n "${{ parameters.IMAGE_NAME }}" ]; then
-          dockerImageName="${{ parameters.IMAGE_NAME }}"
-        fi
-        imageName="${{ parameters.CONTAINER_REGISTRY_SERVER }}/$dockerImageName"
+      dockerImageName=$(Build.Repository.Name)
+      if [ -n "${{ parameters.IMAGE_NAME }}" ]; then
+        dockerImageName="${{ parameters.IMAGE_NAME }}"
+      fi
+      imageName="${{ parameters.CONTAINER_REGISTRY_SERVER }}/$dockerImageName"
 
-        TAGS="$imageName:latest"
-        if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
-          TAGS="$TAGS -t $imageName:$(Build.SourceBranchName)"
-          containerImageTagName="$imageName:$(Build.SourceBranchName)"
-        else
-          containerImageTagName="$TAGS"
-        fi
+      TAGS="$imageName:latest"
+      if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
+        TAGS="$TAGS -t $imageName:$(Build.SourceBranchName)"
+        containerImageTagName="$imageName:$(Build.SourceBranchName)"
+      else
+        containerImageTagName="$TAGS"
+      fi
 
-        echo "##vso[task.setvariable variable=CONTAINER_IMAGE;isOutput=true]$containerImageTagName"
+      echo "##vso[task.setvariable variable=CONTAINER_IMAGE;isOutput=true]$containerImageTagName"
 
-        ${{ parameters.RUN_BEFORE_BUILD }}
+      ${{ parameters.RUN_BEFORE_BUILD }}
 
-        docker buildx create --use
-        docker buildx build ${{ parameters.DOCKER_BUILD_ARGS }} \
-          --platform linux/amd64,linux/arm64 \
-          --tag $TAGS \
-          --cache-from=type=local,src=${{ parameters.DOCKER_CACHE_DIR }} \
-          --cache-to=type=local,dest=${{ parameters.DOCKER_CACHE_DIR }},mode=max \
-          --file ${{ parameters.DOCKER_FILE }} \
-          --push .
+      docker buildx create --use
+      if [ -n "${{ parameters.DOCKER_CACHE_DIR }}" ]; then
+        CACHE_FROM="--cache-from=type=local,src=${{ parameters.DOCKER_CACHE_DIR }}"
+        CACHE_TO="--cache-to=type=local,dest=${{ parameters.DOCKER_CACHE_DIR }},mode=max"
+      else
+        CACHE_FROM=""
+        CACHE_TO=""
+      fi
+      docker buildx build ${{ parameters.DOCKER_BUILD_ARGS }} \
+        --platform linux/amd64,linux/arm64 \
+        --tag $TAGS \
+        $CACHE_FROM \
+        $CACHE_TO \
+        --file ${{ parameters.DOCKER_FILE }} \
+        --push .
     name: 'build'
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
     displayName: 'Build and Push Docker Image'

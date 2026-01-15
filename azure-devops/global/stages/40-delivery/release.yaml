@@ -27,33 +27,33 @@ jobs:
         displayName: 'Extract Release Version'
 
       - ${{ each prefix in parameters.TAG_PREFIXES }}:
-        - script: |
-            set -eux
+          - script: |
+              set -eux
 
-            # only run if extraction found a version
-            if [ "${SKIP_RELEASE:-}" = "true" ]; then
-              echo "Skipping tag creation for prefix '${VERSION_PREFIX:-}' because no bump commit was detected."
-              exit 0
-            fi
+              # only run if extraction found a version
+              if [ "${SKIP_RELEASE:-}" = "true" ]; then
+                echo "Skipping tag creation for prefix '${VERSION_PREFIX:-}' because no bump commit was detected."
+                exit 0
+              fi
 
-            RELEASE_NOTES=""
-            if [ -f CHANGELOG.md ]; then
-                RELEASE_NOTES=$(awk '/## \[Unreleased\]/ {skip=1; next} skip && /## \[.*\]/ {found=1; skip=0; next} found && /## \[.*\]/ {exit} found {print}' CHANGELOG.md)
-                RELEASE_NOTES=$(echo "$RELEASE_NOTES" | jq --raw-input --slurp .)
-            fi
+              RELEASE_NOTES=""
+              if [ -f CHANGELOG.md ]; then
+                  RELEASE_NOTES=$(awk '/## \[Unreleased\]/ {skip=1; next} skip && /## \[.*\]/ {found=1; skip=0; next} found && /## \[.*\]/ {exit} found {print}' CHANGELOG.md)
+                  RELEASE_NOTES=$(echo "$RELEASE_NOTES" | jq --raw-input --slurp .)
+              fi
 
-            DATA="{
-              \"name\": \"${VERSION_PREFIX}${RELEASE_VERSION}\",
-              \"taggedObject\": {
-                \"objectId\": \"$(Build.SourceVersion)\"
-              },
-              \"message\": $RELEASE_NOTES
-            }"
+              DATA="{
+                \"name\": \"${VERSION_PREFIX}${RELEASE_VERSION}\",
+                \"taggedObject\": {
+                  \"objectId\": \"$(Build.SourceVersion)\"
+                },
+                \"message\": $RELEASE_NOTES
+              }"
 
-            curl -X POST "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_apis/git/repositories/$(Build.Repository.ID)/annotatedtags?api-version=7.1-preview.1" \
-                 --header "Authorization: Bearer $(System.AccessToken)" \
-                 --header "Content-Type: application/json" \
-                 --data "$DATA"
-          displayName: "Create Tag w/ Prefix '${{ prefix }}'"
-          env:
-            VERSION_PREFIX: "${{ prefix }}"
+              curl -X POST "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_apis/git/repositories/$(Build.Repository.ID)/annotatedtags?api-version=7.1-preview.1" \
+                   --header "Authorization: Bearer $(System.AccessToken)" \
+                   --header "Content-Type: application/json" \
+                   --data "$DATA"
+            displayName: "Create Tag w/ Prefix '${{ prefix }}'"
+            env:
+              VERSION_PREFIX: "${{ prefix }}"

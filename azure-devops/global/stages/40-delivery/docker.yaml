@@ -1,12 +1,13 @@
 parameters:
   - name: 'DOCKER_FILE'
     type: 'string'
-  - name: 'DOCKER_CACHE_DIR'
-    type: 'string'
   - name : 'CONTAINER_REGISTRY_SERVER'
     type: 'string'
   - name: 'CONTAINER_REGISTRY_SERVICE_CONNECTION'
     type: 'string'
+  - name: 'DOCKER_CACHE_DIR'
+    type: 'string'
+    default: ''
   - name: 'DOCKER_BUILD_ARGS'
     type: 'string'
     default: ''
@@ -21,6 +22,7 @@ parameters:
     default: ''
 
 steps:
+  ${{ if ne(parameters.DOCKER_CACHE_DIR, '') }}:
   - task: 'Cache@2'
     inputs:
       key: "$(Agent.JobName)|${{ parameters.WORKING_DIRECTORY }}/${{ parameters.DOCKER_FILE }}"
@@ -54,11 +56,18 @@ steps:
         ${{ parameters.RUN_BEFORE_BUILD }}
 
         docker buildx create --use
+        if [ -n "${{ parameters.DOCKER_CACHE_DIR }}" ]; then
+          CACHE_FROM="--cache-from=type=local,src=${{ parameters.DOCKER_CACHE_DIR }}"
+          CACHE_TO="--cache-to=type=local,dest=${{ parameters.DOCKER_CACHE_DIR }},mode=max"
+        else
+          CACHE_FROM=""
+          CACHE_TO=""
+        fi
         docker buildx build ${{ parameters.DOCKER_BUILD_ARGS }} \
           --platform linux/amd64,linux/arm64 \
           --tag $TAGS \
-          --cache-from=type=local,src=${{ parameters.DOCKER_CACHE_DIR }} \
-          --cache-to=type=local,dest=${{ parameters.DOCKER_CACHE_DIR }},mode=max \
+          $CACHE_FROM \
+          $CACHE_TO \
           --file ${{ parameters.DOCKER_FILE }} \
           --push .
     name: 'build'

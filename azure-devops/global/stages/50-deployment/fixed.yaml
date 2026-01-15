@@ -74,7 +74,7 @@ steps:
       azureSubscription: "$(AZM_SERVICE_CONNECTION)"
       resourceGroupName: "$(resourceGroupName)"
       csmFile: 'azuredeploy.json'
-      overrideParameters:  -inboundAllowedIps $(INBOUND_ALLOWED_IPS) -oldOutboundIpAddresses $(outboundIpAddresses) $(OVERRIDE_PARAMETERS)
+      overrideParameters: -inboundAllowedIps $(INBOUND_ALLOWED_IPS) -oldOutboundIpAddresses $(outboundIpAddresses) $(OVERRIDE_PARAMETERS)
       templateLocation: 'Linked artifact'
       deploymentMode: 'Incremental'
       deploymentOutputs: 'AZURE_DEPLOY_OUTPUTS'

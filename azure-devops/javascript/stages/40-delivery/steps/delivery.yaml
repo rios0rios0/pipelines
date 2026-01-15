@@ -11,7 +11,7 @@ parameters:
   - name: 'DOCKER_BUILD_ARGS'
     type: 'string'
     default: ''
-  - name: RUN_BEFORE_BUILD
+  - name: 'RUN_BEFORE_BUILD'
     type: 'string'
     default: ''
 
@@ -31,7 +31,6 @@ steps:
   - template: '../../../../global/stages/40-delivery/docker.yaml'
     parameters:
       DOCKER_FILE: '.ci/stages/40-delivery/app.Dockerfile'
-      DOCKER_CACHE_DIR: "$(DOCKER_CACHE_DIR)"
       CONTAINER_REGISTRY_SERVER: "$(CONTAINER_REGISTRY_SERVER)"
       CONTAINER_REGISTRY_SERVICE_CONNECTION: "$(CONTAINER_REGISTRY_SERVICE_CONNECTION)"
       DOCKER_BUILD_ARGS: "${{ parameters.DOCKER_BUILD_ARGS }}"

@@ -1,4 +1,4 @@
-FROM golang:1.25
+FROM golang:1.25.6
 
 RUN apt-get update && apt-get install --yes --no-install-recommends unzip \
 	&& apt-get clean autoclean \

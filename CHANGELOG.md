@@ -18,43 +18,39 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added a generic configuration to run `cyclonedx` for Python projects
 - added `go-library.yaml` pipeline with Azure DevOps to deliver Go libraries
 - added `make test` and `make test-go-script` targets for automated testing
+- added a generic configuration to run `cyclonedx` for Python projects
 - added complete test validation suite with `test-go-validation.sh` script
 - added optional `IMAGE_NAME` parameter to Azure DevOps global docker delivery template to allow custom image names (defaults to repository name if not provided)
 - added optional `RESOLVE_S3` flag to Azure DevOps Go SAM delivery to support bucket auto resolving
-- added support for building GoLang version `1.25`
 
 ### Changed
 
 - changed Python version from `3.13` to `3.14` on Azure DevOps modules
 - changed the Node version from `18.19.0` to `20.18.3` on Azure DevOps modules
-- changed the OSD version to `3.2.0` due to an upgrade request on Azure DevOps modules
 - changed the lambda deployment to use env vars instead of parameters in delivery and deployment steps
 - changed the structure on Azure DevOps to have files for each step inside each stage
 - enhanced coverage accuracy by using `-coverpkg` with all packages when tests are available
-- updated GoLang version to `1.24.5` on Azure DevOps modules
-- updated GoLang version to `1.25.0` on all pipelines and modules
+- updated GoLang version to `1.25.6` on all pipelines and modules
 - updated `CONTRIBUTING.md` and `copilot-instructions.md` with mandatory testing requirements
 
 ### Fixed
 
-- fixed missing `Scripts.Directory` configuration in `pdm-python3.14.yaml` by including the required `scripts-repo.yaml` template
-- fixed the duplicated entry in `go-library`
 - fixed Azure DevOps Go SAM delivery to normalize `RESOLVE_S3` booleans so `--resolve-s3` works with Azure `True/False` (capitalized) values
 - fixed GoLang `1.25.1` compatibility issue in `global/scripts/golang/test/run.sh` by implementing comprehensive coverage reporting
 - fixed coverage reporting to include all packages with Go files, not just packages with tests
 - fixed deployment issue to deploy an AWS Lambda with SAM CLI
+- fixed missing `Scripts.Directory` configuration in `pdm-python3.14.yaml` by including the required `scripts-repo.yaml` template
 - fixed multi-platform builds failing for `go1.x-awscli` containers
 - fixed synthetic coverage generation for projects with packages but no tests
-- fixed the cache task in `azure-devops/global/stages/40-delivery/docker.yaml` to create the Buildx cache
+- fixed the cache task in `azure-devops/global/stages/40-delivery/docker.yaml` to create the `buildx` cache
 - fixed untested packages now appear as 0% covered instead of being excluded from coverage reports
-- fixed workflow and delivery for GitHub Python Docker
+- fixed workflow and delivery for GitHub inside Python Docker
 
 ### Removed
 
-- removed `cache task from `database.yaml` template in the Azure DevOps GoLang pipeline since it was failing to restore cache with readonly files
+- removed cache task from `database.yaml` template in the Azure DevOps GoLang pipeline since it was failing to restore cache with readonly files
 
 ## [2.2.0] - 2025-04-16
 

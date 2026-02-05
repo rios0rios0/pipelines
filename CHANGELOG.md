@@ -18,6 +18,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
+- added OCI image labels to Azure DevOps Docker builds for traceability (`org.opencontainers.image.revision`, `org.opencontainers.image.ref.name`, `org.opencontainers.image.created`, `org.opencontainers.image.source`)
 - added `go-library.yaml` pipeline with Azure DevOps to deliver Go libraries
 - added `make test` and `make test-go-script` targets for automated testing
 - added a generic configuration to run `cyclonedx` for Python projects

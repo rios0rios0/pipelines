@@ -66,6 +66,10 @@ steps:
       docker buildx build ${{ parameters.DOCKER_BUILD_ARGS }} \
         --platform linux/amd64,linux/arm64 \
         --tag $TAGS \
+        --label "org.opencontainers.image.revision=$(Build.SourceVersion)" \
+        --label "org.opencontainers.image.ref.name=$(Build.SourceBranchName)" \
+        --label "org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+        --label "org.opencontainers.image.source=$(Build.Repository.Uri)" \
         $CACHE_FROM \
         $CACHE_TO \
         --file ${{ parameters.DOCKER_FILE }} \

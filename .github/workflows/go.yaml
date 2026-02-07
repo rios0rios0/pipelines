@@ -2,6 +2,10 @@
 # the parent workflow is responsible for setting up the call events²
 on:
   workflow_call:
+    outputs:
+      tag_name:
+        description: 'The tag name created by the release job'
+        value: ${{ jobs.delivery-release.outputs.tag_name }}
 
 # it wasn't needed to set up anything for GoLang because 'ubuntu-latest' has all dependencies
 jobs:
@@ -59,8 +63,11 @@ jobs:
   delivery-release:
     name: 'delivery > release'
     runs-on: 'ubuntu-latest'
+    outputs:
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
-      - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
+      - id: 'release'
+        uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
     needs: [ 'tests-test_all' ]
     if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore/bump-')"
 

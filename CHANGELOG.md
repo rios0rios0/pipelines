@@ -33,8 +33,9 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed the lambda deployment to use env vars instead of parameters in delivery and deployment steps
 - changed the structure on Azure DevOps to have files for each step inside each stage
 - enhanced coverage accuracy by using `-coverpkg` with all packages when tests are available
-- updated GoLang version to `1.25.6` on all pipelines and modules
+- updated GoLang version to `1.25.7` on all pipelines and modules
 - updated `CONTRIBUTING.md` and `copilot-instructions.md` with mandatory testing requirements
+- changed Go pipeline with GitHub to use GoReleaser instead of manually build
 
 ### Fixed
 

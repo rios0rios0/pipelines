@@ -3,37 +3,63 @@ inputs:
     type: 'string'
     required: true
     description: 'Binary name to be used as default source'
+  tag_name:
+    type: 'string'
+    required: true
+    description: 'Tag name to use for the release'
 
 runs:
   using: 'composite'
   steps:
     - name: 'Checkout code'
       uses: 'actions/checkout@v6'
+      with:
+        fetch-depth: 0
 
-    - run: |
-        echo "PACKAGE_NAME=$(echo '${{ inputs.binary_name }}-${{ github.ref }}' | sed 's/refs\/tags\///')" >> $GITHUB_ENV
+    - name: 'Fetch tags'
+      run: git fetch --force --tags
       shell: 'bash'
 
-    - name: 'Build Binary'
-      run: make build
+    - name: 'Setup Go'
+      uses: 'actions/setup-go@v6'
+      with:
+        go-version-file: 'go.mod'
+        cache-dependency-path: 'go.sum'
+
+    - name: 'Generate GoReleaser config'
+      run: |
+        cat > .goreleaser.yaml <<EOF
+        version: 2
+        project_name: '${{ inputs.binary_name }}'
+        builds:
+          - env:
+              - CGO_ENABLED=0
+            goos:
+              - linux
+              - darwin
+              - windows
+            goarch:
+              - amd64
+              - arm64
+        archives:
+          - formats: ['tar.gz']
+            name_template: '{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+            format_overrides:
+              - goos: windows
+                formats: ['zip']
+        release:
+          mode: keep-existing
+        changelog:
+          disable: true
+        EOF
       shell: 'bash'
 
-    - name: 'Compress Binary'
-      run: cd bin && zip -9 "$PACKAGE_NAME.zip" "${{ inputs.binary_name }}"
-      shell: 'bash'
-
-    - name: 'Upload Binary'
-      uses: 'actions/upload-artifact@v6'
+    - name: 'Run GoReleaser'
+      uses: 'goreleaser/goreleaser-action@v6'
       with:
-        name: '${{ inputs.binary_name }}'
-        path: 'bin/${{ env.PACKAGE_NAME }}.zip'
-
-    - name: 'Download Binary'
-      uses: 'actions/download-artifact@v7'
-      with:
-        name: '${{ inputs.binary_name }}'
-
-    - name: 'Upload to Release'
-      uses: 'softprops/action-gh-release@v2'
-      with:
-        files: ${{ env.PACKAGE_NAME }}.zip
+        distribution: 'goreleaser'
+        version: '~> v2'
+        args: 'release --clean'
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        GORELEASER_CURRENT_TAG: ${{ inputs.tag_name }}

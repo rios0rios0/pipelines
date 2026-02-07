@@ -52,6 +52,7 @@ runs:
         changelog:
           disable: true
         EOF
+        echo '.goreleaser.yaml' >> .git/info/exclude
       shell: 'bash'
 
     - name: 'Run GoReleaser'

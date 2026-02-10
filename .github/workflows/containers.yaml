@@ -1,0 +1,126 @@
+name: 'Container Images'
+
+on:
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'global/containers/**'
+  workflow_dispatch:
+    inputs:
+      container_folder:
+        description: >-
+          Container folder name to build (e.g. "golang.1.25-awscli").
+          Leave empty to build ALL containers.
+        required: false
+        default: ''
+        type: 'string'
+
+permissions:
+  contents: 'read'
+  packages: 'write'
+
+jobs:
+  detect-changes:
+    name: 'Detect Changed Containers'
+    runs-on: 'ubuntu-latest'
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      has_changes: ${{ steps.set-matrix.outputs.has_changes }}
+
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+        with:
+          fetch-depth: 0
+
+      - name: 'Detect changed container folders'
+        id: 'set-matrix'
+        run: |
+          INPUT_FOLDER="${{ github.event.inputs.container_folder }}"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual trigger: use the provided folder or enumerate all
+            if [ -n "$INPUT_FOLDER" ]; then
+              CHANGED_DIRS="$INPUT_FOLDER"
+            else
+              CHANGED_DIRS=$(ls -d global/containers/*/ 2>/dev/null | \
+                awk -F'/' '{print $3}' | sort -u)
+            fi
+          else
+            # Push trigger: detect changes via git diff
+            BEFORE="${{ github.event.before }}"
+            AFTER="${{ github.sha }}"
+
+            # Handle initial push where 'before' is all zeros
+            if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              # Initial push: build all containers rather than relying on a missing parent commit
+              CHANGED_DIRS=$(ls -d global/containers/*/ 2>/dev/null | \
+                awk -F'/' '{print $3}' | sort -u)
+            else
+              CHANGED_DIRS=$(git diff --name-only "$BEFORE" "$AFTER" -- 'global/containers/' | \
+                awk -F'/' '{if ($3 != "") print $3}' | sort -u)
+            fi
+          fi
+
+          if [ -z "$CHANGED_DIRS" ]; then
+            echo "No container changes detected."
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+
+          # Build the matrix JSON from folder names (convention: NAME.TAG)
+          MATRIX_JSON='{"include":['
+          FIRST=true
+          for DIR in $CHANGED_DIRS; do
+            # Split on the first dot: everything before is NAME, everything after is TAG
+            NAME="${DIR%%.*}"
+            TAG="${DIR#*.}"
+
+            if [ "$FIRST" = true ]; then
+              FIRST=false
+            else
+              MATRIX_JSON+=','
+            fi
+            MATRIX_JSON+="{\"name\":\"${NAME}\",\"tag\":\"${TAG}\"}"
+          done
+          MATRIX_JSON+=']}'
+
+          echo "matrix=${MATRIX_JSON}" >> "$GITHUB_OUTPUT"
+          echo "Detected container changes: ${MATRIX_JSON}"
+
+  build-and-push:
+    name: 'Build & Push ${{ matrix.name }}:${{ matrix.tag }}'
+    needs: 'detect-changes'
+    if: needs.detect-changes.outputs.has_changes == 'true'
+    runs-on: 'ubuntu-latest'
+    strategy:
+      matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+      fail-fast: false
+
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+
+      - name: 'Set up QEMU'
+        uses: 'docker/setup-qemu-action@v3'
+
+      - name: 'Set up Docker Buildx'
+        uses: 'docker/setup-buildx-action@v3'
+
+      - name: 'Login to GitHub Container Registry'
+        uses: 'docker/login-action@v3'
+        with:
+          registry: 'ghcr.io'
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 'Build and push ${{ matrix.name }}:${{ matrix.tag }}'
+        run: |
+          make build-and-push \
+            NAME="${{ matrix.name }}" \
+            TAG="${{ matrix.tag }}" \
+            CONTAINER_REGISTRY="ghcr.io/${{ github.repository }}"

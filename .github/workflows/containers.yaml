@@ -54,11 +54,13 @@ jobs:
 
             # Handle initial push where 'before' is all zeros
             if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-              BEFORE="${AFTER}~1"
+              # Initial push: build all containers rather than relying on a missing parent commit
+              CHANGED_DIRS=$(ls -d global/containers/*/ 2>/dev/null | \
+                awk -F'/' '{print $3}' | sort -u)
+            else
+              CHANGED_DIRS=$(git diff --name-only "$BEFORE" "$AFTER" -- 'global/containers/' | \
+                awk -F'/' '{if ($3 != "") print $3}' | sort -u)
             fi
-
-            CHANGED_DIRS=$(git diff --name-only "$BEFORE" "$AFTER" -- 'global/containers/' | \
-              awk -F'/' '{if ($3 != "") print $3}' | sort -u)
           fi
 
           if [ -z "$CHANGED_DIRS" ]; then

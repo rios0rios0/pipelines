@@ -7,7 +7,7 @@ steps:
     continueOnError: true
 
   - template: '../../global/abstracts/scripts-repo.yaml'
-  - script: $(Scripts.Directory)/global/scripts/golang/init/run.sh
+  - script: $(Scripts.Directory)/global/scripts/languages/golang/init/run.sh
     displayName: 'Load Custom Configuration'
 
   - task: 'GoTool@0'

@@ -10,3 +10,7 @@ stages:
       - template: '../../../global/stages/20-security/codeql.yaml'
         parameters:
           CODEQL_LANGUAGE: 'python'
+
+      - template: '../../../global/stages/20-security/hadolint.yaml'
+
+      - template: '../../../global/stages/20-security/trivy.yaml'

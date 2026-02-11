@@ -14,7 +14,7 @@ ignoreFileExists=true
 
 if [ ! -f ".semgrepignore" ]; then
   ignoreFileExists=false
-  defaultFile="$SCRIPTS_DIR/global/scripts/semgrep/.semgrepignore"
+  defaultFile="$SCRIPTS_DIR/global/scripts/tools/semgrep/.semgrepignore"
   cp "$defaultFile" .
 fi
 

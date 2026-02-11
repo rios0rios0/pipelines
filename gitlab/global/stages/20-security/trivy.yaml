@@ -2,13 +2,13 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo-alpine-docker.yaml'
 
-sast:codeql:
+sast:trivy:
   extends: '.scripts-repo-alpine-docker'
   stage: 'security (sca/sast)'
   script:
-    - $SCRIPTS_DIR/global/scripts/tools/codeql/run.sh $CODEQL_LANGUAGE
+    - $SCRIPTS_DIR/global/scripts/tools/trivy/run.sh
   artifacts:
     when: 'always'
-    reports:
-      sast: "$REPORT_PATH/codeql.sarif"
+    paths:
+      - "$REPORT_PATH/trivy.sarif"
   dependencies: [] # prevent from fetching artifacts

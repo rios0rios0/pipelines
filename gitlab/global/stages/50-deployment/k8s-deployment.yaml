@@ -8,7 +8,13 @@ deployment:qa:
   environment:
     name: 'qa'
   script:
-    - kubectl rollout restart deployment/$K8S_DEPLOYMENT_NAME --namespace=$K8S_NAMESPACE
+    # Add commit SHA label to deployment's pod template (triggers rolling update)
+    # Label is exposed via kube_pod_labels metric for Grafana dashboards
+    - |
+      kubectl patch deployment/$K8S_DEPLOYMENT_NAME --namespace=$K8S_NAMESPACE --type=strategic \
+        -p '{"spec":{"template":{"metadata":{"labels":{"app.kubernetes.io/version":"'$CI_COMMIT_SHA'"}}}}}' \
+        || kubectl rollout restart deployment/$K8S_DEPLOYMENT_NAME --namespace=$K8S_NAMESPACE
+    - kubectl rollout status deployment/$K8S_DEPLOYMENT_NAME --namespace=$K8S_NAMESPACE --timeout=300s
   tags:
     - 'dev-gitlab-runner-onprem'
   rules:

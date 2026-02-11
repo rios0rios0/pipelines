@@ -63,6 +63,9 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added `global/scripts/tools/codeql/run.sh` script that downloads CodeQL CLI bundle and runs security-and-quality analysis
 - added `global/scripts/tools/hadolint/run.sh` script that downloads Hadolint binary and lints `Dockerfiles` with SARIF output
 - added `global/scripts/tools/trivy/run.sh` script that downloads Trivy and scans for IaC misconfigurations with SARIF output
+- added K8s deployment template that patches deployments with commit SHA label (`app.kubernetes.io/version`) for observability in Grafana/Prometheus via `kube_pod_labels` metric
+- added Azure DevOps global K8s deployment template (`azure-devops/global/stages/50-deployment/k8s-deployment.yaml`)
+- updated GitLab K8s deployment to include commit SHA label in pod template
 - added `go-library.yaml` pipeline with Azure DevOps to deliver Go libraries
 - added `make test` and `make test-go-script` targets for automated testing
 - added a generic configuration to run CycloneDX for Python projects

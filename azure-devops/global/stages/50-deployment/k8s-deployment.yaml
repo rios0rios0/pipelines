@@ -1,0 +1,51 @@
+parameters:
+  - name: 'K8S_SERVICE_CONNECTION'
+    type: 'string'
+    default: '$(K8S_ENDPOINT)'
+  - name: 'K8S_NAMESPACE'
+    type: 'string'
+    default: '$(K8S_NAMESPACE)'
+  - name: 'K8S_DEPLOYMENT_NAME'
+    type: 'string'
+    default: '$(K8S_DEPLOYMENT_NAME)'
+  - name: 'TIMEOUT_SECONDS'
+    type: 'number'
+    default: 300
+  - name: 'RUN_BEFORE_DEPLOYMENT'
+    type: 'string'
+    default: 'echo "No before script"'
+  - name: 'RUN_AFTER_DEPLOYMENT'
+    type: 'string'
+    default: 'echo "No after script"'
+
+steps:
+  - script: ${{ parameters.RUN_BEFORE_DEPLOYMENT }}
+    displayName: 'Run Before Deployment'
+
+  # Patch deployment with commit SHA label (exposed via kube_pod_labels metric)
+  # This triggers a rolling update with traceability
+  # Label key uses dots replaced with underscores for Prometheus compatibility
+  - task: 'Kubernetes@1'
+    inputs:
+      connectionType: 'Kubernetes Service Connection'
+      kubernetesServiceEndpoint: "${{ parameters.K8S_SERVICE_CONNECTION }}"
+      namespace: "${{ parameters.K8S_NAMESPACE }}"
+      command: 'patch'
+      arguments: >
+        deployment ${{ parameters.K8S_DEPLOYMENT_NAME }}
+        --type=strategic
+        -p '{"spec":{"template":{"metadata":{"labels":{"app.kubernetes.io/version":"$(Build.SourceVersion)"}}}}}'
+    displayName: 'Patch Deployment with Commit SHA'
+
+  # Wait for rollout to complete
+  - task: 'Kubernetes@1'
+    inputs:
+      connectionType: 'Kubernetes Service Connection'
+      kubernetesServiceEndpoint: "${{ parameters.K8S_SERVICE_CONNECTION }}"
+      namespace: "${{ parameters.K8S_NAMESPACE }}"
+      command: 'rollout'
+      arguments: "status deployment/${{ parameters.K8S_DEPLOYMENT_NAME }} --timeout=${{ parameters.TIMEOUT_SECONDS }}s"
+    displayName: 'Wait for Rollout'
+
+  - script: ${{ parameters.RUN_AFTER_DEPLOYMENT }}
+    displayName: 'Run After Deployment'

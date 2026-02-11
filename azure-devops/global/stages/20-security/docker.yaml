@@ -3,18 +3,6 @@ parameters:
     type: 'string'
 
 jobs:
-  - job: 'sast_horusec'
-    displayName: 'sast:horusec'
-    steps:
-      - template: '../../abstracts/scripts-repo.yaml'
-      - script: $(Scripts.Directory)/global/scripts/horusec/run.sh # TODO: needs to receive the requirements.txt
-        continueOnError: true
-
-      - task: 'PublishPipelineArtifact@1'
-        inputs:
-          artifactName: 'horusec'
-          targetPath: 'build/reports'
-
   - job: 'sast_semgrep'
     displayName: 'sast:semgrep'
     steps:

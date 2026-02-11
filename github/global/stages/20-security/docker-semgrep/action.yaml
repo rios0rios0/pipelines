@@ -14,7 +14,7 @@ runs:
 
     - name: 'Execute'
       shell: 'bash'
-      run: $SCRIPTS_DIR/global/scripts/semgrep/run.sh "${{ inputs.semgrep_lang }}"
+      run: $SCRIPTS_DIR/global/scripts/tools/semgrep/run.sh "${{ inputs.semgrep_lang }}"
 
     - name: 'Upload Report'
       uses: 'actions/upload-artifact@v6'

@@ -17,7 +17,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - **GitLab CI:** Include `gitlab/golang/go-docker.yaml` from this repo
 - **Azure DevOps:** Template `azure-devops/golang/go-docker.yaml@pipelines`
 
-**Security Tools:** Gitleaks, CodeQL, Semgrep, SonarQube, Dependency Track
+**Security Tools:** Gitleaks, CodeQL, Semgrep, Hadolint, Trivy, SonarQube, Dependency Track
 **Performance:** Security scans 2-10min, Container builds 5-30min
 **Architecture:** 5-stage pipeline (Code Check → Security → Tests → Management → Delivery)
 
@@ -52,10 +52,10 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
   bash global/scripts/shared/cleanup.sh  # Works - 0.004s
 
   # Run GoLang linting (downloads and runs golangci-lint)
-  bash global/scripts/golangci-lint/run.sh  # Works - 1.8s, exits with code 7 (no Go modules)
+  bash global/scripts/languages/golang/golangci-lint/run.sh  # Works - 1.8s, exits with code 7 (no Go modules)
 
   # Run security scanning with Gitleaks
-  bash global/scripts/gitleaks/run.sh  # Works - 2.0s (downloads Docker image)
+  bash global/scripts/tools/gitleaks/run.sh  # Works - 2.0s (downloads Docker image)
   ```
 
 - **Container building:**
@@ -77,6 +77,8 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 
 ### Scripts That Require Environment Variables
 - **codeql/run.sh** - Requires language argument (e.g., go, python, java, javascript, csharp)
+- **hadolint/run.sh** - Auto-discovers Dockerfiles, skips gracefully if none found
+- **trivy/run.sh** - Scans IaC misconfigurations (Terraform, Kubernetes, Dockerfiles)
 - **dependency-track/run.sh** - Requires `DEPENDENCY_TRACK_TOKEN` and `DEPENDENCY_TRACK_HOST_URL`
 - **sonarqube/run.sh** - Requires `sonar-scanner` installed and SonarQube environment
 - **semgrep/run.sh** - May run for 10+ minutes, downloads large Docker image
@@ -86,13 +88,15 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 
 ### Security & Analysis Tools
 
-| Tool                 | Purpose                 | Script Location                    | Configuration         |
-|----------------------|-------------------------|------------------------------------|-----------------------|
-| **Gitleaks**         | Secret detection        | `global/scripts/gitleaks/`         | `.gitleaks.toml`      |
-| **CodeQL**           | SAST security scanning  | `global/scripts/codeql/`           | Auto-configured       |
-| **Semgrep**          | Static analysis         | `global/scripts/semgrep/`          | Auto-configured       |
-| **SonarQube**        | Code quality & security | `global/scripts/sonarqube/`        | Project settings      |
-| **Dependency Track** | SCA analysis            | `global/scripts/dependency-track/` | Environment variables |
+| Tool                 | Purpose                          | Script Location                    | Configuration         |
+|----------------------|----------------------------------|------------------------------------|-----------------------|
+| **Gitleaks**         | Secret detection                 | `global/scripts/tools/gitleaks/`         | `.gitleaks.toml`      |
+| **CodeQL**           | SAST security scanning           | `global/scripts/tools/codeql/`           | Auto-configured       |
+| **Semgrep**          | Static analysis                  | `global/scripts/tools/semgrep/`          | Auto-configured       |
+| **Hadolint**         | Dockerfile linting               | `global/scripts/tools/hadolint/`         | `.hadolint.yaml`      |
+| **Trivy**            | IaC misconfiguration scanning    | `global/scripts/tools/trivy/`            | `.trivyignore`        |
+| **SonarQube**        | Code quality & security          | `global/scripts/tools/sonarqube/`        | Project settings      |
+| **Dependency Track** | SCA analysis                     | `global/scripts/tools/dependency-track/` | Environment variables |
 
 ### Language-Specific Tools
 
@@ -100,9 +104,9 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 
 | Tool               | Purpose               | Script Location                    |
 |--------------------|-----------------------|------------------------------------|
-| **golangci-lint**  | Go linting suite      | `global/scripts/golangci-lint/`    |
-| **Go Test Runner** | Comprehensive testing | `global/scripts/golang/test/`      |
-| **CycloneDX**      | SBOM generation       | `global/scripts/golang/cyclonedx/` |
+| **golangci-lint**  | Go linting suite      | `global/scripts/languages/golang/golangci-lint/`    |
+| **Go Test Runner** | Comprehensive testing | `global/scripts/languages/golang/test/`      |
+| **CycloneDX**      | SBOM generation       | `global/scripts/languages/golang/cyclonedx/` |
 
 ### Container Images
 
@@ -150,13 +154,17 @@ pipelines/
 │   └── global/                # Shared Azure DevOps templates
 ├── global/                     # Shared resources across platforms
 │   ├── scripts/               # Automation scripts
-│   │   ├── golang/            # Go-specific scripts (test, cyclonedx)
-│   │   ├── golangci-lint/     # Go linting configuration
-│   │   ├── gitleaks/          # Secret scanning
-│   │   ├── codeql/            # SAST security scanning (CodeQL)
-│   │   ├── semgrep/           # Static analysis
-│   │   ├── sonarqube/         # Code quality
-│   │   ├── dependency-track/  # SCA analysis
+│   │   ├── tools/             # Language-agnostic tools
+│   │   │   ├── codeql/        # SAST security scanning (CodeQL)
+│   │   │   ├── gitleaks/      # Secret scanning
+│   │   │   ├── hadolint/      # Dockerfile linting
+│   │   │   ├── semgrep/       # Static analysis
+│   │   │   ├── sonarqube/     # Code quality
+│   │   │   ├── trivy/         # IaC misconfiguration scanning
+│   │   │   └── dependency-track/ # SCA analysis
+│   │   ├── languages/         # Language-specific scripts
+│   │   │   ├── golang/        # Go scripts (test, cyclonedx, golangci-lint, init)
+│   │   │   └── python/        # Python scripts (cyclonedx)
 │   │   └── shared/            # Common utilities
 │   ├── containers/            # Custom Docker images
 │   │   ├── golang.*/          # Go development images
@@ -313,10 +321,10 @@ find . -type f -name "*.yaml" -exec sed -i.bak -E "s|(remote: 'https://raw.githu
 export SCRIPTS_DIR=/home/$USER/Development/github.com/rios0rios0/pipelines
 
 # Run any script
-$SCRIPTS_DIR/global/scripts/golangci-lint/run.sh
+$SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/run.sh
 
 # Link golangci-lint config globally
-ln -s $SCRIPTS_DIR/global/scripts/golangci-lint/.golangci.yml ~/.golangci.yml
+ln -s $SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/.golangci.yml ~/.golangci.yml
 ```
 
 ### Comprehensive Local Development Examples
@@ -324,34 +332,40 @@ ln -s $SCRIPTS_DIR/global/scripts/golangci-lint/.golangci.yml ~/.golangci.yml
 #### Configure Go Development
 ```bash
 # Link global Go linting configuration
-ln -s $SCRIPTS_DIR/global/scripts/golangci-lint/.golangci.yml ~/.golangci.yml
+ln -s $SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/.golangci.yml ~/.golangci.yml
 
 # Run linting in your project
-$SCRIPTS_DIR/global/scripts/golangci-lint/run.sh
+$SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/run.sh
 
 # Run with auto-fix
-$SCRIPTS_DIR/global/scripts/golangci-lint/run.sh --fix
+$SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/run.sh --fix
 ```
 
 #### Run Security Scanning Locally
 ```bash
 # Run secret detection
-$SCRIPTS_DIR/global/scripts/gitleaks/run.sh
+$SCRIPTS_DIR/global/scripts/tools/gitleaks/run.sh
 
 # Run SAST security scanning with CodeQL
-$SCRIPTS_DIR/global/scripts/codeql/run.sh go
+$SCRIPTS_DIR/global/scripts/tools/codeql/run.sh go
+
+# Run Dockerfile linting
+$SCRIPTS_DIR/global/scripts/tools/hadolint/run.sh
+
+# Run IaC misconfiguration scanning
+$SCRIPTS_DIR/global/scripts/tools/trivy/run.sh
 
 # Run static analysis (can take 10+ minutes)
-$SCRIPTS_DIR/global/scripts/semgrep/run.sh
+$SCRIPTS_DIR/global/scripts/tools/semgrep/run.sh
 ```
 
 #### Run Tests and Coverage
 ```bash
 # Run comprehensive Go tests
-$SCRIPTS_DIR/global/scripts/golang/test/run.sh
+$SCRIPTS_DIR/global/scripts/languages/golang/test/run.sh
 
 # Generate SBOM for Go projects
-$SCRIPTS_DIR/global/scripts/golang/cyclonedx/run.sh
+$SCRIPTS_DIR/global/scripts/languages/golang/cyclonedx/run.sh
 ```
 
 #### Build and Test Container Images

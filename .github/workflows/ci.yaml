@@ -85,15 +85,13 @@ jobs:
       - name: 'Validate script permissions'
         run: |
           echo "Checking script permissions..."
-          for script in global/scripts/*/run.sh; do
-            if [ -f "$script" ]; then
-              if [ ! -x "$script" ]; then
-                echo "⚠️  $script is not executable"
-                chmod +x "$script"
-                echo "✓ Fixed permissions for $script"
-              else
-                echo "✓ $script has correct permissions"
-              fi
+          for script in $(find global/scripts -name "run.sh" -type f); do
+            if [ ! -x "$script" ]; then
+              echo "⚠️  $script is not executable"
+              chmod +x "$script"
+              echo "✓ Fixed permissions for $script"
+            else
+              echo "✓ $script has correct permissions"
             fi
           done
 
@@ -151,13 +149,11 @@ jobs:
           done
 
           # Check for script documentation
-          for script in global/scripts/*/run.sh; do
-            if [ -f "$script" ]; then
-              if ! head -10 "$script" | grep -q "#"; then
-                echo "⚠️  $script lacks documentation comments"
-              else
-                echo "✓ $script has documentation"
-              fi
+          for script in $(find global/scripts -name "run.sh" -type f); do
+            if ! head -10 "$script" | grep -q "#"; then
+              echo "⚠️  $script lacks documentation comments"
+            else
+              echo "✓ $script has documentation"
             fi
           done
 

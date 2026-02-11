@@ -1,0 +1,11 @@
+# Default Hadolint configuration for CI pipelines.
+# Projects can override this by placing their own .hadolint.yaml in the project root.
+# See: https://github.com/hadolint/hadolint#configure
+
+# Only fail on warnings and above (ignore info/style suggestions)
+failure-threshold: warning
+
+# Commonly ignored rules in CI environments
+ignored:
+  - DL3008 # Pin versions in apt-get install (versions are often managed by the base image)
+  - DL3018 # Pin versions in apk add (same rationale for Alpine-based images)

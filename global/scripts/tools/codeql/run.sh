@@ -36,12 +36,19 @@ echo "CodeQL analysis complete. Results written to: $fileName"
 # Clean up database
 rm -rf "$(pwd)/.codeql-db"
 
-# Load false positive fingerprints if the project has a .codeql-false-positives file
+# Use default false positives file if the project doesn't provide one
+fpFileExists=true
+if [ ! -f ".codeql-false-positives" ]; then
+  fpFileExists=false
+  defaultFile="$SCRIPTS_DIR/global/scripts/tools/codeql/.codeql-false-positives"
+  cp "$defaultFile" .
+fi
+
+# Load false positive fingerprints
 FP_FILE="$(pwd)/.codeql-false-positives"
-FP_FILTER="[]"
-if [ -f "$FP_FILE" ]; then
-  FP_FILTER=$(grep -v '^\s*#' "$FP_FILE" | grep -v '^\s*$' | jq -R -s 'split("\n") | map(select(length > 0))')
-  FP_COUNT=$(echo "$FP_FILTER" | jq 'length')
+FP_FILTER=$(grep -v '^\s*#' "$FP_FILE" | grep -v '^\s*$' | jq -R -s 'split("\n") | map(select(length > 0))')
+FP_COUNT=$(echo "$FP_FILTER" | jq 'length')
+if [ "$FP_COUNT" -gt 0 ]; then
   echo "Loaded $FP_COUNT false positive fingerprint(s) from .codeql-false-positives"
 fi
 
@@ -59,5 +66,11 @@ if [ "$RESULT_COUNT" -gt 0 ]; then
     '.runs[].results[] | select(
       (.partialFingerprints // {} | to_entries | map(.value) | any(. as $h | $fp | any(. == $h))) | not
     ) | "  - \(.ruleId): \(.message.text) (\(.locations[0].physicalLocation.artifactLocation.uri):\(.locations[0].physicalLocation.region.startLine))"' "$fileName"
-  exit 1
+  EXIT_CODE=1
 fi
+
+if [ "$fpFileExists" = false ]; then
+  rm -f .codeql-false-positives
+fi
+
+exit ${EXIT_CODE:-0}

@@ -1,7 +1,7 @@
 steps:
   - template: 'go1.25.yaml'
 
-  - script: $(Scripts.Directory)/global/scripts/golang/test/run.sh
+  - script: $(Scripts.Directory)/global/scripts/languages/golang/test/run.sh
     displayName: 'Run Tests'
 
   - task: 'PublishTestResults@2'

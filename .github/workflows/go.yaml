@@ -51,6 +51,24 @@ jobs:
     needs: [ 'code_check-style_golangci_lint' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
+  security-sast_hadolint:
+    name: 'security > sast:hadolint'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
+    needs: [ 'code_check-style_golangci_lint' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sast_trivy:
+    name: 'security > sast:trivy'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy@main'
+    needs: [ 'code_check-style_golangci_lint' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
 
   # third stage
   tests-test_all:
@@ -58,7 +76,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/golang/stages/30-tests/all@main'
-    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks' ]
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 

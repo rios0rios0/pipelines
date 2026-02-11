@@ -27,5 +27,5 @@ jobs:
         continueOnError: true
 
       - template: '../../abstracts/scripts-repo.yaml'
-      - script: $(Scripts.Directory)/global/scripts/sonarqube/run.sh
+      - script: $(Scripts.Directory)/global/scripts/tools/sonarqube/run.sh
     continueOnError: true

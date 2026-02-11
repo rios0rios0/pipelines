@@ -9,13 +9,13 @@ runs:
 
     - name: 'Execute'
       shell: 'bash'
-      run: $SCRIPTS_DIR/global/scripts/tools/gitleaks/run.sh
+      run: $SCRIPTS_DIR/global/scripts/tools/trivy/run.sh
 
     - name: 'Upload Report'
       uses: 'actions/upload-artifact@v6'
       with:
-        name: 'gitleaks'
-        path: 'build/reports/gitleaks.json'
+        name: 'trivy'
+        path: 'build/reports/trivy.sarif'
         if-no-files-found: 'error'
         overwrite: 'true'
         retention-days: 10

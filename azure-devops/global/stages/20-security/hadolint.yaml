@@ -1,0 +1,12 @@
+jobs:
+  - job: 'sast_hadolint'
+    displayName: 'sast:hadolint'
+    steps:
+      - template: '../../abstracts/scripts-repo.yaml'
+      - script: $(Scripts.Directory)/global/scripts/tools/hadolint/run.sh
+        continueOnError: true
+
+      - task: 'PublishPipelineArtifact@1'
+        inputs:
+          artifactName: 'hadolint'
+          targetPath: 'build/reports'

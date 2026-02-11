@@ -19,7 +19,7 @@ if [ -z "$SCRIPTS_DIR" ]; then
 fi
 
 mergedYamlFile="merged.yml"
-defaultYamlFile="$SCRIPTS_DIR/global/scripts/golangci-lint/.golangci.yml"
+defaultYamlFile="$SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/.golangci.yml"
 
 if [ -f ".golangci.yml" ]; then
   python3 - "$defaultYamlFile" "$mergedYamlFile" << EOF

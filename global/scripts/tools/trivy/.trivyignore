@@ -1,0 +1,8 @@
+# Default Trivy ignore configuration for CI pipelines.
+# Projects can override this by placing their own .trivyignore in the project root.
+# See: https://aquasecurity.github.io/trivy/latest/docs/configuration/filtering/#by-finding-ids
+#
+# Format: Add finding IDs (one per line) to suppress known false positives.
+# Example:
+#   AVD-DS-0002
+#   AVD-KSV-0001

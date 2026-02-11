@@ -89,7 +89,17 @@ pipelines/
 │   │   ├── awscli.latest/     # AWS CLI tools
 │   │   └── tor-proxy.latest/  # Network proxy tools
 │   └── configs/               # Configuration files
-└── docs/                      # Documentation and examples
+├── makefiles/                  # Includable Makefile fragments for local usage
+│   ├── common.mk              # Security tools (sast) and setup
+│   ├── golang.mk              # Go targets (lint, test)
+│   ├── python.mk              # Python/PDM targets (lint, test)
+│   ├── java.mk                # Java/Gradle targets (lint, test)
+│   ├── javascript.mk          # JavaScript/Yarn targets (lint, test)
+│   ├── dotnet.mk              # .NET/C# targets (lint, test)
+│   └── terraform.mk           # Terraform targets (lint, test)
+├── .docs/                      # Documentation and examples
+│   └── examples/              # Per-provider usage examples
+└── .github/tests/              # Validation scripts for this repository
 ```
 
 ### Pipeline Architecture
@@ -363,55 +373,45 @@ Our pipeline templates include a comprehensive suite of tools for security, qual
 
 ### Security & Analysis Tools
 
-| Tool                 | Purpose                          | Script Location                    | Configuration         |
-|----------------------|----------------------------------|------------------------------------|-----------------------|
-| **Gitleaks**         | Secret detection                 | `global/scripts/tools/gitleaks/`         | `.gitleaks.toml`      |
-| **CodeQL**           | SAST security scanning           | `global/scripts/tools/codeql/`           | Auto-configured       |
-| **Semgrep**          | Static analysis                  | `global/scripts/tools/semgrep/`          | Auto-configured       |
-| **Hadolint**         | Dockerfile linting               | `global/scripts/tools/hadolint/`         | `.hadolint.yaml`      |
-| **Trivy**            | IaC misconfiguration scanning    | `global/scripts/tools/trivy/`            | `.trivyignore`        |
-| **SonarQube**        | Code quality & security          | `global/scripts/tools/sonarqube/`        | Project settings      |
-| **Dependency Track** | SCA analysis                     | `global/scripts/tools/dependency-track/` | Environment variables |
+| Tool                 | Purpose                       | Script Location                          | Configuration         |
+|----------------------|-------------------------------|------------------------------------------|-----------------------|
+| **Gitleaks**         | Secret detection              | `global/scripts/tools/gitleaks/`         | `.gitleaks.toml`      |
+| **CodeQL**           | SAST security scanning        | `global/scripts/tools/codeql/`           | Auto-configured       |
+| **Semgrep**          | Static analysis               | `global/scripts/tools/semgrep/`          | Auto-configured       |
+| **Hadolint**         | Dockerfile linting            | `global/scripts/tools/hadolint/`         | `.hadolint.yaml`      |
+| **Trivy**            | IaC misconfiguration scanning | `global/scripts/tools/trivy/`            | `.trivyignore`        |
+| **SonarQube**        | Code quality & security       | `global/scripts/tools/sonarqube/`        | Project settings      |
+| **Dependency Track** | SCA analysis                  | `global/scripts/tools/dependency-track/` | Environment variables |
 
 ### Language-Specific Tools
 
 #### Go Tools
 
-| Tool               | Purpose               | Script Location                    |
-|--------------------|-----------------------|------------------------------------|
-| **golangci-lint**  | Go linting suite      | `global/scripts/languages/golang/golangci-lint/`    |
-| **Go Test Runner** | Comprehensive testing | `global/scripts/languages/golang/test/`      |
-| **CycloneDX**      | SBOM generation       | `global/scripts/languages/golang/cyclonedx/` |
+| Tool               | Purpose               | Script Location                                  |
+|--------------------|-----------------------|--------------------------------------------------|
+| **golangci-lint**  | Go linting suite      | `global/scripts/languages/golang/golangci-lint/` |
+| **Go Test Runner** | Comprehensive testing | `global/scripts/languages/golang/test/`          |
+| **CycloneDX**      | SBOM generation       | `global/scripts/languages/golang/cyclonedx/`     |
 
 ### Usage Examples
 
-#### Run Security Scanning Locally
+#### Run Security Scanning Locally (via Makefile)
+
+The fastest way to run pipeline tools locally is through the Makefile includes. See the [Makefile Integration](#makefile-integration) section below for setup details.
 
 ```bash
-# Clone the pipelines repository
-curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
-
-# Set environment
-export SCRIPTS_DIR=/home/$USER/Development/github.com/rios0rios0/pipelines
-
-# Run secret detection
-$SCRIPTS_DIR/global/scripts/tools/gitleaks/run.sh
-
-# Run static analysis
-$SCRIPTS_DIR/global/scripts/tools/semgrep/run.sh
-
-# Run Go linting
-$SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/run.sh
+make setup      # Clone/update pipelines repo
+make lint       # Run golangci-lint
+make test       # Run Go tests with coverage
+make security   # Run all security tools (CodeQL, Gitleaks, Hadolint, Trivy, Semgrep)
 ```
 
 #### Configure Go Linting Globally
 
 ```bash
-# Link global golangci-lint configuration
+# Symlink the shared golangci-lint config for IDE integration
+SCRIPTS_DIR=$HOME/Development/github.com/rios0rios0/pipelines
 ln -s $SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/.golangci.yml ~/.golangci.yml
-
-# Run with auto-fix
-$SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/run.sh --fix
 ```
 
 ## 🐳 Container Images
@@ -443,66 +443,107 @@ docker build -t my-image -f global/containers/awscli.latest/Dockerfile global/co
 
 ### Installation & Setup
 
+The `clone.sh` script is an idempotent installer: it clones the repository on first run, and pulls the latest changes on subsequent runs. It is designed to be used in project Makefiles so that teams can run linting, SAST, and all pipeline tools locally before pushing.
+
 #### Quick Installation
 
 ```bash
-# Download and set up the pipelines repository
 curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
+```
+
+You can override the installation location with the `PIPELINES_HOME` environment variable:
+
+```bash
+PIPELINES_HOME=/opt/pipelines curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
 ```
 
 #### Manual Installation
 
 ```bash
-# Clone to standard location
 mkdir -p $HOME/Development/github.com/rios0rios0
 cd $HOME/Development/github.com/rios0rios0
 git clone https://github.com/rios0rios0/pipelines.git
 ```
 
-### Local Development Workflow
+### Makefile Integration
 
-#### Set Up Environment
+The recommended way to use this repository locally is through the includable `.mk` files. GNU Make's `-include` directive imports targets from the pipelines repository, so your project Makefile only needs to declare `SCRIPTS_DIR` and the includes:
 
-```bash
-# Export scripts directory for easy access
-export SCRIPTS_DIR=/home/$USER/Development/github.com/rios0rios0/pipelines
+**Before** (repeated in every project):
 
-# Add to your shell profile for persistence
-echo 'export SCRIPTS_DIR=/home/$USER/Development/github.com/rios0rios0/pipelines' >> ~/.bashrc
+```makefile
+SCRIPTS_DIR = $(HOME)/Development/github.com/rios0rios0/pipelines
+
+.PHONY: lint
+lint:
+	${SCRIPTS_DIR}/global/scripts/languages/golang/golangci-lint/run.sh --fix .
+
+.PHONY: test
+test:
+	${SCRIPTS_DIR}/global/scripts/languages/golang/test/run.sh .
+
+.PHONY: sast
+sast:
+	${SCRIPTS_DIR}/global/scripts/tools/codeql/run.sh "go"
 ```
 
-#### Common Development Tasks
+**After** (include once, get all targets):
 
-**Configure Go Development:**
+```makefile
+# Pipeline targets: setup, sast, lint, test
+SCRIPTS_DIR ?= $(HOME)/Development/github.com/rios0rios0/pipelines
+-include $(SCRIPTS_DIR)/makefiles/common.mk
+-include $(SCRIPTS_DIR)/makefiles/golang.mk
+
+build:
+	go build -o bin/app .
+
+run:
+	go run .
+```
+
+This gives you the following targets for free:
+
+| Target       | Source            | Description                              |
+|--------------|-------------------|------------------------------------------|
+| `make setup` | `common.mk`       | Clone or update the pipelines repository |
+| `make sast`  | `common.mk`       | Run all security SAST tools              |
+| `make lint`  | `<language>.mk`   | Run language-specific linter             |
+| `make test`  | `<language>.mk`   | Run language-specific tests              |
+
+Available language files:
+
+| File            | Language          | `lint`                                | `test`             |
+|-----------------|-------------------|---------------------------------------|--------------------|
+| `golang.mk`     | Go                | `golangci-lint --fix`                 | Go test + coverage |
+| `python.mk`     | Python (PDM)      | `isort` + `black` + `flake8` + `mypy` | `pytest`           |
+| `java.mk`       | Java (Gradle)     | `./gradlew check`                     | `./gradlew test`   |
+| `javascript.mk` | JavaScript (Yarn) | `yarn lint`                           | `yarn test`        |
+| `dotnet.mk`     | .NET/C#           | `dotnet format`                       | `dotnet test`      |
+| `terraform.mk`  | Terraform         | `terraform fmt` + `validate`          | `terraform plan`   |
+
+The `-include` prefix means Make silently skips the includes if the repository is not cloned yet. Run `make setup` (or `curl ... | bash`) to bootstrap.
+
+See the [`.docs/examples/`](.docs/examples) directory for complete per-provider examples including Makefiles.
+
+### Direct Script Usage
+
+If you prefer calling scripts directly without Makefile includes:
 
 ```bash
-# Link global Go linting configuration
-ln -s $SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/.golangci.yml ~/.golangci.yml
+export SCRIPTS_DIR=$HOME/Development/github.com/rios0rios0/pipelines
 
-# Run linting in your project
-$SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/run.sh
-
-# Run with auto-fix
+# Go linting
 $SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/run.sh --fix
-```
 
-**Run Tests and Security Scans:**
-
-```bash
-# Run comprehensive Go tests
+# Go tests
 $SCRIPTS_DIR/global/scripts/languages/golang/test/run.sh
 
-# Run security scans
+# Security scans
 $SCRIPTS_DIR/global/scripts/tools/gitleaks/run.sh
 $SCRIPTS_DIR/global/scripts/tools/codeql/run.sh go
-
-# Run Dockerfile linting
 $SCRIPTS_DIR/global/scripts/tools/hadolint/run.sh
-
-# Run IaC misconfiguration scanning (Terraform, Kubernetes, Dockerfiles)
 $SCRIPTS_DIR/global/scripts/tools/trivy/run.sh
-
-# Run static analysis (note: can take 10+ minutes)
 $SCRIPTS_DIR/global/scripts/tools/semgrep/run.sh
 ```
 
@@ -537,14 +578,12 @@ include:
 #### Run Repository Tests
 
 ```bash
-# Run all validation tests
+# Run all validation tests (Go test script + Lambda template validation)
 make test
 
-# Run Go script validation specifically
+# Run individual test suites
 make test-go-script
-
-# Manual validation script
-./test-go-validation.sh
+make test-lambda
 ```
 
 #### Build Container Images

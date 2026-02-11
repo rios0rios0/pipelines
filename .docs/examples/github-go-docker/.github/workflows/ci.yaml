@@ -1,0 +1,17 @@
+name: 'CI/CD Pipeline'
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ '*' ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  checks: write      # Required for test results
+  contents: write    # Required for releases
+  packages: write    # Required for container registry
+
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'

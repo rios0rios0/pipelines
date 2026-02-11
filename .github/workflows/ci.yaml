@@ -11,8 +11,8 @@ permissions:
   contents: read
 
 jobs:
-  validate-templates:
-    name: 'Validate Pipeline Templates'
+  validate:
+    name: 'Validate Templates and Scripts'
     runs-on: 'ubuntu-latest'
 
     steps:
@@ -30,131 +30,78 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y python3 python3-yaml make
 
-      - name: 'Validate Go test script'
-        run: make test-go-script
-
-      - name: 'Run all validation tests'
-        run: make test
-
-      - name: 'Check repository structure'
+      - name: 'Check required files'
         run: |
           echo "Checking required files..."
-          test -f CONTRIBUTING.md
-          test -f CHANGELOG.md
-          test -f README.md
-          test -f Makefile
-          test -f test-go-validation.sh
-          echo "✓ All required files found"
-
-      - name: 'Validate workflow templates'
-        run: |
-          echo "Validating GitHub Actions workflow templates..."
-          for workflow in .github/workflows/*.yaml; do
-            if [ -f "$workflow" ]; then
-              echo "Checking $workflow..."
-              # Basic YAML syntax validation
-              python3 -c "import yaml; yaml.safe_load(open('$workflow'))"
-              echo "✓ $workflow is valid YAML"
-            fi
+          for f in CONTRIBUTING.md CHANGELOG.md README.md Makefile clone.sh; do
+            test -f "$f" && echo "  ✓ $f" || { echo "  ✗ $f is missing"; exit 1; }
+          done
+          for f in .github/tests/test-go-validation.sh .github/tests/test-lambda-templates.sh; do
+            test -f "$f" && echo "  ✓ $f" || { echo "  ✗ $f is missing"; exit 1; }
           done
 
-      - name: 'Validate GitLab CI templates'
+      - name: 'Validate YAML syntax'
         run: |
-          echo "Validating GitLab CI templates..."
-          for template in gitlab/*/*.yaml; do
-            if [ -f "$template" ]; then
-              echo "Checking $template..."
-              # Basic YAML syntax validation
-              python3 -c "import yaml; yaml.safe_load(open('$template'))"
-              echo "✓ $template is valid YAML"
+          echo "Validating YAML files across all providers..."
+          errors=0
+          for template in $(find github gitlab azure-devops global .github/workflows .docs/examples -name '*.yaml' -o -name '*.yml' 2>/dev/null); do
+            if python3 -c "import yaml; yaml.safe_load(open('$template'))" 2>/dev/null; then
+              echo "  ✓ $template"
+            else
+              echo "  ✗ $template -- invalid YAML"
+              errors=$((errors + 1))
             fi
           done
-
-      - name: 'Validate Azure DevOps templates'
-        run: |
-          echo "Validating Azure DevOps templates..."
-          for template in azure-devops/*/*.yaml azure-devops/*/*.yml; do
-            if [ -f "$template" ]; then
-              echo "Checking $template..."
-              # Basic YAML syntax validation
-              python3 -c "import yaml; yaml.safe_load(open('$template'))"
-              echo "✓ $template is valid YAML"
-            fi
-          done
+          if [ "$errors" -gt 0 ]; then
+            echo "Found $errors YAML validation error(s)"
+            exit 1
+          fi
 
       - name: 'Validate script permissions'
         run: |
           echo "Checking script permissions..."
+          errors=0
           for script in $(find global/scripts -name "run.sh" -type f); do
             if [ ! -x "$script" ]; then
-              echo "⚠️  $script is not executable"
-              chmod +x "$script"
-              echo "✓ Fixed permissions for $script"
+              echo "  ✗ $script is not executable"
+              errors=$((errors + 1))
             else
-              echo "✓ $script has correct permissions"
+              echo "  ✓ $script"
             fi
           done
-
-  security-validation:
-    name: 'Security Validation'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: 'Checkout code'
-        uses: 'actions/checkout@v6'
-
-      - name: 'Check for secrets in code'
-        run: |
-          echo "Checking for potential secrets..."
-          # Look for common secret patterns
-          if grep -r -E "(password|secret|key|token).*=" global/ --include="*.sh" --include="*.yaml" --include="*.yml" | grep -v "#"; then
-            echo "⚠️  Potential secrets found in code"
+          if [ "$errors" -gt 0 ]; then
+            echo "Found $errors permission error(s) -- run: chmod +x <script>"
             exit 1
-          else
-            echo "✓ No obvious secrets found"
           fi
 
-      - name: 'Validate Dockerfile security'
-        run: |
-          echo "Checking Dockerfiles for security best practices..."
-          for dockerfile in global/containers/*/Dockerfile; do
-            if [ -f "$dockerfile" ]; then
-              echo "Checking $dockerfile..."
-              # Check for USER instruction
-              if grep -q "^USER " "$dockerfile"; then
-                echo "✓ $dockerfile uses non-root user"
-              else
-                echo "⚠️  $dockerfile might run as root"
-              fi
-            fi
-          done
+      - name: 'Run all validation tests'
+        run: make test
 
-  documentation-check:
-    name: 'Documentation Check'
-    runs-on: ubuntu-latest
+  lint-scripts:
+    name: 'Lint Shell Scripts'
+    runs-on: 'ubuntu-latest'
 
     steps:
       - name: 'Checkout code'
         uses: 'actions/checkout@v6'
 
-      - name: 'Check documentation completeness'
+      - name: 'Install ShellCheck'
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: 'Run ShellCheck'
         run: |
-          echo "Checking documentation..."
-
-          # Check README files
-          for dir in global gitlab azure-devops; do
-            if [ -d "$dir" ] && [ ! -f "$dir/README.md" ]; then
-              echo "⚠️  Missing README.md in $dir"
-            fi
-          done
-
-          # Check for script documentation
-          for script in $(find global/scripts -name "run.sh" -type f); do
-            if ! head -10 "$script" | grep -q "#"; then
-              echo "⚠️  $script lacks documentation comments"
+          echo "Running ShellCheck on all shell scripts..."
+          errors=0
+          for script in $(find global/scripts -name "*.sh" -type f); do
+            echo "Checking $script..."
+            if shellcheck --severity=warning "$script"; then
+              echo "  ✓ $script"
             else
-              echo "✓ $script has documentation"
+              echo "  ✗ $script has issues"
+              errors=$((errors + 1))
             fi
           done
-
-          echo "✓ Documentation check completed"
+          if [ "$errors" -gt 0 ]; then
+            echo "ShellCheck found issues in $errors script(s)"
+            exit 1
+          fi

@@ -1,8 +1,10 @@
 variables:
   SEMGREP_LANG: 'python'
+  CODEQL_LANGUAGE: 'python'
 
 include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/docker.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/codeql.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/python/abstracts/pdm.yaml'
 
 sca:safety:

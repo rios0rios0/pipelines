@@ -24,17 +24,23 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Working Effectively
 
 ### Bootstrap and Setup
-- **Clone the repository locally:**
+- **Using the clone script (recommended, idempotent -- clones or pulls):**
+  ```bash
+  curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
+  ```
+
+- **Manual clone:**
   ```bash
   mkdir -p $HOME/Development/github.com/rios0rios0
   cd $HOME/Development/github.com/rios0rios0
   git clone https://github.com/rios0rios0/pipelines.git
   ```
 
-- **Alternative: Use the provided clone script:**
-  ```bash
-  mkdir -p $HOME/Development/github.com/rios0rios0
-  curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
+- **Makefile integration (for downstream projects):**
+  ```makefile
+  SCRIPTS_DIR ?= $(HOME)/Development/github.com/rios0rios0/pipelines
+  -include $(SCRIPTS_DIR)/makefiles/golang.mk
+  -include $(SCRIPTS_DIR)/makefiles/common.mk
   ```
 
 ### Core Commands That Work
@@ -172,7 +178,12 @@ pipelines/
 │   │   ├── awscli.latest/     # AWS CLI tools
 │   │   └── tor-proxy.latest/  # Network proxy tools
 │   └── configs/               # Configuration files
-└── docs/                      # Documentation and examples
+├── makefiles/                  # Includable Makefile fragments for local usage
+│   ├── common.mk              # Security tools (sast, secrets, hadolint, trivy, semgrep)
+│   └── golang.mk              # Go-specific targets (lint, test)
+├── .docs/                      # Documentation and examples
+│   └── examples/              # Per-provider usage examples
+└── .github/tests/              # Validation scripts for this repository
 ```
 
 ### Pipeline Architecture
@@ -393,19 +404,19 @@ docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/
 3. **Validate pipeline templates** by including them in test projects
 4. **Verify Docker container builds** (may require network access)
 5. **Check security scanning tools** download and run correctly
-6. **Run test suite**: Execute `make test-go-script` for Go script changes
+6. **Run test suite**: Execute `make test` for all validation tests
 
 ### Test Suite Usage
 ```bash
-# Run all validation tests
+# Run all validation tests (Go test script + Lambda templates)
 make test
 
-# Run Go script validation specifically
+# Run individual test suites
 make test-go-script
-
-# Validate changes manually
-./test-go-validation.sh
+make test-lambda
 ```
+
+Test scripts are located in `.github/tests/`.
 
 ### Coverage Testing Requirements
 - Coverage reports MUST include all packages with Go files

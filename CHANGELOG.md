@@ -16,6 +16,18 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added `makefiles/common.mk` and `makefiles/golang.mk` includable Makefile fragments for local pipeline tool usage in downstream projects
+- added per-provider usage examples in `.docs/examples/` for GitHub Actions, GitLab CI, and Azure DevOps (Go with Docker)
+
+### Changed
+
+- added `test-lambda` target to Makefile so `test-lambda-templates.sh` is now part of `make test`
+- consolidated `.github/workflows/ci.yaml` into 2 focused jobs (`validate` + `lint-scripts`), removing superficial security and documentation checks
+- moved test scripts from root to `.github/tests/` directory to reduce clutter for downstream users
+- rewrote `clone.sh` as idempotent installer with `PIPELINES_HOME` support, auto-directory creation, and `git pull` on subsequent runs
+
 ## [3.0.0] - 2026-02-10
 
 ### Added
@@ -35,7 +47,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added `go-library.yaml` pipeline with Azure DevOps to deliver Go libraries
 - added `make test` and `make test-go-script` targets for automated testing
 - added a generic configuration to run CycloneDX for Python projects
-- added complete test validation suite with `test-go-validation.sh` script
+- added complete test validation suite with `.github/tests/test-go-validation.sh` script
 - added optional `IMAGE_NAME` parameter to Azure DevOps global docker delivery template to allow custom image names (defaults to repository name if not provided)
 - added optional `RESOLVE_S3` flag to Azure DevOps Go SAM delivery to support bucket auto resolving
 

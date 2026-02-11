@@ -74,7 +74,7 @@ pipelines/
 │   │   ├── golang/            # Go-specific scripts (test, cyclonedx)
 │   │   ├── golangci-lint/     # Go linting configuration
 │   │   ├── gitleaks/          # Secret scanning
-│   │   ├── horusec/           # Security scanning
+│   │   ├── codeql/            # SAST security scanning (CodeQL)
 │   │   ├── semgrep/           # Static analysis
 │   │   ├── sonarqube/         # Code quality
 │   │   └── shared/            # Common utilities
@@ -361,7 +361,7 @@ Our pipeline templates include a comprehensive suite of tools for security, qual
 | Tool                 | Purpose                 | Script Location                    | Configuration         |
 |----------------------|-------------------------|------------------------------------|-----------------------|
 | **Gitleaks**         | Secret detection        | `global/scripts/gitleaks/`         | `.gitleaks.toml`      |
-| **Horusec**          | SAST security scanning  | `global/scripts/horusec/`          | `horusec*.json`       |
+| **CodeQL**           | SAST security scanning  | `global/scripts/codeql/`           | Auto-configured       |
 | **Semgrep**          | Static analysis         | `global/scripts/semgrep/`          | Auto-configured       |
 | **SonarQube**        | Code quality & security | `global/scripts/sonarqube/`        | Project settings      |
 | **Dependency Track** | SCA analysis            | `global/scripts/dependency-track/` | Environment variables |
@@ -487,7 +487,7 @@ $SCRIPTS_DIR/global/scripts/golang/test/run.sh
 
 # Run security scans
 $SCRIPTS_DIR/global/scripts/gitleaks/run.sh
-$SCRIPTS_DIR/global/scripts/horusec/run.sh
+$SCRIPTS_DIR/global/scripts/codeql/run.sh go
 
 # Run static analysis (note: can take 10+ minutes)
 $SCRIPTS_DIR/global/scripts/semgrep/run.sh
@@ -568,10 +568,10 @@ docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/
 
 #### Security Tool Issues
 
-**Issue: Horusec exits with code 101**
+**Issue: CodeQL analysis fails**
 
-- **Cause:** No horusec configuration files found
-- **Solution:** Create `horusec-config.json` in your project root or let the script use defaults
+- **Cause:** CodeQL CLI not installed or language not supported
+- **Solution:** Ensure network access to download CodeQL CLI bundle; supported languages: go, python, java, javascript, csharp
 
 **Issue: Gitleaks takes too long or fails**
 

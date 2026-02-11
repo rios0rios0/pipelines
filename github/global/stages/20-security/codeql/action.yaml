@@ -1,0 +1,23 @@
+inputs:
+  codeql_language:
+    description: 'CodeQL language to analyze (e.g., go, python, java-kotlin, javascript-typescript, csharp)'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - name: 'Initialize CodeQL'
+      uses: 'github/codeql-action/init@v3'
+      with:
+        languages: ${{ inputs.codeql_language }}
+
+    - name: 'Autobuild'
+      uses: 'github/codeql-action/autobuild@v3'
+
+    - name: 'Perform CodeQL Analysis'
+      uses: 'github/codeql-action/analyze@v3'
+      with:
+        category: '/language:${{ inputs.codeql_language }}'

@@ -8,6 +8,16 @@ fi
 CODEQL_LANGUAGE="${1:?Usage: run.sh <language> (e.g., go, python, java, javascript, csharp)}"
 fileName="$(pwd)/$REPORT_PATH/codeql.sarif"
 
+# Load project-level configuration if available (e.g. for Go build environment)
+if [ "$CODEQL_LANGUAGE" = "go" ]; then
+  INIT_SCRIPT="config.sh"
+  if [ -f "$INIT_SCRIPT" ]; then
+    . ./"$INIT_SCRIPT"
+  else
+    echo "The '$INIT_SCRIPT' file was not found, skipping..."
+  fi
+fi
+
 # Install CodeQL CLI if not already available
 if ! command -v codeql > /dev/null 2>&1; then
   echo "Downloading CodeQL CLI bundle..."

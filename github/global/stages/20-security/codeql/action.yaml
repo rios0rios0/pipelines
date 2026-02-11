@@ -9,6 +9,21 @@ runs:
     - name: 'Checkout code'
       uses: 'actions/checkout@v6'
 
+    - name: 'Load Custom Configuration'
+      if: inputs.codeql_language == 'go'
+      run: |
+        INIT_SCRIPT="config.sh"
+        if [ -f "$INIT_SCRIPT" ]; then
+          env_before=$(mktemp)
+          env | sort > "$env_before"
+          . ./"$INIT_SCRIPT"
+          env | sort | comm -13 "$env_before" - >> "$GITHUB_ENV"
+          rm -f "$env_before"
+        else
+          echo "The '$INIT_SCRIPT' file was not found, skipping..."
+        fi
+      shell: 'bash'
+
     - name: 'Initialize CodeQL'
       uses: 'github/codeql-action/init@v3'
       with:

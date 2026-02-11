@@ -29,7 +29,7 @@ docker run \
 # TODO: create a way to have customized .gitleaks.toml
 if [ -z "$EXIT_CODE" ]; then
   # GitLab customized configuration file
-  cp "$SCRIPTS_DIR/global/scripts/gitleaks/.gitleaks.toml" .
+  cp "$SCRIPTS_DIR/global/scripts/tools/gitleaks/.gitleaks.toml" .
   docker run \
     -v "$(pwd):$CONTAINER_PATH" \
     --env REPORT_NUMBER="02" \

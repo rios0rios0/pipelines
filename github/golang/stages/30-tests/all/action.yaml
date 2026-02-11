@@ -12,5 +12,5 @@ runs:
 
     - uses: 'rios0rios0/pipelines/github/golang/abstracts/scripts-repo@main'
 
-    - run: $SCRIPTS_DIR/global/scripts/golang/test/run.sh
+    - run: $SCRIPTS_DIR/global/scripts/languages/golang/test/run.sh
       shell: 'bash'

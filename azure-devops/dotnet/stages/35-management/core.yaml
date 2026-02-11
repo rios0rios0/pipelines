@@ -57,5 +57,5 @@ stages:
               dotnet CycloneDX $(Restore.SlnFile) -o "$PREFIX$REPORT_PATH" --json -rs
 
           - template: '../../../global/abstracts/scripts-repo.yaml'
-          - script: $(Scripts.Directory)/global/scripts/dependency-track/run.sh
+          - script: $(Scripts.Directory)/global/scripts/tools/dependency-track/run.sh
         continueOnError: true

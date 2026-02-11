@@ -1,0 +1,11 @@
+# Default CodeQL false positives configuration for CI pipelines.
+# Projects can override this by placing their own .codeql-false-positives in the project root.
+#
+# Format: Add SARIF partialFingerprints values (one per line) to suppress known false positives.
+# Lines starting with '#' are treated as comments and ignored.
+#
+# To find the fingerprint for a finding, run CodeQL analysis and inspect the SARIF output:
+#   jq '.runs[].results[] | {ruleId, fingerprints: .partialFingerprints}' build/reports/codeql.sarif
+#
+# Example:
+#   abc123def456  # Suppress a specific finding by its partial fingerprint hash

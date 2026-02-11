@@ -14,6 +14,6 @@ stages:
           # $(Scripts.Directory) was already defined in the line below
           - template: '../../abstracts/go1.25.yaml'
 
-          - script: $(Scripts.Directory)/global/scripts/golang/cyclonedx/run.sh
-          - script: $(Scripts.Directory)/global/scripts/dependency-track/run.sh
+          - script: $(Scripts.Directory)/global/scripts/languages/golang/cyclonedx/run.sh
+          - script: $(Scripts.Directory)/global/scripts/tools/dependency-track/run.sh
         continueOnError: true

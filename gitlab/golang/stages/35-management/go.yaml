@@ -7,11 +7,11 @@ report:sonarqube:
   extends: '.sonarqube'
   script:
     - !reference [ .scripts-repo, before_script ]
-    - $SCRIPTS_DIR/global/scripts/sonarqube/run.sh
+    - $SCRIPTS_DIR/global/scripts/tools/sonarqube/run.sh
 
 report:dependency-track:
   extends: [ '.go', '.dependency-track' ]
   script:
     - !reference [ .scripts-repo, before_script ]
-    - $SCRIPTS_DIR/global/scripts/golang/init/run.sh
-    - $SCRIPTS_DIR/global/scripts/golang/cyclonedx/run.sh
+    - $SCRIPTS_DIR/global/scripts/languages/golang/init/run.sh
+    - $SCRIPTS_DIR/global/scripts/languages/golang/cyclonedx/run.sh

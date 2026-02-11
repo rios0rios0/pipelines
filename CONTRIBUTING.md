@@ -40,7 +40,7 @@ Update documentation to reflect any changes or new features you add. This includ
 Before submitting any changes to pipeline scripts or templates:
 
 1. **Run the test suite**: Execute `make test` to run all validation tests
-2. **Test Go script changes**: For changes to `global/scripts/golang/test/run.sh`, run `make test-go-script`
+2. **Test Go script changes**: For changes to `global/scripts/languages/golang/test/run.sh`, run `make test-go-script`
 3. **Create test scenarios**: When adding new features, create corresponding test scenarios in the validation scripts
 4. **Validate across platforms**: Test pipeline templates across GitHub Actions, GitLab CI, and Azure DevOps
 5. **Coverage verification**: Ensure that coverage reporting includes all packages, not just those with tests

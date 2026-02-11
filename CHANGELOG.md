@@ -16,17 +16,19 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-02-10
+
 ### Added
 
 - added CodeQL as SAST security scanning tool with native CLI support for Go, Python, Java, JavaScript, and C#
 - added Hadolint as `Dockerfile` linting tool with auto-discovery of `Dockerfiles` across all pipelines (GitHub Actions, GitLab CI, Azure DevOps)
-- added Trivy as IaC misconfiguration scanner for Terraform, Kubernetes, and `Dockerfiles` across all pipelines (GitHub Actions, GitLab CI, Azure DevOps)
 - added OCI image labels to Azure DevOps Docker builds for traceability (`org.opencontainers.image.revision`, `org.opencontainers.image.ref.name`, `org.opencontainers.image.created`, `org.opencontainers.image.source`)
+- added Trivy as IaC misconfiguration scanner for Terraform, Kubernetes, and `Dockerfiles` across all pipelines (GitHub Actions, GitLab CI, Azure DevOps)
 - added `github/global/stages/20-security/codeql/action.yaml` composite action using the official `github/codeql-action`
+- added `github/global/stages/20-security/hadolint/action.yaml` and `github/global/stages/20-security/trivy/action.yaml` composite actions
 - added `gitlab/global/stages/20-security/codeql.yaml` and `azure-devops/global/stages/20-security/codeql.yaml` as standalone templates separated from Docker-based tools
 - added `gitlab/global/stages/20-security/hadolint.yaml` and `azure-devops/global/stages/20-security/hadolint.yaml` templates for Dockerfile linting
 - added `gitlab/global/stages/20-security/trivy.yaml` and `azure-devops/global/stages/20-security/trivy.yaml` templates for IaC misconfiguration scanning
-- added `github/global/stages/20-security/hadolint/action.yaml` and `github/global/stages/20-security/trivy/action.yaml` composite actions
 - added `global/scripts/tools/codeql/run.sh` script that downloads CodeQL CLI bundle and runs security-and-quality analysis
 - added `global/scripts/tools/hadolint/run.sh` script that downloads Hadolint binary and lints `Dockerfiles` with SARIF output
 - added `global/scripts/tools/trivy/run.sh` script that downloads Trivy and scans for IaC misconfigurations with SARIF output
@@ -39,7 +41,6 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
-- replaced Horusec SAST tool with CodeQL across all pipelines (GitHub Actions, GitLab CI, Azure DevOps) due to Horusec being unmaintained
 - changed Go pipeline with GitHub to use GoReleaser instead of manually build
 - changed Python version from `3.13` to `3.14` on Azure DevOps modules
 - changed the Node version from `18.19.0` to `20.18.3` on Azure DevOps modules
@@ -47,6 +48,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed the structure on Azure DevOps to have files for each step inside each stage
 - enhanced coverage accuracy by using `-coverpkg` with all packages when tests are available
 - refactored `docker.yaml` security templates to only contain Docker-based tools (Semgrep, Gitleaks), with CodeQL in its own `codeql.yaml` template
+- replaced Horusec SAST tool with CodeQL across all pipelines (GitHub Actions, GitLab CI, Azure DevOps) due to Horusec being unmaintained
 - updated GoLang version to `1.25.7` on all pipelines and modules
 - updated `CONTRIBUTING.md` and `copilot-instructions.md` with mandatory testing requirements
 

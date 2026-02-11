@@ -1,0 +1,28 @@
+trigger:
+  branches:
+    include: [ main ]
+  tags:
+    include: [ '*' ]
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
+      - group: 'production-variables'
+  - ${{ else }}:
+      - group: 'development-variables'
+
+resources:
+  repositories:
+    - repository: 'pipelines'
+      type: 'github'
+      name: 'rios0rios0/pipelines'
+      endpoint: 'YOUR_GITHUB_SERVICE_CONNECTION'  # Replace with your service connection name
+
+stages:
+  - template: 'azure-devops/golang/go-docker.yaml@pipelines'
+    # Optional parameters:
+    # parameters:
+    #   DOCKER_BUILD_ARGS: '--build-arg VERSION=$(Build.BuildNumber)'
+    #   RUN_BEFORE_BUILD: 'echo "Preparing build environment"'

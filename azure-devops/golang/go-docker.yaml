@@ -15,3 +15,18 @@ stages:
     parameters:
       DOCKER_BUILD_ARGS: ${{ parameters.DOCKER_BUILD_ARGS }}
       RUN_BEFORE_BUILD: ${{ parameters.RUN_BEFORE_BUILD }}
+
+  # Optional K8s deployment stage - only runs if K8S_DEPLOYMENT_NAME variable is set
+  - stage: 'deployment'
+    displayName: 'Kubernetes Deployment'
+    dependsOn: 'delivery'
+    condition: and(succeeded(), ne(variables['K8S_DEPLOYMENT_NAME'], ''), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
+    jobs:
+      - job: 'deploy'
+        displayName: 'Deploy to Kubernetes'
+        steps:
+          - template: '../global/stages/50-deployment/k8s-deployment.yaml'
+            parameters:
+              K8S_SERVICE_CONNECTION: '$(K8S_ENDPOINT)'
+              K8S_NAMESPACE: '$(K8S_NAMESPACE)'
+              K8S_DEPLOYMENT_NAME: '$(K8S_DEPLOYMENT_NAME)'

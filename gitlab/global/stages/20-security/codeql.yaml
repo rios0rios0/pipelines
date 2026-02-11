@@ -1,0 +1,14 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo-alpine-docker.yaml'
+
+sast:codeql:
+  extends: '.scripts-repo-alpine-docker'
+  stage: 'security (sca/sast)'
+  script:
+    - $SCRIPTS_DIR/global/scripts/codeql/run.sh $CODEQL_LANGUAGE
+  artifacts:
+    when: 'always'
+    reports:
+      sast: "$REPORT_PATH/codeql.sarif"
+  dependencies: [] # prevent from fetching artifacts

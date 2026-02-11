@@ -63,13 +63,16 @@ jobs:
 
 
   # second stage
-  security-sast_horusec:
-    name: 'security > sast:horusec'
+  security-sast_codeql:
+    name: 'security > sast:codeql'
     runs-on: 'ubuntu-latest'
+    permissions:
+      security-events: 'write'
     steps:
-      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-horusec@main'
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
+        with:
+          codeql_language: 'python'
     needs: [ 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
-    continue-on-error: true # TODO: this is a temporary fix, remove it after the issue is fixed
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_semgrep:
@@ -119,7 +122,7 @@ jobs:
       - run: |
           pdm install -v
           pdm run test
-    needs: [ 'security-sast_horusec', 'security-sast_semgrep', 'security-sast_gitleaks' ]
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 

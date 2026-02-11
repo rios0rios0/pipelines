@@ -17,7 +17,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - **GitLab CI:** Include `gitlab/golang/go-docker.yaml` from this repo
 - **Azure DevOps:** Template `azure-devops/golang/go-docker.yaml@pipelines`
 
-**Security Tools:** Gitleaks, Horusec, Semgrep, SonarQube, Dependency Track
+**Security Tools:** Gitleaks, CodeQL, Semgrep, SonarQube, Dependency Track
 **Performance:** Security scans 2-10min, Container builds 5-30min
 **Architecture:** 5-stage pipeline (Code Check → Security → Tests → Management → Delivery)
 
@@ -76,7 +76,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
   ```
 
 ### Scripts That Require Environment Variables
-- **horusec/run.sh** - Exits with code 101 if no horusec config files present
+- **codeql/run.sh** - Requires language argument (e.g., go, python, java, javascript, csharp)
 - **dependency-track/run.sh** - Requires `DEPENDENCY_TRACK_TOKEN` and `DEPENDENCY_TRACK_HOST_URL`
 - **sonarqube/run.sh** - Requires `sonar-scanner` installed and SonarQube environment
 - **semgrep/run.sh** - May run for 10+ minutes, downloads large Docker image
@@ -89,7 +89,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 | Tool                 | Purpose                 | Script Location                    | Configuration         |
 |----------------------|-------------------------|------------------------------------|-----------------------|
 | **Gitleaks**         | Secret detection        | `global/scripts/gitleaks/`         | `.gitleaks.toml`      |
-| **Horusec**          | SAST security scanning  | `global/scripts/horusec/`          | `horusec*.json`       |
+| **CodeQL**           | SAST security scanning  | `global/scripts/codeql/`           | Auto-configured       |
 | **Semgrep**          | Static analysis         | `global/scripts/semgrep/`          | Auto-configured       |
 | **SonarQube**        | Code quality & security | `global/scripts/sonarqube/`        | Project settings      |
 | **Dependency Track** | SCA analysis            | `global/scripts/dependency-track/` | Environment variables |
@@ -153,7 +153,7 @@ pipelines/
 │   │   ├── golang/            # Go-specific scripts (test, cyclonedx)
 │   │   ├── golangci-lint/     # Go linting configuration
 │   │   ├── gitleaks/          # Secret scanning
-│   │   ├── horusec/           # Security scanning
+│   │   ├── codeql/            # SAST security scanning (CodeQL)
 │   │   ├── semgrep/           # Static analysis
 │   │   ├── sonarqube/         # Code quality
 │   │   ├── dependency-track/  # SCA analysis
@@ -338,8 +338,8 @@ $SCRIPTS_DIR/global/scripts/golangci-lint/run.sh --fix
 # Run secret detection
 $SCRIPTS_DIR/global/scripts/gitleaks/run.sh
 
-# Run SAST security scanning (requires horusec config)
-$SCRIPTS_DIR/global/scripts/horusec/run.sh
+# Run SAST security scanning with CodeQL
+$SCRIPTS_DIR/global/scripts/codeql/run.sh go
 
 # Run static analysis (can take 10+ minutes)
 $SCRIPTS_DIR/global/scripts/semgrep/run.sh
@@ -427,7 +427,7 @@ make test-go-script
 | Script downloads             | 1-5 seconds       | First-time tool downloads              |
 | Go linting (golangci-lint)   | 10-30 seconds     | Depends on codebase size               |
 | Security scanning (Gitleaks) | 2-5 minutes       | Depends on repository size             |
-| Security scanning (Horusec)  | 3-7 minutes       | SAST analysis                          |
+| Security scanning (CodeQL)   | 3-10 minutes      | SAST analysis                          |
 | Security scanning (Semgrep)  | 5-15 minutes      | Downloads large rule sets              |
 | Container builds             | 5-30 minutes      | Depends on base image and dependencies |
 | Go testing with coverage     | 10-60 seconds     | Depends on test suite size             |
@@ -468,9 +468,9 @@ make test-go-script
 
 #### Security Tool Issues
 
-**Issue: Horusec exits with code 101**
-- **Cause:** No horusec configuration files found
-- **Solution:** Create `horusec-config.json` in your project root or let the script use defaults
+**Issue: CodeQL analysis fails**
+- **Cause:** CodeQL CLI not installed or language not supported
+- **Solution:** Ensure network access to download CodeQL CLI bundle; supported languages: go, python, java, javascript, csharp
 
 **Issue: Gitleaks takes too long or fails**
 - **Cause:** Large repository or network issues

@@ -1,0 +1,16 @@
+parameters:
+  - name: 'CODEQL_LANGUAGE'
+    type: 'string'
+
+jobs:
+  - job: 'sast_codeql'
+    displayName: 'sast:codeql'
+    steps:
+      - template: '../../abstracts/scripts-repo.yaml'
+      - script: $(Scripts.Directory)/global/scripts/codeql/run.sh "${{ parameters.CODEQL_LANGUAGE }}"
+        continueOnError: true
+
+      - task: 'PublishPipelineArtifact@1'
+        inputs:
+          artifactName: 'codeql'
+          targetPath: 'build/reports'

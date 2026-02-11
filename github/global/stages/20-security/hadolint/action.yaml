@@ -9,14 +9,14 @@ runs:
 
     - name: 'Execute'
       shell: 'bash'
-      run: $SCRIPTS_DIR/global/scripts/tools/gitleaks/run.sh
+      run: $SCRIPTS_DIR/global/scripts/tools/hadolint/run.sh
 
     - name: 'Upload Report'
       uses: 'actions/upload-artifact@v6'
       with:
-        name: 'gitleaks'
-        path: 'build/reports/gitleaks.json'
-        if-no-files-found: 'error'
+        name: 'hadolint'
+        path: 'build/reports/hadolint.sarif'
+        if-no-files-found: 'warn'
         overwrite: 'true'
         retention-days: 10
       if: always()

@@ -7,7 +7,7 @@ sast:semgrep:
   extends: '.scripts-repo-alpine-docker'
   stage: 'security (sca/sast)'
   script:
-    - $SCRIPTS_DIR/global/scripts/semgrep/run.sh $SEMGREP_LANG # it takes the first param as the main language
+    - $SCRIPTS_DIR/global/scripts/tools/semgrep/run.sh $SEMGREP_LANG # it takes the first param as the main language
   artifacts:
     when: 'always'
     reports:
@@ -18,7 +18,7 @@ sast:gitleaks:
   extends: '.scripts-repo-alpine-docker'
   stage: 'security (sca/sast)'
   script:
-    - $SCRIPTS_DIR/global/scripts/gitleaks/run.sh
+    - $SCRIPTS_DIR/global/scripts/tools/gitleaks/run.sh
   artifacts:
     when: 'always'
     reports:

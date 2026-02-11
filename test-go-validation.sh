@@ -131,7 +131,7 @@ EOF
 
 cd "$TEST_DIR_COMPLETE"
 echo "Running comprehensive coverage test..."
-if /home/runner/work/pipelines/pipelines/global/scripts/golang/test/run.sh; then
+if /home/runner/work/pipelines/pipelines/global/scripts/languages/golang/test/run.sh; then
   echo "✓ Test 1 PASSED: Comprehensive coverage with build tags"
   echo "Verifying that untested package appears in coverage:"
   if grep -q "pkg/utils" coverage.txt; then
@@ -236,7 +236,7 @@ EOF
 
 cd "$TEST_DIR_NO_TAGS"
 echo "Running backward compatibility test with complete coverage..."
-if /home/runner/work/pipelines/pipelines/global/scripts/golang/test/run.sh; then
+if /home/runner/work/pipelines/pipelines/global/scripts/languages/golang/test/run.sh; then
   echo "✓ Test 2 PASSED: Backward compatibility with complete coverage"
   if grep -q "pkg/utils" coverage.txt; then
     echo "✓ Untested package correctly included in coverage report"
@@ -296,7 +296,7 @@ EOF
 
 cd "$TEST_DIR_NO_TESTS"
 echo "Running test with no test files (should handle gracefully)..."
-if /home/runner/work/pipelines/pipelines/global/scripts/golang/test/run.sh; then
+if /home/runner/work/pipelines/pipelines/global/scripts/languages/golang/test/run.sh; then
   echo "✓ Test 3 PASSED: No test files scenario handled gracefully"
 else
   echo "✗ Test 3 FAILED: No test files scenario"
@@ -392,7 +392,7 @@ EOF
 
 cd "$TEST_DIR_WITH_TEST_FOLDER"
 echo "Running test with test folder (should exclude test packages from coverage)..."
-if /home/runner/work/pipelines/pipelines/global/scripts/golang/test/run.sh; then
+if /home/runner/work/pipelines/pipelines/global/scripts/languages/golang/test/run.sh; then
   echo "✓ Test 4 PASSED: Test folder exclusion scenario"
   
   # Verify that test packages are NOT included in coverage

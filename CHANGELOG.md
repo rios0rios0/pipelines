@@ -19,10 +19,17 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Added
 
 - added CodeQL as SAST security scanning tool with native CLI support for Go, Python, Java, JavaScript, and C#
+- added Hadolint as `Dockerfile` linting tool with auto-discovery of `Dockerfiles` across all pipelines (GitHub Actions, GitLab CI, Azure DevOps)
+- added Trivy as IaC misconfiguration scanner for Terraform, Kubernetes, and `Dockerfiles` across all pipelines (GitHub Actions, GitLab CI, Azure DevOps)
 - added OCI image labels to Azure DevOps Docker builds for traceability (`org.opencontainers.image.revision`, `org.opencontainers.image.ref.name`, `org.opencontainers.image.created`, `org.opencontainers.image.source`)
 - added `github/global/stages/20-security/codeql/action.yaml` composite action using the official `github/codeql-action`
 - added `gitlab/global/stages/20-security/codeql.yaml` and `azure-devops/global/stages/20-security/codeql.yaml` as standalone templates separated from Docker-based tools
-- added `global/scripts/codeql/run.sh` script that downloads CodeQL CLI bundle and runs security-and-quality analysis
+- added `gitlab/global/stages/20-security/hadolint.yaml` and `azure-devops/global/stages/20-security/hadolint.yaml` templates for Dockerfile linting
+- added `gitlab/global/stages/20-security/trivy.yaml` and `azure-devops/global/stages/20-security/trivy.yaml` templates for IaC misconfiguration scanning
+- added `github/global/stages/20-security/hadolint/action.yaml` and `github/global/stages/20-security/trivy/action.yaml` composite actions
+- added `global/scripts/tools/codeql/run.sh` script that downloads CodeQL CLI bundle and runs security-and-quality analysis
+- added `global/scripts/tools/hadolint/run.sh` script that downloads Hadolint binary and lints `Dockerfiles` with SARIF output
+- added `global/scripts/tools/trivy/run.sh` script that downloads Trivy and scans for IaC misconfigurations with SARIF output
 - added `go-library.yaml` pipeline with Azure DevOps to deliver Go libraries
 - added `make test` and `make test-go-script` targets for automated testing
 - added a generic configuration to run CycloneDX for Python projects
@@ -46,7 +53,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Fixed
 
 - fixed Azure DevOps Go SAM delivery to normalize `RESOLVE_S3` booleans so `--resolve-s3` works with Azure `True/False` (capitalized) values
-- fixed GoLang `1.25.1` compatibility issue in `global/scripts/golang/test/run.sh` by implementing comprehensive coverage reporting
+- fixed GoLang `1.25.1` compatibility issue in `global/scripts/languages/golang/test/run.sh` by implementing comprehensive coverage reporting
 - fixed coverage reporting to include all packages with Go files, not just packages with tests
 - fixed deployment issue to deploy an AWS Lambda with SAM CLI
 - fixed missing `Scripts.Directory` configuration in `pdm-python3.14.yaml` by including the required `scripts-repo.yaml` template
@@ -180,7 +187,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed the GoLang for Azure DevOps stages to use the `config.sh` script as a source from each project
 - fixed the GoLang pipeline for Azure DevOps to use an optional cache in the delivery stage
 - fixed the GoLang test script to test the `pkg` directory to avoid excluding lib-only directories from testing
-- fixed the error in `global/scripts/golang/test/run.sh` where `cmd` and `internal` folders were both required at the same time
+- fixed the error in `global/scripts/languages/golang/test/run.sh` where `cmd` and `internal` folders were both required at the same time
 - fixed the incorrect string concatenation of the `PREFIX` and `REPORT_PATH` variables
 - fixed the task for Azure DevOps GoLang to avoid failing if there's no function or resource group deployed
 - fixed the task in the GoLang delivery stage to retrieve only the last function app

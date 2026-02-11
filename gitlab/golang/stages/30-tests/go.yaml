@@ -6,7 +6,7 @@ test:all:
   stage: 'tests'
   script:
     - !reference [ .scripts-repo, before_script ]
-    - $SCRIPTS_DIR/global/scripts/golang/test/run.sh
+    - $SCRIPTS_DIR/global/scripts/languages/golang/test/run.sh
   coverage: '/total.*?([0-9]{1,3}[.][0-9]{0,2})%/'
   artifacts:
     when: 'always'

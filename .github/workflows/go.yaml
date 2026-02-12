@@ -24,8 +24,6 @@ jobs:
   security-sast_codeql:
     name: 'security > sast:codeql'
     runs-on: 'ubuntu-latest'
-    #permissions:
-    #  security-events: 'write'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
         with:
@@ -95,17 +93,18 @@ jobs:
 
 # 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations
 # 2- the recommended events to trigger this workflow and permissions are:
-#on:
-#  push:
-#    branches:
-#      - 'main'
-#    tags:
-#      - '*'
-#  pull_request:
-#    branches:
-#      - 'main'
-#  workflow_dispatch:
+# on:
+#   push:
+#     branches:
+#       - 'main'
+#     tags:
+#       - '*'
+#   pull_request:
+#     branches:
+#       - 'main'
+#   workflow_dispatch:
 #
-#permissions:
-#  checks: 'write' # code_check-style_golangci_lint
-#  contents: 'write' # delivery-release
+# permissions:
+#   checks: 'write' # code_check-style_golangci_lint
+#   security-events: 'read' # security-sast_codeql
+#   contents: 'write' # delivery-release

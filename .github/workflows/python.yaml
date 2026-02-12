@@ -66,8 +66,6 @@ jobs:
   security-sast_codeql:
     name: 'security > sast:codeql'
     runs-on: 'ubuntu-latest'
-    #permissions:
-    #  security-events: 'write'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
         with:
@@ -167,3 +165,5 @@ jobs:
 #         - 'main'
 #     workflow_dispatch:
 #
+# permissions:
+#   security-events: 'read' # security-sast_codeql

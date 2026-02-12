@@ -1,5 +1,5 @@
 steps:
-  - template: 'go1.25.yaml'
+  - template: 'go.yaml'
 
   - script: $(Scripts.Directory)/global/scripts/languages/golang/test/run.sh
     displayName: 'Run Tests'

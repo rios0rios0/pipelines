@@ -1,0 +1,22 @@
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - name: 'Get Scripts'
+      uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - name: 'Execute'
+      shell: 'bash'
+      run: $SCRIPTS_DIR/global/scripts/tools/trivy/run-sca.sh
+
+    - name: 'Upload Report'
+      uses: 'actions/upload-artifact@v6'
+      with:
+        name: 'trivy-sca'
+        path: 'build/reports/trivy-sca.json'
+        if-no-files-found: 'error'
+        overwrite: 'true'
+        retention-days: 10
+      if: always()

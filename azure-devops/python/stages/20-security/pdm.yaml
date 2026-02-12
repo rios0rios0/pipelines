@@ -14,3 +14,13 @@ stages:
       - template: '../../../global/stages/20-security/hadolint.yaml'
 
       - template: '../../../global/stages/20-security/trivy.yaml'
+
+      - template: '../../../global/stages/20-security/trivy-sca.yaml'
+
+      - job: 'sca_safety'
+        displayName: 'sca:safety'
+        steps:
+          - template: '../../abstracts/pdm-python3.14.yaml'
+          - script: pdm run safety-check
+            displayName: 'Run Safety dependency check'
+        continueOnError: true

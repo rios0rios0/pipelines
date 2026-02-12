@@ -13,13 +13,15 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `docker --version && make --version && go version` - Check dependencies
 
 **Common Pipeline Usage:**
-- **GitHub Actions:** Use `.github/workflows/go-docker.yaml@main`
-- **GitLab CI:** Include `gitlab/golang/go-docker.yaml` from this repo
+- **GitHub Actions:** Use `.github/workflows/go-docker.yaml@main`, `java-docker.yaml@main`, `javascript-docker.yaml@main`, `dotnet-docker.yaml@main`
+- **GitLab CI:** Include `gitlab/golang/go-docker.yaml`, `gitlab/terraform/terra.yaml` from this repo
 - **Azure DevOps:** Template `azure-devops/golang/go-docker.yaml@pipelines`
 
-**Security Tools:** Gitleaks, CodeQL, Semgrep, Hadolint, Trivy, SonarQube, Dependency Track
+**SAST Tools:** Gitleaks, CodeQL, Semgrep, Hadolint, Trivy IaC
+**SCA Tools:** Trivy SCA (all languages), govulncheck (Go), Safety (Python), OWASP Dependency-Check (Java), yarn npm audit (JavaScript)
+**Quality Tools:** SonarQube, Dependency Track
 **Performance:** Security scans 2-10min, Container builds 5-30min
-**Architecture:** 5-stage pipeline (Code Check → Security → Tests → Management → Delivery)
+**Architecture:** 5-stage pipeline (Code Check [lint + rebase-check] → Security → Tests → Management → Delivery)
 
 ## Working Effectively
 
@@ -94,15 +96,33 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 
 ### Security & Analysis Tools
 
+#### SAST Tools
+
 | Tool                 | Purpose                          | Script Location                    | Configuration         |
 |----------------------|----------------------------------|------------------------------------|-----------------------|
 | **Gitleaks**         | Secret detection                 | `global/scripts/tools/gitleaks/`         | `.gitleaks.toml`      |
 | **CodeQL**           | SAST security scanning           | `global/scripts/tools/codeql/`           | Auto-configured       |
 | **Semgrep**          | Static analysis                  | `global/scripts/tools/semgrep/`          | Auto-configured       |
 | **Hadolint**         | Dockerfile linting               | `global/scripts/tools/hadolint/`         | `.hadolint.yaml`      |
-| **Trivy**            | IaC misconfiguration scanning    | `global/scripts/tools/trivy/`            | `.trivyignore`        |
+| **Trivy IaC**        | IaC misconfiguration scanning    | `global/scripts/tools/trivy/run.sh`      | `.trivyignore`        |
+
+#### SCA Tools
+
+| Tool                       | Purpose                           | Languages  | Script / Integration                           |
+|----------------------------|-----------------------------------|------------|-------------------------------------------------|
+| **Trivy SCA**              | Dependency vulnerability scanning | All        | `global/scripts/tools/trivy/run-sca.sh`         |
+| **govulncheck**            | Go vulnerability scanning         | Go         | `global/scripts/languages/golang/govulncheck/`   |
+| **Safety**                 | Python dependency scanning        | Python     | `pdm run safety-check`                           |
+| **OWASP Dependency-Check** | Java dependency scanning          | Java       | `./gradlew dependencyCheckAnalyze`               |
+| **yarn npm audit**         | JS/Node.js dependency scanning    | JavaScript | `yarn npm audit --recursive`                     |
+
+#### Quality & Management Tools
+
+| Tool                 | Purpose                          | Script Location                    | Configuration         |
+|----------------------|----------------------------------|------------------------------------|-----------------------|
+| **Rebase Check**     | PR/MR rebase verification        | `global/scripts/shared/rebase-check.sh`  | Auto-configured       |
 | **SonarQube**        | Code quality & security          | `global/scripts/tools/sonarqube/`        | Project settings      |
-| **Dependency Track** | SCA analysis                     | `global/scripts/tools/dependency-track/` | Environment variables |
+| **Dependency Track** | SBOM tracking                    | `global/scripts/tools/dependency-track/` | Environment variables |
 
 ### Language-Specific Tools
 
@@ -142,6 +162,9 @@ pipelines/
 │   ├── go-docker.yaml         # Go with Docker delivery
 │   ├── go-binary.yaml         # Go binary compilation
 │   ├── python-docker.yaml     # Python with Docker
+│   ├── java-docker.yaml       # Java with Docker delivery
+│   ├── javascript-docker.yaml # JavaScript with Docker delivery
+│   ├── dotnet-docker.yaml     # .NET with Docker delivery
 │   └── ...
 ├── gitlab/                     # GitLab CI pipeline templates
 │   ├── golang/                # Go language pipelines
@@ -149,6 +172,7 @@ pipelines/
 │   ├── python/                # Python language pipelines
 │   ├── javascript/            # JavaScript/Node.js pipelines
 │   ├── dotnet/                # .NET language pipelines
+│   ├── terraform/             # Terraform pipelines
 │   └── global/                # Shared GitLab configurations
 ├── azure-devops/              # Azure DevOps pipeline templates
 │   ├── golang/                # Go language pipelines
@@ -180,7 +204,12 @@ pipelines/
 │   └── configs/               # Configuration files
 ├── makefiles/                  # Includable Makefile fragments for local usage
 │   ├── common.mk              # Security tools (sast, secrets, hadolint, trivy, semgrep)
-│   └── golang.mk              # Go-specific targets (lint, test)
+│   ├── golang.mk              # Go-specific targets (lint, test)
+│   ├── python.mk              # Python/PDM targets (lint, test)
+│   ├── java.mk                # Java/Gradle targets (lint, test)
+│   ├── javascript.mk          # JavaScript/Yarn targets (lint, test)
+│   ├── dotnet.mk              # .NET/C# targets (lint, test)
+│   └── terraform.mk           # Terraform targets (lint, test)
 ├── .docs/                      # Documentation and examples
 │   └── examples/              # Per-provider usage examples
 └── .github/tests/              # Validation scripts for this repository
@@ -190,7 +219,7 @@ pipelines/
 
 Each platform follows a consistent **5-stage pipeline architecture**:
 
-1. **🔍 Code Check (Style/Quality)** - Linting, formatting, code quality
+1. **🔍 Code Check (Style/Quality)** - Linting, formatting, code quality, rebase verification
 2. **🔒 Security (SCA/SAST)** - Vulnerability scanning, secret detection
 3. **🧪 Tests** - Unit tests, integration tests, coverage reporting
 4. **📊 Management** - Dependency tracking, SBOM generation
@@ -210,15 +239,15 @@ Each platform follows a consistent **5-stage pipeline architecture**:
 |------------------------|----------------|-----------|--------------|--------------------------------|
 | **GoLang**             | ✅              | ✅         | ✅            | Binary, Docker, ARM deployment |
 | **Python**             | ✅              | ✅         | ✅            | PDM, Docker, K8s deployment    |
-| **Java**               | ❌              | ✅         | ✅            | Maven, Gradle, Docker          |
-| **JavaScript/Node.js** | ❌              | ✅         | ✅            | Yarn, Docker, K8s deployment   |
-| **.NET/C#**            | ❌              | ✅         | ✅            | Framework, Core, Docker        |
-| **Terraform**          | ❌              | ❌         | ✅            | Infrastructure as Code         |
+| **Java**               | ✅              | ✅         | ✅            | Maven, Gradle, Docker          |
+| **JavaScript/Node.js** | ✅              | ✅         | ✅            | Yarn, Docker, K8s deployment   |
+| **.NET/C#**            | ✅              | ✅         | ✅            | Framework, Core, Docker        |
+| **Terraform**          | ❌              | ✅         | ✅            | Infrastructure as Code         |
 
 **Pipeline Templates Available:**
-- **GitHub Actions:** `go.yaml`, `go-docker.yaml`, `go-binary.yaml`, `python.yaml`, `python-docker.yaml`
-- **GitLab CI:** `go-docker.yaml`, `go-debian.yaml`, `go-sam.yaml`, `gradle-docker.yaml`, `maven-docker.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `framework.yaml`
-- **Azure DevOps:** `go-docker.yaml`, `go-arm.yaml`, `go-function-arm.yaml`, `gradle-docker.yaml`, `maven-docker.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `framework.yaml`, plus Terraform templates
+- **GitHub Actions:** `go.yaml`, `go-docker.yaml`, `go-binary.yaml`, `python.yaml`, `python-docker.yaml`, `java.yaml`, `java-docker.yaml`, `javascript.yaml`, `javascript-docker.yaml`, `dotnet.yaml`, `dotnet-docker.yaml`
+- **GitLab CI:** `go-docker.yaml`, `go-debian.yaml`, `go-sam.yaml`, `gradle-docker.yaml`, `maven-docker.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `framework.yaml`, `terra.yaml`
+- **Azure DevOps:** `go-docker.yaml`, `go-arm.yaml`, `go-function-arm.yaml`, `kotlin-gradle.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `core.yaml`, `terra.yaml`
 
 ## Common Tasks
 
@@ -318,6 +347,66 @@ include:
 ```yaml
 include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/javascript/yarn-docker.yaml'
+```
+
+#### Terraform (GitLab CI)
+```yaml
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/terraform/terra.yaml'
+```
+
+#### Java with Docker (GitHub Actions)
+```yaml
+name: 'CI/CD Pipeline'
+on:
+  push:
+    branches: [main]
+    tags: ['*']
+  pull_request:
+    branches: [main]
+permissions:
+  security-events: write
+  contents: write
+  packages: write
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/java-docker.yaml@main'
+```
+
+#### JavaScript with Docker (GitHub Actions)
+```yaml
+name: 'CI/CD Pipeline'
+on:
+  push:
+    branches: [main]
+    tags: ['*']
+  pull_request:
+    branches: [main]
+permissions:
+  security-events: write
+  contents: write
+  packages: write
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/javascript-docker.yaml@main'
+```
+
+#### .NET with Docker (GitHub Actions)
+```yaml
+name: 'CI/CD Pipeline'
+on:
+  push:
+    branches: [main]
+    tags: ['*']
+  pull_request:
+    branches: [main]
+permissions:
+  security-events: write
+  contents: write
+  packages: write
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/dotnet-docker.yaml@main'
 ```
 
 ### Testing Pipeline Changes in Development Branches

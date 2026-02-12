@@ -166,4 +166,4 @@ jobs:
 #     workflow_dispatch:
 #
 # permissions:
-#   security-events: 'read' # security-sast_codeql
+#   security-events: 'write' # security-sast_codeql

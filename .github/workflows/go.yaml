@@ -106,5 +106,5 @@ jobs:
 #
 # permissions:
 #   checks: 'write' # code_check-style_golangci_lint
-#   security-events: 'read' # security-sast_codeql
+#   security-events: 'write' # security-sast_codeql
 #   contents: 'write' # delivery-release

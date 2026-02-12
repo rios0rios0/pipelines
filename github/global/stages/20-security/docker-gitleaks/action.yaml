@@ -5,7 +5,7 @@ runs:
       uses: 'actions/checkout@v6'
 
     - name: 'Get Scripts'
-      uses: 'rios0rios0/pipelines/github/golang/abstracts/scripts-repo@main'
+      uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 
     - name: 'Execute'
       shell: 'bash'

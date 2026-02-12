@@ -5,6 +5,15 @@ on:
 
 jobs:
   # first stage
+  code_check-rebase_check:
+    name: 'code-check > quality:rebase-check'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/10-code-check/rebase-check@main'
+        with:
+          target_branch: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch || 'main' }}
+    if: "github.event_name == 'pull_request'"
+
   code_check-style_isort:
     name: 'code-check > style:isort'
     runs-on: 'ubuntu-latest'
@@ -70,7 +79,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
         with:
           codeql_language: 'python'
-    needs: [ 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
+    needs: [ 'code_check-rebase_check', 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_semgrep:
@@ -80,7 +89,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-semgrep@main'
         with:
           semgrep_lang: 'python'
-    needs: [ 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
+    needs: [ 'code_check-rebase_check', 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_gitleaks:
@@ -88,7 +97,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-gitleaks@main'
-    needs: [ 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
+    needs: [ 'code_check-rebase_check', 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_hadolint:
@@ -96,7 +105,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
-    needs: [ 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
+    needs: [ 'code_check-rebase_check', 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -105,7 +114,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy@main'
-    needs: [ 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
+    needs: [ 'code_check-rebase_check', 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -114,7 +123,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy-sca@main'
-    needs: [ 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
+    needs: [ 'code_check-rebase_check', 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -130,7 +139,7 @@ jobs:
       - run: |
           pdm install -v
           pdm run safety-check
-    needs: [ 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
+    needs: [ 'code_check-rebase_check', 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 

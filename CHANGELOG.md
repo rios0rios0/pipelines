@@ -31,6 +31,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added OWASP Dependency-Check SCA job to GitHub Actions and Azure DevOps Java security stages (previously only in GitLab)
 - added `global/scripts/tools/trivy/run-sca.sh` shared script for Trivy dependency vulnerability scanning
 - added `global/scripts/languages/golang/govulncheck/run.sh` shared script for Go vulnerability scanning
+- added rebase-check quality gate to the code-check stage across all providers (GitHub Actions, GitLab CI, Azure DevOps) and all languages, failing the pipeline when a PR/MR branch is not rebased on the default branch
 
 ### Changed
 

@@ -16,6 +16,25 @@ DOCKERFILES=$(find "$(pwd)" -name "Dockerfile*" \
 
 if [ -z "$DOCKERFILES" ]; then
   echo "No Dockerfiles found, skipping Hadolint analysis."
+  cat > "$fileName" <<'EOF'
+{
+  "version": "2.1.0",
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Hadolint",
+          "informationUri": "https://github.com/hadolint/hadolint",
+          "rules": []
+        }
+      },
+      "results": []
+    }
+  ]
+}
+EOF
+  echo "Empty report written to: $fileName"
   exit 0
 fi
 

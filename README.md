@@ -110,7 +110,7 @@ pipelines/
 
 Each platform follows a consistent **5-stage pipeline architecture**:
 
-1. **🔍 Code Check (Style/Quality)** - Linting, formatting, code quality
+1. **🔍 Code Check (Style/Quality)** - Linting, formatting, code quality, rebase verification
 2. **🔒 Security (SCA/SAST)** - Vulnerability scanning, secret detection
 3. **🧪 Tests** - Unit tests, integration tests, coverage reporting
 4. **📊 Management** - Dependency tracking, SBOM generation
@@ -480,8 +480,15 @@ Our pipeline templates include a comprehensive suite of tools for security, qual
 
 | Tool                 | Purpose                       | Script Location                          | Configuration         |
 |----------------------|-------------------------------|------------------------------------------|-----------------------|
+| **Rebase Check**     | PR/MR rebase verification     | `global/scripts/shared/rebase-check.sh`  | Auto-configured       |
 | **SonarQube**        | Code quality & security       | `global/scripts/tools/sonarqube/`        | Project settings      |
 | **Dependency Track** | SBOM tracking                 | `global/scripts/tools/dependency-track/` | Environment variables |
+
+### Rebase Check
+
+Every pipeline includes a **rebase check** that runs in parallel with linting during the **Code Check** stage. This job verifies that the PR/MR branch is rebased on top of the target branch (usually `main`). If the branch is behind, the pipeline fails with clear instructions to rebase.
+
+This enforces a linear commit history and prevents merge conflicts from reaching the test and delivery stages.
 
 ### Language-Specific Tools
 

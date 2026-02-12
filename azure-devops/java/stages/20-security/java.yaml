@@ -14,3 +14,16 @@ stages:
         - template: '../../../global/stages/20-security/hadolint.yaml'
 
         - template: '../../../global/stages/20-security/trivy.yaml'
+
+        - template: '../../../global/stages/20-security/trivy-sca.yaml'
+
+        - job: 'sca_dependency_check'
+          displayName: 'sca:dependency-check'
+          steps:
+            - template: '../../abstracts/gradle.yaml'
+            - script: |
+                mkdir -p '.owasp'
+                export OWASP_PATH="$(pwd)/.owasp"
+                ./gradlew dependencyCheckAnalyze
+              displayName: 'Run OWASP Dependency-Check'
+          continueOnError: true

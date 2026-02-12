@@ -3,6 +3,8 @@ stages:
     displayName: 'code check (style/quality)'
     condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     jobs:
+      - template: '../../../global/stages/10-code-check/rebase-check.yaml'
+
       - job: 'style_golangci_lint'
         displayName: 'style:golangci-lint'
         variables:

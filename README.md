@@ -40,10 +40,10 @@ Choose your platform and language:
 |------------------------|----------------|-----------|--------------|--------------------------------|
 | **GoLang**             | ✅              | ✅         | ✅            | Binary, Docker, ARM deployment |
 | **Python**             | ✅              | ✅         | ✅            | PDM, Docker, K8s deployment    |
-| **Java**               | ❌              | ✅         | ✅            | Maven, Gradle, Docker          |
-| **JavaScript/Node.js** | ❌              | ✅         | ✅            | Yarn, Docker, K8s deployment   |
-| **.NET/C#**            | ❌              | ✅         | ✅            | Framework, Core, Docker        |
-| **Terraform**          | ❌              | ❌         | ✅            | Infrastructure as Code         |
+| **Java**               | ✅              | ✅         | ✅            | Maven, Gradle, Docker          |
+| **JavaScript/Node.js** | ✅              | ✅         | ✅            | Yarn, Docker, K8s deployment   |
+| **.NET/C#**            | ✅              | ✅         | ✅            | Framework, Core, Docker        |
+| **Terraform**          | ❌              | ✅         | ✅            | Infrastructure as Code         |
 
 ## 📁 Project Structure
 
@@ -53,6 +53,9 @@ pipelines/
 │   ├── go-docker.yaml         # Go with Docker delivery
 │   ├── go-binary.yaml         # Go binary compilation
 │   ├── python-docker.yaml     # Python with Docker
+│   ├── java-docker.yaml       # Java with Docker delivery
+│   ├── javascript-docker.yaml # JavaScript with Docker delivery
+│   ├── dotnet-docker.yaml     # .NET with Docker delivery
 │   └── ...
 ├── gitlab/                     # GitLab CI pipeline templates
 │   ├── golang/                # Go language pipelines
@@ -60,6 +63,7 @@ pipelines/
 │   ├── python/                # Python language pipelines
 │   ├── javascript/            # JavaScript/Node.js pipelines
 │   ├── dotnet/                # .NET language pipelines
+│   ├── terraform/             # Terraform pipelines
 │   └── global/                # Shared GitLab configurations
 ├── azure-devops/              # Azure DevOps pipeline templates
 │   ├── golang/                # Go language pipelines
@@ -106,7 +110,7 @@ pipelines/
 
 Each platform follows a consistent **5-stage pipeline architecture**:
 
-1. **🔍 Code Check (Style/Quality)** - Linting, formatting, code quality
+1. **🔍 Code Check (Style/Quality)** - Linting, formatting, code quality, rebase verification
 2. **🔒 Security (SCA/SAST)** - Vulnerability scanning, secret detection
 3. **🧪 Tests** - Unit tests, integration tests, coverage reporting
 4. **📊 Management** - Dependency tracking, SBOM generation
@@ -120,13 +124,19 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 
 #### Available Workflows
 
-| Workflow             | Purpose                           | Languages |
-|----------------------|-----------------------------------|-----------|
-| `go.yaml`            | Go testing and quality checks     | Go        |
-| `go-docker.yaml`     | Go with Docker image delivery     | Go        |
-| `go-binary.yaml`     | Go binary compilation and release | Go        |
-| `python.yaml`        | Python testing and quality checks | Python    |
-| `python-docker.yaml` | Python with Docker image delivery | Python    |
+| Workflow                  | Purpose                                    | Languages      |
+|---------------------------|--------------------------------------------|----------------|
+| `go.yaml`                 | Go testing and quality checks              | Go             |
+| `go-docker.yaml`          | Go with Docker image delivery              | Go             |
+| `go-binary.yaml`          | Go binary compilation and release          | Go             |
+| `python.yaml`             | Python testing and quality checks          | Python         |
+| `python-docker.yaml`      | Python with Docker image delivery          | Python         |
+| `java.yaml`               | Java/Gradle testing and quality checks     | Java           |
+| `java-docker.yaml`        | Java/Gradle with Docker image delivery     | Java           |
+| `javascript.yaml`         | JavaScript/Yarn testing and quality checks | JavaScript     |
+| `javascript-docker.yaml`  | JavaScript/Yarn with Docker image delivery | JavaScript     |
+| `dotnet.yaml`             | .NET testing and quality checks            | C#             |
+| `dotnet-docker.yaml`      | .NET with Docker image delivery            | C#             |
 
 #### Usage Example (Go with Docker)
 
@@ -166,6 +176,72 @@ jobs:
     uses: 'rios0rios0/pipelines/.github/workflows/python-docker.yaml@main'
 ```
 
+#### Usage Example (Java with Docker)
+
+```yaml
+name: 'CI/CD Pipeline'
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ '*' ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  security-events: write
+  contents: write
+  packages: write
+
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/java-docker.yaml@main'
+```
+
+#### Usage Example (JavaScript with Docker)
+
+```yaml
+name: 'CI/CD Pipeline'
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ '*' ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  security-events: write
+  contents: write
+  packages: write
+
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/javascript-docker.yaml@main'
+```
+
+#### Usage Example (.NET with Docker)
+
+```yaml
+name: 'CI/CD Pipeline'
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ '*' ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  security-events: write
+  contents: write
+  packages: write
+
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/dotnet-docker.yaml@main'
+```
+
 ![GitHub Actions Example](.docs/github-golang.png)
 
 ### GitLab CI
@@ -174,16 +250,17 @@ GitLab CI templates use remote includes and are organized by language in the `gi
 
 #### Available Templates
 
-| Language       | Template             | Purpose                    |
-|----------------|----------------------|----------------------------|
-| **Go**         | `go-docker.yaml`     | Go with Docker delivery    |
-| **Go**         | `go-debian.yaml`     | Go Debian-based pipeline   |
-| **Go**         | `go-sam.yaml`        | Go with AWS SAM deployment |
-| **Java**       | `gradle-docker.yaml` | Gradle with Docker         |
-| **Java**       | `maven-docker.yaml`  | Maven with Docker          |
-| **Python**     | `pdm-docker.yaml`    | Python PDM with Docker     |
-| **JavaScript** | `yarn-docker.yaml`   | Node.js Yarn with Docker   |
-| **.NET**       | `framework.yaml`     | .NET Framework pipeline    |
+| Language        | Template             | Purpose                    |
+|-----------------|----------------------|----------------------------|
+| **Go**          | `go-docker.yaml`     | Go with Docker delivery    |
+| **Go**          | `go-debian.yaml`     | Go Debian-based pipeline   |
+| **Go**          | `go-sam.yaml`        | Go with AWS SAM deployment |
+| **Java**        | `gradle-docker.yaml` | Gradle with Docker         |
+| **Java**        | `maven-docker.yaml`  | Maven with Docker          |
+| **Python**      | `pdm-docker.yaml`    | Python PDM with Docker     |
+| **JavaScript**  | `yarn-docker.yaml`   | Node.js Yarn with Docker   |
+| **.NET**        | `framework.yaml`     | .NET Framework pipeline    |
+| **Terraform**   | `terra.yaml`         | Terraform IaC pipeline     |
 
 #### Usage Example (Go with Docker)
 
@@ -211,6 +288,13 @@ variables:
   PYTHON_VERSION: "3.11"  # Optional: specify a Python version
 ```
 
+#### Usage Example (Terraform)
+
+```yaml
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/terraform/terra.yaml'
+```
+
 #### Required GitLab Variables
 
 Configure these in your GitLab project settings:
@@ -231,19 +315,18 @@ Azure DevOps templates are located in the `azure-devops/` directory and use temp
 
 #### Available Templates
 
-| Language       | Template               | Purpose                           |
-|----------------|------------------------|-----------------------------------|
-| **Go**         | `go-docker.yaml`       | Go with Docker delivery           |
-| **Go**         | `go-arm.yaml`          | Go with Azure ARM deployment      |
-| **Go**         | `go-function-arm.yaml` | Go Azure Functions                |
-| **Go**         | `go-lambda.yaml`       | Go AWS Lambda deployment (ZIP)    |
-| **Go**         | `go-lambda-sam.yaml`   | Go AWS Lambda deployment (SAM)    |
-| **Java**       | `gradle-docker.yaml`   | Gradle with Docker                |
-| **Java**       | `maven-docker.yaml`    | Maven with Docker                 |
-| **Python**     | `pdm-docker.yaml`      | Python PDM with Docker            |
-| **JavaScript** | `yarn-docker.yaml`     | Node.js Yarn with Docker          |
-| **.NET**       | `framework.yaml`       | .NET Framework pipeline           |
-| **Terraform**  | Various ARM templates  | Infrastructure as Code            |
+| Language        | Template               | Purpose                           |
+|-----------------|------------------------|-----------------------------------|
+| **Go**          | `go-docker.yaml`       | Go with Docker delivery           |
+| **Go**          | `go-arm.yaml`          | Go with Azure ARM deployment      |
+| **Go**          | `go-function-arm.yaml` | Go Azure Functions                |
+| **Go**          | `go-lambda.yaml`       | Go AWS Lambda deployment (ZIP)    |
+| **Go**          | `go-lambda-sam.yaml`   | Go AWS Lambda deployment (SAM)    |
+| **Java**        | `kotlin-gradle.yaml`   | Kotlin/Gradle with Docker         |
+| **Python**      | `pdm-docker.yaml`      | Python PDM with Docker            |
+| **JavaScript**  | `yarn-docker.yaml`     | Node.js Yarn with Docker          |
+| **.NET**        | `core.yaml`            | .NET Core pipeline                |
+| **Terraform**   | `terra.yaml`           | Infrastructure as Code pipeline   |
 
 #### Usage Example (Go with Docker)
 
@@ -373,15 +456,39 @@ Our pipeline templates include a comprehensive suite of tools for security, qual
 
 ### Security & Analysis Tools
 
+#### SAST (Static Application Security Testing)
+
 | Tool                 | Purpose                       | Script Location                          | Configuration         |
 |----------------------|-------------------------------|------------------------------------------|-----------------------|
 | **Gitleaks**         | Secret detection              | `global/scripts/tools/gitleaks/`         | `.gitleaks.toml`      |
 | **CodeQL**           | SAST security scanning        | `global/scripts/tools/codeql/`           | Auto-configured       |
 | **Semgrep**          | Static analysis               | `global/scripts/tools/semgrep/`          | Auto-configured       |
 | **Hadolint**         | Dockerfile linting            | `global/scripts/tools/hadolint/`         | `.hadolint.yaml`      |
-| **Trivy**            | IaC misconfiguration scanning | `global/scripts/tools/trivy/`            | `.trivyignore`        |
+| **Trivy IaC**        | IaC misconfiguration scanning | `global/scripts/tools/trivy/run.sh`      | `.trivyignore`        |
+
+#### SCA (Software Composition Analysis)
+
+| Tool                      | Purpose                           | Languages  | Script / Integration                              |
+|---------------------------|-----------------------------------|------------|---------------------------------------------------|
+| **Trivy SCA**             | Dependency vulnerability scanning | All        | `global/scripts/tools/trivy/run-sca.sh`           |
+| **govulncheck**           | Go vulnerability scanning         | Go         | `global/scripts/languages/golang/govulncheck/`    |
+| **Safety**                | Python dependency scanning        | Python     | `pdm run safety-check`                            |
+| **OWASP Dependency-Check**| Java dependency scanning          | Java       | `./gradlew dependencyCheckAnalyze`                |
+| **yarn npm audit**        | JS/Node.js dependency scanning    | JavaScript | `yarn npm audit --recursive`                      |
+
+#### Quality & Management
+
+| Tool                 | Purpose                       | Script Location                          | Configuration         |
+|----------------------|-------------------------------|------------------------------------------|-----------------------|
+| **Rebase Check**     | PR/MR rebase verification     | `global/scripts/shared/rebase-check.sh`  | Auto-configured       |
 | **SonarQube**        | Code quality & security       | `global/scripts/tools/sonarqube/`        | Project settings      |
-| **Dependency Track** | SCA analysis                  | `global/scripts/tools/dependency-track/` | Environment variables |
+| **Dependency Track** | SBOM tracking                 | `global/scripts/tools/dependency-track/` | Environment variables |
+
+### Rebase Check
+
+Every pipeline includes a **rebase check** that runs in parallel with linting during the **Code Check** stage. This job verifies that the PR/MR branch is rebased on top of the target branch (usually `main`). If the branch is behind, the pipeline fails with clear instructions to rebase.
+
+This enforces a linear commit history and prevents merge conflicts from reaching the test and delivery stages.
 
 ### Language-Specific Tools
 

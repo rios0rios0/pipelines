@@ -1,0 +1,12 @@
+jobs:
+  - job: 'sca_trivy'
+    displayName: 'sca:trivy'
+    steps:
+      - template: '../../abstracts/scripts-repo.yaml'
+      - script: $(Scripts.Directory)/global/scripts/tools/trivy/run-sca.sh
+        continueOnError: true
+
+      - task: 'PublishPipelineArtifact@1'
+        inputs:
+          artifactName: 'trivy-sca'
+          targetPath: 'build/reports'

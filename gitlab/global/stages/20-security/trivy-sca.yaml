@@ -1,0 +1,14 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo-alpine-docker.yaml'
+
+sca:trivy:
+  extends: '.scripts-repo-alpine-docker'
+  stage: 'security (sca/sast)'
+  script:
+    - $SCRIPTS_DIR/global/scripts/tools/trivy/run-sca.sh
+  artifacts:
+    when: 'always'
+    paths:
+      - "$REPORT_PATH/trivy-sca.json"
+  dependencies: [] # prevent from fetching artifacts

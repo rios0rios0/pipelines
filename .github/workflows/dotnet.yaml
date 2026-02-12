@@ -78,6 +78,15 @@ jobs:
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
+  security-sca_trivy:
+    name: 'security > sca:trivy'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy-sca@main'
+    needs: [ 'code_check-quality_resharper' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
 
   # third stage
   tests-test_all:
@@ -98,7 +107,7 @@ jobs:
       - name: 'Run tests'
         run: dotnet test --no-restore --collect:"XPlat Code Coverage"
         shell: 'bash'
-    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy' ]
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 

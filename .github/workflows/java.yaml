@@ -76,6 +76,35 @@ jobs:
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
+  security-sca_trivy:
+    name: 'security > sca:trivy'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy-sca@main'
+    needs: [ 'code_check-style_checkstyle' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sca_dependency_check:
+    name: 'security > sca:dependency-check'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+
+      - name: 'Setup Java'
+        uses: 'actions/setup-java@v4'
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+
+      - run: ./gradlew dependencyCheckAnalyze
+        shell: 'bash'
+    needs: [ 'code_check-style_checkstyle' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
 
   # third stage
   tests-test_all:
@@ -94,7 +123,7 @@ jobs:
 
       - run: ./gradlew test
         shell: 'bash'
-    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy' ]
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_dependency_check' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 

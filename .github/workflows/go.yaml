@@ -67,6 +67,24 @@ jobs:
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
+  security-sca_trivy:
+    name: 'security > sca:trivy'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy-sca@main'
+    needs: [ 'code_check-style_golangci_lint' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sca_govulncheck:
+    name: 'security > sca:govulncheck'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/golang/stages/20-security/govulncheck@main'
+    needs: [ 'code_check-style_golangci_lint' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
 
   # third stage
   tests-test_all:
@@ -74,7 +92,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/golang/stages/30-tests/all@main'
-    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy' ]
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_govulncheck' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 

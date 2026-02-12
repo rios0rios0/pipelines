@@ -17,7 +17,9 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - **GitLab CI:** Include `gitlab/golang/go-docker.yaml`, `gitlab/terraform/terra.yaml` from this repo
 - **Azure DevOps:** Template `azure-devops/golang/go-docker.yaml@pipelines`
 
-**Security Tools:** Gitleaks, CodeQL, Semgrep, Hadolint, Trivy, SonarQube, Dependency Track
+**SAST Tools:** Gitleaks, CodeQL, Semgrep, Hadolint, Trivy IaC
+**SCA Tools:** Trivy SCA (all languages), govulncheck (Go), Safety (Python), OWASP Dependency-Check (Java), yarn npm audit (JavaScript)
+**Quality Tools:** SonarQube, Dependency Track
 **Performance:** Security scans 2-10min, Container builds 5-30min
 **Architecture:** 5-stage pipeline (Code Check → Security → Tests → Management → Delivery)
 
@@ -94,15 +96,32 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 
 ### Security & Analysis Tools
 
+#### SAST Tools
+
 | Tool                 | Purpose                          | Script Location                    | Configuration         |
 |----------------------|----------------------------------|------------------------------------|-----------------------|
 | **Gitleaks**         | Secret detection                 | `global/scripts/tools/gitleaks/`         | `.gitleaks.toml`      |
 | **CodeQL**           | SAST security scanning           | `global/scripts/tools/codeql/`           | Auto-configured       |
 | **Semgrep**          | Static analysis                  | `global/scripts/tools/semgrep/`          | Auto-configured       |
 | **Hadolint**         | Dockerfile linting               | `global/scripts/tools/hadolint/`         | `.hadolint.yaml`      |
-| **Trivy**            | IaC misconfiguration scanning    | `global/scripts/tools/trivy/`            | `.trivyignore`        |
+| **Trivy IaC**        | IaC misconfiguration scanning    | `global/scripts/tools/trivy/run.sh`      | `.trivyignore`        |
+
+#### SCA Tools
+
+| Tool                       | Purpose                           | Languages  | Script / Integration                           |
+|----------------------------|-----------------------------------|------------|-------------------------------------------------|
+| **Trivy SCA**              | Dependency vulnerability scanning | All        | `global/scripts/tools/trivy/run-sca.sh`         |
+| **govulncheck**            | Go vulnerability scanning         | Go         | `global/scripts/languages/golang/govulncheck/`   |
+| **Safety**                 | Python dependency scanning        | Python     | `pdm run safety-check`                           |
+| **OWASP Dependency-Check** | Java dependency scanning          | Java       | `./gradlew dependencyCheckAnalyze`               |
+| **yarn npm audit**         | JS/Node.js dependency scanning    | JavaScript | `yarn npm audit --recursive`                     |
+
+#### Quality & Management Tools
+
+| Tool                 | Purpose                          | Script Location                    | Configuration         |
+|----------------------|----------------------------------|------------------------------------|-----------------------|
 | **SonarQube**        | Code quality & security          | `global/scripts/tools/sonarqube/`        | Project settings      |
-| **Dependency Track** | SCA analysis                     | `global/scripts/tools/dependency-track/` | Environment variables |
+| **Dependency Track** | SBOM tracking                    | `global/scripts/tools/dependency-track/` | Environment variables |
 
 ### Language-Specific Tools
 

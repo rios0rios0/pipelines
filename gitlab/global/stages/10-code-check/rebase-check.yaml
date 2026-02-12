@@ -1,0 +1,32 @@
+quality:rebase-check:
+  stage: 'code check (style/quality)'
+  image: 'alpine/git:latest'
+  variables:
+    GIT_DEPTH: 0
+  script:
+    - |
+      TARGET_BRANCH="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-$CI_DEFAULT_BRANCH}"
+      echo "Checking if branch is rebased on top of '$TARGET_BRANCH'..."
+
+      git fetch origin "$TARGET_BRANCH" --no-tags
+
+      if git merge-base --is-ancestor "origin/$TARGET_BRANCH" HEAD; then
+        echo "Branch is up-to-date with '$TARGET_BRANCH'. No rebase needed."
+      else
+        BEHIND_COUNT=$(git rev-list HEAD.."origin/$TARGET_BRANCH" --count 2>/dev/null || echo "unknown")
+        echo ""
+        echo "============================================================"
+        echo "  ERROR: Branch is NOT rebased on top of '$TARGET_BRANCH'."
+        echo "  The branch is $BEHIND_COUNT commit(s) behind."
+        echo ""
+        echo "  Please rebase your branch:"
+        echo "    git fetch origin $TARGET_BRANCH"
+        echo "    git rebase origin/$TARGET_BRANCH"
+        echo "    git push --force-with-lease"
+        echo "============================================================"
+        echo ""
+        exit 1
+      fi
+  rules:
+    - if: "$CI_MERGE_REQUEST_IID"
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"

@@ -1,0 +1,9 @@
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout scripts'
+      run: |
+        SCRIPTS_DIR="$(mktemp -d)/pipelines"
+        echo "SCRIPTS_DIR=$SCRIPTS_DIR" >> $GITHUB_ENV
+        git clone --depth 1 https://github.com/rios0rios0/pipelines.git "$SCRIPTS_DIR"
+      shell: 'bash'

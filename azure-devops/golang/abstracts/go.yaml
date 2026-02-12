@@ -12,7 +12,7 @@ steps:
 
   - task: 'GoTool@0'
     inputs:
-      version: '1.25.7'
+      version: '1.26.0'
       architecture: 'amd64'
       goArguments: 'mod tidy'
-    displayName: 'Use Go 1.25.7'
+    displayName: 'Use Go 1.26.0'

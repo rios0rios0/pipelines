@@ -1,0 +1,12 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/35-management/docker.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo-alpine-docker.yaml'
+
+report:dependency-track:
+  extends: '.scripts-repo-alpine-docker'
+  stage: 'management'
+  script:
+    # TODO: see https://www.reddit.com/r/Terraform/comments/1g9go7p/what_do_you_use_to_generate_sbom_for_terraform/
+    - echo "$(date "+%Y-%m-%d %H:%M:%S") - Missing CycloneDX for Terraform..."
+    - $SCRIPTS_DIR/global/scripts/tools/dependency-track/run.sh
+  allow_failure: true

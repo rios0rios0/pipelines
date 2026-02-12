@@ -1,0 +1,11 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
+
+.terra:
+  extends: '.scripts-repo'
+  image: 'hashicorp/terraform:1.9'
+  cache:
+    key: "${CI_COMMIT_REF_SLUG}"
+    paths:
+      - '.terraform'
+      - '.terraform.lock.hcl'

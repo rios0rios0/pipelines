@@ -78,6 +78,36 @@ jobs:
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
+  security-sca_trivy:
+    name: 'security > sca:trivy'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy-sca@main'
+    needs: [ 'code_check-style_eslint' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sca_yarn_audit:
+    name: 'security > sca:yarn-audit'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+
+      - name: 'Setup Node.js'
+        uses: 'actions/setup-node@v4'
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - run: |
+          corepack enable
+          yarn npm audit --recursive --severity high
+        shell: 'bash'
+    needs: [ 'code_check-style_eslint' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
 
   # third stage
   tests-test_all:
@@ -98,7 +128,7 @@ jobs:
           yarn install --immutable
           yarn test:ci
         shell: 'bash'
-    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy' ]
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_yarn_audit' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   tests-test_build:
@@ -119,7 +149,7 @@ jobs:
           yarn install --immutable
           yarn build
         shell: 'bash'
-    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy' ]
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_yarn_audit' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 

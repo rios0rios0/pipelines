@@ -1,0 +1,26 @@
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - name: 'Setup Go'
+      uses: 'actions/setup-go@v6'
+      with:
+        go-version-file: 'go.mod'
+        cache-dependency-path: 'go.sum'
+
+    - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - run: $SCRIPTS_DIR/global/scripts/languages/golang/govulncheck/run.sh
+      shell: 'bash'
+
+    - name: 'Upload Report'
+      uses: 'actions/upload-artifact@v6'
+      with:
+        name: 'govulncheck'
+        path: 'build/reports/govulncheck.json'
+        if-no-files-found: 'error'
+        overwrite: 'true'
+        retention-days: 10
+      if: always()

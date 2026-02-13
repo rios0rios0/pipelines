@@ -20,7 +20,7 @@ stages:
       - job: 'sca_yarn_audit'
         displayName: 'sca:yarn-audit'
         steps:
-          - template: '../../abstracts/corepack-node20.18.3.yaml'
+          - template: '../../abstracts/corepack-node20.18.3-no-cache.yaml'
           - script: yarn npm audit --recursive --severity high
             displayName: 'Run yarn npm audit'
         continueOnError: true

@@ -6,9 +6,14 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: 'Checkout code'
+    - name: 'Checkout PR branch'
       uses: 'actions/checkout@v6'
       with:
+        # IMPORTANT: check out the actual PR branch HEAD, NOT the default merge commit.
+        # GitHub Actions checks out refs/pull/N/merge by default, which is a synthetic
+        # commit that can become stale if the target branch advances after it was created.
+        # Using the real PR branch ensures the ancestry check is accurate.
+        ref: ${{ github.event.pull_request.head.sha }}
         fetch-depth: 0
 
     - name: 'Check rebase status'

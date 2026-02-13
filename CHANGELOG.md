@@ -33,6 +33,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added `global/scripts/languages/golang/govulncheck/run.sh` shared script for Go vulnerability scanning
 - added rebase-check quality gate to the code-check stage across all providers (GitHub Actions, GitLab CI, Azure DevOps) and all languages, failing the pipeline when a PR/MR branch is not rebased on the default branch
 
+### Fixed
+
+- fixed SonarQube failing on Azure DevOps and GitLab when projects have no test coverage by detecting missing coverage files and clearing coverage report path properties before running `sonar-scanner`
+- fixed JavaScript Azure DevOps SonarQube step failing when `cobertura-coverage` artifact does not exist by adding `continueOnError: true` to the download step
+
 ### Changed
 
 - added `config.sh` loading to CodeQL for GoLang across all pipelines (GitHub Actions, GitLab CI, Azure DevOps) to support project-level build configuration before analysis

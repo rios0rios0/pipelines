@@ -23,6 +23,7 @@ steps:
       artifactName: 'cobertura-coverage'
       targetPath: "${{ parameters.WORKING_DIRECTORY }}/coverage"
     displayName: 'Download Cobertura Coverage File'
+    continueOnError: true
 
   - script: ${{ parameters.RUN_BEFORE_MANAGEMENT }}
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"

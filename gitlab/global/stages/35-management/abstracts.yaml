@@ -12,6 +12,20 @@
       - '.sonar/cache'
     when: 'always'
   script:
+    - |
+      # Check if any coverage files exist; if not, clear coverage properties
+      # so sonar-scanner doesn't fail looking for files that don't exist
+      COVERAGE_FOUND=false
+      for pattern in coverage.out coverage/*.xml coverage/*.json coverage/*.lcov build/reports/coverage*; do
+        if ls $pattern 1>/dev/null 2>&1; then COVERAGE_FOUND=true; break; fi
+      done
+      if [ "$COVERAGE_FOUND" = "false" ]; then
+        echo "No coverage files found. Running SonarQube without coverage data."
+        echo "sonar.coverage.jacoco.xmlReportPaths=" >> sonar-project.properties
+        echo "sonar.javascript.lcov.reportPaths=" >> sonar-project.properties
+        echo "sonar.python.coverage.reportPaths=" >> sonar-project.properties
+        echo "sonar.go.coverage.reportPaths=" >> sonar-project.properties
+      fi
     - sonar-scanner
   tags:
     - 'dev-gitlab-runner-onprem'

@@ -1,0 +1,9 @@
+# Installs the terra CLI (https://github.com/rios0rios0/terra) which wraps
+# Terraform and Terragrunt. After installation, `terra install` pulls the
+# correct versions of both tools automatically.
+steps:
+  - script: |
+      curl -fsSL https://raw.githubusercontent.com/rios0rios0/terra/main/install.sh | sh
+      terra install
+      terra version
+    displayName: 'Install terra CLI + dependencies'

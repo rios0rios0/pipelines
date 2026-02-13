@@ -1,0 +1,16 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/terra/abstracts/terra.yaml'
+
+style:terra-format:
+  extends: '.terra'
+  stage: 'code check (style/quality)'
+  script:
+    - terra format
+    - git diff --exit-code
+
+style:tflint:
+  extends: '.terra'
+  stage: 'code check (style/quality)'
+  script:
+    - wget -qO- https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | sh
+    - tflint --chdir . --recursive

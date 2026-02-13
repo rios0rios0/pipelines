@@ -1,0 +1,22 @@
+stages:
+  - stage: 'tests'
+    displayName: 'tests'
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    jobs:
+      - job: 'test_all'
+        displayName: 'test:all'
+        steps:
+          - template: '../../abstracts/terra.yaml'
+
+          - script: |
+              echo "Running Terraform module tests..."
+              if [ -f "Makefile" ] && grep -q "test" Makefile; then
+                make test
+              else
+                echo "No Makefile test target found. Running terraform test on all modules..."
+                find modules -maxdepth 1 -mindepth 1 -type d | while read -r module; do
+                  echo "Testing $module..."
+                  cd "$module" && terraform init -upgrade && terraform test && cd - || exit 1
+                done
+              fi
+            displayName: 'Run Terraform module tests'

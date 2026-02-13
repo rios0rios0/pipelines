@@ -32,6 +32,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added `global/scripts/tools/trivy/run-sca.sh` shared script for Trivy dependency vulnerability scanning
 - added `global/scripts/languages/golang/govulncheck/run.sh` shared script for Go vulnerability scanning
 - added rebase-check quality gate to the code-check stage across all providers (GitHub Actions, GitLab CI, Azure DevOps) and all languages, failing the pipeline when a PR/MR branch is not rebased on the default branch
+- added `terra` CLI pipeline templates for all providers (GitHub Actions `terra.yaml`, GitLab CI `terra/terra.yaml`, Azure DevOps `terra/terra.yaml`) with code check, security, tests, and management stages using the [terra CLI](https://github.com/rios0rios0/terra) wrapper for Terraform/Terragrunt
 
 ### Fixed
 

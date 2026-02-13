@@ -1,0 +1,18 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/terra/abstracts/terra.yaml'
+
+test:all:
+  extends: '.terra'
+  stage: 'tests'
+  script:
+    - |
+      echo "Running Terraform module tests..."
+      if [ -f "Makefile" ] && grep -q "test" Makefile; then
+        make test
+      else
+        echo "No Makefile test target found. Running terraform test on all modules..."
+        find modules -maxdepth 1 -mindepth 1 -type d | while read -r module; do
+          echo "Testing $module..."
+          (cd "$module" && terraform init -upgrade && terraform test) || exit 1
+        done
+      fi

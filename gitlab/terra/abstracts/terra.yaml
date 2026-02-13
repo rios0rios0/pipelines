@@ -1,0 +1,18 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
+
+# Installs the terra CLI (https://github.com/rios0rios0/terra) which wraps
+# Terraform and Terragrunt. After installation, `terra install` pulls the
+# correct versions of both tools automatically.
+.terra:
+  extends: '.scripts-repo'
+  image: 'golang:1.23'
+  before_script:
+    - !reference [.scripts-repo, before_script]
+    - curl -fsSL https://raw.githubusercontent.com/rios0rios0/terra/main/install.sh | sh
+    - terra install
+  cache:
+    key: "${CI_COMMIT_REF_SLUG}"
+    paths:
+      - '.terraform'
+      - '.terraform.lock.hcl'

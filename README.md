@@ -44,6 +44,7 @@ Choose your platform and language:
 | **JavaScript/Node.js** | ✅              | ✅         | ✅            | Yarn, Docker, K8s deployment   |
 | **.NET/C#**            | ✅              | ✅         | ✅            | Framework, Core, Docker        |
 | **Terraform**          | ❌              | ✅         | ✅            | Infrastructure as Code         |
+| **Terra CLI**          | ✅              | ✅         | ✅            | Terraform/Terragrunt wrapper   |
 
 ## 📁 Project Structure
 
@@ -63,7 +64,8 @@ pipelines/
 │   ├── python/                # Python language pipelines
 │   ├── javascript/            # JavaScript/Node.js pipelines
 │   ├── dotnet/                # .NET language pipelines
-│   ├── terraform/             # Terraform pipelines
+│   ├── terraform/             # Terraform pipelines (raw terraform/terragrunt)
+│   ├── terra/                 # Terra CLI pipelines (terraform/terragrunt wrapper)
 │   └── global/                # Shared GitLab configurations
 ├── azure-devops/              # Azure DevOps pipeline templates
 │   ├── golang/                # Go language pipelines
@@ -71,7 +73,8 @@ pipelines/
 │   ├── python/                # Python language pipelines
 │   ├── javascript/            # JavaScript/Node.js pipelines
 │   ├── dotnet/                # .NET language pipelines
-│   ├── terraform/             # Terraform pipelines
+│   ├── terraform/             # Terraform pipelines (raw terraform/terragrunt)
+│   ├── terra/                 # Terra CLI pipelines (terraform/terragrunt wrapper)
 │   └── global/                # Shared Azure DevOps templates
 ├── global/                     # Shared resources across platforms
 │   ├── scripts/               # Automation scripts
@@ -100,7 +103,8 @@ pipelines/
 │   ├── java.mk                # Java/Gradle targets (lint, test)
 │   ├── javascript.mk          # JavaScript/Yarn targets (lint, test)
 │   ├── dotnet.mk              # .NET/C# targets (lint, test)
-│   └── terraform.mk           # Terraform targets (lint, test)
+│   ├── terraform.mk           # Terraform targets (lint, test)
+│   └── terra.mk               # Terra CLI targets (lint, test)
 ├── .docs/                      # Documentation and examples
 │   └── examples/              # Per-provider usage examples
 └── .github/tests/              # Validation scripts for this repository
@@ -137,6 +141,7 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 | `javascript-docker.yaml`  | JavaScript/Yarn with Docker image delivery | JavaScript     |
 | `dotnet.yaml`             | .NET testing and quality checks            | C#             |
 | `dotnet-docker.yaml`      | .NET with Docker image delivery            | C#             |
+| `terra.yaml`              | Terra CLI quality, security, and tests     | Terraform/HCL  |
 
 #### Usage Example (Go with Docker)
 
@@ -288,12 +293,16 @@ variables:
   PYTHON_VERSION: "3.11"  # Optional: specify a Python version
 ```
 
-#### Usage Example (Terraform)
+#### Usage Example (Terraform -- raw terraform/terragrunt)
 
 ```yaml
 include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/terraform/terra.yaml'
 ```
+
+#### Usage Example (Terra CLI)
+
+The [terra CLI](https://github.com/rios0rios0/terra) wraps Terraform and Terragrunt with a simplified interface, auto-answering prompts, and parallel execution. The terra pipeline provides code check, security, tests, and management stages. Delivery is intentionally excluded because it is project-specific (plan/apply targets, environments, stack ordering). See examples for all providers in the Azure DevOps section below.
 
 #### Required GitLab Variables
 
@@ -327,6 +336,7 @@ Azure DevOps templates are located in the `azure-devops/` directory and use temp
 | **JavaScript**  | `yarn-docker.yaml`     | Node.js Yarn with Docker          |
 | **.NET**        | `core.yaml`            | .NET Core pipeline                |
 | **Terraform**   | `terra.yaml`           | Infrastructure as Code pipeline   |
+| **Terra CLI**   | `terra/terra.yaml`     | Terra CLI wrapper pipeline        |
 
 #### Usage Example (Go with Docker)
 
@@ -628,6 +638,7 @@ Available language files:
 | `javascript.mk` | JavaScript (Yarn) | `yarn lint`                           | `yarn test`        |
 | `dotnet.mk`     | .NET/C#           | `dotnet format`                       | `dotnet test`      |
 | `terraform.mk`  | Terraform         | `terraform fmt` + `validate`          | `terraform plan`   |
+| `terra.mk`      | Terra CLI         | `terra format` + git diff check       | `terraform test` on all modules |
 
 The `-include` prefix means Make silently skips the includes if the repository is not cloned yet. Run `make setup` (or `curl ... | bash`) to bootstrap.
 
@@ -827,6 +838,35 @@ We welcome contributions! This project follows enterprise security and testing s
 
 - Adding support for new programming languages
 - Improving security tool integration
+- Enhancing container images
+- Adding new platform features
+- Improving documentation and examples
+
+## 📄 License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+---
+
+> **Note:** This repository provides **pipeline templates and automation scripts**, not a runnable application. Users
+> consume these templates in their own projects to establish comprehensive CI/CD pipelines with security, quality, and
+> testing automation.
+amming languages
+- Improving security tool integration
+- Enhancing container images
+- Adding new platform features
+- Improving documentation and examples
+
+## 📄 License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+---
+
+> **Note:** This repository provides **pipeline templates and automation scripts**, not a runnable application. Users
+> consume these templates in their own projects to establish comprehensive CI/CD pipelines with security, quality, and
+> testing automation.
+g security tool integration
 - Enhancing container images
 - Adding new platform features
 - Improving documentation and examples

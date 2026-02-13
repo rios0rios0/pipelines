@@ -243,11 +243,12 @@ Each platform follows a consistent **5-stage pipeline architecture**:
 | **JavaScript/Node.js** | ✅              | ✅         | ✅            | Yarn, Docker, K8s deployment   |
 | **.NET/C#**            | ✅              | ✅         | ✅            | Framework, Core, Docker        |
 | **Terraform**          | ❌              | ✅         | ✅            | Infrastructure as Code         |
+| **Terra CLI**          | ✅              | ✅         | ✅            | Terraform/Terragrunt wrapper   |
 
 **Pipeline Templates Available:**
-- **GitHub Actions:** `go.yaml`, `go-docker.yaml`, `go-binary.yaml`, `python.yaml`, `python-docker.yaml`, `java.yaml`, `java-docker.yaml`, `javascript.yaml`, `javascript-docker.yaml`, `dotnet.yaml`, `dotnet-docker.yaml`
-- **GitLab CI:** `go-docker.yaml`, `go-debian.yaml`, `go-sam.yaml`, `gradle-docker.yaml`, `maven-docker.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `framework.yaml`, `terra.yaml`
-- **Azure DevOps:** `go-docker.yaml`, `go-arm.yaml`, `go-function-arm.yaml`, `kotlin-gradle.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `core.yaml`, `terra.yaml`
+- **GitHub Actions:** `go.yaml`, `go-docker.yaml`, `go-binary.yaml`, `python.yaml`, `python-docker.yaml`, `java.yaml`, `java-docker.yaml`, `javascript.yaml`, `javascript-docker.yaml`, `dotnet.yaml`, `dotnet-docker.yaml`, `terra.yaml`
+- **GitLab CI:** `go-docker.yaml`, `go-debian.yaml`, `go-sam.yaml`, `gradle-docker.yaml`, `maven-docker.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `framework.yaml`, `terraform/terra.yaml`, `terra/terra.yaml`
+- **Azure DevOps:** `go-docker.yaml`, `go-arm.yaml`, `go-function-arm.yaml`, `kotlin-gradle.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `core.yaml`, `terraform/terra.yaml`, `terra/terra.yaml`
 
 ## Common Tasks
 

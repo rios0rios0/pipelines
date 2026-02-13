@@ -19,10 +19,12 @@ stages:
 
       - job: 'sca_govulncheck'
         displayName: 'sca:govulncheck'
+        variables:
+          GOPATH: "$(Pipeline.Workspace)/.go"
         steps:
           - template: '../../abstracts/go.yaml'
           - script: |
               go install golang.org/x/vuln/cmd/govulncheck@latest
-              govulncheck ./...
+              "$(go env GOPATH)/bin/govulncheck" ./...
             displayName: 'Run govulncheck'
         continueOnError: true

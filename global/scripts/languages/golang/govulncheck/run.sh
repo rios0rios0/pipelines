@@ -8,13 +8,14 @@ fi
 fileName="$(pwd)/$REPORT_PATH/govulncheck.json"
 
 # Install govulncheck if not already available
-if ! command -v govulncheck > /dev/null 2>&1; then
+GOVULNCHECK_BIN="$(go env GOPATH)/bin/govulncheck"
+if [ ! -f "$GOVULNCHECK_BIN" ]; then
   echo "Installing govulncheck..."
   go install golang.org/x/vuln/cmd/govulncheck@latest
 fi
 
 echo "Running govulncheck SCA vulnerability scan..."
-govulncheck -json ./... > "$fileName" 2>&1 || EXIT_CODE=$?
+"$GOVULNCHECK_BIN" -json ./... > "$fileName" 2>&1 || EXIT_CODE=$?
 
 echo "govulncheck analysis complete. Results written to: $fileName"
 exit ${EXIT_CODE:-0}

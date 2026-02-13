@@ -1,6 +1,7 @@
 jobs:
   - job: 'quality_rebase_check'
     displayName: 'quality:rebase-check'
+    condition: eq(variables['Build.Reason'], 'PullRequest')
     steps:
       - checkout: 'self'
         fetchDepth: 0
@@ -11,7 +12,7 @@ jobs:
           FULL_REF="$(System.PullRequest.TargetBranch)"
           TARGET_BRANCH="${FULL_REF#refs/heads/}"
 
-          # Fallback to 'main' if the variable is empty (non-PR builds)
+          # Fallback to 'main' if the variable is empty
           if [ -z "$TARGET_BRANCH" ] || [ "$TARGET_BRANCH" = "$(System.PullRequest.TargetBranch)" ]; then
             TARGET_BRANCH="main"
           fi
@@ -38,4 +39,3 @@ jobs:
             exit 1
           fi
         displayName: 'Check rebase status'
-    condition: eq(variables['Build.Reason'], 'PullRequest')

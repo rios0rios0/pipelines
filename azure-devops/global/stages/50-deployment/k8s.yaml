@@ -1,13 +1,13 @@
 parameters:
   - name: 'K8S_SERVICE_CONNECTION'
     type: 'string'
-    default: '$(K8S_ENDPOINT)'
+    default: "$(K8S_ENDPOINT)"
   - name: 'K8S_NAMESPACE'
     type: 'string'
-    default: '$(K8S_NAMESPACE)'
+    default: "$(K8S_NAMESPACE)"
   - name: 'K8S_DEPLOYMENT_NAME'
     type: 'string'
-    default: '$(K8S_DEPLOYMENT_NAME)'
+    default: "$(K8S_DEPLOYMENT_NAME)"
   - name: 'TIMEOUT_SECONDS'
     type: 'number'
     default: 300

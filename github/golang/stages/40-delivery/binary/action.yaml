@@ -31,9 +31,10 @@ runs:
         go-version-file: 'go.mod'
         cache-dependency-path: 'go.sum'
 
+    - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
     - name: 'Prepare GoReleaser config'
       run: |
-        SCRIPTS_DIR="${{ github.action_path }}/../../../../.."
         "$SCRIPTS_DIR/global/scripts/languages/golang/goreleaser/prepare.sh" \
           "${{ inputs.binary_name }}" \
           "${{ inputs.binary_path }}"

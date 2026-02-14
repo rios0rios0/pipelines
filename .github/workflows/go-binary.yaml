@@ -7,6 +7,11 @@ on:
         type: 'string'
         required: true
         description: 'Binary name to be used as default source'
+      binary_path:
+        type: 'string'
+        required: false
+        default: '.'
+        description: 'Path to the main package (e.g. ./cmd/terra). Defaults to auto-detection.'
 
 jobs:
   go:
@@ -17,9 +22,10 @@ jobs:
     name: 'delivery > binary'
     runs-on: 'ubuntu-latest'
     steps:
-      - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/binary@main'
+      - uses: 'rios0rios0/pipelines/github/golang/stages/40-delivery/binary@main'
         with:
           binary_name: "${{ inputs.binary_name || github.event.repository.name }}"
+          binary_path: "${{ inputs.binary_path }}"
           tag_name: "${{ needs.go.outputs.tag_name || github.ref_name }}"
     needs: [ 'go' ]
     if: "!failure() && (startsWith(github.ref, 'refs/tags/') || needs.go.outputs.tag_name != '')"

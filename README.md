@@ -258,7 +258,7 @@ GitLab CI templates use remote includes and are organized by language in the `gi
 | Language        | Template             | Purpose                    |
 |-----------------|----------------------|----------------------------|
 | **Go**          | `go-docker.yaml`     | Go with Docker delivery    |
-| **Go**          | `go-debian.yaml`     | Go Debian-based pipeline   |
+| **Go**          | `go-binary.yaml`     | Go binary pipeline         |
 | **Go**          | `go-sam.yaml`        | Go with AWS SAM deployment |
 | **Java**        | `gradle-docker.yaml` | Gradle with Docker         |
 | **Java**        | `maven-docker.yaml`  | Maven with Docker          |
@@ -478,13 +478,13 @@ Our pipeline templates include a comprehensive suite of tools for security, qual
 
 #### SCA (Software Composition Analysis)
 
-| Tool                      | Purpose                           | Languages  | Script / Integration                              |
-|---------------------------|-----------------------------------|------------|---------------------------------------------------|
-| **Trivy SCA**             | Dependency vulnerability scanning | All        | `global/scripts/tools/trivy/run-sca.sh`           |
-| **govulncheck**           | Go vulnerability scanning         | Go         | `global/scripts/languages/golang/govulncheck/`    |
-| **Safety**                | Python dependency scanning        | Python     | `pdm run safety-check`                            |
-| **OWASP Dependency-Check**| Java dependency scanning          | Java       | `./gradlew dependencyCheckAnalyze`                |
-| **yarn npm audit**        | JS/Node.js dependency scanning    | JavaScript | `yarn npm audit --recursive`                      |
+| Tool                       | Purpose                           | Languages  | Script / Integration                           |
+|----------------------------|-----------------------------------|------------|------------------------------------------------|
+| **Trivy SCA**              | Dependency vulnerability scanning | All        | `global/scripts/tools/trivy/run-sca.sh`        |
+| **govulncheck**            | Go vulnerability scanning         | Go         | `global/scripts/languages/golang/govulncheck/` |
+| **Safety**                 | Python dependency scanning        | Python     | `pdm run safety-check`                         |
+| **OWASP Dependency-Check** | Java dependency scanning          | Java       | `./gradlew dependencyCheckAnalyze`             |
+| **yarn npm audit**         | JS/Node.js dependency scanning    | JavaScript | `yarn npm audit --recursive`                   |
 
 #### Quality & Management
 
@@ -630,14 +630,14 @@ This gives you the following targets for free:
 
 Available language files:
 
-| File            | Language          | `lint`                                | `test`             |
-|-----------------|-------------------|---------------------------------------|--------------------|
-| `golang.mk`     | Go                | `golangci-lint --fix`                 | Go test + coverage |
-| `python.mk`     | Python (PDM)      | `isort` + `black` + `flake8` + `mypy` | `pytest`           |
-| `java.mk`       | Java (Gradle)     | `./gradlew check`                     | `./gradlew test`   |
-| `javascript.mk` | JavaScript (Yarn) | `yarn lint`                           | `yarn test`        |
-| `dotnet.mk`     | .NET/C#           | `dotnet format`                       | `dotnet test`      |
-| `terraform.mk`  | Terraform         | `terraform fmt` + `validate`          | `terraform plan`   |
+| File            | Language          | `lint`                                | `test`                          |
+|-----------------|-------------------|---------------------------------------|---------------------------------|
+| `golang.mk`     | Go                | `golangci-lint --fix`                 | Go test + coverage              |
+| `python.mk`     | Python (PDM)      | `isort` + `black` + `flake8` + `mypy` | `pytest`                        |
+| `java.mk`       | Java (Gradle)     | `./gradlew check`                     | `./gradlew test`                |
+| `javascript.mk` | JavaScript (Yarn) | `yarn lint`                           | `yarn test`                     |
+| `dotnet.mk`     | .NET/C#           | `dotnet format`                       | `dotnet test`                   |
+| `terraform.mk`  | Terraform         | `terraform fmt` + `validate`          | `terraform plan`                |
 | `terra.mk`      | Terra CLI         | `terra format` + git diff check       | `terraform test` on all modules |
 
 The `-include` prefix means Make silently skips the includes if the repository is not cloned yet. Run `make setup` (or `curl ... | bash`) to bootstrap.

@@ -1,0 +1,31 @@
+version: 2
+project_name: '__BINARY_NAME__'
+builds:
+  - main: '__BINARY_PATH__'
+    binary: '__BINARY_NAME__'
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+archives:
+  - formats: ['tar.gz']
+    name_template: '{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    format_overrides:
+      - goos: windows
+        formats: ['zip']
+checksum:
+  name_template: 'checksums.txt'
+release:
+  mode: keep-existing
+changelog:
+  disable: true

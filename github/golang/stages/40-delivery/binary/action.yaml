@@ -3,6 +3,11 @@ inputs:
     type: 'string'
     required: true
     description: 'Binary name to be used as default source'
+  binary_path:
+    type: 'string'
+    required: false
+    default: '.'
+    description: 'Path to the main package (e.g. ./cmd/terra). Defaults to auto-detection.'
   tag_name:
     type: 'string'
     required: true
@@ -26,33 +31,12 @@ runs:
         go-version-file: 'go.mod'
         cache-dependency-path: 'go.sum'
 
-    - name: 'Generate GoReleaser config'
+    - name: 'Prepare GoReleaser config'
       run: |
-        cat > .goreleaser.yaml <<EOF
-        version: 2
-        project_name: '${{ inputs.binary_name }}'
-        builds:
-          - env:
-              - CGO_ENABLED=0
-            goos:
-              - linux
-              - darwin
-              - windows
-            goarch:
-              - amd64
-              - arm64
-        archives:
-          - formats: ['tar.gz']
-            name_template: '{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}'
-            format_overrides:
-              - goos: windows
-                formats: ['zip']
-        release:
-          mode: keep-existing
-        changelog:
-          disable: true
-        EOF
-        echo '.goreleaser.yaml' >> .git/info/exclude
+        SCRIPTS_DIR="${{ github.action_path }}/../../../../.."
+        "$SCRIPTS_DIR/global/scripts/languages/golang/goreleaser/prepare.sh" \
+          "${{ inputs.binary_name }}" \
+          "${{ inputs.binary_path }}"
       shell: 'bash'
 
     - name: 'Run GoReleaser'

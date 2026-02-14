@@ -31,7 +31,7 @@ jobs:
           GRADLE_PROPERTIES:
             - ${{ each prop in parameters.GRADLE_PROPERTIES }}:
                 - ${{ prop }}
-            - "checkstyleConfigFile=$(Scripts.Directory)/global/configs/java/checkstyle/google-checkstyle10.12.4.xml"
+            - "checkstyleConfigFile=$(Scripts.Directory)/global/scripts/languages/java/checkstyle/google-checkstyle10.12.4.xml"
 
       - task: 'Gradle@3'
         inputs:

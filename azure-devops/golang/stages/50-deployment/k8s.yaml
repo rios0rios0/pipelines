@@ -1,0 +1,14 @@
+stages:
+  # only runs if K8S_DEPLOYMENT_NAME variable is set
+  - stage: 'deployment'
+    displayName: 'deployment'
+    condition: and(succeeded(), ne(variables['K8S_DEPLOYMENT_NAME'], ''), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
+    jobs:
+      - job: 'deployment'
+        displayName: 'deployment'
+        steps:
+          - template: '../../../global/stages/50-deployment/k8s.yaml'
+            parameters:
+              K8S_SERVICE_CONNECTION: "$(K8S_ENDPOINT)"
+              K8S_NAMESPACE: "$(K8S_NAMESPACE)"
+              K8S_DEPLOYMENT_NAME: "$(K8S_DEPLOYMENT_NAME)"

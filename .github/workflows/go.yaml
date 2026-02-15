@@ -67,7 +67,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     strategy:
       matrix:
-        prefix: "${{ fromJSON(inputs.tag_prefixes) }}"
+        prefix: ${{ fromJSON(inputs.tag_prefixes) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
         with:

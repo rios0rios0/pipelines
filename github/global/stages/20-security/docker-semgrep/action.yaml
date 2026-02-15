@@ -1,7 +1,7 @@
 inputs:
   semgrep_lang:
     required: true
-    description: 'Sempgrep language to be used as default source'
+    description: 'Semgrep language to be used as default source'
 
 runs:
   using: 'composite'

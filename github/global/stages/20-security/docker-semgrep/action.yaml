@@ -20,7 +20,7 @@ runs:
       uses: 'actions/upload-artifact@v6'
       with:
         name: 'semgrep'
-        path: 'build/reports/semgrep.json'
+        path: 'build/reports/semgrep/'
         if-no-files-found: 'error'
         overwrite: 'true'
         retention-days: 10

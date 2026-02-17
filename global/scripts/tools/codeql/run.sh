@@ -3,7 +3,7 @@
 if [ -z "$SCRIPTS_DIR" ]; then
   export SCRIPTS_DIR="$(echo $(dirname "$(realpath "$0")") | sed 's|\(.*pipelines\).*|\1|')"
 fi
-. "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
+TOOL_NAME="codeql" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
 
 CODEQL_LANGUAGE="${1:?Usage: run.sh <language> (e.g., go, python, java, javascript, csharp)}"
 fileName="$(pwd)/$REPORT_PATH/codeql.sarif"

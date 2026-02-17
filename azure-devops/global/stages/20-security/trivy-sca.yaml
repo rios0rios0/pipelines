@@ -9,4 +9,4 @@ jobs:
       - task: 'PublishPipelineArtifact@1'
         inputs:
           artifactName: 'trivy-sca'
-          targetPath: 'build/reports'
+          targetPath: 'build/reports/trivy-sca'

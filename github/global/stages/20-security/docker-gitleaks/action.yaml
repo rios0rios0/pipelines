@@ -15,7 +15,7 @@ runs:
       uses: 'actions/upload-artifact@v6'
       with:
         name: 'gitleaks'
-        path: 'build/reports/gitleaks.json'
+        path: 'build/reports/gitleaks/'
         if-no-files-found: 'error'
         overwrite: 'true'
         retention-days: 10

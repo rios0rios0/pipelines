@@ -13,7 +13,7 @@ jobs:
       - task: 'PublishPipelineArtifact@1'
         inputs:
           artifactName: 'semgrep'
-          targetPath: 'build/reports'
+          targetPath: 'build/reports/semgrep'
 
   - job: 'sast_gitleaks'
     displayName: 'sast:gitleaks'
@@ -29,4 +29,4 @@ jobs:
       - task: 'PublishPipelineArtifact@1'
         inputs:
           artifactName: 'gitleaks'
-          targetPath: 'build/reports'
+          targetPath: 'build/reports/gitleaks'

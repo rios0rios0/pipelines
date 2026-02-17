@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
+# Set DEBUG=1 to print curl validation logs (URLs, project UUID, and form params).
 
 # read and sanitize project name
 bomFile="$PREFIX$REPORT_PATH/bom.json"
@@ -7,15 +8,25 @@ projectVersion=$(cat "$bomFile" | jq -r '.metadata.component.version')
 
 export requestApiKey="X-Api-Key: $DEPENDENCY_TRACK_TOKEN"
 
+# normalize base URL (strip trailing slash and trailing /api to avoid /api/api)
+baseUrl="${DEPENDENCY_TRACK_HOST_URL%/}"
+baseUrl="${baseUrl%/api}"
+
 # get project UUID from the JSON response
-projectUuid=$(curl --insecure --fail --request 'GET' "$DEPENDENCY_TRACK_HOST_URL/api/v1/project/latest/$projectName" \
+getProjectUrl="$baseUrl/api/v1/project/latest/$projectName"
+[ -n "${DEBUG:-}" ] && echo "[DEBUG] GET project: url=$getProjectUrl projectName=$projectName" >&2
+projectUuid=$(curl --insecure --fail --request 'GET' "$getProjectUrl" \
   -H 'Content-Type: application/json' -H "$requestApiKey" | jq -r '.uuid')
+[ -n "${DEBUG:-}" ] && echo "[DEBUG] GET project response: projectUuid=${projectUuid:-<empty>}" >&2
 
 requestContentType="Content-Type: multipart/form-data"
 
+bomUploadUrl="$baseUrl/api/v1/bom"
+
 # check if project UUID is not empty
 if [ -n "$projectUuid" ]; then
-  curl --insecure --fail --request 'POST' "$DEPENDENCY_TRACK_HOST_URL/api/v1/bom" \
+  [ -n "${DEBUG:-}" ] && echo "[DEBUG] POST bom (existing project): url=$bomUploadUrl projectUuid=$projectUuid projectVersion=$projectVersion bomFile=$bomFile" >&2
+  curl --insecure --fail --request 'POST' "$bomUploadUrl" \
     -H "$requestContentType" -H "$requestApiKey" \
     -F "project=$projectUuid" \
     -F "projectVersion=$projectVersion" \
@@ -23,7 +34,8 @@ if [ -n "$projectUuid" ]; then
     -F 'isLatest=true' \
     -F "bom=@$bomFile"
 else
-  curl --insecure --fail --request 'POST' "$DEPENDENCY_TRACK_HOST_URL/api/v1/bom" \
+  [ -n "${DEBUG:-}" ] && echo "[DEBUG] POST bom (new project): url=$bomUploadUrl projectName=$projectName projectVersion=$projectVersion bomFile=$bomFile" >&2
+  curl --insecure --fail --request 'POST' "$bomUploadUrl" \
     -H "$requestContentType" -H "$requestApiKey" \
     -F "projectName=$projectName" \
     -F "projectVersion=$projectVersion" \

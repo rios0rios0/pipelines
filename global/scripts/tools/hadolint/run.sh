@@ -3,7 +3,7 @@
 if [ -z "$SCRIPTS_DIR" ]; then
   export SCRIPTS_DIR="$(echo $(dirname "$(realpath "$0")") | sed 's|\(.*pipelines\).*|\1|')"
 fi
-. "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
+TOOL_NAME="hadolint" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
 
 fileName="$(pwd)/$REPORT_PATH/hadolint.sarif"
 

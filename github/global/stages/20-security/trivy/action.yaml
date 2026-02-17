@@ -15,7 +15,7 @@ runs:
       uses: 'actions/upload-artifact@v6'
       with:
         name: 'trivy'
-        path: 'build/reports/trivy.sarif'
+        path: 'build/reports/trivy/'
         if-no-files-found: 'error'
         overwrite: 'true'
         retention-days: 10

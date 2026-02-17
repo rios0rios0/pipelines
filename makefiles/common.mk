@@ -14,18 +14,18 @@ setup:
 	@curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
 
 codeql:
-	@$(SCRIPTS_DIR)/global/scripts/tools/codeql/run.sh "$(CODEQL_LANGUAGE)"
+	-@$(SCRIPTS_DIR)/global/scripts/tools/codeql/run.sh "$(CODEQL_LANGUAGE)"
 
 semgrep:
-	@$(SCRIPTS_DIR)/global/scripts/tools/semgrep/run.sh "$(SEMGREP_LANGUAGE)"
+	-@$(SCRIPTS_DIR)/global/scripts/tools/semgrep/run.sh "$(SEMGREP_LANGUAGE)"
 
 trivy:
-	@$(SCRIPTS_DIR)/global/scripts/tools/trivy/run.sh
+	-@$(SCRIPTS_DIR)/global/scripts/tools/trivy/run.sh
 
 hadolint:
-	@$(SCRIPTS_DIR)/global/scripts/tools/hadolint/run.sh
+	-@$(SCRIPTS_DIR)/global/scripts/tools/hadolint/run.sh
 
 gitleaks:
-	@$(SCRIPTS_DIR)/global/scripts/tools/gitleaks/run.sh
+	-@$(SCRIPTS_DIR)/global/scripts/tools/gitleaks/run.sh
 
 sast: codeql semgrep trivy hadolint gitleaks

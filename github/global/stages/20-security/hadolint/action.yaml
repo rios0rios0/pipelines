@@ -15,7 +15,7 @@ runs:
       uses: 'actions/upload-artifact@v6'
       with:
         name: 'hadolint'
-        path: 'build/reports/hadolint.sarif'
+        path: 'build/reports/hadolint/'
         if-no-files-found: 'warn'
         overwrite: 'true'
         retention-days: 10

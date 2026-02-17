@@ -31,7 +31,7 @@ stages:
     jobs:
       - job: 'deployment'
         displayName: 'deployment'
-        container: 'ghcr.io/rios0rios0/pipelines/golang:1.25-awscli'
+        container: 'ghcr.io/rios0rios0/pipelines/golang:1.26-awscli'
         steps:
           - task: 'DownloadPipelineArtifact@2'
             inputs:

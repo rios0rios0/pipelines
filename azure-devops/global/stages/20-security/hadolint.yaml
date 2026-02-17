@@ -9,4 +9,4 @@ jobs:
       - task: 'PublishPipelineArtifact@1'
         inputs:
           artifactName: 'hadolint'
-          targetPath: 'build/reports'
+          targetPath: 'build/reports/hadolint'

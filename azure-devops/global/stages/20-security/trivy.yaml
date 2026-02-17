@@ -9,4 +9,4 @@ jobs:
       - task: 'PublishPipelineArtifact@1'
         inputs:
           artifactName: 'trivy'
-          targetPath: 'build/reports'
+          targetPath: 'build/reports/trivy'

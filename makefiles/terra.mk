@@ -24,9 +24,11 @@ lint:
 test:
 	@if [ -d "modules" ]; then \
 		for module in modules/*/; do \
-			if [ -d "$$module" ]; then \
+			if [ -d "$$module/tests" ]; then \
 				echo "Testing $$module..."; \
 				(cd "$$module" && terraform init -upgrade && terraform test) || exit 1; \
+			else \
+				echo "Skipping $${module%/} (no tests/ directory)."; \
 			fi; \
 		done; \
 		echo "All module tests passed."; \

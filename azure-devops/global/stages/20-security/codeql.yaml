@@ -13,4 +13,4 @@ jobs:
       - task: 'PublishPipelineArtifact@1'
         inputs:
           artifactName: 'codeql'
-          targetPath: 'build/reports'
+          targetPath: 'build/reports/codeql'

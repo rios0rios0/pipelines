@@ -12,6 +12,8 @@ echo "Updated sonar.projectVersion to $version"
 COVERAGE_FOUND=false
 for pattern in \
   "coverage.out" \
+  "coverage.txt" \
+  "coverage/*.txt" \
   "coverage/*.xml" \
   "coverage/*.json" \
   "coverage/*.lcov" \
@@ -39,6 +41,18 @@ if [ "$COVERAGE_FOUND" = "false" ]; then
     echo "sonar.cs.vscoveragexml.reportsPaths="
   } >> sonar-project.properties
   echo "Cleared coverage report path properties in sonar-project.properties."
+else
+  GO_REPORT_PATH=
+  for p in coverage.out coverage.txt coverage/coverage.out coverage/coverage.txt coverage/*.txt coverage/*.out; do
+    for f in $p; do
+      [ -f "$f" ] || continue
+      GO_REPORT_PATH="$f"
+      break 2
+    done
+  done
+  if [ -n "$GO_REPORT_PATH" ]; then
+    echo "sonar.go.coverage.reportPaths=$GO_REPORT_PATH" >> sonar-project.properties
+  fi
 fi
 
 sonar-scanner

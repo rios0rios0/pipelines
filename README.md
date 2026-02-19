@@ -851,32 +851,3 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 > **Note:** This repository provides **pipeline templates and automation scripts**, not a runnable application. Users
 > consume these templates in their own projects to establish comprehensive CI/CD pipelines with security, quality, and
 > testing automation.
-amming languages
-- Improving security tool integration
-- Enhancing container images
-- Adding new platform features
-- Improving documentation and examples
-
-## 📄 License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
----
-
-> **Note:** This repository provides **pipeline templates and automation scripts**, not a runnable application. Users
-> consume these templates in their own projects to establish comprehensive CI/CD pipelines with security, quality, and
-> testing automation.
-g security tool integration
-- Enhancing container images
-- Adding new platform features
-- Improving documentation and examples
-
-## 📄 License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
----
-
-> **Note:** This repository provides **pipeline templates and automation scripts**, not a runnable application. Users
-> consume these templates in their own projects to establish comprehensive CI/CD pipelines with security, quality, and
-> testing automation.

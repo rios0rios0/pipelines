@@ -21,6 +21,6 @@ stages:
         displayName: 'sca:safety'
         steps:
           - template: '../../abstracts/pdm-python3.14.yaml'
-          - script: pdm run safety-check
+          - script: pdm run safety-scan
             displayName: 'Run Safety dependency check'
         continueOnError: true

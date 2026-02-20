@@ -98,41 +98,41 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 
 #### SAST Tools
 
-| Tool                 | Purpose                          | Script Location                    | Configuration         |
-|----------------------|----------------------------------|------------------------------------|-----------------------|
-| **Gitleaks**         | Secret detection                 | `global/scripts/tools/gitleaks/`         | `.gitleaks.toml`      |
-| **CodeQL**           | SAST security scanning           | `global/scripts/tools/codeql/`           | Auto-configured       |
-| **Semgrep**          | Static analysis                  | `global/scripts/tools/semgrep/`          | Auto-configured       |
-| **Hadolint**         | Dockerfile linting               | `global/scripts/tools/hadolint/`         | `.hadolint.yaml`      |
-| **Trivy IaC**        | IaC misconfiguration scanning    | `global/scripts/tools/trivy/run.sh`      | `.trivyignore`        |
+| Tool          | Purpose                       | Script Location                     | Configuration    |
+|---------------|-------------------------------|-------------------------------------|------------------|
+| **Gitleaks**  | Secret detection              | `global/scripts/tools/gitleaks/`    | `.gitleaks.toml` |
+| **CodeQL**    | SAST security scanning        | `global/scripts/tools/codeql/`      | Auto-configured  |
+| **Semgrep**   | Static analysis               | `global/scripts/tools/semgrep/`     | Auto-configured  |
+| **Hadolint**  | Dockerfile linting            | `global/scripts/tools/hadolint/`    | `.hadolint.yaml` |
+| **Trivy IaC** | IaC misconfiguration scanning | `global/scripts/tools/trivy/run.sh` | `.trivyignore`   |
 
 #### SCA Tools
 
 | Tool                       | Purpose                           | Languages  | Script / Integration                           |
-|----------------------------|-----------------------------------|------------|-------------------------------------------------|
-| **Trivy SCA**              | Dependency vulnerability scanning | All        | `global/scripts/tools/trivy/run-sca.sh`         |
-| **govulncheck**            | Go vulnerability scanning         | Go         | `global/scripts/languages/golang/govulncheck/`   |
-| **Safety**                 | Python dependency scanning        | Python     | `pdm run safety-check`                           |
-| **OWASP Dependency-Check** | Java dependency scanning          | Java       | `./gradlew dependencyCheckAnalyze`               |
-| **yarn npm audit**         | JS/Node.js dependency scanning    | JavaScript | `yarn npm audit --recursive`                     |
+|----------------------------|-----------------------------------|------------|------------------------------------------------|
+| **Trivy SCA**              | Dependency vulnerability scanning | All        | `global/scripts/tools/trivy/run-sca.sh`        |
+| **govulncheck**            | Go vulnerability scanning         | Go         | `global/scripts/languages/golang/govulncheck/` |
+| **Safety**                 | Python dependency scanning        | Python     | `pdm run safety-scan`                          |
+| **OWASP Dependency-Check** | Java dependency scanning          | Java       | `./gradlew dependencyCheckAnalyze`             |
+| **yarn npm audit**         | JS/Node.js dependency scanning    | JavaScript | `yarn npm audit --recursive`                   |
 
 #### Quality & Management Tools
 
-| Tool                 | Purpose                          | Script Location                    | Configuration         |
-|----------------------|----------------------------------|------------------------------------|-----------------------|
-| **Rebase Check**     | PR/MR rebase verification        | `global/scripts/shared/rebase-check.sh`  | Auto-configured       |
-| **SonarQube**        | Code quality & security          | `global/scripts/tools/sonarqube/`        | Project settings      |
-| **Dependency Track** | SBOM tracking                    | `global/scripts/tools/dependency-track/` | Environment variables |
+| Tool                 | Purpose                   | Script Location                          | Configuration         |
+|----------------------|---------------------------|------------------------------------------|-----------------------|
+| **Rebase Check**     | PR/MR rebase verification | `global/scripts/shared/rebase-check.sh`  | Auto-configured       |
+| **SonarQube**        | Code quality & security   | `global/scripts/tools/sonarqube/`        | Project settings      |
+| **Dependency Track** | SBOM tracking             | `global/scripts/tools/dependency-track/` | Environment variables |
 
 ### Language-Specific Tools
 
 #### Go Tools
 
-| Tool               | Purpose               | Script Location                    |
-|--------------------|-----------------------|------------------------------------|
-| **golangci-lint**  | Go linting suite      | `global/scripts/languages/golang/golangci-lint/`    |
-| **Go Test Runner** | Comprehensive testing | `global/scripts/languages/golang/test/`      |
-| **CycloneDX**      | SBOM generation       | `global/scripts/languages/golang/cyclonedx/` |
+| Tool               | Purpose               | Script Location                                  |
+|--------------------|-----------------------|--------------------------------------------------|
+| **golangci-lint**  | Go linting suite      | `global/scripts/languages/golang/golangci-lint/` |
+| **Go Test Runner** | Comprehensive testing | `global/scripts/languages/golang/test/`          |
+| **CycloneDX**      | SBOM generation       | `global/scripts/languages/golang/cyclonedx/`     |
 
 ### Container Images
 
@@ -546,7 +546,7 @@ Test scripts are located in `.github/tests/`.
 | Security scanning (Semgrep)  | 5-15 minutes      | Downloads large rule sets              |
 | Container builds             | 5-30 minutes      | Depends on base image and dependencies |
 | Go testing with coverage     | 10-60 seconds     | Depends on test suite size             |
-| SonarQube analysis          | 2-10 minutes      | Depends on codebase size               |
+| SonarQube analysis           | 2-10 minutes      | Depends on codebase size               |
 
 **Important:** Never cancel operations that appear to be hanging - they may be downloading large Docker images or security rule sets.
 

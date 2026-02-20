@@ -482,7 +482,7 @@ Our pipeline templates include a comprehensive suite of tools for security, qual
 |----------------------------|-----------------------------------|------------|------------------------------------------------|
 | **Trivy SCA**              | Dependency vulnerability scanning | All        | `global/scripts/tools/trivy/run-sca.sh`        |
 | **govulncheck**            | Go vulnerability scanning         | Go         | `global/scripts/languages/golang/govulncheck/` |
-| **Safety**                 | Python dependency scanning        | Python     | `pdm run safety-check`                         |
+| **Safety**                 | Python dependency scanning        | Python     | `pdm run safety-scan`                         |
 | **OWASP Dependency-Check** | Java dependency scanning          | Java       | `./gradlew dependencyCheckAnalyze`             |
 | **yarn npm audit**         | JS/Node.js dependency scanning    | JavaScript | `yarn npm audit --recursive`                   |
 

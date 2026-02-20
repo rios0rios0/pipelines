@@ -14,4 +14,4 @@ sca:safety:
   extends: '.pdm'
   stage: 'security (sca/sast)'
   script:
-    - pdm run safety-check
+    - pdm run safety-scan

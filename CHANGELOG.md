@@ -18,6 +18,9 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
+- added `lint` target to `makefiles/terra.mk` using TFLint for recursive Terraform linting
+- added `validate` target to `makefiles/terra.mk` that runs format, lint, and test in sequence
+- added descriptive echo messages to `format` and `lint` targets in `makefiles/terra.mk` for better pipeline output readability
 - added `makefiles/common.mk` and `makefiles/golang.mk` includable Makefile fragments for local pipeline tool usage in downstream projects
 - added per-provider usage examples in `.docs/examples/` for GitHub Actions, GitLab CI, and Azure DevOps (Go with Docker)
 - added Java (Gradle) pipeline for GitHub Actions with `java.yaml` (testing/quality) and `java-docker.yaml` (Docker delivery) reusable workflows
@@ -38,6 +41,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
+- fixed `makefiles/terra.mk` `format` target error message that incorrectly suggested running `make lint` instead of `make format`
 - fixed `dependency-track` execution
 - fixed test execution for `terra` pipeline
 - fixed SonarQube failing on Azure DevOps and GitLab when projects have no test coverage by detecting missing coverage files and clearing coverage report path properties before running `sonar-scanner`
@@ -48,6 +52,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
+- renamed the existing `lint` target in `makefiles/terra.mk` to `format` to accurately reflect its purpose (`terra format`)
 - added `config.sh` loading to CodeQL for GoLang across all pipelines (GitHub Actions, GitLab CI, Azure DevOps) to support project-level build configuration before analysis
 - added `test-lambda` target to Makefile so `test-lambda-templates.sh` is now part of `make test`
 - consolidated `.github/workflows/ci.yaml` into 2 focused jobs (`validate` + `lint-scripts`), removing superficial security and documentation checks

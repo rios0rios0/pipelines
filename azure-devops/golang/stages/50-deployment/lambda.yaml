@@ -20,6 +20,9 @@ parameters:
   - name: 'CREATE_IF_MISSING'
     type: 'boolean'
     default: false
+  - name: 'DEPLOY_STRATEGY'
+    type: 'string'
+    default: 'zip'
   - name: 'SAM_CONFIG_ENV'
     type: 'string'
     default: 'default'
@@ -32,6 +35,8 @@ stages:
       - job: 'deployment'
         displayName: 'deployment'
         container: 'ghcr.io/rios0rios0/pipelines/golang:1.26-awscli'
+        variables:
+          DEPLOY_STRATEGY: ${{ parameters.DEPLOY_STRATEGY }}
         steps:
           - task: 'DownloadPipelineArtifact@2'
             inputs:

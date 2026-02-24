@@ -5,7 +5,7 @@
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #   -include $(SCRIPTS_DIR)/makefiles/terra.mk
 #
-# Targets provided: lint, test
+# Targets provided: format, lint, test, validate
 # Also sets SEMGREP_LANGUAGE=terraform for the common.mk sast target.
 # Note: CodeQL does not support Terraform; CODEQL_LANGUAGE is left unset.
 #
@@ -14,12 +14,19 @@
 
 SEMGREP_LANGUAGE ?= terraform
 
-.PHONY: lint test
+.PHONY: format lint test validate
 
-lint:
+format:
+	@echo "Formatting Terraform files with Terra..."
 	@terra format
 	@echo "Checking for unformatted files..."
-	@git diff --exit-code || (echo "ERROR: Files were not formatted. Run 'make lint' and commit the changes." && exit 1)
+	@git diff --exit-code || (echo "ERROR: Files were not formatted. Run 'make format' and commit the changes." && exit 1)
+	@echo "Format check passed."
+
+lint:
+	@echo "Linting Terraform files with TFLint..."
+	@tflint --chdir . --recursive
+	@echo "Lint check passed."
 
 test:
 	@if [ -d "modules" ]; then \
@@ -35,3 +42,6 @@ test:
 	else \
 		echo "No modules/ directory found, skipping tests."; \
 	fi
+
+validate: format lint test
+	@echo "All validations passed (format, lint, test)."

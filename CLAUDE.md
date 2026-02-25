@@ -1,0 +1,78 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What This Is
+
+A CI/CD pipeline templates library providing reusable workflows for **GitHub Actions**, **GitLab CI**, and **Azure DevOps** across Go, Python, Java, JavaScript, PHP, Ruby, .NET, Terraform, and Terra CLI. This is **not a runnable application** — it provides templates and scripts consumed by other projects.
+
+## Commands
+
+```bash
+make test              # Run all validation tests (Go + Lambda)
+make test-go-script    # Test Go validation script only
+make test-lambda       # Test Lambda template validation only
+make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
+```
+
+Test scripts live in `.github/tests/`. The CI workflow (`.github/workflows/ci.yaml`) validates YAML syntax, script permissions, and runs ShellCheck on all shell scripts.
+
+## Architecture
+
+### 5-Stage Pipeline Model
+
+All platforms follow consistent numbered stages:
+1. **10 - Code Check** — Linting, formatting, rebase verification
+2. **20 - Security** — SAST (CodeQL, Semgrep, Gitleaks, Hadolint, Trivy) and SCA
+3. **30 - Tests** — Unit/integration tests, coverage
+4. **35 - Management** — SBOM generation, dependency tracking
+5. **40 - Delivery** — Artifact builds, container images
+6. **50 - Deployment** — Azure DevOps only (ARM, Lambda, K8s)
+
+### Directory Layout
+
+- `.github/workflows/` — GitHub Actions reusable workflows (e.g., `go-docker.yaml`)
+- `gitlab/<language>/` — GitLab CI templates with `stages/`, `scripts/`, `abstracts/` subdirs
+- `azure-devops/<language>/` — Azure DevOps templates, same structure as GitLab
+- `global/scripts/tools/` — Platform-agnostic security tools (codeql, gitleaks, semgrep, hadolint, trivy, sonarqube, dependency-track)
+- `global/scripts/languages/` — Language-specific scripts (golang, python)
+- `global/scripts/shared/` — Shared utilities (cleanup.sh, rebase-check.sh)
+- `global/containers/` — Docker image definitions for CI environments
+- `makefiles/` — Includable `.mk` fragments for downstream projects (`common.mk`, `golang.mk`, `python.mk`, etc.)
+- `.docs/examples/` — Complete per-platform usage examples
+
+### How Platforms Consume Templates
+
+**GitHub Actions** — Reusable workflows via `uses: 'rios0rios0/pipelines/.github/workflows/<workflow>@main'`
+
+**GitLab CI** — Remote includes via `remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/<lang>/<template>.yaml'`
+
+**Azure DevOps** — Template references via `template: 'azure-devops/<lang>/<template>.yaml@pipelines'` with a `resources.repositories` block
+
+### Script Conventions
+
+All `run.sh` scripts follow this pattern:
+- Shebang: `#!/usr/bin/env sh` (POSIX sh, not bash)
+- Auto-detect `SCRIPTS_DIR` if not set, using `dirname/realpath` with sed to find the pipelines root
+- Source `cleanup.sh` to set up report directory cleanup
+- Generate reports to `build/reports/<tool-name>/`
+- Use Docker-in-Docker for tool isolation
+
+### Makefile Include Pattern
+
+Downstream projects include pipeline targets via:
+```makefile
+SCRIPTS_DIR ?= $(HOME)/Development/github.com/rios0rios0/pipelines
+-include $(SCRIPTS_DIR)/makefiles/common.mk    # setup, sast
+-include $(SCRIPTS_DIR)/makefiles/golang.mk     # lint, test
+```
+
+The `-include` prefix makes includes optional (no error if pipelines not cloned).
+
+## Contribution Requirements
+
+- Changes **must** work across all three platforms (GitHub Actions, GitLab CI, Azure DevOps)
+- Run `make test` before submitting
+- **Mandatory updates**: CHANGELOG.md, relevant documentation, and test scenarios for new functionality
+- Shell scripts must pass ShellCheck and must be executable (`chmod +x`)
+- YAML indentation: 2 spaces, UTF-8, LF line endings (see `.editorconfig`)

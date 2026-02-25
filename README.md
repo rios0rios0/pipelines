@@ -33,7 +33,9 @@ Comprehensive, enterprise-grade SDLC pipeline templates for **GitHub Actions**, 
 | **GoLang**             | yes            | yes       | yes          | Binary, Docker, ARM deployment |
 | **Python**             | yes            | yes       | yes          | PDM, Docker, K8s deployment    |
 | **Java**               | yes            | yes       | yes          | Maven, Gradle, Docker          |
-| **JavaScript/Node.js** | yes            | yes       | yes          | Yarn, Docker, K8s deployment   |
+| **JavaScript/Node.js** | yes            | yes       | yes          | npm, Yarn, Docker, K8s deployment |
+| **PHP**                | yes            | no        | no           | Composer, Docker               |
+| **Ruby**               | yes            | no        | no           | Bundler, Docker                |
 | **.NET/C#**            | yes            | yes       | yes          | Framework, Core, Docker        |
 | **Terraform**          | no             | yes       | yes          | Infrastructure as Code         |
 | **Terra CLI**          | yes            | yes       | yes          | Terraform/Terragrunt wrapper   |
@@ -46,8 +48,12 @@ pipelines/
 │   ├── go-docker.yaml         # Go with Docker delivery
 │   ├── go-binary.yaml         # Go binary compilation
 │   ├── python-docker.yaml     # Python with Docker
-│   ├── java-docker.yaml       # Java with Docker delivery
-│   ├── javascript-docker.yaml # JavaScript with Docker delivery
+│   ├── java-docker.yaml       # Java/Gradle with Docker delivery
+│   ├── java-maven-docker.yaml # Java/Maven with Docker delivery
+│   ├── javascript-docker.yaml # JavaScript/Yarn with Docker delivery
+│   ├── javascript-npm-docker.yaml # JavaScript/npm with Docker delivery
+│   ├── php-docker.yaml        # PHP with Docker delivery
+│   ├── ruby-docker.yaml       # Ruby with Docker delivery
 │   ├── dotnet-docker.yaml     # .NET with Docker delivery
 │   └── ...
 ├── gitlab/                     # GitLab CI pipeline templates
@@ -155,6 +161,14 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 | `javascript-docker.yaml`  | JavaScript/Yarn with Docker image delivery | JavaScript     |
 | `dotnet.yaml`             | .NET testing and quality checks            | C#             |
 | `dotnet-docker.yaml`      | .NET with Docker image delivery            | C#             |
+| `javascript-npm.yaml`     | JavaScript/npm testing and quality checks  | JavaScript     |
+| `javascript-npm-docker.yaml` | JavaScript/npm with Docker image delivery | JavaScript     |
+| `java-maven.yaml`        | Java/Maven testing and quality checks      | Java           |
+| `java-maven-docker.yaml` | Java/Maven with Docker image delivery      | Java           |
+| `php.yaml`               | PHP/Composer testing and quality checks    | PHP            |
+| `php-docker.yaml`        | PHP/Composer with Docker image delivery    | PHP            |
+| `ruby.yaml`              | Ruby/Bundler testing and quality checks    | Ruby           |
+| `ruby-docker.yaml`       | Ruby/Bundler with Docker image delivery    | Ruby           |
 | `terra.yaml`              | Terra CLI quality, security, and tests     | Terraform/HCL  |
 
 #### Usage Example (Go with Docker)
@@ -259,6 +273,93 @@ permissions:
 jobs:
   pipeline:
     uses: 'rios0rios0/pipelines/.github/workflows/dotnet-docker.yaml@main'
+```
+
+#### Usage Example (JavaScript/npm with Docker)
+
+```yaml
+name: 'CI/CD Pipeline'
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ '*' ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  security-events: write
+  contents: write
+  packages: write
+
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/javascript-npm-docker.yaml@main'
+```
+
+#### Usage Example (Java/Maven with Docker)
+
+```yaml
+name: 'CI/CD Pipeline'
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ '*' ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  security-events: write
+  contents: write
+  packages: write
+
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/java-maven-docker.yaml@main'
+```
+
+#### Usage Example (PHP with Docker)
+
+```yaml
+name: 'CI/CD Pipeline'
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ '*' ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/php-docker.yaml@main'
+```
+
+#### Usage Example (Ruby with Docker)
+
+```yaml
+name: 'CI/CD Pipeline'
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ '*' ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  security-events: write
+  contents: write
+  packages: write
+
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/ruby-docker.yaml@main'
 ```
 
 ![GitHub Actions Example](.docs/github-golang.png)
@@ -500,6 +601,9 @@ Create these variable groups in Azure DevOps Library:
 | **Safety**                 | Python dependency scanning        | Python     | `pdm run safety-scan`                         |
 | **OWASP Dependency-Check** | Java dependency scanning          | Java       | `./gradlew dependencyCheckAnalyze`             |
 | **yarn npm audit**         | JS/Node.js dependency scanning    | JavaScript | `yarn npm audit --recursive`                   |
+| **npm audit**              | JS/Node.js dependency scanning    | JavaScript | `npm audit --audit-level=high`                 |
+| **Composer Audit**         | PHP dependency scanning           | PHP        | `composer audit`                               |
+| **bundler-audit**          | Ruby dependency scanning          | Ruby       | `bundle-audit check --update`                  |
 
 #### Quality & Management
 
@@ -703,7 +807,7 @@ include:
 **Issue: CodeQL analysis fails**
 
 - **Cause:** CodeQL CLI not installed or language not supported
-- **Solution:** Ensure network access to download CodeQL CLI bundle; supported languages: go, python, java, javascript, csharp
+- **Solution:** Ensure network access to download CodeQL CLI bundle; supported languages: go, python, java, javascript, csharp, ruby (PHP is not supported)
 
 **Issue: Gitleaks takes too long or fails**
 

@@ -2,7 +2,7 @@
 
 **ALWAYS FOLLOW THESE INSTRUCTIONS FIRST.** Only fallback to additional search and context gathering if the information in these instructions is incomplete or found to be in error.
 
-This repository provides comprehensive SDLC pipeline templates for GitHub Actions, GitLab CI, and Azure DevOps across multiple programming languages including GoLang, Java, Python, JavaScript, and .NET.
+This repository provides comprehensive SDLC pipeline templates for GitHub Actions, GitLab CI, and Azure DevOps across multiple programming languages including GoLang, Java, Python, JavaScript, PHP, Ruby, and .NET.
 
 ## Quick Reference
 
@@ -13,12 +13,12 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `docker --version && make --version && go version` - Check dependencies
 
 **Common Pipeline Usage:**
-- **GitHub Actions:** Use `.github/workflows/go-docker.yaml@main`, `java-docker.yaml@main`, `javascript-docker.yaml@main`, `dotnet-docker.yaml@main`
+- **GitHub Actions:** Use `.github/workflows/go-docker.yaml@main`, `java-docker.yaml@main`, `java-maven-docker.yaml@main`, `javascript-docker.yaml@main`, `javascript-npm-docker.yaml@main`, `php-docker.yaml@main`, `ruby-docker.yaml@main`, `dotnet-docker.yaml@main`
 - **GitLab CI:** Include `gitlab/golang/go-docker.yaml`, `gitlab/terraform/terra.yaml` from this repo
 - **Azure DevOps:** Template `azure-devops/golang/go-docker.yaml@pipelines`
 
 **SAST Tools:** Gitleaks, CodeQL, Semgrep, Hadolint, Trivy IaC
-**SCA Tools:** Trivy SCA (all languages), govulncheck (Go), Safety (Python), OWASP Dependency-Check (Java), yarn npm audit (JavaScript)
+**SCA Tools:** Trivy SCA (all languages), govulncheck (Go), Safety (Python), OWASP Dependency-Check (Java), yarn npm audit (JavaScript/Yarn), npm audit (JavaScript/npm), Composer Audit (PHP), bundler-audit (Ruby)
 **Quality Tools:** SonarQube, Dependency Track
 **Performance:** Security scans 2-10min, Container builds 5-30min
 **Architecture:** 5-stage pipeline (Code Check [lint + rebase-check] → Security → Tests → Management → Delivery)
@@ -115,6 +115,9 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 | **Safety**                 | Python dependency scanning        | Python     | `pdm run safety-scan`                          |
 | **OWASP Dependency-Check** | Java dependency scanning          | Java       | `./gradlew dependencyCheckAnalyze`             |
 | **yarn npm audit**         | JS/Node.js dependency scanning    | JavaScript | `yarn npm audit --recursive`                   |
+| **npm audit**              | JS/Node.js dependency scanning    | JavaScript | `npm audit --audit-level=high`                 |
+| **Composer Audit**         | PHP dependency scanning           | PHP        | `composer audit`                               |
+| **bundler-audit**          | Ruby dependency scanning          | Ruby       | `bundle-audit check --update`                  |
 
 #### Quality & Management Tools
 
@@ -162,8 +165,12 @@ pipelines/
 │   ├── go-docker.yaml         # Go with Docker delivery
 │   ├── go-binary.yaml         # Go binary compilation
 │   ├── python-docker.yaml     # Python with Docker
-│   ├── java-docker.yaml       # Java with Docker delivery
-│   ├── javascript-docker.yaml # JavaScript with Docker delivery
+│   ├── java-docker.yaml       # Java/Gradle with Docker delivery
+│   ├── java-maven-docker.yaml # Java/Maven with Docker delivery
+│   ├── javascript-docker.yaml # JavaScript/Yarn with Docker delivery
+│   ├── javascript-npm-docker.yaml # JavaScript/npm with Docker delivery
+│   ├── php-docker.yaml        # PHP with Docker delivery
+│   ├── ruby-docker.yaml       # Ruby with Docker delivery
 │   ├── dotnet-docker.yaml     # .NET with Docker delivery
 │   └── ...
 ├── gitlab/                     # GitLab CI pipeline templates
@@ -240,13 +247,15 @@ Each platform follows a consistent **5-stage pipeline architecture**:
 | **GoLang**             | ✅              | ✅         | ✅            | Binary, Docker, ARM deployment |
 | **Python**             | ✅              | ✅         | ✅            | PDM, Docker, K8s deployment    |
 | **Java**               | ✅              | ✅         | ✅            | Maven, Gradle, Docker          |
-| **JavaScript/Node.js** | ✅              | ✅         | ✅            | Yarn, Docker, K8s deployment   |
+| **JavaScript/Node.js** | ✅              | ✅         | ✅            | npm, Yarn, Docker, K8s deployment |
+| **PHP**                | ✅              | ❌         | ❌            | Composer, Docker               |
+| **Ruby**               | ✅              | ❌         | ❌            | Bundler, Docker                |
 | **.NET/C#**            | ✅              | ✅         | ✅            | Framework, Core, Docker        |
 | **Terraform**          | ❌              | ✅         | ✅            | Infrastructure as Code         |
 | **Terra CLI**          | ✅              | ✅         | ✅            | Terraform/Terragrunt wrapper   |
 
 **Pipeline Templates Available:**
-- **GitHub Actions:** `go.yaml`, `go-docker.yaml`, `go-binary.yaml`, `python.yaml`, `python-docker.yaml`, `java.yaml`, `java-docker.yaml`, `javascript.yaml`, `javascript-docker.yaml`, `dotnet.yaml`, `dotnet-docker.yaml`, `terra.yaml`
+- **GitHub Actions:** `go.yaml`, `go-docker.yaml`, `go-binary.yaml`, `python.yaml`, `python-docker.yaml`, `java.yaml`, `java-docker.yaml`, `java-maven.yaml`, `java-maven-docker.yaml`, `javascript.yaml`, `javascript-docker.yaml`, `javascript-npm.yaml`, `javascript-npm-docker.yaml`, `php.yaml`, `php-docker.yaml`, `ruby.yaml`, `ruby-docker.yaml`, `dotnet.yaml`, `dotnet-docker.yaml`, `terra.yaml`
 - **GitLab CI:** `go-docker.yaml`, `go-binary.yaml`, `go-sam.yaml`, `gradle-docker.yaml`, `maven-docker.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `framework.yaml`, `terraform/terra.yaml`, `terra/terra.yaml`
 - **Azure DevOps:** `go-docker.yaml`, `go-arm.yaml`, `go-function-arm.yaml`, `kotlin-gradle.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `core.yaml`, `terraform/terra.yaml`, `terra/terra.yaml`
 
@@ -408,6 +417,77 @@ permissions:
 jobs:
   pipeline:
     uses: 'rios0rios0/pipelines/.github/workflows/dotnet-docker.yaml@main'
+```
+
+#### JavaScript/npm with Docker (GitHub Actions)
+```yaml
+name: 'CI/CD Pipeline'
+on:
+  push:
+    branches: [main]
+    tags: ['*']
+  pull_request:
+    branches: [main]
+permissions:
+  security-events: write
+  contents: write
+  packages: write
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/javascript-npm-docker.yaml@main'
+```
+
+#### Java/Maven with Docker (GitHub Actions)
+```yaml
+name: 'CI/CD Pipeline'
+on:
+  push:
+    branches: [main]
+    tags: ['*']
+  pull_request:
+    branches: [main]
+permissions:
+  security-events: write
+  contents: write
+  packages: write
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/java-maven-docker.yaml@main'
+```
+
+#### PHP with Docker (GitHub Actions)
+```yaml
+name: 'CI/CD Pipeline'
+on:
+  push:
+    branches: [main]
+    tags: ['*']
+  pull_request:
+    branches: [main]
+permissions:
+  contents: write
+  packages: write
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/php-docker.yaml@main'
+```
+
+#### Ruby with Docker (GitHub Actions)
+```yaml
+name: 'CI/CD Pipeline'
+on:
+  push:
+    branches: [main]
+    tags: ['*']
+  pull_request:
+    branches: [main]
+permissions:
+  security-events: write
+  contents: write
+  packages: write
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/ruby-docker.yaml@main'
 ```
 
 ### Testing Pipeline Changes in Development Branches
@@ -585,7 +665,7 @@ Test scripts are located in `.github/tests/`.
 
 **Issue: CodeQL analysis fails**
 - **Cause:** CodeQL CLI not installed or language not supported
-- **Solution:** Ensure network access to download CodeQL CLI bundle; supported languages: go, python, java, javascript, csharp
+- **Solution:** Ensure network access to download CodeQL CLI bundle; supported languages: go, python, java, javascript, csharp, ruby (PHP is not supported)
 
 **Issue: Gitleaks takes too long or fails**
 - **Cause:** Large repository or network issues

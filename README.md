@@ -10,6 +10,8 @@
         <img src="https://img.shields.io/sonar/coverage/rios0rios0_pipelines?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge&logo=sonarqubecloud" alt="Coverage"/></a>
     <a href="https://sonarcloud.io/summary/overall?id=rios0rios0_pipelines">
         <img src="https://img.shields.io/sonar/quality_gate/rios0rios0_pipelines?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge&logo=sonarqubecloud" alt="Quality Gate"/></a>
+    <a href="https://www.bestpractices.dev/projects/12028">
+        <img src="https://img.shields.io/cii/level/12028?style=for-the-badge&logo=opensourceinitiative" alt="OpenSSF Best Practices"/></a>
 </p>
 
 Comprehensive, enterprise-grade SDLC pipeline templates for **GitHub Actions**, **GitLab CI**, and **Azure DevOps** with security scanning (SAST), dependency analysis (SCA), supply chain security (SSCA), testing, and deployment automation for multiple programming languages.

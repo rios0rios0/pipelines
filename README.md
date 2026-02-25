@@ -4,6 +4,12 @@
         <img src="https://img.shields.io/github/release/rios0rios0/pipelines.svg?style=for-the-badge&logo=github" alt="Latest Release"/></a>
     <a href="https://github.com/rios0rios0/pipelines/blob/main/LICENSE">
         <img src="https://img.shields.io/github/license/rios0rios0/pipelines.svg?style=for-the-badge&logo=github" alt="License"/></a>
+    <a href="https://github.com/rios0rios0/pipelines/actions/workflows/ci.yaml">
+        <img src="https://img.shields.io/github/actions/workflow/status/rios0rios0/pipelines/ci.yaml?branch=main&style=for-the-badge&logo=github" alt="Build Status"/></a>
+    <a href="https://sonarcloud.io/summary/overall?id=rios0rios0_pipelines">
+        <img src="https://img.shields.io/sonar/coverage/rios0rios0_pipelines?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge&logo=sonarqubecloud" alt="Coverage"/></a>
+    <a href="https://sonarcloud.io/summary/overall?id=rios0rios0_pipelines">
+        <img src="https://img.shields.io/sonar/quality_gate/rios0rios0_pipelines?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge&logo=sonarqubecloud" alt="Quality Gate"/></a>
 </p>
 
 Comprehensive, enterprise-grade SDLC pipeline templates for **GitHub Actions**, **GitLab CI**, and **Azure DevOps** with security scanning (SAST), dependency analysis (SCA), supply chain security (SSCA), testing, and deployment automation for multiple programming languages.

@@ -875,11 +875,7 @@ include:
 
 ## Contributing
 
-Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines. Before submitting changes:
-
-1. Run `make test` to validate changes
-2. Test across platforms (GitHub, GitLab, Azure DevOps)
-3. Update documentation and changelogs
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 

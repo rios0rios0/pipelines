@@ -1,52 +1,36 @@
-# CI/CD Pipeline Templates Repository
+<h1 align="center">Pipelines</h1>
+<p align="center">
+    <a href="https://github.com/rios0rios0/pipelines/releases/latest">
+        <img src="https://img.shields.io/github/release/rios0rios0/pipelines.svg?style=for-the-badge&logo=github" alt="Latest Release"/></a>
+    <a href="https://github.com/rios0rios0/pipelines/blob/main/LICENSE">
+        <img src="https://img.shields.io/github/license/rios0rios0/pipelines.svg?style=for-the-badge&logo=github" alt="License"/></a>
+</p>
 
-Welcome to the **Pipelines Project**! This repository provides comprehensive, enterprise-grade Software Development Life
-Cycle (SDLC) pipeline templates for **GitHub Actions**, **GitLab CI**, and **Azure DevOps**. Our templates include
-security scanning (SAST), dependency analysis (SCA), supply chain security (SSCA), testing, and deployment automation
-for multiple programming languages.
+Comprehensive, enterprise-grade SDLC pipeline templates for **GitHub Actions**, **GitLab CI**, and **Azure DevOps** with security scanning (SAST), dependency analysis (SCA), supply chain security (SSCA), testing, and deployment automation for multiple programming languages.
 
-## 🚀 Quick Start
-
-Choose your platform and language:
-
-- **[GitHub Actions](#github-actions)** - Modern, cloud-native CI/CD
-- **[GitLab CI](#gitlab-ci)** - Integrated DevOps platform
-- **[Azure DevOps](#azure-devops)** - Enterprise Microsoft ecosystem
-
-## 📋 Table of Contents
-
-- [Supported Platforms & Languages](#supported-platforms--languages)
-- [Project Structure](#project-structure)
-- [Platform Usage](#platform-usage)
-- [Available Tools & Scripts](#available-tools--scripts)
-- [Container Images](#container-images)
-- [Development & Local Usage](#development--local-usage)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-
-## 🛠 Supported Platforms & Languages
+## Supported Platforms & Languages
 
 ### Platforms
 
-| Platform           | Status         | Documentation                  |
-|--------------------|----------------|--------------------------------|
-| **GitHub Actions** | ✅ Full Support | [Usage Guide](#github-actions) |
-| **GitLab CI**      | ✅ Full Support | [Usage Guide](#gitlab-ci)      |
-| **Azure DevOps**   | ✅ Full Support | [Usage Guide](#azure-devops)   |
+| Platform           | Status       | Documentation                  |
+|--------------------|--------------|--------------------------------|
+| **GitHub Actions** | Full Support | [Usage Guide](#github-actions) |
+| **GitLab CI**      | Full Support | [Usage Guide](#gitlab-ci)      |
+| **Azure DevOps**   | Full Support | [Usage Guide](#azure-devops)   |
 
 ### Programming Languages
 
 | Language               | GitHub Actions | GitLab CI | Azure DevOps | Features                       |
 |------------------------|----------------|-----------|--------------|--------------------------------|
-| **GoLang**             | ✅              | ✅         | ✅            | Binary, Docker, ARM deployment |
-| **Python**             | ✅              | ✅         | ✅            | PDM, Docker, K8s deployment    |
-| **Java**               | ✅              | ✅         | ✅            | Maven, Gradle, Docker          |
-| **JavaScript/Node.js** | ✅              | ✅         | ✅            | Yarn, Docker, K8s deployment   |
-| **.NET/C#**            | ✅              | ✅         | ✅            | Framework, Core, Docker        |
-| **Terraform**          | ❌              | ✅         | ✅            | Infrastructure as Code         |
-| **Terra CLI**          | ✅              | ✅         | ✅            | Terraform/Terragrunt wrapper   |
+| **GoLang**             | yes            | yes       | yes          | Binary, Docker, ARM deployment |
+| **Python**             | yes            | yes       | yes          | PDM, Docker, K8s deployment    |
+| **Java**               | yes            | yes       | yes          | Maven, Gradle, Docker          |
+| **JavaScript/Node.js** | yes            | yes       | yes          | Yarn, Docker, K8s deployment   |
+| **.NET/C#**            | yes            | yes       | yes          | Framework, Core, Docker        |
+| **Terraform**          | no             | yes       | yes          | Infrastructure as Code         |
+| **Terra CLI**          | yes            | yes       | yes          | Terraform/Terragrunt wrapper   |
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 pipelines/
@@ -114,13 +98,35 @@ pipelines/
 
 Each platform follows a consistent **5-stage pipeline architecture**:
 
-1. **🔍 Code Check (Style/Quality)** - Linting, formatting, code quality, rebase verification
-2. **🔒 Security (SCA/SAST)** - Vulnerability scanning, secret detection
-3. **🧪 Tests** - Unit tests, integration tests, coverage reporting
-4. **📊 Management** - Dependency tracking, SBOM generation
-5. **🚀 Delivery** - Build artifacts, container images, deployments
+1. **Code Check (Style/Quality)** - Linting, formatting, code quality, rebase verification
+2. **Security (SCA/SAST)** - Vulnerability scanning, secret detection
+3. **Tests** - Unit tests, integration tests, coverage reporting
+4. **Management** - Dependency tracking, SBOM generation
+5. **Delivery** - Build artifacts, container images, deployments
 
-## 💻 Platform Usage
+## Installation
+
+### Quick Installation
+
+```bash
+curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
+```
+
+You can override the installation location with the `PIPELINES_HOME` environment variable:
+
+```bash
+PIPELINES_HOME=/opt/pipelines curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
+```
+
+### Manual Installation
+
+```bash
+mkdir -p $HOME/Development/github.com/rios0rios0
+cd $HOME/Development/github.com/rios0rios0
+git clone https://github.com/rios0rios0/pipelines.git
+```
+
+## Platform Usage
 
 ### GitHub Actions
 
@@ -438,31 +444,32 @@ stages:
 Create these variable groups in Azure DevOps Library:
 
 **Shared Variables (All Projects):**
+
 | Variable | Description |
 |----------|-------------|
 | `SONAR_HOST_URL` | SonarQube server URL |
 | `SONAR_TOKEN` | SonarQube authentication token |
 
 **Project-Specific Variables (.NET Example):**
+
 | Variable | Description |
 |----------|-------------|
 | `SONAR_PROJECT_NAME` | SonarQube project display name |
 | `SONAR_PROJECT_KEY` | SonarQube project unique key |
 
 **AWS Lambda Deployment Variables (Optional):**
+
 | Variable | Description | Required For |
 |----------|-------------|--------------|
 | `AWS_ACCESS_KEY_ID` | AWS access key (if not using service connection) | Lambda deployment |
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key (if not using service connection) | Lambda deployment |
 | `LAMBDA_ROLE_ARN` | IAM role ARN for Lambda function | Creating new functions |
 
-**Note:** For AWS deployments, it's recommended to use Azure DevOps AWS Service Connection instead of storing credentials in variable groups. Configure the service connection in Azure DevOps Project Settings → Service Connections.
+**Note:** For AWS deployments, it is recommended to use Azure DevOps AWS Service Connection instead of storing credentials in variable groups. Configure the service connection in Azure DevOps Project Settings > Service Connections.
 
 ![Azure DevOps Example](.docs/azure-devops-golang.png)
 
-## 🔧 Available Tools & Scripts
-
-Our pipeline templates include a comprehensive suite of tools for security, quality, and testing:
+## Available Tools & Scripts
 
 ### Security & Analysis Tools
 
@@ -514,8 +521,6 @@ This enforces a linear commit history and prevents merge conflicts from reaching
 
 #### Run Security Scanning Locally (via Makefile)
 
-The fastest way to run pipeline tools locally is through the Makefile includes. See the [Makefile Integration](#makefile-integration) section below for setup details.
-
 ```bash
 make setup      # Clone/update pipelines repo
 make lint       # Run golangci-lint
@@ -531,11 +536,9 @@ SCRIPTS_DIR=$HOME/Development/github.com/rios0rios0/pipelines
 ln -s $SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/.golangci.yml ~/.golangci.yml
 ```
 
-## 🐳 Container Images
+## Container Images
 
-We provide pre-built container images optimized for CI/CD environments:
-
-### Available Images
+Pre-built container images optimized for CI/CD environments:
 
 | Image                      | Purpose                         | Registry                       |
 |----------------------------|---------------------------------|--------------------------------|
@@ -556,33 +559,7 @@ make build-and-push NAME=awscli TAG=latest
 docker build -t my-image -f global/containers/awscli.latest/Dockerfile global/containers/awscli.latest/
 ```
 
-## 💻 Development & Local Usage
-
-### Installation & Setup
-
-The `clone.sh` script is an idempotent installer: it clones the repository on first run, and pulls the latest changes on subsequent runs. It is designed to be used in project Makefiles so that teams can run linting, SAST, and all pipeline tools locally before pushing.
-
-#### Quick Installation
-
-```bash
-curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
-```
-
-You can override the installation location with the `PIPELINES_HOME` environment variable:
-
-```bash
-PIPELINES_HOME=/opt/pipelines curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
-```
-
-#### Manual Installation
-
-```bash
-mkdir -p $HOME/Development/github.com/rios0rios0
-cd $HOME/Development/github.com/rios0rios0
-git clone https://github.com/rios0rios0/pipelines.git
-```
-
-### Makefile Integration
+## Makefile Integration
 
 The recommended way to use this repository locally is through the includable `.mk` files. GNU Make's `-include` directive imports targets from the pipelines repository, so your project Makefile only needs to declare `SCRIPTS_DIR` and the includes:
 
@@ -667,7 +644,7 @@ $SCRIPTS_DIR/global/scripts/tools/semgrep/run.sh
 
 ### Testing Pipeline Changes
 
-When developing pipeline modifications, you can test it against development branches:
+When developing pipeline modifications, you can test against development branches:
 
 #### Switch to Development Branch
 
@@ -691,30 +668,7 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/your-feature-branch/gitlab/golang/go-docker.yaml'
 ```
 
-### Validation & Testing
-
-#### Run Repository Tests
-
-```bash
-# Run all validation tests (Go test script + Lambda template validation)
-make test
-
-# Run individual test suites
-make test-go-script
-make test-lambda
-```
-
-#### Build Container Images
-
-```bash
-# Test container builds locally
-make build-and-push NAME=awscli TAG=latest
-
-# Build specific image for testing
-docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/containers/awscli.latest/
-```
-
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues & Solutions
 
@@ -722,9 +676,9 @@ docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/
 
 **Issue: "No directories found to test it" (Go projects)**
 
-- **Cause:** Go project structure doesn't match the expected layout
+- **Cause:** Go project structure does not match the expected layout
 - **Solution:** Ensure your project has `cmd/`, `pkg/`, or `internal/` directories
-- **Alternative:** Modify a test script to include your custom directories
+- **Alternative:** Modify the test script to include your custom directories
 
 **Issue: "golangci-lint: command not found"**
 
@@ -751,7 +705,7 @@ docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/
 **Issue: Semgrep timeout or hangs**
 
 - **Cause:** Large codebase, downloading security rules
-- **Solution:** Allow 10+ minutes for completion, don't cancel the operation
+- **Solution:** Allow 10+ minutes for completion, do not cancel the operation
 
 **Issue: Hadolint skips analysis**
 
@@ -767,7 +721,7 @@ docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/
 
 **GitHub Actions:**
 
-- **Issue:** Workflow doesn't trigger
+- **Issue:** Workflow does not trigger
 - **Solution:** Check repository permissions, ensure workflow file is in `.github/workflows/`
 
 **GitLab CI:**
@@ -805,49 +759,20 @@ docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/
 | Container builds  | 5-30 minutes      | Depends on base image and dependencies |
 | Semgrep analysis  | 5-15 minutes      | Downloads large rule sets              |
 
-**Important:** Never cancel operations that appear to be hanging - they may be downloading large Docker images or rule
-sets.
+**Important:** Never cancel operations that appear to be hanging - they may be downloading large Docker images or rule sets.
 
-### Getting Help
+## Contributing
 
-1. **Check the logs:** Most scripts provide detailed output about what they're doing
-2. **Verify environment:** Ensure Docker is running and network access is available
-3. **Check examples:** Review the working examples in this README
-4. **Review CONTRIBUTING.md:** For development and contribution guidelines
-5. **Open an issue:** For bugs or feature requests on GitHub
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines. Before submitting changes:
 
-## 📚 Additional Resources
+1. Run `make test` to validate changes
+2. Test across platforms (GitHub, GitLab, Azure DevOps)
+3. Update documentation and changelogs
 
-- **[Contributing Guidelines](CONTRIBUTING.md)** - How to contribute to this project
-- **[Changelog](CHANGELOG.md)** - Version history and changes
-- **[License](LICENSE)** - MIT License details
-- **Examples in `.docs/`** - Screenshots and detailed examples
+## License
 
-## 🤝 Contributing
-
-We welcome contributions! This project follows enterprise security and testing standards:
-
-### Before Contributing
-
-1. **Read [CONTRIBUTING.md](CONTRIBUTING.md)** for detailed guidelines
-2. **Run tests:** Execute `make test` before submitting changes
-3. **Test across platforms:** Validate changes on GitHub, GitLab, and Azure DevOps
-4. **Update documentation:** Keep README and changelogs current
-
-### Key Contribution Areas
-
-- Adding support for new programming languages
-- Improving security tool integration
-- Enhancing container images
-- Adding new platform features
-- Improving documentation and examples
-
-## 📄 License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the [MIT](LICENSE) License.
 
 ---
 
-> **Note:** This repository provides **pipeline templates and automation scripts**, not a runnable application. Users
-> consume these templates in their own projects to establish comprehensive CI/CD pipelines with security, quality, and
-> testing automation.
+> **Note:** This repository provides **pipeline templates and automation scripts**, not a runnable application. Users consume these templates in their own projects to establish comprehensive CI/CD pipelines with security, quality, and testing automation.

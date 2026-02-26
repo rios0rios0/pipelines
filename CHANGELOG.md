@@ -19,6 +19,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Changed
 
 - added end-to-end testing instructions to `CONTRIBUTING.md` showing how to point a consuming repository at a feature branch for each platform
+- changed Go CycloneDX script to handle multiple `main.go` files by falling back to `cyclonedx-gomod mod` instead of failing
 
 ### Added
 

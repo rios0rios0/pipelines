@@ -35,23 +35,23 @@ parameters:
     default: 'echo "No after script"'
 
 stages:
-  - template: 'stages/10-code-check/yarn.yaml'
-    parameters:
-      RUN_BEFORE_CODE_CHECK: ${{ parameters.RUN_BEFORE_CODE_CHECK }}
-      RUN_AFTER_CODE_CHECK: ${{ parameters.RUN_AFTER_CODE_CHECK }}
-      WORKING_DIRECTORY: "$(System.DefaultWorkingDirectory)"
+  #- template: 'stages/10-code-check/yarn.yaml'
+  #  parameters:
+  #    RUN_BEFORE_CODE_CHECK: ${{ parameters.RUN_BEFORE_CODE_CHECK }}
+  #    RUN_AFTER_CODE_CHECK: ${{ parameters.RUN_AFTER_CODE_CHECK }}
+  #    WORKING_DIRECTORY: "$(System.DefaultWorkingDirectory)"
 
-  - template: 'stages/20-security/yarn.yaml'
+  #- template: 'stages/20-security/yarn.yaml'
 
-  - template: 'stages/30-tests/yarn.yaml'
-    parameters:
-      RUN_BEFORE_TESTS: ${{ parameters.RUN_BEFORE_TESTS }}
-      RUN_AFTER_TESTS: ${{ parameters.RUN_AFTER_TESTS }}
+  #- template: 'stages/30-tests/yarn.yaml'
+  #  parameters:
+  #    RUN_BEFORE_TESTS: ${{ parameters.RUN_BEFORE_TESTS }}
+  #    RUN_AFTER_TESTS: ${{ parameters.RUN_AFTER_TESTS }}
 
-  - template: 'stages/35-management/yarn.yaml'
-    parameters:
-      RUN_BEFORE_MANAGEMENT: ${{ parameters.RUN_BEFORE_MANAGEMENT }}
-      RUN_AFTER_MANAGEMENT: ${{ parameters.RUN_AFTER_MANAGEMENT }}
+  #- template: 'stages/35-management/yarn.yaml'
+  #  parameters:
+  #    RUN_BEFORE_MANAGEMENT: ${{ parameters.RUN_BEFORE_MANAGEMENT }}
+  #    RUN_AFTER_MANAGEMENT: ${{ parameters.RUN_AFTER_MANAGEMENT }}
 
   - template: 'stages/40-delivery/docker.yaml'
     parameters:

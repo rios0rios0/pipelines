@@ -58,6 +58,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed SAST tool report cleanup deleting reports from other tools by isolating each tool's output into its own `build/reports/<tool>/` subdirectory
 - fixed `make sast` aggregate target aborting on the first tool failure by adding the `-` prefix to all SAST tool recipes in `makefiles/common.mk`
 - fixed `global/scripts/tools/sonarqube/run.sh` by adding `coverage.txt` in coverage file patterns
+- fixed Python CycloneDX BOM generation using an independent `BOM_PATH` variable instead of `$PREFIX$REPORT_PATH`, causing `dependency-track` upload to fail with "No such file or directory" because the BOM was written to a different path than expected
 
 ### Changed
 

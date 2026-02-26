@@ -6,10 +6,8 @@ if [ -z "$SCRIPTS_DIR" ]; then
   export SCRIPTS_DIR="$(echo $(dirname "$(realpath "$0")") | sed 's|\(.*pipelines\).*|\1|')"
 fi
 
-# Default BOM_PATH if not set
-BOM_PATH="${BOM_PATH:-build/reports}"
-
-mkdir -p "$BOM_PATH"
+# TODO: this should not be needed since it's covered by the parent YAML file that calls this shell script
+BOM_PATH="$PREFIX$REPORT_PATH" && mkdir -p "$BOM_PATH"
 pdm run cyclonedx-py environment "$(pdm info --python)" --of JSON -o "$BOM_PATH/bom.json"
 name=$(pdm show --name 2>/dev/null)
 version=$(pdm show --version 2>/dev/null)

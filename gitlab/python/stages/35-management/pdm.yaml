@@ -34,5 +34,5 @@ report:dependency-track:
     - mkdir -p "$PREFIX$REPORT_PATH"
     - apt update && apt install -y --no-install-recommends curl jq
 
-    - pdm run sbom
+    - $SCRIPTS_DIR/global/scripts/languages/python/cyclonedx/run.sh
     - !reference [ .dependency-track, script ]

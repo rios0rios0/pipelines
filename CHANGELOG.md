@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- added end-to-end testing instructions to `CONTRIBUTING.md` showing how to point a consuming repository at a feature branch for each platform
+
 ### Added
 
 - added JavaScript/Node.js (npm) pipeline for GitHub Actions with `javascript-npm.yaml` (testing/quality) and `javascript-npm-docker.yaml` (Docker delivery) reusable workflows
@@ -136,7 +140,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added a new optional parameter called `CUSTOM_PARAMETERS` in `go-arm-az-function` to add custom parameters in resource group deployment
 - added a new pipeline in Azure DevOps for .NET Core (C#)
 - added a new pipeline in Azure DevOps for Terraform
-- added a new rule to ignore the Swagger comments to godot linter in `golangci-lint`
+- added a new rule to ignore the Swagger comments to `godot` linter in `golangci-lint`
 - added a new rule to ignore the docs folder in `golangci-lint`
 - added another stage's template `acr-container-deployment.yaml`, introduced new test steps' template: `test.yaml` and new test stage: `acr.yaml` to the GoLang pipeline to log in into ACR before running tests
 - added messages to show application states in the `test_e2e` job

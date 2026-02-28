@@ -150,8 +150,8 @@ assert_true "custom setting merged" \
   "yq eval '.linters-settings.errcheck.check-blank' '$TEST_DIR/merged.yml' | grep -qx true"
 assert_true "new linter settings added" \
   "yq eval '.linters-settings.custom-linter.option-a' '$TEST_DIR/merged.yml' | grep -qx hello"
-assert_true "existing settings preserved" \
-  "yq eval '.linters-settings.cyclop.max-complexity' '$TEST_DIR/merged.yml' | grep -qx 30"
+assert_true "existing default settings preserved" \
+  "yq eval '.linters.settings.cyclop.max-complexity' '$TEST_DIR/merged.yml' | grep -qx 30"
 
 # =============================================================================
 # Test 5: Complex config (enable + disable + settings)

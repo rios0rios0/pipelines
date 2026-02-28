@@ -13,11 +13,11 @@ stages:
           # $(Scripts.Directory) was already defined in the line below
           - template: '../../abstracts/go.yaml'
 
-          # for golangci-lint config merging
+          # Install yq for golangci-lint config merging
           - script: |
               sudo apt-get update && \
-              sudo apt-get install -y python3 python3-yaml
-            displayName: 'Install Dependencies'
+              sudo apt-get install -y yq
+            displayName: 'Install yq'
 
           - script: $(Scripts.Directory)/global/scripts/languages/golang/golangci-lint/run.sh
             displayName: 'Run GolangCI-Lint'

@@ -32,7 +32,11 @@ if [ -f ".golangci.yml" ]; then
     for linter in $repo_enabled; do
       if [ -n "$linter" ]; then
         if ! yq eval ".linters.enable | contains([\"$linter\"])" "$mergedYamlFile" | grep -q true; then
-          to_enable="$to_enable \"$linter\""
+          if [ -n "$to_enable" ]; then
+            to_enable="$to_enable, \"$linter\""
+          else
+            to_enable="\"$linter\""
+          fi
         fi
       fi
     done

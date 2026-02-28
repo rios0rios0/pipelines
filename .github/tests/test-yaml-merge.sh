@@ -147,11 +147,11 @@ linters-settings:
 YAML
 merge_yaml "$DEFAULT_CONFIG" "$TEST_DIR/repo.yml" "$TEST_DIR/merged.yml"
 assert_true "custom setting merged" \
-  "[ \"$(yq eval '.linters-settings.errcheck.check-blank' '$TEST_DIR/merged.yml')\" = 'true' ]"
+  "yq eval '.linters-settings.errcheck.check-blank' '$TEST_DIR/merged.yml' | grep -qx true"
 assert_true "new linter settings added" \
-  "[ \"$(yq eval '.linters-settings.custom-linter.option-a' '$TEST_DIR/merged.yml')\" = 'hello' ]"
+  "yq eval '.linters-settings.custom-linter.option-a' '$TEST_DIR/merged.yml' | grep -qx hello"
 assert_true "existing settings preserved" \
-  "[ \"$(yq eval '.linters-settings.cyclop.max-complexity' '$TEST_DIR/merged.yml')\" = '30' ]"
+  "yq eval '.linters-settings.cyclop.max-complexity' '$TEST_DIR/merged.yml' | grep -qx 30"
 
 # =============================================================================
 # Test 5: Complex config (enable + disable + settings)

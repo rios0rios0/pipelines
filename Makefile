@@ -2,7 +2,7 @@ TAG := latest
 ROOT := global/containers
 CONTAINER_REGISTRY = ghcr.io/rios0rios0/pipelines
 
-.PHONY: login setup-buildx build-and-push test-go-script test-lambda test
+.PHONY: login setup-buildx build-and-push test-go-script test-lambda test-yaml-merge test
 
 login:
 	docker login $(CONTAINER_REGISTRY)
@@ -26,5 +26,9 @@ test-lambda:
 	@echo "Running Lambda template validation..."
 	@./.github/tests/test-lambda-templates.sh
 
-test: test-go-script test-lambda
+test-yaml-merge:
+	@echo "Running YAML merge validation..."
+	@./.github/tests/test-yaml-merge.sh
+
+test: test-go-script test-lambda test-yaml-merge
 	@echo "All tests completed successfully!"

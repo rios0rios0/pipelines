@@ -8,7 +8,11 @@ fi
 
 # TODO: this should not be needed since it's covered by the parent YAML file that calls this shell script
 BOM_PATH="$PREFIX$REPORT_PATH" && mkdir -p "$BOM_PATH"
+
+echo "Generating Python SBOM with CycloneDX..."
 pdm run cyclonedx-py environment "$(pdm info --python)" --of JSON -o "$BOM_PATH/bom.json"
+
+echo "Patching BOM metadata with project name and version..."
 name=$(pdm show --name 2>/dev/null)
 version=$(pdm show --version 2>/dev/null)
 jq --arg name "$name" \

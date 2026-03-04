@@ -9,6 +9,7 @@ stages:
         displayName: 'report:dependency-track'
         variables:
           REPORT_PATH: 'build/reports'
+          DEBUG: '1'
         steps:
           # $(Scripts.Directory) was already defined in the line below
           - template: '../../abstracts/pdm-python3.14.yaml'

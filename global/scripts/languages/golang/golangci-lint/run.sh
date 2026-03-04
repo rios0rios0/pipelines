@@ -64,11 +64,16 @@ if [ -f ".golangci.yml" ]; then
     yq eval "$filter" -i "$mergedYamlFile"
   fi
 
-  # Merge linter settings using yq deep merge
-  repo_settings=$(yq eval '.linters-settings // ""' ".golangci.yml" 2>/dev/null || true)
+  # Merge linter settings using yq.
+  # Reads from the v1 legacy key "linters-settings" (used by project configs)
+  # and merges into the v2 key "linters.settings" (required by golangci-lint v2).
+  # Uses a two-step approach: extract settings to a temp file, then merge with *= to
+  # avoid clobbering other keys under "linters" (e.g., "enable").
+  repo_settings=$(yq eval '."linters-settings" // ""' ".golangci.yml" 2>/dev/null || true)
   if [ -n "$repo_settings" ] && [ "$repo_settings" != "" ] && [ "$repo_settings" != "null" ]; then
-    yq eval-all 'select(fileIndex == 0) * {"linters-settings": select(fileIndex == 1).linters-settings}' "$mergedYamlFile" ".golangci.yml" > "$mergedYamlFile.tmp"
-    mv "$mergedYamlFile.tmp" "$mergedYamlFile"
+    yq eval '."linters-settings"' ".golangci.yml" > "$mergedYamlFile.settings.tmp"
+    yq eval '.linters.settings *= load("'"$mergedYamlFile"'.settings.tmp")' -i "$mergedYamlFile"
+    rm -f "$mergedYamlFile.settings.tmp"
   fi
 else
   cp "$defaultYamlFile" "$mergedYamlFile"

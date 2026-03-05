@@ -1,7 +1,8 @@
 #!/usr/bin/env sh
 
 if [ -z "$SCRIPTS_DIR" ]; then
-  export SCRIPTS_DIR="$(echo $(dirname "$(realpath "$0")") | sed 's|\(.*pipelines\).*|\1|')"
+  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
+  export SCRIPTS_DIR
 fi
 TOOL_NAME="semgrep" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
 
@@ -18,6 +19,7 @@ if [ ! -f ".semgrepignore" ]; then
   cp "$defaultFile" .
 fi
 
+# shellcheck disable=SC2086,SC2027
 dockerRun="docker run \
   -v "$(pwd):$CONTAINER_PATH" \
   --workdir "$CONTAINER_PATH" \
@@ -31,19 +33,18 @@ dockerRun="docker run \
   --config "p/owasp-top-ten" \
   --config "p/r2c-best-practices" \
   --enable-version-check --force-color \
-  --error --json --output "$fileName"" 
+  --error --json --output "$fileName""
 
 if [ -f ".semgrepexcluderules" ]; then # check if you have rules to exclude
   semgrepExcludeRules=""
-  IFS='
-  '
-  for line in $(cat ".semgrepexcluderules"); do
+  while IFS= read -r line || [ -n "$line" ]; do
     semgrepExcludeRules="$semgrepExcludeRules --exclude-rule $line"
-  done
+  done < ".semgrepexcluderules"
   dockerRun="$dockerRun$semgrepExcludeRules"
 fi
 
 if [ -f ".semgrep.yaml" ]; then # check if you have custom rules to add
+  # shellcheck disable=SC2027
   dockerRun="$dockerRun --config ".semgrep.yaml""
 fi
 
@@ -53,8 +54,8 @@ if ! ls "$REPORT_PATH"/*.json 1> /dev/null 2>&1; then
   echo "OK" > "$fileName"
 fi
 
-if [ ! $ignoreFileExists ]; then
+if [ ! "$ignoreFileExists" ]; then
   rm .semgrepignore
 fi
 
-exit $EXIT_CODE
+exit "${EXIT_CODE:-0}"

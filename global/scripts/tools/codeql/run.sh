@@ -1,7 +1,8 @@
 #!/usr/bin/env sh
 
 if [ -z "$SCRIPTS_DIR" ]; then
-  export SCRIPTS_DIR="$(echo $(dirname "$(realpath "$0")") | sed 's|\(.*pipelines\).*|\1|')"
+  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
+  export SCRIPTS_DIR
 fi
 TOOL_NAME="codeql" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
 
@@ -12,6 +13,7 @@ fileName="$(pwd)/$REPORT_PATH/codeql.sarif"
 if [ "$CODEQL_LANGUAGE" = "go" ]; then
   INIT_SCRIPT="config.sh"
   if [ -f "$INIT_SCRIPT" ]; then
+    # shellcheck disable=SC1090
     . ./"$INIT_SCRIPT"
   else
     echo "The '$INIT_SCRIPT' file was not found, skipping..."

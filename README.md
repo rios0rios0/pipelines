@@ -28,17 +28,17 @@ Comprehensive, enterprise-grade SDLC pipeline templates for **GitHub Actions**, 
 
 ### Programming Languages
 
-| Language               | GitHub Actions | GitLab CI | Azure DevOps | Features                       |
-|------------------------|----------------|-----------|--------------|--------------------------------|
-| **GoLang**             | yes            | yes       | yes          | Binary, Docker, ARM deployment |
-| **Python**             | yes            | yes       | yes          | PDM, Docker, K8s deployment    |
-| **Java**               | yes            | yes       | yes          | Maven, Gradle, Docker          |
+| Language               | GitHub Actions | GitLab CI | Azure DevOps | Features                          |
+|------------------------|----------------|-----------|--------------|-----------------------------------|
+| **GoLang**             | yes            | yes       | yes          | Binary, Docker, ARM deployment    |
+| **Python**             | yes            | yes       | yes          | PDM, Docker, K8s deployment       |
+| **Java**               | yes            | yes       | yes          | Maven, Gradle, Docker             |
 | **JavaScript/Node.js** | yes            | yes       | yes          | npm, Yarn, Docker, K8s deployment |
-| **PHP**                | yes            | no        | no           | Composer, Docker               |
-| **Ruby**               | yes            | no        | no           | Bundler, Docker                |
-| **.NET/C#**            | yes            | yes       | yes          | Framework, Core, Docker        |
-| **Terraform**          | no             | yes       | yes          | Infrastructure as Code         |
-| **Terra CLI**          | yes            | yes       | yes          | Terraform/Terragrunt wrapper   |
+| **PHP**                | yes            | no        | no           | Composer, Docker                  |
+| **Ruby**               | yes            | no        | no           | Bundler, Docker                   |
+| **.NET/C#**            | yes            | yes       | yes          | Framework, Core, Docker           |
+| **Terraform**          | no             | yes       | yes          | Infrastructure as Code            |
+| **Terra CLI**          | yes            | yes       | yes          | Terraform/Terragrunt wrapper      |
 
 ## Project Structure
 
@@ -112,7 +112,7 @@ pipelines/
 
 Each platform follows a consistent **5-stage pipeline architecture**:
 
-1. **Code Check (Style/Quality)** - Linting, formatting, code quality, rebase verification
+1. **Code Check (Style/Quality)** - Linting, formatting, code quality, basic checks (rebase verification, changelog validation)
 2. **Security (SCA/SAST)** - Vulnerability scanning, secret detection
 3. **Tests** - Unit tests, integration tests, coverage reporting
 4. **Management** - Dependency tracking, SBOM generation
@@ -148,28 +148,28 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 
 #### Available Workflows
 
-| Workflow                  | Purpose                                    | Languages      |
-|---------------------------|--------------------------------------------|----------------|
-| `go.yaml`                 | Go testing and quality checks              | Go             |
-| `go-docker.yaml`          | Go with Docker image delivery              | Go             |
-| `go-binary.yaml`          | Go binary compilation and release          | Go             |
-| `python.yaml`             | Python testing and quality checks          | Python         |
-| `python-docker.yaml`      | Python with Docker image delivery          | Python         |
-| `java.yaml`               | Java/Gradle testing and quality checks     | Java           |
-| `java-docker.yaml`        | Java/Gradle with Docker image delivery     | Java           |
-| `javascript.yaml`         | JavaScript/Yarn testing and quality checks | JavaScript     |
-| `javascript-docker.yaml`  | JavaScript/Yarn with Docker image delivery | JavaScript     |
-| `dotnet.yaml`             | .NET testing and quality checks            | C#             |
-| `dotnet-docker.yaml`      | .NET with Docker image delivery            | C#             |
-| `javascript-npm.yaml`     | JavaScript/npm testing and quality checks  | JavaScript     |
-| `javascript-npm-docker.yaml` | JavaScript/npm with Docker image delivery | JavaScript     |
-| `java-maven.yaml`        | Java/Maven testing and quality checks      | Java           |
-| `java-maven-docker.yaml` | Java/Maven with Docker image delivery      | Java           |
-| `php.yaml`               | PHP/Composer testing and quality checks    | PHP            |
-| `php-docker.yaml`        | PHP/Composer with Docker image delivery    | PHP            |
-| `ruby.yaml`              | Ruby/Bundler testing and quality checks    | Ruby           |
-| `ruby-docker.yaml`       | Ruby/Bundler with Docker image delivery    | Ruby           |
-| `terra.yaml`              | Terra CLI quality, security, and tests     | Terraform/HCL  |
+| Workflow                     | Purpose                                    | Languages     |
+|------------------------------|--------------------------------------------|---------------|
+| `go.yaml`                    | Go testing and quality checks              | Go            |
+| `go-docker.yaml`             | Go with Docker image delivery              | Go            |
+| `go-binary.yaml`             | Go binary compilation and release          | Go            |
+| `python.yaml`                | Python testing and quality checks          | Python        |
+| `python-docker.yaml`         | Python with Docker image delivery          | Python        |
+| `java.yaml`                  | Java/Gradle testing and quality checks     | Java          |
+| `java-docker.yaml`           | Java/Gradle with Docker image delivery     | Java          |
+| `javascript.yaml`            | JavaScript/Yarn testing and quality checks | JavaScript    |
+| `javascript-docker.yaml`     | JavaScript/Yarn with Docker image delivery | JavaScript    |
+| `dotnet.yaml`                | .NET testing and quality checks            | C#            |
+| `dotnet-docker.yaml`         | .NET with Docker image delivery            | C#            |
+| `javascript-npm.yaml`        | JavaScript/npm testing and quality checks  | JavaScript    |
+| `javascript-npm-docker.yaml` | JavaScript/npm with Docker image delivery  | JavaScript    |
+| `java-maven.yaml`            | Java/Maven testing and quality checks      | Java          |
+| `java-maven-docker.yaml`     | Java/Maven with Docker image delivery      | Java          |
+| `php.yaml`                   | PHP/Composer testing and quality checks    | PHP           |
+| `php-docker.yaml`            | PHP/Composer with Docker image delivery    | PHP           |
+| `ruby.yaml`                  | Ruby/Bundler testing and quality checks    | Ruby          |
+| `ruby-docker.yaml`           | Ruby/Bundler with Docker image delivery    | Ruby          |
+| `terra.yaml`                 | Terra CLI quality, security, and tests     | Terraform/HCL |
 
 #### Usage Example (Go with Docker)
 
@@ -554,25 +554,25 @@ Create these variable groups in Azure DevOps Library:
 
 **Shared Variables (All Projects):**
 
-| Variable | Description |
-|----------|-------------|
-| `SONAR_HOST_URL` | SonarQube server URL |
-| `SONAR_TOKEN` | SonarQube authentication token |
+| Variable         | Description                    |
+|------------------|--------------------------------|
+| `SONAR_HOST_URL` | SonarQube server URL           |
+| `SONAR_TOKEN`    | SonarQube authentication token |
 
 **Project-Specific Variables (.NET Example):**
 
-| Variable | Description |
-|----------|-------------|
+| Variable             | Description                    |
+|----------------------|--------------------------------|
 | `SONAR_PROJECT_NAME` | SonarQube project display name |
-| `SONAR_PROJECT_KEY` | SonarQube project unique key |
+| `SONAR_PROJECT_KEY`  | SonarQube project unique key   |
 
 **AWS Lambda Deployment Variables (Optional):**
 
-| Variable | Description | Required For |
-|----------|-------------|--------------|
-| `AWS_ACCESS_KEY_ID` | AWS access key (if not using service connection) | Lambda deployment |
-| `AWS_SECRET_ACCESS_KEY` | AWS secret key (if not using service connection) | Lambda deployment |
-| `LAMBDA_ROLE_ARN` | IAM role ARN for Lambda function | Creating new functions |
+| Variable                | Description                                      | Required For           |
+|-------------------------|--------------------------------------------------|------------------------|
+| `AWS_ACCESS_KEY_ID`     | AWS access key (if not using service connection) | Lambda deployment      |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key (if not using service connection) | Lambda deployment      |
+| `LAMBDA_ROLE_ARN`       | IAM role ARN for Lambda function                 | Creating new functions |
 
 **Note:** For AWS deployments, it is recommended to use Azure DevOps AWS Service Connection instead of storing credentials in variable groups. Configure the service connection in Azure DevOps Project Settings > Service Connections.
 
@@ -598,7 +598,7 @@ Create these variable groups in Azure DevOps Library:
 |----------------------------|-----------------------------------|------------|------------------------------------------------|
 | **Trivy SCA**              | Dependency vulnerability scanning | All        | `global/scripts/tools/trivy/run-sca.sh`        |
 | **govulncheck**            | Go vulnerability scanning         | Go         | `global/scripts/languages/golang/govulncheck/` |
-| **Safety**                 | Python dependency scanning        | Python     | `pdm run safety-scan`                         |
+| **Safety**                 | Python dependency scanning        | Python     | `pdm run safety-scan`                          |
 | **OWASP Dependency-Check** | Java dependency scanning          | Java       | `./gradlew dependencyCheckAnalyze`             |
 | **yarn npm audit**         | JS/Node.js dependency scanning    | JavaScript | `yarn npm audit --recursive`                   |
 | **npm audit**              | JS/Node.js dependency scanning    | JavaScript | `npm audit --audit-level=high`                 |
@@ -607,17 +607,18 @@ Create these variable groups in Azure DevOps Library:
 
 #### Quality & Management
 
-| Tool                 | Purpose                       | Script Location                          | Configuration         |
-|----------------------|-------------------------------|------------------------------------------|-----------------------|
-| **Rebase Check**     | PR/MR rebase verification     | `global/scripts/shared/rebase-check.sh`  | Auto-configured       |
-| **SonarQube**        | Code quality & security       | `global/scripts/tools/sonarqube/`        | Project settings      |
-| **Dependency Track** | SBOM tracking                 | `global/scripts/tools/dependency-track/` | Environment variables |
+| Tool                 | Purpose                                 | Script Location                                               | Configuration         |
+|----------------------|-----------------------------------------|---------------------------------------------------------------|-----------------------|
+| **Basic Checks**     | PR/MR rebase and changelog verification | `global/scripts/shared/rebase-check.sh`, `changelog-check.sh` | Auto-configured       |
+| **SonarQube**        | Code quality & security                 | `global/scripts/tools/sonarqube/`                             | Project settings      |
+| **Dependency Track** | SBOM tracking                           | `global/scripts/tools/dependency-track/`                      | Environment variables |
 
-### Rebase Check
+### Basic Checks
 
-Every pipeline includes a **rebase check** that runs in parallel with linting during the **Code Check** stage. This job verifies that the PR/MR branch is rebased on top of the target branch (usually `main`). If the branch is behind, the pipeline fails with clear instructions to rebase.
+Every pipeline includes **basic checks** that run in parallel with linting during the **Code Check** stage. These checks verify:
 
-This enforces a linear commit history and prevents merge conflicts from reaching the test and delivery stages.
+1. **Rebase verification** — the PR/MR branch is rebased on top of the target branch (usually `main`). If the branch is behind, the pipeline fails with clear instructions to rebase. This enforces a linear commit history and prevents merge conflicts from reaching the test and delivery stages.
+2. **Changelog validation** — the `CHANGELOG.md` file was modified and new entries are placed under the `[Unreleased]` section. If entries appear below an existing version section (e.g., due to an erroneous rebase), the pipeline fails with instructions to fix the placement.
 
 ### Language-Specific Tools
 

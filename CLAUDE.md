@@ -22,7 +22,7 @@ Test scripts live in `.github/tests/`. The CI workflow (`.github/workflows/ci.ya
 ### 5-Stage Pipeline Model
 
 All platforms follow consistent numbered stages:
-1. **10 - Code Check** — Linting, formatting, rebase verification
+1. **10 - Code Check** — Linting, formatting, basic checks (rebase verification, changelog validation)
 2. **20 - Security** — SAST (CodeQL, Semgrep, Gitleaks, Hadolint, Trivy) and SCA
 3. **30 - Tests** — Unit/integration tests, coverage
 4. **35 - Management** — SBOM generation, dependency tracking
@@ -36,7 +36,7 @@ All platforms follow consistent numbered stages:
 - `azure-devops/<language>/` — Azure DevOps templates, same structure as GitLab
 - `global/scripts/tools/` — Platform-agnostic security tools (codeql, gitleaks, semgrep, hadolint, trivy, sonarqube, dependency-track)
 - `global/scripts/languages/` — Language-specific scripts (golang, python)
-- `global/scripts/shared/` — Shared utilities (cleanup.sh, rebase-check.sh)
+- `global/scripts/shared/` — Shared utilities (cleanup.sh, rebase-check.sh, changelog-check.sh)
 - `global/containers/` — Docker image definitions for CI environments
 - `makefiles/` — Includable `.mk` fragments for downstream projects (`common.mk`, `golang.mk`, `python.mk`, etc.)
 - `.docs/examples/` — Complete per-platform usage examples

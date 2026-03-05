@@ -45,7 +45,21 @@ jobs:
           echo "Validating YAML files across all providers..."
           errors=0
           for template in $(find github gitlab azure-devops global .github/workflows .docs/examples -name '*.yaml' -o -name '*.yml' 2>/dev/null); do
-            if python3 -c "import yaml; yaml.safe_load(open('$template'))" 2>/dev/null; then
+            if python3 -c "
+          import yaml
+          # Handle custom YAML tags used by GitLab CI (e.g., !reference)
+          class CustomSafeLoader(yaml.SafeLoader):
+              pass
+          def default_constructor(loader, tag_suffix, node):
+              if isinstance(node, yaml.ScalarNode):
+                  return loader.construct_scalar(node)
+              elif isinstance(node, yaml.SequenceNode):
+                  return loader.construct_sequence(node)
+              elif isinstance(node, yaml.MappingNode):
+                  return loader.construct_mapping(node)
+          CustomSafeLoader.add_multi_constructor('!', default_constructor)
+          yaml.load(open('$template'), Loader=CustomSafeLoader)
+          " 2>/dev/null; then
               echo "  ✓ $template"
             else
               echo "  ✗ $template -- invalid YAML"

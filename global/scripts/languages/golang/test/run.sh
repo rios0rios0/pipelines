@@ -3,12 +3,14 @@ set -e
 
 # GitLab CI/CD steps/jobs leverages this variable to perform other commands
 if [ -z "$SCRIPTS_DIR" ]; then
-  export SCRIPTS_DIR="$(echo $(dirname "$(realpath "$0")") | sed 's|\(.*pipelines\).*|\1|')"
+  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
+  export SCRIPTS_DIR
 fi
 
 # GitLab CI/CD just supports cache in the project directory
 if [ -z "${GOPATH+x}" ]; then
-  export GOPATH="$(pwd)/.go"
+  GOPATH="$(pwd)/.go"
+  export GOPATH
 fi
 
 touch coverage.xml
@@ -26,6 +28,7 @@ if [ -z "$directories" ]; then
 fi
 
 # trim leading or trailing spaces
+# shellcheck disable=SC2086
 directories=$(echo $directories | sed 's/^ *//;s/ *$//')
 echo "Testing code in the following directories: $directories"
 
@@ -41,7 +44,8 @@ echo "Started at: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "=========================================="
 unit_start_time=$(date +%s)
 
-# run unit tests
+# run unit tests (word splitting on $directories is intentional)
+# shellcheck disable=SC2086
 go test -v -tags test,unit \
   -coverpkg="$(echo $directories | tr ' ' ',')" \
   -covermode=count \
@@ -79,6 +83,7 @@ echo "=========================================="
 integration_start_time=$(date +%s)
 
 # TODO: this should be in another step to run in parallel along the unit tests
+# shellcheck disable=SC2086
 go test -p 1 -v -tags integration \
   -coverpkg="$(echo $directories | tr ' ' ',')" \
   -covermode=count \

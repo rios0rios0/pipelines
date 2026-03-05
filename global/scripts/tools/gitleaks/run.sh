@@ -1,7 +1,8 @@
 #!/usr/bin/env sh
 
 if [ -z "$SCRIPTS_DIR" ]; then
-  export SCRIPTS_DIR="$(echo $(dirname "$(realpath "$0")") | sed 's|\(.*pipelines\).*|\1|')"
+  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
+  export SCRIPTS_DIR
 fi
 TOOL_NAME="gitleaks" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
 

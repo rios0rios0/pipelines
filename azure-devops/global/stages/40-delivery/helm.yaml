@@ -6,9 +6,6 @@ parameters:
   - name: 'CHART_DIRECTORY'
     type: 'string'
     default: '.'
-  - name: 'CHART_NAME'
-    type: 'string'
-    default: ''
 
 steps:
   - task: AzureCLI@2
@@ -26,11 +23,16 @@ steps:
       helmVersionToInstall: 'latest'
 
   - bash: |
-      chartName=$(Build.Repository.Name)
-      if [ -n "${{ parameters.CHART_NAME }}" ]; then
-        chartName="${{ parameters.CHART_NAME }}"
+      set -euo pipefail
+
+      package_output=$(helm package ${{ parameters.CHART_DIRECTORY }} --version "$(Build.SourceBranchName)")
+      chart_archive=$(echo "$package_output" | awk '/Successfully packaged chart/ {print $NF}' | tail -n1)
+
+      if [ -z "$chart_archive" ]; then
+        echo "Error: failed to determine packaged chart archive path from helm output:"
+        echo "$package_output"
+        exit 1
       fi
 
-      helm package ${{ parameters.CHART_DIRECTORY }} --version $(Build.SourceBranchName)
-      helm push ${chartName}-$(Build.SourceBranchName).tgz oci://${{ parameters.HELM_REGISTRY_SERVER }}/charts
+      helm push "$chart_archive" oci://${{ parameters.HELM_REGISTRY_SERVER }}/charts
     displayName: 'Package and Push Helm Chart'

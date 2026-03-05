@@ -1,0 +1,14 @@
+stages:
+  - stage: 'delivery'
+    displayName: 'delivery'
+    condition: and(not(failed()), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    jobs:
+      - job: 'delivery'
+        displayName: 'delivery'
+        steps:
+          - template: '../../../global/stages/40-delivery/helm.yaml'
+            parameters:
+              HELM_REGISTRY_SERVER: '$(HELM_REGISTRY_SERVER)'
+              HELM_REGISTRY_SERVICE_CONNECTION: '$(HELM_REGISTRY_SERVICE_CONNECTION)'
+
+      - template: '../../../global/stages/40-delivery/release.yaml'

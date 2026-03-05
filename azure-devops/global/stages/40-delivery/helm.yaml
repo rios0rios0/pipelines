@@ -1,0 +1,38 @@
+parameters:
+  - name: 'HELM_REGISTRY_SERVER'
+    type: 'string'
+  - name: 'HELM_REGISTRY_SERVICE_CONNECTION'
+    type: 'string'
+  - name: 'CHART_DIRECTORY'
+    type: 'string'
+    default: '.'
+
+steps:
+  - task: AzureCLI@2
+    displayName: 'Login to Azure Container Registry'
+    inputs:
+      connectedServiceNameARM: '${{ parameters.HELM_REGISTRY_SERVICE_CONNECTION }}'
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        az acr login --name ${{ parameters.HELM_REGISTRY_SERVER }}
+
+  - task: HelmInstaller@1
+    displayName: 'Install Helm'
+    inputs:
+      helmVersionToInstall: 'latest'
+
+  - bash: |
+      set -euo pipefail
+
+      package_output=$(helm package ${{ parameters.CHART_DIRECTORY }} --version "$(Build.SourceBranchName)")
+      chart_archive=$(echo "$package_output" | awk '/Successfully packaged chart/ {print $NF}' | tail -n1)
+
+      if [ -z "$chart_archive" ]; then
+        echo "Error: failed to determine packaged chart archive path from helm output:"
+        echo "$package_output"
+        exit 1
+      fi
+
+      helm push "$chart_archive" oci://${{ parameters.HELM_REGISTRY_SERVER }}/charts
+    displayName: 'Package and Push Helm Chart'

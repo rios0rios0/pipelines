@@ -1,0 +1,36 @@
+parameters:
+  - name: 'HELM_REGISTRY_SERVER'
+    type: 'string'
+  - name: 'HELM_REGISTRY_SERVICE_CONNECTION'
+    type: 'string'
+  - name: 'CHART_DIRECTORY'
+    type: 'string'
+    default: '.'
+  - name: 'CHART_NAME'
+    type: 'string'
+    default: ''
+
+steps:
+  - task: AzureCLI@2
+    displayName: 'Login to Azure Container Registry'
+    inputs:
+      connectedServiceNameARM: '${{ parameters.HELM_REGISTRY_SERVICE_CONNECTION }}'
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        az acr login --name ${{ parameters.HELM_REGISTRY_SERVER }}
+
+  - task: HelmInstaller@1
+    displayName: 'Install Helm'
+    inputs:
+      helmVersionToInstall: 'latest'
+
+  - bash: |
+      chartName=$(Build.Repository.Name)
+      if [ -n "${{ parameters.CHART_NAME }}" ]; then
+        chartName="${{ parameters.CHART_NAME }}"
+      fi
+
+      helm package ${{ parameters.CHART_DIRECTORY }} --version $(Build.SourceBranchName)
+      helm push ${chartName}-$(Build.SourceBranchName).tgz oci://${{ parameters.HELM_REGISTRY_SERVER }}/charts
+    displayName: 'Package and Push Helm Chart'

@@ -9,6 +9,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 **Essential Commands:**
 - `make test` - Run all validation tests
 - `make test-go-script` - Test Go script changes specifically
+- `make test-yaml-merge` - Test YAML merge validation specifically
 - `bash global/scripts/shared/cleanup.sh` - Clean up build reports
 - `docker --version && make --version && go version` - Check dependencies
 
@@ -136,27 +137,39 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 | **golangci-lint**  | Go linting suite      | `global/scripts/languages/golang/golangci-lint/` |
 | **Go Test Runner** | Comprehensive testing | `global/scripts/languages/golang/test/`          |
 | **CycloneDX**      | SBOM generation       | `global/scripts/languages/golang/cyclonedx/`     |
+| **GoReleaser**     | Binary release builds | `global/scripts/languages/golang/goreleaser/`    |
+
+#### Java Tools
+
+| Tool            | Purpose                      | Script Location                               |
+|-----------------|------------------------------|-----------------------------------------------|
+| **Checkstyle**  | Java code style enforcement  | `global/scripts/languages/java/checkstyle/`   |
 
 ### Container Images
 
 **Available Pre-built Images:**
 
-| Image                      | Purpose                         | Registry                       |
-|----------------------------|---------------------------------|--------------------------------|
-| `golang.1.18-awscli`       | Go 1.18 + AWS CLI               | `ghcr.io/rios0rios0/pipelines` |
-| `golang.1.19-awscli`       | Go 1.19 + AWS CLI               | `ghcr.io/rios0rios0/pipelines` |
-| `python.3.9-pdm-buster`    | Python 3.9 + PDM                | `ghcr.io/rios0rios0/pipelines` |
-| `python.3.10-pdm-bullseye` | Python 3.10 + PDM               | `ghcr.io/rios0rios0/pipelines` |
-| `awscli.latest`            | AWS CLI tools                   | `ghcr.io/rios0rios0/pipelines` |
-| `tor-proxy.latest`         | Network proxy with health check | `ghcr.io/rios0rios0/pipelines` |
+| Image                       | Purpose                         | Registry                       |
+|-----------------------------|---------------------------------|--------------------------------|
+| `golang.1.18-awscli`        | Go 1.18 + AWS CLI               | `ghcr.io/rios0rios0/pipelines` |
+| `golang.1.19-awscli`        | Go 1.19 + AWS CLI               | `ghcr.io/rios0rios0/pipelines` |
+| `golang.1.25-awscli`        | Go 1.25 + AWS CLI               | `ghcr.io/rios0rios0/pipelines` |
+| `golang.1.26-awscli`        | Go 1.26 + AWS CLI               | `ghcr.io/rios0rios0/pipelines` |
+| `python.3.9-pdm-buster`     | Python 3.9 + PDM                | `ghcr.io/rios0rios0/pipelines` |
+| `python.3.10-pdm-bullseye`  | Python 3.10 + PDM               | `ghcr.io/rios0rios0/pipelines` |
+| `python.3.13-pdm-bullseye`  | Python 3.13 + PDM               | `ghcr.io/rios0rios0/pipelines` |
+| `awscli.latest`             | AWS CLI tools                   | `ghcr.io/rios0rios0/pipelines` |
+| `bfg.latest`                | BFG Repo-Cleaner                | `ghcr.io/rios0rios0/pipelines` |
+| `mssql-tools18.latest`      | Microsoft SQL Server tools      | `ghcr.io/rios0rios0/pipelines` |
+| `tor-proxy.latest`          | Network proxy with health check | `ghcr.io/rios0rios0/pipelines` |
 
 ### Key Directories
 - `.github/workflows/` - Reusable GitHub Actions workflows
+- `github/` - GitHub Actions pipeline templates (mirrors gitlab/ structure)
 - `gitlab/` - GitLab CI pipeline templates
 - `azure-devops/` - Azure DevOps pipeline templates
 - `global/scripts/` - Shared scripts for linting, security scanning, testing
 - `global/containers/` - Docker container definitions
-- `global/configs/` - Configuration files
 
 ## Repository Structure
 ```
@@ -164,6 +177,7 @@ pipelines/
 ├── .github/workflows/          # GitHub Actions reusable workflows
 │   ├── go-docker.yaml         # Go with Docker delivery
 │   ├── go-binary.yaml         # Go binary compilation
+│   ├── go-library.yaml        # Go library publishing
 │   ├── python-docker.yaml     # Python with Docker
 │   ├── java-docker.yaml       # Java/Gradle with Docker delivery
 │   ├── java-maven-docker.yaml # Java/Maven with Docker delivery
@@ -173,13 +187,24 @@ pipelines/
 │   ├── ruby-docker.yaml       # Ruby with Docker delivery
 │   ├── dotnet-docker.yaml     # .NET with Docker delivery
 │   └── ...
+├── github/                     # GitHub Actions pipeline stage templates
+│   ├── golang/                # Go language pipelines
+│   ├── java/                  # Java language pipelines
+│   ├── python/                # Python language pipelines
+│   ├── javascript/            # JavaScript/Node.js pipelines
+│   ├── dotnet/                # .NET language pipelines
+│   ├── php/                   # PHP language pipelines
+│   ├── ruby/                  # Ruby language pipelines
+│   └── terra/                 # Terra CLI pipelines
 ├── gitlab/                     # GitLab CI pipeline templates
 │   ├── golang/                # Go language pipelines
 │   ├── java/                  # Java language pipelines
 │   ├── python/                # Python language pipelines
 │   ├── javascript/            # JavaScript/Node.js pipelines
 │   ├── dotnet/                # .NET language pipelines
+│   ├── logstash/              # Logstash pipelines
 │   ├── terraform/             # Terraform pipelines
+│   ├── terra/                 # Terra CLI pipelines
 │   └── global/                # Shared GitLab configurations
 ├── azure-devops/              # Azure DevOps pipeline templates
 │   ├── golang/                # Go language pipelines
@@ -188,6 +213,7 @@ pipelines/
 │   ├── javascript/            # JavaScript/Node.js pipelines
 │   ├── dotnet/                # .NET language pipelines
 │   ├── terraform/             # Terraform pipelines
+│   ├── terra/                 # Terra CLI pipelines
 │   └── global/                # Shared Azure DevOps templates
 ├── global/                     # Shared resources across platforms
 │   ├── scripts/               # Automation scripts
@@ -200,15 +226,17 @@ pipelines/
 │   │   │   ├── trivy/         # IaC misconfiguration scanning
 │   │   │   └── dependency-track/ # SCA analysis
 │   │   ├── languages/         # Language-specific scripts
-│   │   │   ├── golang/        # Go scripts (test, cyclonedx, golangci-lint, init)
+│   │   │   ├── golang/        # Go scripts (test, cyclonedx, golangci-lint, goreleaser, init)
+│   │   │   ├── java/          # Java scripts (checkstyle)
 │   │   │   └── python/        # Python scripts (cyclonedx)
 │   │   └── shared/            # Common utilities
 │   ├── containers/            # Custom Docker images
 │   │   ├── golang.*/          # Go development images
 │   │   ├── python.*/          # Python development images
 │   │   ├── awscli.latest/     # AWS CLI tools
+│   │   ├── bfg.latest/        # BFG Repo-Cleaner
+│   │   ├── mssql-tools18.latest/ # Microsoft SQL Server tools
 │   │   └── tor-proxy.latest/  # Network proxy tools
-│   └── configs/               # Configuration files
 ├── makefiles/                  # Includable Makefile fragments for local usage
 │   ├── common.mk              # Security tools (sast, secrets, hadolint, trivy, semgrep)
 │   ├── golang.mk              # Go-specific targets (lint, test)
@@ -216,6 +244,7 @@ pipelines/
 │   ├── java.mk                # Java/Gradle targets (lint, test)
 │   ├── javascript.mk          # JavaScript/Yarn targets (lint, test)
 │   ├── dotnet.mk              # .NET/C# targets (lint, test)
+│   ├── terra.mk               # Terra CLI targets (lint, test)
 │   └── terraform.mk           # Terraform targets (lint, test)
 ├── .docs/                      # Documentation and examples
 │   └── examples/              # Per-provider usage examples
@@ -242,22 +271,23 @@ Each platform follows a consistent **5-stage pipeline architecture**:
 | **Azure DevOps**   | ✅ Full Support | [Usage Guide](#azure-devops)   |
 
 **Programming Languages:**
-| Language               | GitHub Actions | GitLab CI | Azure DevOps | Features                       |
-|------------------------|----------------|-----------|--------------|--------------------------------|
-| **GoLang**             | ✅              | ✅         | ✅            | Binary, Docker, ARM deployment |
-| **Python**             | ✅              | ✅         | ✅            | PDM, Docker, K8s deployment    |
-| **Java**               | ✅              | ✅         | ✅            | Maven, Gradle, Docker          |
-| **JavaScript/Node.js** | ✅              | ✅         | ✅            | npm, Yarn, Docker, K8s deployment |
-| **PHP**                | ✅              | ❌         | ❌            | Composer, Docker               |
-| **Ruby**               | ✅              | ❌         | ❌            | Bundler, Docker                |
-| **.NET/C#**            | ✅              | ✅         | ✅            | Framework, Core, Docker        |
-| **Terraform**          | ❌              | ✅         | ✅            | Infrastructure as Code         |
-| **Terra CLI**          | ✅              | ✅         | ✅            | Terraform/Terragrunt wrapper   |
+| Language               | GitHub Actions | GitLab CI | Azure DevOps | Features                                  |
+|------------------------|----------------|-----------|--------------|-------------------------------------------|
+| **GoLang**             | ✅              | ✅         | ✅            | Binary, Docker, K8s, ARM, Lambda, Library |
+| **Python**             | ✅              | ✅         | ✅            | PDM, Docker, K8s deployment, Library      |
+| **Java**               | ✅              | ✅         | ✅            | Maven, Gradle, Docker, K8s, Library       |
+| **JavaScript/Node.js** | ✅              | ✅         | ✅            | npm, Yarn, Docker, K8s deployment         |
+| **PHP**                | ✅              | ❌         | ❌            | Composer, Docker                          |
+| **Ruby**               | ✅              | ❌         | ❌            | Bundler, Docker                           |
+| **.NET/C#**            | ✅              | ✅         | ✅            | Framework, Core, Docker, PowerShell       |
+| **Logstash**           | ❌              | ✅         | ❌            | Docker delivery                           |
+| **Terraform**          | ❌              | ✅         | ✅            | Infrastructure as Code                    |
+| **Terra CLI**          | ✅              | ✅         | ✅            | Terraform/Terragrunt wrapper              |
 
 **Pipeline Templates Available:**
-- **GitHub Actions:** `go.yaml`, `go-docker.yaml`, `go-binary.yaml`, `python.yaml`, `python-docker.yaml`, `java.yaml`, `java-docker.yaml`, `java-maven.yaml`, `java-maven-docker.yaml`, `javascript.yaml`, `javascript-docker.yaml`, `javascript-npm.yaml`, `javascript-npm-docker.yaml`, `php.yaml`, `php-docker.yaml`, `ruby.yaml`, `ruby-docker.yaml`, `dotnet.yaml`, `dotnet-docker.yaml`, `terra.yaml`
-- **GitLab CI:** `go-docker.yaml`, `go-binary.yaml`, `go-sam.yaml`, `gradle-docker.yaml`, `maven-docker.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `framework.yaml`, `terraform/terra.yaml`, `terra/terra.yaml`
-- **Azure DevOps:** `go-docker.yaml`, `go-arm.yaml`, `go-function-arm.yaml`, `kotlin-gradle.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `core.yaml`, `terraform/terra.yaml`, `terra/terra.yaml`
+- **GitHub Actions:** `go.yaml`, `go-docker.yaml`, `go-binary.yaml`, `go-library.yaml`, `python.yaml`, `python-docker.yaml`, `java.yaml`, `java-docker.yaml`, `java-maven.yaml`, `java-maven-docker.yaml`, `javascript.yaml`, `javascript-docker.yaml`, `javascript-npm.yaml`, `javascript-npm-docker.yaml`, `php.yaml`, `php-docker.yaml`, `ruby.yaml`, `ruby-docker.yaml`, `dotnet.yaml`, `dotnet-docker.yaml`, `terra.yaml`
+- **GitLab CI:** `go-docker.yaml`, `go-binary.yaml`, `go-docker-k8s-deployment.yaml`, `go-sam.yaml`, `gradle-docker.yaml`, `gradle-docker-k8s-deployment.yaml`, `gradle-library.yaml`, `maven-docker.yaml`, `pdm-docker.yaml`, `pdm-docker-k8s-deployment.yaml`, `pdm-library.yaml`, `yarn-docker.yaml`, `yarn-docker-k8s-deployment.yaml`, `framework.yaml`, `powershell.yaml`, `logstash-docker.yaml`, `terraform/terra.yaml`, `terra/terra.yaml`
+- **Azure DevOps:** `go-docker.yaml`, `go-arm.yaml`, `go-docker-arm.yaml`, `go-docker-k8s.yaml`, `go-docker-with-registry.yaml`, `go-function-arm.yaml`, `go-lambda-sam.yaml`, `go-lambda.yaml`, `go-library.yaml`, `kotlin-gradle.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `core.yaml`, `terraform/terra.yaml`, `terra/terra.yaml`
 
 ## Common Tasks
 
@@ -578,12 +608,13 @@ docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/
 
 ### Test Suite Usage
 ```bash
-# Run all validation tests (Go test script + Lambda templates)
+# Run all validation tests (Go test script + Lambda templates + YAML merge)
 make test
 
 # Run individual test suites
 make test-go-script
 make test-lambda
+make test-yaml-merge
 ```
 
 Test scripts are located in `.github/tests/`.

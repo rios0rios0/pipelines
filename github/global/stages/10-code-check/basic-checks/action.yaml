@@ -1,0 +1,127 @@
+inputs:
+  target_branch:
+    description: 'The target branch to check against (e.g., main, master)'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout PR branch'
+      uses: 'actions/checkout@v6'
+      with:
+        # IMPORTANT: check out the actual PR branch HEAD, NOT the default merge commit.
+        # GitHub Actions checks out refs/pull/N/merge by default, which is a synthetic
+        # commit that can become stale if the target branch advances after it was created.
+        # Using the real PR branch ensures the ancestry check is accurate.
+        ref: ${{ github.event.pull_request.head.sha }}
+        fetch-depth: 0
+
+    - name: 'Check rebase status'
+      shell: 'bash'
+      run: |
+        TARGET_BRANCH="${{ inputs.target_branch }}"
+        echo "Checking if branch is rebased on top of '$TARGET_BRANCH'..."
+
+        git fetch origin "$TARGET_BRANCH" --no-tags
+
+        if git merge-base --is-ancestor "origin/$TARGET_BRANCH" HEAD; then
+          echo "Branch is up-to-date with '$TARGET_BRANCH'. No rebase needed."
+        else
+          BEHIND_COUNT=$(git rev-list HEAD.."origin/$TARGET_BRANCH" --count 2>/dev/null || echo "unknown")
+          echo ""
+          echo "============================================================"
+          echo "  ERROR: Branch is NOT rebased on top of '$TARGET_BRANCH'."
+          echo "  The branch is $BEHIND_COUNT commit(s) behind."
+          echo ""
+          echo "  Please rebase your branch:"
+          echo "    git fetch origin $TARGET_BRANCH"
+          echo "    git rebase origin/$TARGET_BRANCH"
+          echo "    git push --force-with-lease"
+          echo "============================================================"
+          echo ""
+          exit 1
+        fi
+
+    - name: 'Check changelog entries'
+      shell: 'bash'
+      run: |
+        TARGET_BRANCH="${{ inputs.target_branch }}"
+        echo "Checking CHANGELOG.md modifications against '$TARGET_BRANCH'..."
+
+        CHANGED_FILES=$(git diff --name-only "origin/$TARGET_BRANCH"...HEAD -- 'CHANGELOG.md' 2>/dev/null || true)
+        if [ -z "$CHANGED_FILES" ]; then
+          echo ""
+          echo "============================================================"
+          echo "  ERROR: CHANGELOG.md was NOT modified."
+          echo ""
+          echo "  Every change must include an entry in CHANGELOG.md"
+          echo "  under the [Unreleased] section."
+          echo ""
+          echo "  See: https://keepachangelog.com/en/1.1.0/"
+          echo "============================================================"
+          echo ""
+          exit 1
+        fi
+
+        echo "CHANGELOG.md was modified. Validating entry placement..."
+
+        CHANGELOG_CONTENT=$(git show HEAD:CHANGELOG.md 2>/dev/null || true)
+        if [ -z "$CHANGELOG_CONTENT" ]; then
+          echo "WARNING: could not read CHANGELOG.md from HEAD, skipping placement check."
+          exit 0
+        fi
+
+        UNRELEASED_LINE=$(echo "$CHANGELOG_CONTENT" | grep -n '^##\s*\[Unreleased\]' | head -1 | cut -d: -f1)
+
+        if [ -z "$UNRELEASED_LINE" ]; then
+          echo ""
+          echo "============================================================"
+          echo "  ERROR: CHANGELOG.md does not contain an [Unreleased] section."
+          echo ""
+          echo "  The changelog must have a '## [Unreleased]' header."
+          echo "  All new entries must be added under this section."
+          echo ""
+          echo "  See: https://keepachangelog.com/en/1.1.0/"
+          echo "============================================================"
+          echo ""
+          exit 1
+        fi
+
+        NEXT_VERSION_LINE=$(echo "$CHANGELOG_CONTENT" | grep -n '^##\s*\[' | grep -v '\[Unreleased\]' | head -1 | cut -d: -f1)
+
+        DIFF_LINES=$(git diff "origin/$TARGET_BRANCH"...HEAD -- 'CHANGELOG.md' 2>/dev/null || true)
+        HUNK_POSITIONS=$(echo "$DIFF_LINES" | grep '^@@' | sed 's/.*+\([0-9]*\).*/\1/' || true)
+
+        HAS_VALID_ENTRIES=false
+        HAS_INVALID_ENTRIES=false
+
+        for HUNK_START in $HUNK_POSITIONS; do
+          if [ "$HUNK_START" -ge "$UNRELEASED_LINE" ]; then
+            if [ -n "$NEXT_VERSION_LINE" ] && [ "$HUNK_START" -ge "$NEXT_VERSION_LINE" ]; then
+              HAS_INVALID_ENTRIES=true
+            else
+              HAS_VALID_ENTRIES=true
+            fi
+          else
+            HAS_VALID_ENTRIES=true
+          fi
+        done
+
+        if [ "$HAS_INVALID_ENTRIES" = true ] && [ "$HAS_VALID_ENTRIES" = false ]; then
+          echo ""
+          echo "============================================================"
+          echo "  ERROR: CHANGELOG.md entries are NOT under [Unreleased]."
+          echo ""
+          echo "  New entries were found below an existing version section."
+          echo "  This usually happens after an erroneous rebase."
+          echo ""
+          echo "  Please move your changelog entries under the"
+          echo "  '## [Unreleased]' section."
+          echo ""
+          echo "  See: https://keepachangelog.com/en/1.1.0/"
+          echo "============================================================"
+          echo ""
+          exit 1
+        fi
+
+        echo "CHANGELOG.md entries are correctly placed under [Unreleased]."

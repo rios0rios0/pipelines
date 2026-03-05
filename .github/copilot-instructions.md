@@ -22,7 +22,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 **SCA Tools:** Trivy SCA (all languages), govulncheck (Go), Safety (Python), OWASP Dependency-Check (Java), yarn npm audit (JavaScript/Yarn), npm audit (JavaScript/npm), Composer Audit (PHP), bundler-audit (Ruby)
 **Quality Tools:** SonarQube, Dependency Track
 **Performance:** Security scans 2-10min, Container builds 5-30min
-**Architecture:** 5-stage pipeline (Code Check [lint + rebase-check] → Security → Tests → Management → Delivery)
+**Architecture:** 5-stage pipeline (Code Check [lint + basic-checks] → Security → Tests → Management → Delivery)
 
 ## Working Effectively
 
@@ -124,7 +124,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 
 | Tool                 | Purpose                   | Script Location                          | Configuration         |
 |----------------------|---------------------------|------------------------------------------|-----------------------|
-| **Rebase Check**     | PR/MR rebase verification | `global/scripts/shared/rebase-check.sh`  | Auto-configured       |
+| **Basic Checks**     | PR/MR rebase and changelog verification | `global/scripts/shared/rebase-check.sh`, `changelog-check.sh` | Auto-configured       |
 | **SonarQube**        | Code quality & security   | `global/scripts/tools/sonarqube/`        | Project settings      |
 | **Dependency Track** | SBOM tracking             | `global/scripts/tools/dependency-track/` | Environment variables |
 

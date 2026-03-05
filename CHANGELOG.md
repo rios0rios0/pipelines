@@ -18,9 +18,13 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
+- renamed `rebase-check` step to `basic-checks` across all pipeline vendors (GitHub Actions, GitLab CI, Azure DevOps)
 - added end-to-end testing instructions to `CONTRIBUTING.md` showing how to point a consuming repository at a feature branch for each platform
 
 ### Added
+
+- added changelog validation to the basic checks step, verifying that `CHANGELOG.md` is modified and entries are under the `[Unreleased]` section
+- added `global/scripts/shared/changelog-check.sh` standalone script for changelog validation
 
 - added JavaScript/Node.js (npm) pipeline for GitHub Actions with `javascript-npm.yaml` (testing/quality) and `javascript-npm-docker.yaml` (Docker delivery) reusable workflows
 - added Java (Maven) pipeline for GitHub Actions with `java-maven.yaml` (testing/quality) and `java-maven-docker.yaml` (Docker delivery) reusable workflows

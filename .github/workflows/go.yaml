@@ -2,10 +2,6 @@
 # the parent workflow is responsible for setting up the call events²
 on:
   workflow_call:
-    outputs:
-      tag_name:
-        description: 'The tag name created by the release job'
-        value: ${{ jobs.delivery-release.outputs.tag_name }}
 
 # it wasn't needed to set up anything for GoLang because 'ubuntu-latest' has all dependencies
 jobs:

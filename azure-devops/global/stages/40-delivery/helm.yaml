@@ -25,7 +25,13 @@ steps:
   - bash: |
       set -euo pipefail
 
-      package_output=$(helm package ${{ parameters.CHART_DIRECTORY }} --version "$(Build.SourceBranchName)")
+      if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
+        CHART_VERSION="$(Build.SourceBranchName)"
+      else
+        CHART_VERSION="0.0.0-latest"
+      fi
+
+      package_output=$(helm package ${{ parameters.CHART_DIRECTORY }} --version "$CHART_VERSION")
       chart_archive=$(echo "$package_output" | awk '/Successfully packaged chart/ {print $NF}' | tail -n1)
 
       if [ -z "$chart_archive" ]; then

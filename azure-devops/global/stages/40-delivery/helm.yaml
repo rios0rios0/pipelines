@@ -26,11 +26,19 @@ steps:
       set -euo pipefail
 
       if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
-        CHART_VERSION="$(Build.SourceBranchName)"
+        RAW_TAG="$(Build.SourceBranchName)"
+        # Normalize tag by stripping a leading "v" if present (e.g., v1.2.3 -> 1.2.3)
+        CHART_VERSION="${RAW_TAG#v}"
       else
         CHART_VERSION="0.0.0-latest"
       fi
 
+      # Validate that CHART_VERSION is a valid SemVer string before calling helm
+      if ! [[ "$CHART_VERSION" =~ ^[0-9]+(\.[0-9]+){2}(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+        echo "Error: CHART_VERSION '$CHART_VERSION' is not a valid SemVer version."
+        echo "When building from a tag, use tags like '1.2.3' or 'v1.2.3'."
+        exit 1
+      fi
       package_output=$(helm package ${{ parameters.CHART_DIRECTORY }} --version "$CHART_VERSION")
       chart_archive=$(echo "$package_output" | awk '/Successfully packaged chart/ {print $NF}' | tail -n1)
 

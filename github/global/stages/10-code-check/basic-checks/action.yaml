@@ -87,7 +87,7 @@ runs:
           exit 1
         fi
 
-        NEXT_VERSION_LINE=$(echo "$CHANGELOG_CONTENT" | grep -n '^##\s*\[' | grep -v '\[Unreleased\]' | head -1 | cut -d: -f1)
+        NEXT_VERSION_LINE=$(echo "$CHANGELOG_CONTENT" | grep -n '^##\s*\[' | grep -v '\[Unreleased\]' | head -1 | cut -d: -f1 || true)
 
         DIFF_LINES=$(git diff "origin/$TARGET_BRANCH"...HEAD -- 'CHANGELOG.md' 2>/dev/null || true)
         HUNK_POSITIONS=$(echo "$DIFF_LINES" | grep '^@@' | sed 's/.*+\([0-9]*\).*/\1/' || true)

@@ -18,61 +18,62 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added changelog validation to the basic checks step, verifying that `CHANGELOG.md` is modified and entries are under the `[Unreleased]` section
-- added `global/scripts/shared/changelog-check.sh` standalone script for changelog validation
-- added JavaScript/Node.js (npm) pipeline for GitHub Actions with `javascript-npm.yaml` (testing/quality) and `javascript-npm-docker.yaml` (Docker delivery) reusable workflows
+- added .NET/C# pipeline for GitHub Actions with `dotnet.yaml` (testing/quality) and `dotnet-docker.yaml` (Docker delivery) reusable workflows
+- added Java (Gradle) pipeline for GitHub Actions with `java.yaml` (testing/quality) and `java-docker.yaml` (Docker delivery) reusable workflows
 - added Java (Maven) pipeline for GitHub Actions with `java-maven.yaml` (testing/quality) and `java-maven-docker.yaml` (Docker delivery) reusable workflows
+- added JavaScript/Node.js (Yarn) pipeline for GitHub Actions with `javascript.yaml` (testing/quality) and `javascript-docker.yaml` (Docker delivery) reusable workflows
+- added JavaScript/Node.js (npm) pipeline for GitHub Actions with `javascript-npm.yaml` (testing/quality) and `javascript-npm-docker.yaml` (Docker delivery) reusable workflows
+- added OWASP Dependency-Check SCA job to GitHub Actions and Azure DevOps Java security stages (previously only in GitLab)
 - added PHP (Composer) pipeline for GitHub Actions with `php.yaml` (testing/quality) and `php-docker.yaml` (Docker delivery) reusable workflows
 - added Ruby (Bundler) pipeline for GitHub Actions with `ruby.yaml` (testing/quality) and `ruby-docker.yaml` (Docker delivery) reusable workflows
-- added symbolic links under `github/` for all importable GitHub Actions workflows (javascript, java, php, ruby, dotnet, terra) to match the existing golang/python pattern
-- added `lint` target to `makefiles/terra.mk` using TFLint for recursive Terraform linting
-- added `validate` target to `makefiles/terra.mk` that runs format, lint, and test in sequence
-- added descriptive echo messages to `format` and `lint` targets in `makefiles/terra.mk` for better pipeline output readability
-- added `makefiles/common.mk` and `makefiles/golang.mk` includable Makefile fragments for local pipeline tool usage in downstream projects
-- added per-provider usage examples in `.docs/examples/` for GitHub Actions, GitLab CI, and Azure DevOps (Go with Docker)
-- added Java (Gradle) pipeline for GitHub Actions with `java.yaml` (testing/quality) and `java-docker.yaml` (Docker delivery) reusable workflows
-- added JavaScript/Node.js (Yarn) pipeline for GitHub Actions with `javascript.yaml` (testing/quality) and `javascript-docker.yaml` (Docker delivery) reusable workflows
-- added .NET/C# pipeline for GitHub Actions with `dotnet.yaml` (testing/quality) and `dotnet-docker.yaml` (Docker delivery) reusable workflows
+- added Safety SCA job to Azure DevOps Python security stage (previously only in GitHub Actions and GitLab)
 - added Terraform pipeline for GitLab CI with `terra.yaml` including code check (terraform fmt, TFLint), security (Semgrep, Hadolint, Trivy), and management stages
 - added Trivy SCA dependency vulnerability scanning (`trivy fs --scanners vuln`) as a unified SCA layer across all languages and all providers (GitHub Actions, GitLab CI, Azure DevOps)
-- added `govulncheck` as Go-specific SCA tool across all providers (GitHub Actions, GitLab CI, Azure DevOps) using the official Go vulnerability scanner with call-graph analysis
-- added `yarn npm audit` as JavaScript-specific SCA tool across all providers (GitHub Actions, GitLab CI, Azure DevOps) for dependency vulnerability scanning
-- added Safety SCA job to Azure DevOps Python security stage (previously only in GitHub Actions and GitLab)
-- added OWASP Dependency-Check SCA job to GitHub Actions and Azure DevOps Java security stages (previously only in GitLab)
-- added `global/scripts/tools/trivy/run-sca.sh` shared script for Trivy dependency vulnerability scanning
+- added `config.sh` loading to CodeQL for GoLang across all pipelines (GitHub Actions, GitLab CI, Azure DevOps) to support project-level build configuration before analysis
 - added `global/scripts/languages/golang/govulncheck/run.sh` shared script for Go vulnerability scanning
-- added rebase-check quality gate to the code-check stage across all providers (GitHub Actions, GitLab CI, Azure DevOps) and all languages, failing the pipeline when a PR/MR branch is not rebased on the default branch
+- added `global/scripts/shared/changelog-check.sh` standalone script for changelog validation
+- added `global/scripts/tools/trivy/run-sca.sh` shared script for Trivy dependency vulnerability scanning
+- added `govulncheck` as Go-specific SCA tool across all providers (GitHub Actions, GitLab CI, Azure DevOps) using the official Go vulnerability scanner with call-graph analysis
+- added `lint` target to `makefiles/terra.mk` using TFLint for recursive Terraform linting
+- added `makefiles/common.mk` and `makefiles/golang.mk` includable Makefile fragments for local pipeline tool usage in downstream projects
 - added `terra` CLI pipeline templates for all providers (GitHub Actions `terra.yaml`, GitLab CI `terra/terra.yaml`, Azure DevOps `terra/terra.yaml`) with code check, security, tests, and management stages using the [terra CLI](https://github.com/rios0rios0/terra) wrapper for Terraform/Terragrunt
-- added optional K8s deployment stage to `azure-devops/golang/go-docker.yaml` - automatically deploys with commit SHA label when `K8S_DEPLOYMENT_NAME` variable is set
+- added `test-lambda` target to Makefile so `test-lambda-templates.sh` is now part of `make test`
+- added `validate` target to `makefiles/terra.mk` that runs format, lint, and test in sequence
+- added `yarn npm audit` as JavaScript-specific SCA tool across all providers (GitHub Actions, GitLab CI, Azure DevOps) for dependency vulnerability scanning
+- added changelog validation to the basic checks step, verifying that `CHANGELOG.md` is modified and entries are under the `[Unreleased]` section
+- added descriptive echo messages to `format` and `lint` targets in `makefiles/terra.mk` for better pipeline output readability
+- added end-to-end testing instructions to `CONTRIBUTING.md` showing how to point a consuming repository at a feature branch for each platform
 - added new container to support Golang version `1.26.0`
+- added optional K8s deployment stage to `azure-devops/golang/go-docker.yaml` - automatically deploys with commit SHA label when `K8S_DEPLOYMENT_NAME` variable is set
+- added per-provider usage examples in `.docs/examples/` for GitHub Actions, GitLab CI, and Azure DevOps (Go with Docker)
+- added rebase-check quality gate to the code-check stage across all providers (GitHub Actions, GitLab CI, Azure DevOps) and all languages, failing the pipeline when a PR/MR branch is not rebased on the default branch
+- added symbolic links under `github/` for all importable GitHub Actions workflows (javascript, java, php, ruby, dotnet, terra) to match the existing golang/python pattern
 
 ### Changed
 
-- renamed `rebase-check` step to `basic-checks` across all pipeline vendors (GitHub Actions, GitLab CI, Azure DevOps)
-- added end-to-end testing instructions to `CONTRIBUTING.md` showing how to point a consuming repository at a feature branch for each platform
 - changed Azure DevOps JavaScript Kubernetes deployment step to patch `app.kubernetes.io/version` with `$(Build.SourceVersion)` and wait for `rollout status` (`--timeout=300s`) instead of forcing a restart
-- renamed the existing `lint` target in `makefiles/terra.mk` to `format` to accurately reflect its purpose (`terra format`)
-- added `config.sh` loading to CodeQL for GoLang across all pipelines (GitHub Actions, GitLab CI, Azure DevOps) to support project-level build configuration before analysis
-- added `test-lambda` target to Makefile so `test-lambda-templates.sh` is now part of `make test`
-- consolidated `.github/workflows/ci.yaml` into 2 focused jobs (`validate` + `lint-scripts`), removing superficial security and documentation checks
-- moved test scripts from root to `.github/tests/` directory to reduce clutter for downstream users
-- rewrote `clone.sh` as idempotent installer with `PIPELINES_HOME` support, auto-directory creation, and `git pull` on subsequent runs
+- changed Golang version to `1.26.0` on lambda files
 - changed `cleanup.sh` to accept a `TOOL_NAME` variable, scoping report cleanup to `build/reports/<tool>/` instead of wiping the entire `build/reports/` directory
 - changed artifact publish paths across all providers (Azure DevOps `targetPath`, GitHub Actions `path`) to reference tool-specific subdirectories instead of the shared `build/reports/` root
-- changed Golang version to `1.26.0` on lambda files
+- consolidated `.github/workflows/ci.yaml` into 2 focused jobs (`validate` + `lint-scripts`), removing superficial security and documentation checks
+- moved test scripts from root to `.github/tests/` directory to reduce clutter for downstream users
+- renamed `rebase-check` step to `basic-checks` across all pipeline vendors (GitHub Actions, GitLab CI, Azure DevOps)
+- renamed the existing `lint` target in `makefiles/terra.mk` to `format` to accurately reflect its purpose (`terra format`)
+- rewrote `clone.sh` as idempotent installer with `PIPELINES_HOME` support, auto-directory creation, and `git pull` on subsequent runs
 
 ### Fixed
 
-- fixed changelog validation crashing when the changelog has no versioned sections (only `[Unreleased]`), caused by `grep -v` returning exit code 1 under `bash -e -o pipefail`
-- fixed `makefiles/terra.mk` `format` target error message that incorrectly suggested running `make lint` instead of `make format`
-- fixed `dependency-track` execution
-- fixed test execution for `terra` pipeline
-- fixed SonarQube failing on Azure DevOps and GitLab when projects have no test coverage by detecting missing coverage files and clearing coverage report path properties before running `sonar-scanner`
 - fixed JavaScript Azure DevOps SonarQube step failing when `cobertura-coverage` artifact does not exist by adding `continueOnError: true` to the download step
-- fixed SAST tool report cleanup deleting reports from other tools by isolating each tool's output into its own `build/reports/<tool>/` subdirectory
-- fixed `make sast` aggregate target aborting on the first tool failure by adding the `-` prefix to all SAST tool recipes in `makefiles/common.mk`
-- fixed `global/scripts/tools/sonarqube/run.sh` by adding `coverage.txt` in coverage file patterns
 - fixed Python CycloneDX BOM generation using an independent `BOM_PATH` variable instead of `$PREFIX$REPORT_PATH`, causing `dependency-track` upload to fail with "No such file or directory" because the BOM was written to a different path than expected
+- fixed SAST tool report cleanup deleting reports from other tools by isolating each tool's output into its own `build/reports/<tool>/` subdirectory
+- fixed SonarQube failing on Azure DevOps and GitLab when projects have no test coverage by detecting missing coverage files and clearing coverage report path properties before running `sonar-scanner`
+- fixed `dependency-track` execution
+- fixed `global/scripts/tools/sonarqube/run.sh` by adding `coverage.txt` in coverage file patterns
+- fixed `make sast` aggregate target aborting on the first tool failure by adding the `-` prefix to all SAST tool recipes in `makefiles/common.mk`
+- fixed `makefiles/terra.mk` `format` target error message that incorrectly suggested running `make lint` instead of `make format`
+- fixed changelog validation crashing when the changelog has no versioned sections (only `[Unreleased]`), caused by `grep -v` returning exit code 1 under `bash -e -o pipefail`
+- fixed Go library workflow (`go-library.yaml`) default `tag_prefixes` from `[""]` to `["", "v"]` so it creates both `X.Y.Z` and `vX.Y.Z` tags as documented
+- fixed test execution for `terra` pipeline
 
 ## [3.0.0] - 2026-02-10
 

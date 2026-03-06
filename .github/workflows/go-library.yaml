@@ -6,7 +6,7 @@ on:
       tag_prefixes:
         type: 'string'
         required: false
-        default: '[""]'
+        default: '["", "v"]'
         description: 'JSON array of tag prefixes (e.g., ''["", "v"]''). Use ''[""]'' for no prefix.'
 
 jobs:

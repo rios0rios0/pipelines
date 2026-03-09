@@ -69,6 +69,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed SonarQube failing on Azure DevOps and GitLab when projects have no test coverage by detecting missing coverage files and clearing coverage report path properties before running `sonar-scanner`
 - fixed `dependency-track` execution
 - fixed `global/scripts/tools/sonarqube/run.sh` by adding `coverage.txt` in coverage file patterns
+- fixed Yarn Berry compatibility in `javascript.yaml` by moving `corepack enable` before `actions/setup-node` cache step, which failed when projects declared `packageManager: yarn@4.x` in `package.json`
 - fixed `make sast` aggregate target aborting on the first tool failure by adding the `-` prefix to all SAST tool recipes in `makefiles/common.mk`
 - fixed `makefiles/terra.mk` `format` target error message that incorrectly suggested running `make lint` instead of `make format`
 - fixed changelog validation crashing when the changelog has no versioned sections (only `[Unreleased]`), caused by `grep -v` returning exit code 1 under `bash -e -o pipefail`

@@ -19,6 +19,12 @@ git fetch origin "$TARGET_BRANCH" --no-tags 2>/dev/null || {
   exit 0
 }
 
+# Guard: if HEAD is already merged into the target branch, skip the check
+if git merge-base --is-ancestor HEAD "origin/$TARGET_BRANCH"; then
+  echo "$(date "+%Y-%m-%d %H:%M:%S") - Branch HEAD is already part of '$TARGET_BRANCH' (likely merged). Skipping changelog check."
+  exit 0
+fi
+
 # Check if CHANGELOG.md was modified in this branch compared to the target
 CHANGED_FILES=$(git diff --name-only "origin/$TARGET_BRANCH"...HEAD -- 'CHANGELOG.md' 2>/dev/null || true)
 if [ -z "$CHANGED_FILES" ]; then

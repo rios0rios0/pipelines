@@ -12,6 +12,12 @@ quality:basic-checks:
 
       git fetch origin "$TARGET_BRANCH" --no-tags
 
+      # Guard: if HEAD is already merged into the target branch, skip all checks
+      if git merge-base --is-ancestor HEAD "origin/$TARGET_BRANCH"; then
+        echo "Branch HEAD is already part of '$TARGET_BRANCH' (likely merged). Skipping all basic checks."
+        exit 0
+      fi
+
       if git merge-base --is-ancestor "origin/$TARGET_BRANCH" HEAD; then
         echo "Branch is up-to-date with '$TARGET_BRANCH'. No rebase needed."
       else

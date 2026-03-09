@@ -120,7 +120,7 @@ echo "=========================================="
 reports_start_time=$(date +%s)
 
 # Try to merge coverage files with gocovmerge, fallback if it fails due to overlap merge issues
-if ! $(go env GOPATH)/bin/gocovmerge unit_coverage.txt integration_coverage.txt > coverage.txt 2>/dev/null; then
+if ! "$(go env GOPATH)"/bin/gocovmerge unit_coverage.txt integration_coverage.txt > coverage.txt 2>/dev/null; then
   echo "⚠ gocovmerge failed due to overlapping coverage blocks - using fallback strategy"
   
   # Fallback: Merge coverage files by summing coverage counts for overlapping blocks
@@ -186,9 +186,9 @@ fi
 
 # Combine test outputs for JUnit report generation
 cat unit_test_output.txt integration_test_output.txt > combined_test_output.txt
-$(go env GOPATH)/bin/go-junit-report < combined_test_output.txt > junit.xml
+"$(go env GOPATH)"/bin/go-junit-report < combined_test_output.txt > junit.xml
 go tool cover -func coverage.txt
-$(go env GOPATH)/bin/gocover-cobertura < coverage.txt > cobertura.xml
+"$(go env GOPATH)"/bin/gocover-cobertura < coverage.txt > cobertura.xml
 
 # clean up temporary coverage and test output files
 rm unit_coverage.txt integration_coverage.txt unit_test_output.txt integration_test_output.txt combined_test_output.txt

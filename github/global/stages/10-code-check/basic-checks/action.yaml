@@ -24,6 +24,12 @@ runs:
 
         git fetch origin "$TARGET_BRANCH" --no-tags
 
+        # Guard: if HEAD is already merged into the target branch, skip the check
+        if git merge-base --is-ancestor HEAD "origin/$TARGET_BRANCH"; then
+          echo "Branch HEAD is already part of '$TARGET_BRANCH' (likely merged). Skipping rebase check."
+          exit 0
+        fi
+
         if git merge-base --is-ancestor "origin/$TARGET_BRANCH" HEAD; then
           echo "Branch is up-to-date with '$TARGET_BRANCH'. No rebase needed."
         else
@@ -47,6 +53,14 @@ runs:
       run: |
         TARGET_BRANCH="${{ inputs.target_branch }}"
         echo "Checking CHANGELOG.md modifications against '$TARGET_BRANCH'..."
+
+        git fetch origin "$TARGET_BRANCH" --no-tags
+
+        # Guard: if HEAD is already merged into the target branch, skip the check
+        if git merge-base --is-ancestor HEAD "origin/$TARGET_BRANCH"; then
+          echo "Branch HEAD is already part of '$TARGET_BRANCH' (likely merged). Skipping changelog check."
+          exit 0
+        fi
 
         CHANGED_FILES=$(git diff --name-only "origin/$TARGET_BRANCH"...HEAD -- 'CHANGELOG.md' 2>/dev/null || true)
         if [ -z "$CHANGED_FILES" ]; then

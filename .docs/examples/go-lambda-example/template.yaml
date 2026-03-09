@@ -1,0 +1,31 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: 'Example Go Lambda function deployed via SAM'
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 128
+    Runtime: 'provided.al2023'
+    Architectures:
+      - 'x86_64'
+
+Resources:
+  MyGoFunction:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: 'bootstrap'
+      CodeUri: '.'
+      Events:
+        ApiEvent:
+          Type: 'Api'
+          Properties:
+            Path: '/hello'
+            Method: 'get'
+    Metadata:
+      BuildMethod: 'go1.x'
+
+Outputs:
+  ApiEndpoint:
+    Description: 'API Gateway endpoint URL'
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/'

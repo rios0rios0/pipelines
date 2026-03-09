@@ -19,6 +19,12 @@ git fetch origin "$TARGET_BRANCH" --no-tags 2>/dev/null || {
   exit 0
 }
 
+# Guard: if HEAD is already merged into the target branch, skip the check
+if git merge-base --is-ancestor HEAD "origin/$TARGET_BRANCH"; then
+  echo "$(date "+%Y-%m-%d %H:%M:%S") - Branch HEAD is already part of '$TARGET_BRANCH' (likely merged). Skipping rebase check."
+  exit 0
+fi
+
 # Check if the target branch HEAD is an ancestor of the current HEAD.
 # If it IS an ancestor, the branch is properly rebased (exit 0).
 # If it is NOT an ancestor, the branch is behind and needs rebasing (exit 1).

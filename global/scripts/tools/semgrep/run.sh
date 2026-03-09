@@ -19,7 +19,7 @@ if [ ! -f ".semgrepignore" ]; then
   cp "$defaultFile" .
 fi
 
-# shellcheck disable=SC2086,SC2027
+# shellcheck disable=SC2086,SC2027,SC2140
 dockerRun="docker run \
   -v "$(pwd):$CONTAINER_PATH" \
   --workdir "$CONTAINER_PATH" \
@@ -44,7 +44,7 @@ if [ -f ".semgrepexcluderules" ]; then # check if you have rules to exclude
 fi
 
 if [ -f ".semgrep.yaml" ]; then # check if you have custom rules to add
-  # shellcheck disable=SC2027
+  # shellcheck disable=SC2027,SC2140
   dockerRun="$dockerRun --config ".semgrep.yaml""
 fi
 

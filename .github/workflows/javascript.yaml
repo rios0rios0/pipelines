@@ -25,6 +25,9 @@ jobs:
       - name: 'Checkout code'
         uses: 'actions/checkout@v6'
 
+      - name: 'Enable Corepack'
+        run: 'corepack enable'
+
       - name: 'Setup Node.js'
         uses: 'actions/setup-node@v4'
         with:
@@ -32,7 +35,6 @@ jobs:
           cache: 'yarn'
 
       - run: |
-          corepack enable
           yarn install --immutable
           yarn lint:ci
         shell: 'bash'
@@ -103,15 +105,16 @@ jobs:
       - name: 'Checkout code'
         uses: 'actions/checkout@v6'
 
+      - name: 'Enable Corepack'
+        run: 'corepack enable'
+
       - name: 'Setup Node.js'
         uses: 'actions/setup-node@v4'
         with:
           node-version: '20'
           cache: 'yarn'
 
-      - run: |
-          corepack enable
-          yarn npm audit --recursive --severity high
+      - run: 'yarn npm audit --recursive --severity high'
         shell: 'bash'
     needs: [ 'code_check-style_eslint' ]
     continue-on-error: true
@@ -126,6 +129,9 @@ jobs:
       - name: 'Checkout code'
         uses: 'actions/checkout@v6'
 
+      - name: 'Enable Corepack'
+        run: 'corepack enable'
+
       - name: 'Setup Node.js'
         uses: 'actions/setup-node@v4'
         with:
@@ -133,7 +139,6 @@ jobs:
           cache: 'yarn'
 
       - run: |
-          corepack enable
           yarn install --immutable
           yarn test:ci
         shell: 'bash'
@@ -147,6 +152,9 @@ jobs:
       - name: 'Checkout code'
         uses: 'actions/checkout@v6'
 
+      - name: 'Enable Corepack'
+        run: 'corepack enable'
+
       - name: 'Setup Node.js'
         uses: 'actions/setup-node@v4'
         with:
@@ -154,7 +162,6 @@ jobs:
           cache: 'yarn'
 
       - run: |
-          corepack enable
           yarn install --immutable
           yarn build
         shell: 'bash'

@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-03-12
+
 ### Added
 
 - added .NET/C# pipeline for GitHub Actions with `dotnet.yaml` (testing/quality) and `dotnet-docker.yaml` (Docker delivery) reusable workflows
@@ -63,20 +65,20 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
-- fixed rebase check false positive when the PR was merged while CI was still running
-- fixed ShellCheck warnings in `golang/test/run.sh` (SC2046) and `semgrep/run.sh` (SC2140)
-- fixed lambda template test failures by adding missing example files and documentation
+- fixed Go library workflow (`go-library.yaml`) default `tag_prefixes` from `[""]` to `["", "v"]` so it creates both `X.Y.Z` and `vX.Y.Z` tags as documented
 - fixed JavaScript Azure DevOps SonarQube step failing when `cobertura-coverage` artifact does not exist by adding `continueOnError: true` to the download step
 - fixed Python CycloneDX BOM generation using an independent `BOM_PATH` variable instead of `$PREFIX$REPORT_PATH`, causing `dependency-track` upload to fail with "No such file or directory" because the BOM was written to a different path than expected
 - fixed SAST tool report cleanup deleting reports from other tools by isolating each tool's output into its own `build/reports/<tool>/` subdirectory
+- fixed ShellCheck warnings in `golang/test/run.sh` (SC2046) and `semgrep/run.sh` (SC2140)
 - fixed SonarQube failing on Azure DevOps and GitLab when projects have no test coverage by detecting missing coverage files and clearing coverage report path properties before running `sonar-scanner`
+- fixed Yarn Berry compatibility in `javascript.yaml` by moving `corepack enable` before `actions/setup-node` cache step, which failed when projects declared `packageManager: yarn@4.x` in `package.json`
 - fixed `dependency-track` execution
 - fixed `global/scripts/tools/sonarqube/run.sh` by adding `coverage.txt` in coverage file patterns
-- fixed Yarn Berry compatibility in `javascript.yaml` by moving `corepack enable` before `actions/setup-node` cache step, which failed when projects declared `packageManager: yarn@4.x` in `package.json`
 - fixed `make sast` aggregate target aborting on the first tool failure by adding the `-` prefix to all SAST tool recipes in `makefiles/common.mk`
 - fixed `makefiles/terra.mk` `format` target error message that incorrectly suggested running `make lint` instead of `make format`
 - fixed changelog validation crashing when the changelog has no versioned sections (only `[Unreleased]`), caused by `grep -v` returning exit code 1 under `bash -e -o pipefail`
-- fixed Go library workflow (`go-library.yaml`) default `tag_prefixes` from `[""]` to `["", "v"]` so it creates both `X.Y.Z` and `vX.Y.Z` tags as documented
+- fixed lambda template test failures by adding missing example files and documentation
+- fixed rebase check false positive when the PR was merged while CI was still running
 - fixed test execution for `terra` pipeline
 
 ## [3.0.0] - 2026-02-10

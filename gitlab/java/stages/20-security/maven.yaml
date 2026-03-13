@@ -21,6 +21,7 @@ sca:dependency-check:
   script:
     - mkdir -p '.owasp'
     - export MAVEN_OPTS="$MAVEN_OPTS -DdependencyCheck.dataDirectory=$(pwd)/.owasp" # the Dependency Check data path must be absolute
+    # NVD_API_KEY is optional — set it as a CI/CD variable to avoid NVD rate limits
     - mvn dependency-check:check
   artifacts:
     when: 'always'

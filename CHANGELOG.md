@@ -19,6 +19,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Added
 
 - added optional `NVD_API_KEY` secret support to OWASP Dependency-Check jobs across GitHub Actions, GitLab CI, and Azure DevOps Java pipelines
+- added NVD database caching to dependency-check jobs in GitHub Actions and Azure DevOps to avoid re-downloading on every run
 
 ## [3.1.0] - 2026-03-12
 

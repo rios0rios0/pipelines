@@ -21,6 +21,12 @@ stages:
           displayName: 'sca:dependency-check'
           steps:
             - template: '../../abstracts/gradle.yaml'
+            - task: 'Cache@2'
+              inputs:
+                key: "$(Agent.JobName)|owasp-nvd"
+                path: '.owasp'
+              displayName: 'Cache NVD database'
+              continueOnError: true
             - script: |
                 mkdir -p '.owasp'
                 export OWASP_PATH="$(pwd)/.owasp"

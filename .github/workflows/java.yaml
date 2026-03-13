@@ -111,7 +111,19 @@ jobs:
           java-version: '21'
           cache: 'gradle'
 
-      - run: ./gradlew dependencyCheckAnalyze
+      - name: 'Cache NVD database'
+        uses: 'actions/cache@v4'
+        with:
+          path: '.owasp'
+          key: owasp-nvd-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            owasp-nvd-${{ runner.os }}-
+
+      - name: 'Run OWASP Dependency-Check'
+        run: |
+          mkdir -p '.owasp'
+          export OWASP_PATH="$(pwd)/.owasp"
+          ./gradlew dependencyCheckAnalyze
         shell: 'bash'
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}

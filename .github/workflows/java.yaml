@@ -29,7 +29,7 @@ jobs:
         uses: 'actions/checkout@v6'
 
       - name: 'Setup Java'
-        uses: 'actions/setup-java@v4'
+        uses: 'actions/setup-java@v5'
         with:
           distribution: 'temurin'
           java-version: '21'
@@ -105,7 +105,7 @@ jobs:
         uses: 'actions/checkout@v6'
 
       - name: 'Setup Java'
-        uses: 'actions/setup-java@v4'
+        uses: 'actions/setup-java@v5'
         with:
           distribution: 'temurin'
           java-version: '21'
@@ -141,7 +141,7 @@ jobs:
         uses: 'actions/checkout@v6'
 
       - name: 'Setup Java'
-        uses: 'actions/setup-java@v4'
+        uses: 'actions/setup-java@v5'
         with:
           distribution: 'temurin'
           java-version: '21'

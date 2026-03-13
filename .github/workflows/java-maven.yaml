@@ -2,6 +2,9 @@
 # the parent workflow is responsible for setting up the call events²
 on:
   workflow_call:
+    secrets:
+      NVD_API_KEY:
+        required: false
     outputs:
       tag_name:
         description: 'The tag name created by the release job'
@@ -110,6 +113,8 @@ jobs:
 
       - run: mvn org.owasp:dependency-check-maven:check
         shell: 'bash'
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
     needs: [ 'code_check-style_maven_verify' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"

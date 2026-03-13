@@ -26,4 +26,6 @@ stages:
                 export OWASP_PATH="$(pwd)/.owasp"
                 ./gradlew dependencyCheckAnalyze
               displayName: 'Run OWASP Dependency-Check'
+              env:
+                NVD_API_KEY: $(NVD_API_KEY)
           continueOnError: true

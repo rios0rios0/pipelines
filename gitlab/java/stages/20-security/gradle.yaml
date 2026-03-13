@@ -18,6 +18,7 @@ sca:dependency-check:
   script:
     - mkdir -p '.owasp'
     - export OWASP_PATH="$(pwd)/.owasp" # the Dependency Check data path must be absolute
+    # NVD_API_KEY is optional — set it as a CI/CD variable to avoid NVD rate limits
     - gradle dependencyCheckAnalyze
   artifacts:
     when: 'always'

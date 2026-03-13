@@ -4,6 +4,7 @@ on:
 jobs:
   java:
     uses: 'rios0rios0/pipelines/.github/workflows/java.yaml@main'
+    secrets: inherit
 
   # fourth stage
   delivery-docker:

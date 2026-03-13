@@ -111,7 +111,19 @@ jobs:
           java-version: '21'
           cache: 'maven'
 
-      - run: mvn org.owasp:dependency-check-maven:check
+      - name: 'Cache NVD database'
+        uses: 'actions/cache@v4'
+        with:
+          path: '.owasp'
+          key: owasp-nvd-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            owasp-nvd-${{ runner.os }}-
+
+      - name: 'Run OWASP Dependency-Check'
+        run: |
+          mkdir -p '.owasp'
+          export MAVEN_OPTS="$MAVEN_OPTS -DdependencyCheck.dataDirectory=$(pwd)/.owasp"
+          mvn org.owasp:dependency-check-maven:check
         shell: 'bash'
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}

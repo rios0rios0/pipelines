@@ -1,0 +1,65 @@
+inputs:
+  github_token:
+    type: 'string'
+    required: true
+  source_tag:
+    type: 'string'
+    required: false
+    default: 'latest'
+  target_tag:
+    type: 'string'
+    required: false
+    default: ''
+  image:
+    type: 'string'
+    required: false
+    default: ''
+  expected_revision:
+    type: 'string'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Login to Registry'
+      uses: 'docker/login-action@v3'
+      with:
+        registry: 'ghcr.io'
+        username: '${{ github.actor }}'
+        password: '${{ inputs.github_token }}'
+
+    - name: 'Install crane'
+      shell: 'bash'
+      run: |
+        curl -sL "https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_x86_64.tar.gz" \
+          | tar xz -C /usr/local/bin crane
+
+    - name: 'Re-tag Image'
+      shell: 'bash'
+      run: |
+        IMAGE="${{ inputs.image }}"
+        if [ -z "$IMAGE" ]; then
+          IMAGE="ghcr.io/${{ github.repository }}"
+        fi
+
+        TARGET_TAG="${{ inputs.target_tag }}"
+        if [ -z "$TARGET_TAG" ]; then
+          TARGET_TAG="${{ github.ref_name }}"
+        fi
+
+        SOURCE="${IMAGE}:${{ inputs.source_tag }}"
+        TARGET="${IMAGE}:${TARGET_TAG}"
+
+        EXPECTED_REV="${{ inputs.expected_revision }}"
+        if [ -n "$EXPECTED_REV" ]; then
+          ACTUAL_REV=$(crane config "$SOURCE" | jq -r '.config.Labels["org.opencontainers.image.revision"] // empty')
+          if [ -n "$ACTUAL_REV" ] && [ "$ACTUAL_REV" != "$EXPECTED_REV" ]; then
+            echo "::error::Revision mismatch: image has $ACTUAL_REV, expected $EXPECTED_REV"
+            exit 1
+          fi
+        fi
+
+        echo "Copying $SOURCE -> $TARGET"
+        crane copy "$SOURCE" "$TARGET"
+        echo "Successfully re-tagged $SOURCE as $TARGET"

@@ -43,6 +43,19 @@ steps:
       fi
       imageName="${{ parameters.CONTAINER_REGISTRY_SERVER }}/$dockerImageName"
 
+      if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
+        echo "Tag event detected, attempting to re-tag :latest as :$(Build.SourceBranchName)"
+        curl -sL "https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_x86_64.tar.gz" \
+          | tar xz -C /usr/local/bin crane
+        if crane copy "$imageName:latest" "$imageName:$(Build.SourceBranchName)"; then
+          containerImageTagName="$imageName:$(Build.SourceBranchName)"
+          echo "##vso[task.setvariable variable=CONTAINER_IMAGE;isOutput=true]$containerImageTagName"
+          echo "Successfully re-tagged $imageName:latest as $containerImageTagName"
+          exit 0
+        fi
+        echo "##vso[task.logissue type=warning]Re-tag failed, falling back to full build"
+      fi
+
       TAGS="$imageName:latest"
       if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
         TAGS="$TAGS -t $imageName:$(Build.SourceBranchName)"

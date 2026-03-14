@@ -21,9 +21,13 @@ stages:
           displayName: 'sca:dependency-check'
           steps:
             - template: '../../abstracts/gradle.yaml'
+            - script: echo "##vso[task.setvariable variable=WEEK_NUMBER]$(date +%Y-%W)"
+              displayName: 'Get current week number'
             - task: 'Cache@2'
               inputs:
-                key: "$(Agent.JobName)|owasp-nvd"
+                key: "$(Agent.JobName)|owasp-nvd|$(WEEK_NUMBER)"
+                restoreKeys: |
+                  $(Agent.JobName)|owasp-nvd
                 path: '.owasp'
               displayName: 'Cache NVD database'
               continueOnError: true

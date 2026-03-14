@@ -25,6 +25,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - changed `actions/setup-java` from v4 to v5 to support Node.js 24 runners
 
+### Fixed
+
+- fixed NVD database cache key in GitHub Actions using `github.run_id`, which prevented cache reuse across workflow runs
+
 ## [3.1.0] - 2026-03-12
 
 ### Added

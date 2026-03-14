@@ -20,10 +20,15 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - added optional `NVD_API_KEY` secret support to OWASP Dependency-Check jobs across GitHub Actions, GitLab CI, and Azure DevOps Java pipelines
 - added NVD database caching to dependency-check jobs in GitHub Actions and Azure DevOps to avoid re-downloading on every run
+- added `docker-retag` composite action for GitHub Actions that re-tags an existing `:latest` image with a release tag using `crane`, avoiding a full Docker rebuild on tag events
+- added OCI image labels (`org.opencontainers.image.revision`, `org.opencontainers.image.ref.name`, `org.opencontainers.image.source`) to GitHub Actions Docker builds to match Azure DevOps and enable digest verification
 
 ### Changed
 
 - changed `actions/setup-java` from v4 to v5 to support Node.js 24 runners
+- changed all GitHub Actions `*-docker.yaml` workflows to use `docker-retag` action on tag events instead of rebuilding the Docker image from scratch
+- changed GitLab CI `delivery:prod` job to use `crane copy` for re-tagging instead of a full Docker rebuild on tag events
+- changed Azure DevOps global Docker delivery template to attempt `crane`-based re-tagging on tag events before falling back to a full build
 
 ### Fixed
 

@@ -23,3 +23,7 @@ runs:
         context: '.'
         push: true
         tags: '${{ inputs.tags }}'
+        labels: |
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.ref.name=${{ github.ref_name }}
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}

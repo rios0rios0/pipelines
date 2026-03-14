@@ -21,10 +21,15 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added code check stage (10) to Helm Azure DevOps pipeline with `helm lint` and `helm template` validation
 - added security stage (20) to Helm Azure DevOps pipeline with Semgrep, Gitleaks, Hadolint, and Trivy
 - added cross-compilation check step to Go pipeline that builds for linux, darwin, and windows (amd64 + arm64) to catch platform-specific type errors at PR time
+- added `docker-retag` composite action for GitHub Actions that re-tags an existing `:latest` image with a release tag using `crane`, avoiding a full Docker rebuild on tag events
+- added OCI image labels (`org.opencontainers.image.revision`, `org.opencontainers.image.ref.name`, `org.opencontainers.image.source`) to GitHub Actions Docker builds to match Azure DevOps and enable digest verification
 
 ### Changed
 
 - changed Helm chart delivery to always push `0.0.0-latest` and additionally push the tag-derived version on tag builds, matching Docker's dual-tag strategy
+- changed all GitHub Actions `*-docker.yaml` workflows to use `docker-retag` action on tag events instead of rebuilding the Docker image from scratch
+- changed GitLab CI `delivery:prod` job to use `crane copy` for re-tagging instead of a full Docker rebuild on tag events
+- changed Azure DevOps global Docker delivery template to attempt `crane`-based re-tagging on tag events before falling back to a full build
 
 ## [3.2.0] - 2026-03-14
 

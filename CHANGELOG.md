@@ -27,7 +27,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
-- fixed NVD database cache key in GitHub Actions using `github.run_id`, which prevented cache reuse across workflow runs
+- fixed NVD database cache for Dependency-Check: corrected Maven property from `-DdependencyCheck.dataDirectory` to `-DdataDirectory` and added weekly cache key rotation to prevent stale empty caches
 
 ## [3.1.0] - 2026-03-12
 

@@ -111,13 +111,18 @@ jobs:
           java-version: '21'
           cache: 'gradle'
 
+      - name: 'Get current week number'
+        id: 'week'
+        run: echo "week=$(date +%Y-%W)" >> "$GITHUB_OUTPUT"
+        shell: 'bash'
+
       - name: 'Cache NVD database'
         uses: 'actions/cache@v4'
         with:
           path: '.owasp'
-          key: owasp-nvd-${{ runner.os }}
+          key: owasp-nvd-${{ runner.os }}-${{ steps.week.outputs.week }}
           restore-keys: |
-            owasp-nvd-${{ runner.os }}
+            owasp-nvd-${{ runner.os }}-
 
       - name: 'Run OWASP Dependency-Check'
         run: |

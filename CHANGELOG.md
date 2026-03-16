@@ -16,14 +16,16 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-03-14
+
 ### Added
 
+- added NVD database caching to Dependency-Check jobs in GitHub Actions and Azure DevOps to avoid re-downloading on every run
 - added optional `NVD_API_KEY` secret support to OWASP Dependency-Check jobs across GitHub Actions, GitLab CI, and Azure DevOps Java pipelines
-- added NVD database caching to dependency-check jobs in GitHub Actions and Azure DevOps to avoid re-downloading on every run
 
 ### Changed
 
-- changed `actions/setup-java` from v4 to v5 to support Node.js 24 runners
+- changed `actions/setup-java` from `v4` to `v5` to support Node.js 24 runners
 
 ### Fixed
 

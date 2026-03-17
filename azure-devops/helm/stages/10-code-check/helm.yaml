@@ -1,0 +1,20 @@
+stages:
+  - stage: 'code_check'
+    displayName: 'code check (style/quality)'
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    jobs:
+      - template: '../../../global/stages/10-code-check/basic-checks.yaml'
+
+      - job: 'style_helm_lint'
+        displayName: 'style:helm-lint'
+        steps:
+          - task: HelmInstaller@1
+            displayName: 'Install Helm'
+            inputs:
+              helmVersionToInstall: 'latest'
+
+          - script: helm lint .
+            displayName: 'Run Helm lint'
+
+          - script: helm template . > /dev/null
+            displayName: 'Run Helm template validation'

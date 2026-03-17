@@ -16,6 +16,15 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added code check stage (10) to Helm Azure DevOps pipeline with `helm lint` and `helm template` validation
+- added security stage (20) to Helm Azure DevOps pipeline with Semgrep, Gitleaks, Hadolint, and Trivy
+
+### Changed
+
+- changed Helm chart delivery to always push `0.0.0-latest` and additionally push the tag-derived version on tag builds, matching Docker's dual-tag strategy
+
 ## [3.2.0] - 2026-03-14
 
 ### Added

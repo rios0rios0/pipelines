@@ -12,6 +12,8 @@ on:
 jobs:
   go:
     uses: 'rios0rios0/pipelines/.github/workflows/go.yaml@main'
+    with:
+      cross_compile: true
 
   # fourth stage
   delivery-release:

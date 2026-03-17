@@ -20,6 +20,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - added code check stage (10) to Helm Azure DevOps pipeline with `helm lint` and `helm template` validation
 - added security stage (20) to Helm Azure DevOps pipeline with Semgrep, Gitleaks, Hadolint, and Trivy
+- added cross-compilation check step to Go pipeline that builds for linux, darwin, and windows (amd64 + arm64) to catch platform-specific type errors at PR time
 
 ### Changed
 

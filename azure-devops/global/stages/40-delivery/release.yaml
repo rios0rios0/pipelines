@@ -7,7 +7,7 @@ parameters:
 jobs:
   - job: 'release'
     displayName: 'release'
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), or(contains(variables['Build.SourceVersionMessage'], 'origin/chore/bump-'), contains(variables['Build.SourceVersionMessage'], 'origin/bump/'), contains(variables['Build.SourceVersionMessage'], 'chore(bump)')))
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), or(contains(variables['Build.SourceVersionMessage'], 'chore/bump-'), contains(variables['Build.SourceVersionMessage'], 'bump/'), contains(variables['Build.SourceVersionMessage'], 'chore(bump)')))
     steps:
       - script: |
           set -eux

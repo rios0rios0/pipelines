@@ -30,7 +30,7 @@ jobs:
         with:
           tag_prefix: "${{ matrix.prefix }}"
     needs: [ 'go' ]
-    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore/bump-') || contains(github.event.head_commit.message, 'chore(bump)'))"
+    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore/bump-') || contains(github.event.head_commit.message, 'bump/') || contains(github.event.head_commit.message, 'chore(bump)'))"
 
 
 # 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations

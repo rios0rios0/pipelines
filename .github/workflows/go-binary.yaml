@@ -29,7 +29,7 @@ jobs:
       - id: 'release'
         uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
     needs: [ 'go' ]
-    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore/bump-') || contains(github.event.head_commit.message, 'chore(bump)'))"
+    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore/bump-') || contains(github.event.head_commit.message, 'bump/') || contains(github.event.head_commit.message, 'chore(bump)'))"
 
   delivery-binary:
     name: 'delivery > binary'

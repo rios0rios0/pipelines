@@ -2,6 +2,12 @@
 # the parent workflow is responsible for setting up the call events²
 on:
   workflow_call:
+    inputs:
+      cross_compile:
+        type: 'boolean'
+        required: false
+        default: false
+        description: 'Enable cross-compilation check for all 6 OS/arch targets'
 
 # it wasn't needed to set up anything for GoLang because 'ubuntu-latest' has all dependencies
 jobs:
@@ -28,7 +34,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/golang/stages/10-code-check/cross-compile@main'
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: "inputs.cross_compile && !startsWith(github.ref, 'refs/tags/')"
 
 
   # second stage
@@ -39,7 +45,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
         with:
           codeql_language: 'go'
-    needs: [ 'code_check-style_golangci_lint', 'code_check-cross_compile' ]
+    needs: [ 'code_check-style_golangci_lint' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_semgrep:
@@ -49,7 +55,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-semgrep@main'
         with:
           semgrep_lang: 'golang'
-    needs: [ 'code_check-style_golangci_lint', 'code_check-cross_compile' ]
+    needs: [ 'code_check-style_golangci_lint' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_gitleaks:
@@ -57,7 +63,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-gitleaks@main'
-    needs: [ 'code_check-style_golangci_lint', 'code_check-cross_compile' ]
+    needs: [ 'code_check-style_golangci_lint' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_hadolint:
@@ -65,7 +71,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
-    needs: [ 'code_check-style_golangci_lint', 'code_check-cross_compile' ]
+    needs: [ 'code_check-style_golangci_lint' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -74,7 +80,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy@main'
-    needs: [ 'code_check-style_golangci_lint', 'code_check-cross_compile' ]
+    needs: [ 'code_check-style_golangci_lint' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -83,7 +89,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy-sca@main'
-    needs: [ 'code_check-style_golangci_lint', 'code_check-cross_compile' ]
+    needs: [ 'code_check-style_golangci_lint' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -92,7 +98,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/golang/stages/20-security/govulncheck@main'
-    needs: [ 'code_check-style_golangci_lint', 'code_check-cross_compile' ]
+    needs: [ 'code_check-style_golangci_lint' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 

@@ -1,2 +1,4 @@
 stages:
+  - template: 'stages/10-code-check/helm.yaml'
+  - template: 'stages/20-security/helm.yaml'
   - template: 'stages/40-delivery/helm.yaml'

@@ -1,0 +1,14 @@
+stages:
+  - stage: 'security'
+    displayName: 'security (sca/sast)'
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    jobs:
+      - template: '../../../global/stages/20-security/docker.yaml'
+        parameters:
+          SEMGREP_LANGUAGE: 'kubernetes'
+
+      - template: '../../../global/stages/20-security/hadolint.yaml'
+
+      - template: '../../../global/stages/20-security/trivy.yaml'
+
+      - template: '../../../global/stages/20-security/trivy-sca.yaml'

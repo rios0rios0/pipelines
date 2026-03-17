@@ -21,10 +21,14 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added code check stage (10) to Helm Azure DevOps pipeline with `helm lint` and `helm template` validation
 - added security stage (20) to Helm Azure DevOps pipeline with Semgrep, Gitleaks, Hadolint, and Trivy
 - added cross-compilation check step to Go pipeline that builds for linux, darwin, and windows (amd64 + arm64) to catch platform-specific type errors at PR time
+- added trap-based cleanup for temporary files in the Go test script ensuring reliable removal on exit
 
 ### Changed
 
 - changed Helm chart delivery to always push `0.0.0-latest` and additionally push the tag-derived version on tag builds, matching Docker's dual-tag strategy
+- replaced raw `go test` with `gotestsum` in the Go test script, providing compact per-package output (`--format pkgname`) and automatic failure summaries at the end of each test phase
+- replaced `go-junit-report` with `gotestsum --junitfile` for native JUnit XML generation, merging unit and integration reports into a single `junit.xml`
+- changed Go test script to defer exit on test failure, ensuring all phases (unit tests, integration tests, coverage reports) run to completion before returning the final exit code
 
 ## [3.2.0] - 2026-03-14
 

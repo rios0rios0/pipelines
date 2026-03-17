@@ -1,6 +1,14 @@
 #!/usr/bin/env sh
 set -e
 
+FINAL_EXIT_CODE=0
+
+cleanup() {
+  rm -f unit_coverage.txt integration_coverage.txt \
+       junit-unit.xml junit-integration.xml
+}
+trap cleanup EXIT
+
 # GitLab CI/CD steps/jobs leverages this variable to perform other commands
 if [ -z "$SCRIPTS_DIR" ]; then
   SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
@@ -33,9 +41,9 @@ directories=$(echo $directories | sed 's/^ *//;s/ *$//')
 echo "Testing code in the following directories: $directories"
 
 echo "Installing dependencies..."
+go install gotest.tools/gotestsum@latest
 go install github.com/wadey/gocovmerge@latest
 go install github.com/boumenot/gocover-cobertura@latest
-go install github.com/jstemmer/go-junit-report/v2@latest
 
 echo ""
 echo "=========================================="
@@ -44,34 +52,27 @@ echo "Started at: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "=========================================="
 unit_start_time=$(date +%s)
 
-# run unit tests (word splitting on $directories is intentional)
 # shellcheck disable=SC2086
-go test -v -tags test,unit \
+"$(go env GOPATH)"/bin/gotestsum \
+  --format pkgname \
+  --junitfile junit-unit.xml \
+  -- -tags test,unit \
   -coverpkg="$(echo $directories | tr ' ' ',')" \
   -covermode=count \
   -coverprofile=unit_coverage.txt \
-  $directories > unit_test_output.tmp 2>&1 || UNIT_EXIT_CODE=$?
+  $directories || UNIT_EXIT_CODE=$?
 
 unit_end_time=$(date +%s)
 unit_duration=$((unit_end_time - unit_start_time))
 
-# Display the test output
-cat unit_test_output.tmp
-
-# Check if unit tests actually failed (not just covdata warnings)
 if [ -n "$UNIT_EXIT_CODE" ] && [ "$UNIT_EXIT_CODE" -ne 0 ]; then
-  # Check if output contains actual test failures
-  if grep -q "^FAIL" unit_test_output.tmp; then
-    echo "✗ Unit tests failed with exit code $UNIT_EXIT_CODE"
-    rm unit_test_output.tmp
-    exit $UNIT_EXIT_CODE
-  else
+  if grep -q '<testsuites.*failures="0"' junit-unit.xml 2>/dev/null; then
     echo "⚠ Unit tests passed with warnings (covdata tool missing) - continuing..."
+  else
+    FINAL_EXIT_CODE=$UNIT_EXIT_CODE
   fi
 fi
 
-# Keep unit test output for JUnit report generation
-mv unit_test_output.tmp unit_test_output.txt
 echo "✓ Unit tests phase completed at $(date '+%Y-%m-%d %H:%M:%S') (took ${unit_duration}s)"
 echo ""
 
@@ -84,32 +85,26 @@ integration_start_time=$(date +%s)
 
 # TODO: this should be in another step to run in parallel along the unit tests
 # shellcheck disable=SC2086
-go test -p 1 -v -tags integration \
+"$(go env GOPATH)"/bin/gotestsum \
+  --format pkgname \
+  --junitfile junit-integration.xml \
+  -- -p 1 -tags integration \
   -coverpkg="$(echo $directories | tr ' ' ',')" \
   -covermode=count \
   -coverprofile=integration_coverage.txt \
-  $directories > integration_test_output.tmp 2>&1 || INTEGRATION_EXIT_CODE=$?
+  $directories || INTEGRATION_EXIT_CODE=$?
 
 integration_end_time=$(date +%s)
 integration_duration=$((integration_end_time - integration_start_time))
 
-# Display the test output
-cat integration_test_output.tmp
-
-# Check if integration tests actually failed (not just covdata warnings)
 if [ -n "$INTEGRATION_EXIT_CODE" ] && [ "$INTEGRATION_EXIT_CODE" -ne 0 ]; then
-  # Check if output contains actual test failures
-  if grep -q "^FAIL" integration_test_output.tmp; then
-    echo "✗ Integration tests failed with exit code $INTEGRATION_EXIT_CODE"
-    rm integration_test_output.tmp
-    exit $INTEGRATION_EXIT_CODE
-  else
+  if grep -q '<testsuites.*failures="0"' junit-integration.xml 2>/dev/null; then
     echo "⚠ Integration tests passed with warnings (covdata tool missing) - continuing..."
+  else
+    FINAL_EXIT_CODE=$INTEGRATION_EXIT_CODE
   fi
 fi
 
-# Keep integration test output for JUnit report generation
-mv integration_test_output.tmp integration_test_output.txt
 echo "✓ Integration tests phase completed at $(date '+%Y-%m-%d %H:%M:%S') (took ${integration_duration}s)"
 echo ""
 
@@ -184,16 +179,27 @@ else
   echo "✓ Coverage files merged successfully with gocovmerge"
 fi
 
-# Combine test outputs for JUnit report generation
-cat unit_test_output.txt integration_test_output.txt > combined_test_output.txt
-"$(go env GOPATH)"/bin/go-junit-report < combined_test_output.txt > junit.xml
+# Merge JUnit XML files from both test phases into a single report.
+# Strip XML headers and the outer <testsuites> wrapper from each file,
+# keeping all inner <testsuite> elements (one per package).
+extract_testsuites() {
+  [ -f "$1" ] || return 0
+  sed '/<\?xml /d; /<testsuites/d; /<\/testsuites>/d' "$1" 2>/dev/null || true
+}
+{
+  echo '<?xml version="1.0" encoding="UTF-8"?>'
+  echo '<testsuites>'
+  extract_testsuites junit-unit.xml
+  extract_testsuites junit-integration.xml
+  echo '</testsuites>'
+} > junit.xml
+
 go tool cover -func coverage.txt
 "$(go env GOPATH)"/bin/gocover-cobertura < coverage.txt > cobertura.xml
-
-# clean up temporary coverage and test output files
-rm unit_coverage.txt integration_coverage.txt unit_test_output.txt integration_test_output.txt combined_test_output.txt
 
 reports_end_time=$(date +%s)
 reports_duration=$((reports_end_time - reports_start_time))
 echo "✓ Coverage reports generated successfully at $(date '+%Y-%m-%d %H:%M:%S') (took ${reports_duration}s)"
 echo "=========================================="
+
+exit $FINAL_EXIT_CODE

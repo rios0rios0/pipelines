@@ -7,18 +7,27 @@ parameters:
 jobs:
   - job: 'release'
     displayName: 'release'
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), or(contains(variables['Build.SourceVersionMessage'], 'origin/chore/bump-'), contains(variables['Build.SourceVersionMessage'], 'chore(bump)')))
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), or(contains(variables['Build.SourceVersionMessage'], 'origin/chore/bump-'), contains(variables['Build.SourceVersionMessage'], 'origin/bump/'), contains(variables['Build.SourceVersionMessage'], 'chore(bump)')))
     steps:
       - script: |
           set -eux
 
           COMMIT_MESSAGE="$(git log -1 --pretty=%B)"
-          # Azure DevOps format: "Merge branch 'chore/bump-X.X.X'"
-          # Conventional commit format: "chore(bump): bumped version to X.X.X"
-          REGEX="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)'.*$|.*chore\(bump\):.*version to ([0-9]+\.[0-9]+\.[0-9]+).*"
+          # Azure DevOps format: "Merge branch 'chore/bump-X.X.X'" or "Merge branch 'bump/X.X.X'"
+          # Conventional commit format: "chore(bump): bumped to version X.X.X"
+          REGEX_CHORE_BUMP="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)'.*$"
+          REGEX_BUMP="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?bump\/([0-9]+\.[0-9]+\.[0-9]+)'.*$"
+          REGEX_CONVENTIONAL=".*chore\(bump\):.*([0-9]+\.[0-9]+\.[0-9]+).*"
 
-          if echo -n "$COMMIT_MESSAGE" | grep -Eq "$REGEX"; then
-            VERSION=$(echo "$COMMIT_MESSAGE" | sed -En "s/$REGEX/\3\4/p" | head -n 1)
+          if echo -n "$COMMIT_MESSAGE" | grep -Eq "$REGEX_CHORE_BUMP"; then
+            VERSION=$(echo "$COMMIT_MESSAGE" | sed -En "s/$REGEX_CHORE_BUMP/\3/p" | head -n 1)
+          elif echo -n "$COMMIT_MESSAGE" | grep -Eq "$REGEX_BUMP"; then
+            VERSION=$(echo "$COMMIT_MESSAGE" | sed -En "s/$REGEX_BUMP/\3/p" | head -n 1)
+          elif echo -n "$COMMIT_MESSAGE" | grep -Eq "$REGEX_CONVENTIONAL"; then
+            VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -n 1)
+          fi
+
+          if [ -n "${VERSION:-}" ]; then
             echo "##vso[task.setvariable variable=RELEASE_VERSION]$VERSION"
           else
             echo "$(date "+%Y-%m-%d %H:%M:%S") - Commit is not a bump, not creating a release..."

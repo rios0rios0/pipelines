@@ -30,7 +30,7 @@ jobs:
         with:
           tag_prefix: "${{ matrix.prefix }}"
     needs: [ 'go' ]
-    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore/bump-')"
+    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore/bump-') || contains(github.event.head_commit.message, 'chore(bump)'))"
 
 
 # 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations
@@ -54,4 +54,4 @@ jobs:
 # workflow_dispatch inputs can only be defined in the workflow that is directly triggered
 #
 # This workflow will create releases with both no prefix and 'v' prefix (e.g., "1.0.0" and "v1.0.0")
-# when a commit with "chore/bump-" message is pushed to main.
+# when a commit with "chore/bump-" or "chore(bump)" message is pushed to main.

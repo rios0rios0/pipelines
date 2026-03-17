@@ -23,16 +23,20 @@ runs:
 
         COMMIT_MESSAGE="$(git log -1 --pretty=%B)"
         # GitHub PR merge format: "Merge pull request #XX from repository/chore/bump-X.X.X"
-        # Conventional commit format: "chore(bump): bumped version to X.X.X"
+        # GitHub PR merge format: "Merge pull request #XX from repository/bump/X.X.X"
+        # Conventional commit format: "chore(bump): bumped to version X.X.X"
 
         VERSION=""
 
         # Try GitHub PR merge format: chore/bump-X.X.X
         if echo "$COMMIT_MESSAGE" | grep -Eq "chore/bump-[0-9]+\.[0-9]+\.[0-9]+"; then
           VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE "chore/bump-[0-9]+\.[0-9]+\.[0-9]+" | head -n 1 | sed 's/chore\/bump-//')
-        # Try conventional commit format: version to X.X.X
-        elif echo "$COMMIT_MESSAGE" | grep -Eq "chore\(bump\):.*version to [0-9]+\.[0-9]+\.[0-9]+"; then
-          VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE "version to [0-9]+\.[0-9]+\.[0-9]+" | head -n 1 | sed 's/version to //')
+        # Try GitHub PR merge format: bump/X.X.X
+        elif echo "$COMMIT_MESSAGE" | grep -Eq "bump/[0-9]+\.[0-9]+\.[0-9]+"; then
+          VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE "bump/[0-9]+\.[0-9]+\.[0-9]+" | head -n 1 | sed 's/bump\///')
+        # Try conventional commit format: chore(bump): ... version X.X.X
+        elif echo "$COMMIT_MESSAGE" | grep -Eq "chore\(bump\):.*[0-9]+\.[0-9]+\.[0-9]+"; then
+          VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -n 1)
         fi
 
         if [ -n "$VERSION" ]; then

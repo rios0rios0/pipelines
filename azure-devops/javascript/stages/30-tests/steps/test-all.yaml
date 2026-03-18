@@ -14,6 +14,9 @@ parameters:
   - name: 'COBERTURA_RELATIVE_PATH'
     type: 'string'
     default: 'cobertura.xml'
+  - name: 'LCOV_RELATIVE_PATH'
+    type: 'string'
+    default: ''
 
 steps:
   - script: ${{ parameters.RUN_BEFORE_TESTS }}
@@ -51,3 +54,10 @@ steps:
       artifactName: 'coverage-cobertura'
       targetPath: "${{ parameters.WORKING_DIRECTORY }}/${{ parameters.COBERTURA_RELATIVE_PATH }}"
     displayName: 'Publish Cobertura File'
+
+  - ${{ if ne(parameters.LCOV_RELATIVE_PATH, '') }}:
+    - task: 'PublishPipelineArtifact@1'
+      inputs:
+        artifactName: 'coverage-lcov'
+        targetPath: "${{ parameters.WORKING_DIRECTORY }}/${{ parameters.LCOV_RELATIVE_PATH }}"
+      displayName: 'Publish LCOV File'

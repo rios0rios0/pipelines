@@ -51,12 +51,13 @@ steps:
         rm -f "$chart_archive"
       }
 
+      SHORT_SHA=$(echo "$(Build.SourceVersion)" | cut -c1-7)
+
       if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
         RAW_TAG="$(Build.SourceBranchName)"
-        # Normalize tag by stripping a leading "v" if present (e.g., v1.2.3 -> 1.2.3)
         CHART_VERSION="${RAW_TAG#v}"
         package_and_push "$CHART_VERSION"
+      else
+        package_and_push "0.0.0-${SHORT_SHA}"
       fi
-
-      package_and_push "0.0.0-latest"
     displayName: 'Package and Push Helm Chart'

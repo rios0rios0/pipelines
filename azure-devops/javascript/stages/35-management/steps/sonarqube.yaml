@@ -20,7 +20,7 @@ steps:
 
   - task: 'DownloadPipelineArtifact@2'
     inputs:
-      artifactName: 'cobertura-coverage'
+      artifactName: 'coverage-cobertura'
       targetPath: "${{ parameters.WORKING_DIRECTORY }}/coverage"
     displayName: 'Download Cobertura Coverage File'
     continueOnError: true

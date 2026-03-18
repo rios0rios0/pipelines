@@ -8,6 +8,9 @@ parameters:
   - name: 'RUN_AFTER_MANAGEMENT'
     type: 'string'
     default: 'echo "No after script"'
+  - name: 'LCOV_DOWNLOAD_SUBPATH'
+    type: 'string'
+    default: ''
 
 steps:
   - task: 'Cache@2'
@@ -24,6 +27,14 @@ steps:
       targetPath: "${{ parameters.WORKING_DIRECTORY }}/coverage"
     displayName: 'Download Cobertura Coverage File'
     continueOnError: true
+
+  - ${{ if ne(parameters.LCOV_DOWNLOAD_SUBPATH, '') }}:
+    - task: 'DownloadPipelineArtifact@2'
+      inputs:
+        artifactName: 'coverage-lcov'
+        targetPath: "${{ parameters.WORKING_DIRECTORY }}/${{ parameters.LCOV_DOWNLOAD_SUBPATH }}"
+      displayName: 'Download LCOV Coverage File'
+      continueOnError: true
 
   - script: ${{ parameters.RUN_BEFORE_MANAGEMENT }}
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"

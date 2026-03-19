@@ -8,7 +8,7 @@ stages:
       - job: 'style_terraform_fmt'
         displayName: 'style:terraform-fmt'
         steps:
-          - template: '../../abstracts/terra-terraform1.9.3.yaml'
+          - template: '../../abstracts/terra-terraform.yaml'
 
           - script: terraform fmt -check -recursive
             displayName: 'Run Terraform format check'

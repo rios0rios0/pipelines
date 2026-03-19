@@ -21,6 +21,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed Helm chart builds from mutable `0.0.0-latest` to immutable `0.0.0-<commit>` versioning, ensuring each push produces a unique, traceable chart version
 - changed the java pipeline version from 21 to 25
 - changed the terraform pipeline version from 1.9.3 to 1.14.7
+- changed Go cross-compile script to use `go vet` instead of `go build` for type-checking without linking, plus vet diagnostics
+- changed `go-binary.yaml` to disable cross-compile check since GoReleaser already handles multi-platform builds in the delivery stage
 
 ### Added
 

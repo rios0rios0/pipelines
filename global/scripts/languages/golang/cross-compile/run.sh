@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Cross-compile check: builds the module for all target platforms to catch
+# Cross-compile check: validates the module for all target platforms to catch
 # platform-specific type errors (e.g., syscall.Handle vs int on Windows).
+# Uses "go vet" instead of "go build" — this performs full type-checking without
+# linking (faster), and additionally runs vet diagnostics (printf, structtag, etc.)
+# which may surface issues beyond pure compilation errors.
 set -euo pipefail
 
 TARGETS=(
@@ -15,8 +18,8 @@ TARGETS=(
 FAILED=0
 for target in "${TARGETS[@]}"; do
   IFS='/' read -r os arch <<< "$target"
-  echo "=== Building for ${os}/${arch} ==="
-  if ! CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build ./...; then
+  echo "=== Type-checking for ${os}/${arch} ==="
+  if ! CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go vet ./...; then
     echo "FAIL: ${os}/${arch}"
     FAILED=1
   fi

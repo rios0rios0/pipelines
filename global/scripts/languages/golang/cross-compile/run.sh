@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Cross-compile check: type-checks the module for all target platforms to catch
+# Cross-compile check: validates the module for all target platforms to catch
 # platform-specific type errors (e.g., syscall.Handle vs int on Windows).
-# Uses "go vet" instead of "go build" to perform type-checking without linking,
-# which is faster while still catching the same class of compilation errors.
+# Uses "go vet" instead of "go build" — this performs full type-checking without
+# linking (faster), and additionally runs vet diagnostics (printf, structtag, etc.)
+# which may surface issues beyond pure compilation errors.
 set -euo pipefail
 
 TARGETS=(

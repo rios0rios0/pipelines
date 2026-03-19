@@ -13,7 +13,7 @@ stages:
           - script: terraform fmt -check -recursive
             displayName: 'Run Terraform format check'
 
-          - script: ./terragrunt hclfmt --terragrunt-check **/*.hcl
+          - script: ./terragrunt hcl format --check
             displayName: 'Run Terragrunt HCL format check'
 
           - script: curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash

@@ -19,6 +19,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Changed
 
 - changed Helm chart builds from mutable `0.0.0-latest` to immutable `0.0.0-<commit>` versioning, ensuring each push produces a unique, traceable chart version
+- changed the java pipeline version from 21 to 25
+- changed the terraform pipeline version from 1.9.3 to 1.14.7
 
 ### Added
 

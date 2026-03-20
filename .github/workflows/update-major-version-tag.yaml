@@ -12,16 +12,26 @@ jobs:
   update-tag:
     name: 'update major version tag'
     runs-on: 'ubuntu-latest'
+    if: >-
+      !github.event.release.prerelease &&
+      contains(github.event.release.tag_name, '.')
     steps:
       - uses: 'actions/checkout@v4'
 
       - name: 'Extract major version'
         id: 'extract'
         run: |
-          TAG="${GITHUB_EVENT_RELEASE_TAG_NAME}"
-          MAJOR=$(echo "${TAG}" | cut -d. -f1)
+          RAW_TAG="${GITHUB_EVENT_RELEASE_TAG_NAME}"
+          # Require SemVer format X.Y.Z with an optional leading "v"
+          if ! echo "${RAW_TAG}" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Error: Release tag '${RAW_TAG}' is not a valid SemVer tag (expected X.Y.Z or vX.Y.Z)" >&2
+            exit 1
+          fi
+          # Strip optional leading "v" before extracting the major component
+          TAG="${RAW_TAG#v}"
+          MAJOR="${TAG%%.*}"
           echo "major=v${MAJOR}" >> "${GITHUB_OUTPUT}"
-          echo "semver=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "semver=${RAW_TAG}" >> "${GITHUB_OUTPUT}"
         env:
           GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
 

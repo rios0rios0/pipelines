@@ -16,6 +16,12 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-03-20
+
+### Added
+
+- added optional LCOV coverage artifact publishing to JavaScript Azure DevOps test stage and downloading in the SonarQube management step, enabling JS/TS coverage reporting in SonarQube
+
 ### Changed
 
 - changed Helm chart builds from mutable `0.0.0-latest` to immutable `0.0.0-<commit>` versioning, ensuring each push produces a unique, traceable chart version
@@ -23,10 +29,6 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed the terraform pipeline version from 1.9.3 to 1.14.7
 - changed Go cross-compile script to use `go vet` instead of `go build` for type-checking without linking, plus vet diagnostics
 - changed `go-binary.yaml` to disable cross-compile check since GoReleaser already handles multi-platform builds in the delivery stage
-
-### Added
-
-- added optional LCOV coverage artifact publishing to JavaScript Azure DevOps test stage and downloading in the SonarQube management step, enabling JS/TS coverage reporting in SonarQube
 
 ### Fixed
 

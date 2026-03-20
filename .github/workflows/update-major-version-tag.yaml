@@ -1,0 +1,54 @@
+name: 'Update Major Version Tag'
+
+on:
+  release:
+    types:
+      - 'published'
+
+permissions:
+  contents: write
+
+jobs:
+  update-tag:
+    name: 'update major version tag'
+    runs-on: 'ubuntu-latest'
+    if: >-
+      !github.event.release.prerelease &&
+      contains(github.event.release.tag_name, '.')
+    steps:
+      - uses: 'actions/checkout@v4'
+
+      - name: 'Extract major version'
+        id: 'extract'
+        run: |
+          RAW_TAG="${GITHUB_EVENT_RELEASE_TAG_NAME}"
+          # Require SemVer format X.Y.Z with an optional leading "v"
+          if ! echo "${RAW_TAG}" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Error: Release tag '${RAW_TAG}' is not a valid SemVer tag (expected X.Y.Z or vX.Y.Z)" >&2
+            exit 1
+          fi
+          # Strip optional leading "v" before extracting the major component
+          TAG="${RAW_TAG#v}"
+          MAJOR="${TAG%%.*}"
+          echo "major=v${MAJOR}" >> "${GITHUB_OUTPUT}"
+          echo "semver=${RAW_TAG}" >> "${GITHUB_OUTPUT}"
+        env:
+          GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+
+      - name: 'Force-update major version tag'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -fa "${{ steps.extract.outputs.major }}" \
+            -m "Update ${{ steps.extract.outputs.major }} to ${{ steps.extract.outputs.semver }}"
+          git push origin "${{ steps.extract.outputs.major }}" --force
+
+      - name: 'Create or update GitHub Release'
+        uses: 'softprops/action-gh-release@v2'
+        with:
+          tag_name: ${{ steps.extract.outputs.major }}
+          name: ${{ steps.extract.outputs.major }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          make_latest: false

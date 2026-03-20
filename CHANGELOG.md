@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added workflow to auto-update major version tags (e.g., `v3`) when a new SemVer release is published, enabling downstream repos to pin to stable `@v3` refs
+
 ## [3.4.0] - 2026-03-20
 
 ### Added

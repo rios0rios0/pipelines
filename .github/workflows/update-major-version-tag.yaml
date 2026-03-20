@@ -1,0 +1,44 @@
+name: 'Update Major Version Tag'
+
+on:
+  release:
+    types:
+      - 'published'
+
+permissions:
+  contents: write
+
+jobs:
+  update-tag:
+    name: 'update major version tag'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'actions/checkout@v4'
+
+      - name: 'Extract major version'
+        id: 'extract'
+        run: |
+          TAG="${GITHUB_EVENT_RELEASE_TAG_NAME}"
+          MAJOR=$(echo "${TAG}" | cut -d. -f1)
+          echo "major=v${MAJOR}" >> "${GITHUB_OUTPUT}"
+          echo "semver=${TAG}" >> "${GITHUB_OUTPUT}"
+        env:
+          GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+
+      - name: 'Force-update major version tag'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -fa "${{ steps.extract.outputs.major }}" \
+            -m "Update ${{ steps.extract.outputs.major }} to ${{ steps.extract.outputs.semver }}"
+          git push origin "${{ steps.extract.outputs.major }}" --force
+
+      - name: 'Create or update GitHub Release'
+        uses: 'softprops/action-gh-release@v2'
+        with:
+          tag_name: ${{ steps.extract.outputs.major }}
+          name: ${{ steps.extract.outputs.major }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          make_latest: false

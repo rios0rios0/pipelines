@@ -2,6 +2,16 @@
 # the parent workflow is responsible for setting up the call events²
 on:
   workflow_call:
+    inputs:
+      sonar_host:
+        description: 'SonarQube/SonarCloud host URL (leave empty to skip SonarQube)'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      sonar_token:
+        description: 'SonarQube authentication token'
+        required: false
     outputs:
       tag_name:
         description: 'The tag name created by the release job'
@@ -142,6 +152,30 @@ jobs:
           yarn install --immutable
           yarn test:ci
         shell: 'bash'
+
+      - name: 'Coverage Report'
+        if: "always() && hashFiles('coverage/coverage-summary.json') != '' && hashFiles('coverage/coverage-final.json') != ''"
+        uses: 'davelosert/vitest-coverage-report-action@v2'
+        with:
+          json-summary-path: 'coverage/coverage-summary.json'
+          json-final-path: 'coverage/coverage-final.json'
+          vite-config-path: 'vite.config.ts'
+
+      - name: 'Test Results'
+        if: "always() && hashFiles('junit-report.xml') != ''"
+        uses: 'dorny/test-reporter@v1'
+        with:
+          name: 'Test Results'
+          path: 'junit-report.xml'
+          reporter: 'java-junit'
+
+      - name: 'Upload Coverage Report'
+        if: "always() && hashFiles('coverage/index.html') != ''"
+        uses: 'actions/upload-artifact@v4'
+        with:
+          name: 'coverage-report'
+          path: 'coverage/'
+          retention-days: 30
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_yarn_audit' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -167,6 +201,40 @@ jobs:
         shell: 'bash'
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_yarn_audit' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
+
+
+  # management stage (optional)
+  management-report_sonarqube:
+    name: 'management > report:sonarqube'
+    runs-on: 'ubuntu-latest'
+    container:
+      image: 'sonarsource/sonar-scanner-cli:6.2.1'
+    needs: ['tests-test_all']
+    if: "inputs.sonar_host != '' && secrets.sonar_token != '' && !startsWith(github.ref, 'refs/tags/')"
+    continue-on-error: true
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: 'Download coverage artifact'
+        uses: 'actions/download-artifact@v4'
+        with:
+          name: 'coverage-report'
+          path: 'coverage/'
+        continue-on-error: true
+
+      - name: 'Checkout scripts'
+        uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+      - name: 'Run SonarQube'
+        run: '${{ env.SCRIPTS_DIR }}/global/scripts/tools/sonarqube/run.sh'
+        shell: 'bash'
+        env:
+          SONAR_HOST_URL: ${{ inputs.sonar_host }}
+          SONAR_TOKEN: ${{ secrets.sonar_token }}
 
 
   # fourth stage
@@ -198,3 +266,5 @@ jobs:
 #   permissions:
 #     security-events: 'write' # security-sast_codeql
 #     contents: 'write' # delivery-release
+#     pull-requests: 'write' # tests-test_all (coverage report comment)
+#     checks: 'write' # tests-test_all (test results annotations)

@@ -47,7 +47,7 @@ pipelines/
 ├── .github/workflows/          # GitHub Actions reusable workflows
 │   ├── go-docker.yaml         # Go with Docker delivery
 │   ├── go-binary.yaml         # Go binary compilation
-│   ├── python-docker.yaml     # Python with Docker
+│   ├── pdm-docker.yaml        # Python/PDM with Docker
 │   ├── java-docker.yaml       # Java/Gradle with Docker delivery
 │   ├── java-maven-docker.yaml # Java/Maven with Docker delivery
 │   ├── javascript-docker.yaml # JavaScript/Yarn with Docker delivery
@@ -153,8 +153,8 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 | `go.yaml`                    | Go testing and quality checks              | Go            |
 | `go-docker.yaml`             | Go with Docker image delivery              | Go            |
 | `go-binary.yaml`             | Go binary compilation and release          | Go            |
-| `python.yaml`                | Python testing and quality checks          | Python        |
-| `python-docker.yaml`         | Python with Docker image delivery          | Python        |
+| `pdm.yaml`                   | Python/PDM testing and quality checks      | Python        |
+| `pdm-docker.yaml`            | Python/PDM with Docker image delivery      | Python        |
 | `java.yaml`                  | Java/Gradle testing and quality checks     | Java          |
 | `java-docker.yaml`           | Java/Gradle with Docker image delivery     | Java          |
 | `javascript.yaml`            | JavaScript/Yarn testing and quality checks | JavaScript    |
@@ -193,7 +193,7 @@ jobs:
     uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'
 ```
 
-#### Usage Example (Python with Docker)
+#### Usage Example (Python/PDM with Docker)
 
 ```yaml
 name: 'CI/CD Pipeline'
@@ -201,12 +201,18 @@ name: 'CI/CD Pipeline'
 on:
   push:
     branches: [ main ]
+    tags: [ '*' ]
   pull_request:
     branches: [ main ]
 
+permissions:
+  security-events: 'write'
+  contents: 'write'
+  packages: 'write'
+
 jobs:
-  pipeline:
-    uses: 'rios0rios0/pipelines/.github/workflows/python-docker.yaml@main'
+  default:
+    uses: 'rios0rios0/pipelines/.github/workflows/pdm-docker.yaml@main'
 ```
 
 #### Usage Example (Java with Docker)

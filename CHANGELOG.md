@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-03-21
+
 ### Added
 
 - added Android (`android/amd64`, `android/arm64`) as build targets to Go cross-compile validation and GoReleaser binary template

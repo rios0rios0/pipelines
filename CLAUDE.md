@@ -31,7 +31,7 @@ All platforms follow consistent numbered stages:
 
 ### Directory Layout
 
-- `.github/workflows/` — GitHub Actions reusable workflows (e.g., `go-docker.yaml`)
+- `.github/workflows/` — GitHub Actions reusable workflows (e.g., `go-docker.yaml`, `pdm-docker.yaml`)
 - `gitlab/<language>/` — GitLab CI templates with `stages/`, `scripts/`, `abstracts/` subdirs
 - `azure-devops/<language>/` — Azure DevOps templates, same structure as GitLab
 - `global/scripts/tools/` — Platform-agnostic security tools (codeql, gitleaks, semgrep, hadolint, trivy, sonarqube, dependency-track)
@@ -40,6 +40,21 @@ All platforms follow consistent numbered stages:
 - `global/containers/` — Docker image definitions for CI environments
 - `makefiles/` — Includable `.mk` fragments for downstream projects (`common.mk`, `golang.mk`, `python.mk`, etc.)
 - `.docs/examples/` — Complete per-platform usage examples
+
+### Workflow Naming Convention
+
+GitHub Actions workflow files (`.github/workflows/`) are named by **package manager or toolchain**, not by language. The language context is already provided by the directory structure (`github/<language>/stages/`). This matches the naming used in Azure DevOps and GitLab.
+
+| Language   | Toolchain     | Workflow Name       | NOT            |
+|------------|---------------|---------------------|----------------|
+| Go         | go            | `go-docker.yaml`    | —              |
+| Python     | PDM           | `pdm-docker.yaml`   | ~~python-docker.yaml~~ |
+| Java       | Gradle        | `java-docker.yaml`  | —              |
+| Java       | Maven         | `java-maven-docker.yaml` | —         |
+| JavaScript | Yarn          | `javascript-docker.yaml` | —         |
+| JavaScript | npm           | `javascript-npm-docker.yaml` | —     |
+
+When adding a new language or toolchain, always use the toolchain name in the workflow file.
 
 ### How Platforms Consume Templates
 

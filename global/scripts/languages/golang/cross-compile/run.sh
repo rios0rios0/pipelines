@@ -13,6 +13,8 @@ TARGETS=(
   "darwin/arm64"
   "windows/amd64"
   "windows/arm64"
+  "android/amd64"
+  "android/arm64"
 )
 
 FAILED=0

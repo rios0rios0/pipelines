@@ -7,7 +7,7 @@ on:
         type: 'boolean'
         required: false
         default: false
-        description: 'Enable cross-compilation check for all 6 OS/arch targets'
+        description: 'Enable cross-compilation check for all 8 OS/arch targets'
 
 # it wasn't needed to set up anything for GoLang because 'ubuntu-latest' has all dependencies
 jobs:

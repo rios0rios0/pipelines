@@ -14,7 +14,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `docker --version && make --version && go version` - Check dependencies
 
 **Common Pipeline Usage:**
-- **GitHub Actions:** Use `.github/workflows/go-docker.yaml@main`, `java-docker.yaml@main`, `java-maven-docker.yaml@main`, `javascript-docker.yaml@main`, `javascript-npm-docker.yaml@main`, `php-docker.yaml@main`, `ruby-docker.yaml@main`, `dotnet-docker.yaml@main`
+- **GitHub Actions:** Use `.github/workflows/go-docker.yaml@main`, `pdm-docker.yaml@main`, `java-docker.yaml@main`, `java-maven-docker.yaml@main`, `javascript-docker.yaml@main`, `javascript-npm-docker.yaml@main`, `php-docker.yaml@main`, `ruby-docker.yaml@main`, `dotnet-docker.yaml@main`
 - **GitLab CI:** Include `gitlab/golang/go-docker.yaml`, `gitlab/terraform/terra.yaml` from this repo
 - **Azure DevOps:** Template `azure-devops/golang/go-docker.yaml@pipelines`
 
@@ -178,7 +178,7 @@ pipelines/
 │   ├── go-docker.yaml         # Go with Docker delivery
 │   ├── go-binary.yaml         # Go binary compilation
 │   ├── go-library.yaml        # Go library publishing
-│   ├── python-docker.yaml     # Python with Docker
+│   ├── pdm-docker.yaml        # Python/PDM with Docker
 │   ├── java-docker.yaml       # Java/Gradle with Docker delivery
 │   ├── java-maven-docker.yaml # Java/Maven with Docker delivery
 │   ├── javascript-docker.yaml # JavaScript/Yarn with Docker delivery
@@ -285,7 +285,7 @@ Each platform follows a consistent **5-stage pipeline architecture**:
 | **Terra CLI**          | ✅              | ✅         | ✅            | Terraform/Terragrunt wrapper              |
 
 **Pipeline Templates Available:**
-- **GitHub Actions:** `go.yaml`, `go-docker.yaml`, `go-binary.yaml`, `go-library.yaml`, `python.yaml`, `python-docker.yaml`, `java.yaml`, `java-docker.yaml`, `java-maven.yaml`, `java-maven-docker.yaml`, `javascript.yaml`, `javascript-docker.yaml`, `javascript-npm.yaml`, `javascript-npm-docker.yaml`, `php.yaml`, `php-docker.yaml`, `ruby.yaml`, `ruby-docker.yaml`, `dotnet.yaml`, `dotnet-docker.yaml`, `terra.yaml`
+- **GitHub Actions:** `go.yaml`, `go-docker.yaml`, `go-binary.yaml`, `go-library.yaml`, `pdm.yaml`, `pdm-docker.yaml`, `java.yaml`, `java-docker.yaml`, `java-maven.yaml`, `java-maven-docker.yaml`, `javascript.yaml`, `javascript-docker.yaml`, `javascript-npm.yaml`, `javascript-npm-docker.yaml`, `php.yaml`, `php-docker.yaml`, `ruby.yaml`, `ruby-docker.yaml`, `dotnet.yaml`, `dotnet-docker.yaml`, `terra.yaml`
 - **GitLab CI:** `go-docker.yaml`, `go-binary.yaml`, `go-docker-k8s-deployment.yaml`, `go-sam.yaml`, `gradle-docker.yaml`, `gradle-docker-k8s-deployment.yaml`, `gradle-library.yaml`, `maven-docker.yaml`, `pdm-docker.yaml`, `pdm-docker-k8s-deployment.yaml`, `pdm-library.yaml`, `yarn-docker.yaml`, `yarn-docker-k8s-deployment.yaml`, `framework.yaml`, `powershell.yaml`, `logstash-docker.yaml`, `terraform/terra.yaml`, `terra/terra.yaml`
 - **Azure DevOps:** `go-docker.yaml`, `go-arm.yaml`, `go-docker-arm.yaml`, `go-docker-k8s.yaml`, `go-docker-with-registry.yaml`, `go-function-arm.yaml`, `go-lambda-sam.yaml`, `go-lambda.yaml`, `go-library.yaml`, `kotlin-gradle.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `core.yaml`, `terraform/terra.yaml`, `terra/terra.yaml`
 

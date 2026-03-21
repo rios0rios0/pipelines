@@ -1,0 +1,26 @@
+on:
+  workflow_call:
+
+jobs:
+  pdm:
+    uses: 'rios0rios0/pipelines/.github/workflows/pdm.yaml@main'
+
+  # fourth stage
+  delivery-release:
+    name: 'delivery > release'
+    runs-on: 'ubuntu-latest'
+    outputs:
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - id: 'release'
+        uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
+    needs: [ 'pdm' ]
+    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore/bump-')"
+
+  delivery-docker:
+    name: 'delivery > docker'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/docker@main'
+    needs: [ 'pdm' ]
+    if: "!failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/'))"

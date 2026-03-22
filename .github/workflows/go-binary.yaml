@@ -23,12 +23,153 @@ on:
         required: false
 
 jobs:
-  go:
-    uses: 'rios0rios0/pipelines/.github/workflows/go.yaml@main'
-    with:
-      sonar_host: ${{ inputs.sonar_host }}
-    secrets:
-      sonar_token: ${{ secrets.sonar_token }}
+  # first stage
+  code_check-basic_checks:
+    name: 'code-check > quality:basic-checks'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/10-code-check/basic-checks@main'
+        with:
+          target_branch: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch || 'main' }}
+    if: "github.event_name == 'pull_request'"
+
+  code_check-style_golangci_lint:
+    name: 'code-check > style:golangci-lint'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/golang/stages/10-code-check/golangci-lint@main'
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
+  # second stage
+  security-sast_codeql:
+    name: 'security > sast:codeql'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
+        with:
+          codeql_language: 'go'
+    needs: [ 'code_check-style_golangci_lint' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sast_semgrep:
+    name: 'security > sast:semgrep'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-semgrep@main'
+        with:
+          semgrep_lang: 'golang'
+    needs: [ 'code_check-style_golangci_lint' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sast_gitleaks:
+    name: 'security > sast:gitleaks'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-gitleaks@main'
+    needs: [ 'code_check-style_golangci_lint' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sast_hadolint:
+    name: 'security > sast:hadolint'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
+    needs: [ 'code_check-style_golangci_lint' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sast_trivy:
+    name: 'security > sast:trivy'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy@main'
+    needs: [ 'code_check-style_golangci_lint' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sca_trivy:
+    name: 'security > sca:trivy'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy-sca@main'
+    needs: [ 'code_check-style_golangci_lint' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sca_govulncheck:
+    name: 'security > sca:govulncheck'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/golang/stages/20-security/govulncheck@main'
+    needs: [ 'code_check-style_golangci_lint' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
+  # third stage
+  tests-test_all:
+    name: 'tests > test:all'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/golang/stages/30-tests/all@main'
+
+      - name: 'Test Results'
+        if: "always() && hashFiles('junit.xml') != ''"
+        uses: 'dorny/test-reporter@v1'
+        with:
+          name: 'Test Results'
+          path: 'junit.xml'
+          reporter: 'java-junit'
+
+      - name: 'Upload Coverage Report'
+        if: "always() && hashFiles('coverage.txt') != ''"
+        uses: 'actions/upload-artifact@v4'
+        with:
+          name: 'coverage-report'
+          path: |
+            coverage.txt
+            cobertura.xml
+          if-no-files-found: ignore
+          retention-days: 30
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_govulncheck' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
+  # management stage (optional)
+  management-report_sonarqube:
+    name: 'management > report:sonarqube'
+    runs-on: 'ubuntu-latest'
+    container:
+      image: 'sonarsource/sonar-scanner-cli:6.2.1'
+    needs: [ 'tests-test_all' ]
+    if: "inputs.sonar_host != '' && !startsWith(github.ref, 'refs/tags/')"
+    continue-on-error: true
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: 'Download coverage artifact'
+        uses: 'actions/download-artifact@v4'
+        with:
+          name: 'coverage-report'
+          path: '.'
+        continue-on-error: true
+
+      - name: 'Checkout scripts'
+        uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+      - name: 'Run SonarQube'
+        run: '${{ env.SCRIPTS_DIR }}/global/scripts/tools/sonarqube/run.sh'
+        shell: 'bash'
+        env:
+          SONAR_HOST_URL: ${{ inputs.sonar_host }}
+          SONAR_TOKEN: ${{ secrets.sonar_token }}
+
 
   # fourth stage
   delivery-release:
@@ -39,7 +180,7 @@ jobs:
     steps:
       - id: 'release'
         uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
-    needs: [ 'go' ]
+    needs: [ 'tests-test_all', 'management-report_sonarqube' ]
     if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore/bump-')"
 
   delivery-binary:
@@ -51,7 +192,7 @@ jobs:
           binary_name: "${{ inputs.binary_name || github.event.repository.name }}"
           binary_path: "${{ inputs.binary_path }}"
           tag_name: "${{ needs.delivery-release.outputs.tag_name || github.ref_name }}"
-    needs: [ 'go', 'delivery-release' ]
+    needs: [ 'tests-test_all', 'management-report_sonarqube', 'delivery-release' ]
     if: "!failure() && (startsWith(github.ref, 'refs/tags/') || needs.delivery-release.outputs.tag_name != '')"
 
 

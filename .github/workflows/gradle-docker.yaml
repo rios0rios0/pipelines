@@ -10,13 +10,18 @@ on:
       sonar_token:
         description: 'SonarQube authentication token'
         required: false
+      NVD_API_KEY:
+        description: 'NVD API key for OWASP Dependency-Check (optional)'
+        required: false
 
 jobs:
   gradle:
     uses: 'rios0rios0/pipelines/.github/workflows/gradle.yaml@main'
     with:
       sonar_host: ${{ inputs.sonar_host }}
-    secrets: inherit
+    secrets:
+      sonar_token: ${{ secrets.sonar_token }}
+      NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
 
   # fourth stage
   delivery-release:

@@ -122,6 +122,17 @@ jobs:
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
+  security-sast_knip:
+    name: 'security > sast:knip'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/javascript/stages/20-security/knip@main'
+        with:
+          package_manager: 'npm'
+    needs: [ 'code_check-style_eslint' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
 
   # third stage
   tests-test_all:
@@ -165,7 +176,7 @@ jobs:
           name: 'coverage-report'
           path: 'coverage/'
           retention-days: 30
-    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_npm_audit' ]
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_npm_audit', 'security-sast_knip' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   tests-test_build:
@@ -185,7 +196,7 @@ jobs:
           npm ci
           npm run build
         shell: 'bash'
-    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_npm_audit' ]
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_npm_audit', 'security-sast_knip' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 

@@ -16,6 +16,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added unused code detection SAST stage for Go (`deadcode`), Python (`vulture`), and JavaScript/TypeScript (`knip`) with composite actions, wrapper scripts, and `make unused` target
+- added `deadcode`, `vulture`, and `knip` named Makefile targets to `golang.mk`, `python.mk`, and `javascript.mk` respectively
+
 ### Changed
 
 - changed Azure DevOps `sonar.projectName` derivation to use `project/repository` format instead of just the repository name

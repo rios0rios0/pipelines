@@ -18,6 +18,8 @@ for pattern in \
   "coverage/*.json" \
   "coverage/*.lcov" \
   "build/reports/coverage*" \
+  "build/reports/jacoco/test/jacocoTestReport.xml" \
+  "target/site/jacoco/jacoco.xml" \
   "TestResults/*.xml" \
   "TestResults/Cobertura.xml"; do
   # shellcheck disable=SC2086
@@ -52,6 +54,18 @@ else
   done
   if [ -n "$GO_REPORT_PATH" ]; then
     echo "sonar.go.coverage.reportPaths=$GO_REPORT_PATH" >> sonar-project.properties
+  fi
+
+  # Auto-detect JaCoCo coverage reports (Gradle and Maven)
+  JACOCO_REPORT_PATH=
+  for p in build/reports/jacoco/test/jacocoTestReport.xml target/site/jacoco/jacoco.xml; do
+    if [ -f "$p" ]; then
+      JACOCO_REPORT_PATH="$p"
+      break
+    fi
+  done
+  if [ -n "$JACOCO_REPORT_PATH" ]; then
+    echo "sonar.coverage.jacoco.xmlReportPaths=$JACOCO_REPORT_PATH" >> sonar-project.properties
   fi
 fi
 

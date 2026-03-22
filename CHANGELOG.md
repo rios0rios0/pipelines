@@ -16,17 +16,15 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-03-22
+
 ### Added
 
 - added Zig as C cross-compiler for Android targets in Go cross-compile check and GoReleaser binary delivery
 - added coverage reporting to `npm.yaml` via `davelosert/vitest-coverage-report-action@v2`, `dorny/test-reporter@v1`, and `actions/upload-artifact@v4`, matching `yarn.yaml` features
-- added optional SonarQube management stage to `npm.yaml` with `sonar_host` input and `sonar_token` secret, matching `yarn.yaml` features
 - added coverage reporting and test results to `go.yaml` via `dorny/test-reporter@v1` and `actions/upload-artifact@v4`
-- added optional SonarQube management stage to `go.yaml` with `sonar_host` input and `sonar_token` secret, matching `yarn.yaml` features
 - added coverage reporting and test results to `gradle.yaml` via `dorny/test-reporter@v1` and `actions/upload-artifact@v4` with JaCoCo detection
 - added optional SonarQube management stage to `gradle.yaml` with `sonar_host` input and `sonar_token` secret, matching `yarn.yaml` features
-- added coverage reporting and test results to `maven.yaml` via `dorny/test-reporter@v1` and `actions/upload-artifact@v4` with JaCoCo detection
-- added optional SonarQube management stage to `maven.yaml` with `sonar_host` input and `sonar_token` secret, matching `yarn.yaml` features
 - added JaCoCo XML report auto-detection for Gradle and Maven in `sonarqube/run.sh`
 - added Python composite actions (`pdm-lint`, `safety`, `tests/all`) under `github/python/stages/`, replacing inline workflow steps and matching Go's composite action pattern
 - added workflow to auto-update major version tags (e.g., `v3`) when a new SemVer release is published, enabling downstream repos to pin to stable `@v3` refs
@@ -44,11 +42,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed Go cross-compile Android targets to use Zig as C cross-compiler (`CGO_ENABLED=1`) instead of skipping when no NDK is available
 - changed Go cross-compile script to support single-target mode via `CROSS_GOOS`/`CROSS_GOARCH` environment variables and parallel execution for all-targets mode
 - changed GoReleaser template to use Zig-based `overrides` for Android targets with `CGO_ENABLED=1`, fixing Android binary builds
-- changed `bundler.yaml` to stages 1-3 only, moving `delivery-release` to variant workflows following Go/PDM pattern
 - changed `composer.yaml` to stages 1-3 only, moving `delivery-release` to variant workflows following Go/PDM pattern
 - changed `gradle.yaml` to stages 1-3 only (code check, security, tests), moving `delivery-release` to variant workflows following Go/PDM pattern
-- changed `maven.yaml` to stages 1-3 only, moving `delivery-release` to variant workflows following Go/PDM pattern
-- changed `npm.yaml` to stages 1-3 only, moving `delivery-release` to variant workflows following Go/PDM pattern
 - changed `npm-docker.yaml` to declare and forward `sonar_host` input and `sonar_token` secret to the inner `npm.yaml` workflow
 - changed `go-docker.yaml`, `go-binary.yaml`, and `go-library.yaml` to declare and forward `sonar_host` input and `sonar_token` secret to the inner `go.yaml` workflow
 - changed `gradle-docker.yaml` to declare and forward `sonar_host` input and `sonar_token` secret to the inner `gradle.yaml` workflow
@@ -62,16 +57,16 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed `yarn.yaml` to stages 1-3 only (code check, security, tests, management), moving `delivery-release` to variant workflows following Go/PDM pattern
 - changed `yarn-docker.yaml` to declare and forward `sonar_host` input and `sonar_token` secret to the inner `yarn.yaml` workflow
 
-### Removed
-
-- simplified CGO skip/fallback logic in Go cross-compile script in favor of Zig-based Android compilation when Zig is available (Android targets are skipped locally if Zig is not installed; CI installs Zig so Android cross-compilation remains validated)
-
 ### Fixed
 
 - fixed `yarn.yaml` and `npm.yaml` SonarQube job failing at workflow parse time by removing `secrets.sonar_token` from job-level `if` condition (GitHub Actions does not allow `secrets` context in reusable workflow job `if` expressions)
 - fixed `pdm.yaml` display names for `flake8` and `mypy` jobs from `style:` to `quality:` to match their job IDs
 - fixed missing `continue-on-error: true` on `mypy` and `safety` jobs to match Azure DevOps golden standard
 - fixed `pdm-docker.yaml` skipping all code check, security, and test stages when used standalone
+
+### Removed
+
+- simplified CGO skip/fallback logic in Go cross-compile script in favor of Zig-based Android compilation when Zig is available (Android targets are skipped locally if Zig is not installed; CI installs Zig so Android cross-compilation remains validated)
 
 ## [3.4.0] - 2026-03-20
 

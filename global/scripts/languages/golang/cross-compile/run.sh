@@ -32,7 +32,11 @@ for target in "${TARGETS[@]}"; do
   fi
 
   output=$(CGO_ENABLED="$cgo_enabled" GOOS="$os" GOARCH="$arch" go vet ./... 2>&1) || {
-    if [[ "$cgo_enabled" -eq 1 ]] && echo "$output" | grep -q "requires external (cgo) linking"; then
+    if [[ "$cgo_enabled" -eq 1 ]] && { \
+      [[ "$output" == *"requires external (cgo) linking"* ]] || \
+      [[ "$output" == *"C compiler"* ]] || \
+      [[ "$output" == *"exec: \""*"\": executable file not found"* ]]; \
+    }; then
       echo "SKIP: ${os}/${arch} (requires cgo; no C cross-compiler available)"
     else
       echo "$output"

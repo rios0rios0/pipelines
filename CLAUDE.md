@@ -49,10 +49,13 @@ GitHub Actions workflow files (`.github/workflows/`) are named by **package mana
 |------------|---------------|---------------------|----------------|
 | Go         | go            | `go-docker.yaml`    | —              |
 | Python     | PDM           | `pdm-docker.yaml`   | ~~python-docker.yaml~~ |
-| Java       | Gradle        | `java-docker.yaml`  | —              |
-| Java       | Maven         | `java-maven-docker.yaml` | —         |
-| JavaScript | Yarn          | `javascript-docker.yaml` | —         |
-| JavaScript | npm           | `javascript-npm-docker.yaml` | —     |
+| Java       | Gradle        | `gradle-docker.yaml` | ~~java-docker.yaml~~       |
+| Java       | Maven         | `maven-docker.yaml`  | ~~java-maven-docker.yaml~~ |
+| JavaScript | Yarn          | `yarn-docker.yaml`   | ~~javascript-docker.yaml~~     |
+| JavaScript | npm           | `npm-docker.yaml`    | ~~javascript-npm-docker.yaml~~ |
+| PHP        | Composer      | `composer-docker.yaml` | ~~php-docker.yaml~~          |
+| Ruby       | Bundler       | `bundler-docker.yaml`  | ~~ruby-docker.yaml~~         |
+| C#         | dotnet        | `dotnet-docker.yaml` | —              |
 
 When adding a new language or toolchain, always use the toolchain name in the workflow file.
 

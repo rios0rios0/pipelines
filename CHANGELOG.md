@@ -18,6 +18,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
+- added Claude Code workflow (`claude.yaml`) for AI-assisted issue and PR comment handling via `@claude` mentions
+- added Claude Code Review workflow (`claude-code-review.yaml`) for automated PR code review on open/sync/reopen events
 - added Zig as C cross-compiler for Android targets in Go cross-compile check and GoReleaser binary delivery
 - added coverage reporting to `npm.yaml` via `davelosert/vitest-coverage-report-action@v2`, `dorny/test-reporter@v1`, and `actions/upload-artifact@v4`, matching `yarn.yaml` features
 - added optional SonarQube management stage to `npm.yaml` with `sonar_host` input and `sonar_token` secret, matching `yarn.yaml` features

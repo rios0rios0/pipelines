@@ -117,6 +117,15 @@ jobs:
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
+  security-sast_vulture:
+    name: 'security > sast:vulture'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/python/stages/20-security/vulture@main'
+    needs: [ 'code_check-style_isort', 'code_check-style_black', 'code_check-quality_flake8', 'code_check-quality_mypy' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
 
   # third stage
   tests-test_all:
@@ -124,7 +133,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/python/stages/30-tests/all@main'
-    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_safety' ]
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_safety', 'security-sast_vulture' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 

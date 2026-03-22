@@ -130,6 +130,15 @@ jobs:
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
+  security-sast_deadcode:
+    name: 'security > sast:deadcode'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/golang/stages/20-security/deadcode@main'
+    needs: [ 'code_check-style_golangci_lint' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
 
   # third stage
   tests-test_all:
@@ -156,7 +165,7 @@ jobs:
             cobertura.xml
           if-no-files-found: ignore
           retention-days: 30
-    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_govulncheck' ]
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_govulncheck', 'security-sast_deadcode' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 

@@ -4,6 +4,15 @@
 # Uses "go vet" instead of "go build" — this performs full type-checking without
 # linking (faster), and additionally runs vet diagnostics (printf, structtag, etc.)
 # which may surface issues beyond pure compilation errors.
+#
+# Android targets require CGO_ENABLED=1 with Zig as the C cross-compiler.
+# All other targets use CGO_ENABLED=0 (pure Go, no C toolchain needed).
+#
+# Usage:
+#   Run all targets in parallel (local development):
+#     ./run.sh
+#   Run a single target (CI matrix mode):
+#     CROSS_GOOS=linux CROSS_GOARCH=amd64 ./run.sh
 set -euo pipefail
 
 TARGETS=(
@@ -17,33 +26,57 @@ TARGETS=(
   "android/arm64"
 )
 
-# Targets that require cgo (external linking). These are checked with CGO_ENABLED=1
-# and skipped when no C cross-compiler is available.
-CGO_REQUIRED_OS="android"
-
-FAILED=0
-for target in "${TARGETS[@]}"; do
-  IFS='/' read -r os arch <<< "$target"
+vet_target() {
+  local os="$1" arch="$2"
   echo "=== Type-checking for ${os}/${arch} ==="
 
-  cgo_enabled=0
-  if [[ "$os" == "$CGO_REQUIRED_OS" ]]; then
-    cgo_enabled=1
+  if [ "$os" = "android" ]; then
+    if ! command -v zig &>/dev/null; then
+      echo "SKIP: ${os}/${arch} (zig not installed; install Zig to enable Android cross-compile)"
+      return 0
+    fi
+    local zig_arch
+    case "$arch" in
+      arm64) zig_arch="aarch64" ;;
+      amd64) zig_arch="x86_64" ;;
+      *)
+        echo "FAIL: ${os}/${arch} (unsupported Android architecture)"
+        return 1
+        ;;
+    esac
+    CC="zig cc -target ${zig_arch}-linux-android28" \
+    CXX="zig c++ -target ${zig_arch}-linux-android28" \
+    CGO_ENABLED=1 GOOS="$os" GOARCH="$arch" go vet ./... 2>&1
+  else
+    CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go vet ./... 2>&1
   fi
 
-  output=$(CGO_ENABLED="$cgo_enabled" GOOS="$os" GOARCH="$arch" go vet ./... 2>&1) || {
-    if [[ "$cgo_enabled" -eq 1 ]] && { \
-      [[ "$output" == *"requires external (cgo) linking"* ]] || \
-      [[ "$output" == *"C compiler"* ]] || \
-      [[ "$output" == *"exec: \""*"\": executable file not found"* ]]; \
-    }; then
-      echo "SKIP: ${os}/${arch} (requires cgo; no C cross-compiler available)"
-    else
-      echo "$output"
-      echo "FAIL: ${os}/${arch}"
-      FAILED=1
-    fi
-  }
+  echo "PASS: ${os}/${arch}"
+}
+
+# Single-target mode: when CROSS_GOOS and CROSS_GOARCH are both set,
+# check only that one target and exit. Used by CI matrix jobs.
+if [ -n "${CROSS_GOOS:-}" ] && [ -n "${CROSS_GOARCH:-}" ]; then
+  vet_target "$CROSS_GOOS" "$CROSS_GOARCH"
+  exit $?
+fi
+
+# All-targets mode: run every target in parallel (for local development).
+PIDS=()
+TARGETS_MAP=()
+for target in "${TARGETS[@]}"; do
+  IFS='/' read -r os arch <<< "$target"
+  vet_target "$os" "$arch" &
+  PIDS+=($!)
+  TARGETS_MAP+=("$target")
+done
+
+FAILED=0
+for i in "${!PIDS[@]}"; do
+  if ! wait "${PIDS[$i]}"; then
+    echo "FAIL: ${TARGETS_MAP[$i]}"
+    FAILED=1
+  fi
 done
 
 if [ "$FAILED" -ne 0 ]; then

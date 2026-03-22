@@ -7,6 +7,7 @@ This directory contains **language-agnostic** security and quality tools used ac
 | Tool                | Purpose                                                            |
 |---------------------|--------------------------------------------------------------------|
 | `codeql/`           | Static Application Security Testing (SAST)                         |
+| `deadcode/`         | Dead code and unused file detection (Go, Python, JS/TS, Java)      |
 | `dependency-track/` | Software Composition Analysis (SCA) tracking                       |
 | `gitleaks/`         | Secret and credential detection in Git history                     |
 | `hadolint/`         | Dockerfile linting and best practices                              |

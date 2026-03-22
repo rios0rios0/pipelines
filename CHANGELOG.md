@@ -18,6 +18,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
+- added dead code detection SAST tool (`global/scripts/tools/deadcode/`) supporting Go (`deadcode`), Python (`vulture`), JavaScript/TypeScript (`knip`), and Java (`PMD`) with JSON report output to `build/reports/deadcode/`
+- added `deadcode` target to `makefiles/common.mk` and `DEADCODE_LANGUAGE` variable to all language-specific makefiles (golang.mk, python.mk, java.mk, javascript.mk)
+- added `deadcode` composite action for GitHub Actions (`github/global/stages/20-security/deadcode/action.yaml`)
+- added `deadcode` templates for GitLab CI (`gitlab/global/stages/20-security/deadcode.yaml`) and Azure DevOps (`azure-devops/global/stages/20-security/deadcode.yaml`)
+- added configurable false positive handling via `.deadcode-ignore` file with per-language pattern support
 - added Claude Code workflow (`claude.yaml`) for AI-assisted issue and PR comment handling via `@claude` mentions
 - added Claude Code Review workflow (`claude-code-review.yaml`) for automated PR code review on open/sync/reopen events
 - added Zig as C cross-compiler for Android targets in Go cross-compile check and GoReleaser binary delivery

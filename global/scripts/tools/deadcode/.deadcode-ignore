@@ -1,0 +1,14 @@
+# Dead code false positive patterns.
+# Lines starting with '#' are comments. Blank lines are ignored.
+# Each line is a pattern (regex for Go, name for Python/JS) to exclude from results.
+#
+# Common false positives:
+# - Entry points (main, init, exported APIs)
+# - Reflection-based code
+# - Plugin architectures
+# - Test helpers
+#
+# Examples:
+# main
+# init
+# TestMain

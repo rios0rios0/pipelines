@@ -4,11 +4,11 @@
 #   SCRIPTS_DIR ?= $(HOME)/Development/github.com/rios0rios0/pipelines
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #
-# Targets provided: setup codeql semgrep trivy hadolint gitleaks sast
-# Requires: SCRIPTS_DIR to be set. SEMGREP_LANGUAGE and CODEQL_LANGUAGE should be set by a language
+# Targets provided: setup codeql semgrep trivy hadolint gitleaks deadcode sast
+# Requires: SCRIPTS_DIR to be set. SEMGREP_LANGUAGE, CODEQL_LANGUAGE, and DEADCODE_LANGUAGE should be set by a language
 #           .mk file (e.g. golang.mk) or manually before including this file.
 
-.PHONY: setup codeql semgrep trivy hadolint gitleaks sast
+.PHONY: setup codeql semgrep trivy hadolint gitleaks deadcode sast
 
 setup:
 	@curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
@@ -28,4 +28,7 @@ hadolint:
 gitleaks:
 	-@$(SCRIPTS_DIR)/global/scripts/tools/gitleaks/run.sh
 
-sast: codeql semgrep trivy hadolint gitleaks
+deadcode:
+	-@$(SCRIPTS_DIR)/global/scripts/tools/deadcode/run.sh "$(DEADCODE_LANGUAGE)"
+
+sast: codeql semgrep trivy hadolint gitleaks deadcode

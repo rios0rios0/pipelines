@@ -6,12 +6,13 @@
 #   -include $(SCRIPTS_DIR)/makefiles/javascript.mk
 #
 # Targets provided: lint, test
-# Also sets CODEQL_LANGUAGE=javascript, SEMGREP_LANGUAGE=javascript for the common.mk sast target.
+# Also sets CODEQL_LANGUAGE=javascript, SEMGREP_LANGUAGE=javascript, DEADCODE_LANGUAGE=javascript for the common.mk sast target.
 #
 # Prerequisites: Yarn must be installed and the project must have a package.json.
 
 CODEQL_LANGUAGE ?= javascript
 SEMGREP_LANGUAGE ?= javascript
+DEADCODE_LANGUAGE ?= javascript
 
 .PHONY: lint test
 

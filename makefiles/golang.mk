@@ -6,10 +6,11 @@
 #   -include $(SCRIPTS_DIR)/makefiles/golang.mk
 #
 # Targets provided: lint, test, cross-compile, cyclonedx
-# Also sets CODEQL_LANGUAGE=go, SEMGREP_LANGUAGE=golang for the common.mk sast target.
+# Also sets CODEQL_LANGUAGE=go, SEMGREP_LANGUAGE=golang, DEADCODE_LANGUAGE=go for the common.mk sast target.
 
 CODEQL_LANGUAGE ?= go
 SEMGREP_LANGUAGE ?= golang
+DEADCODE_LANGUAGE ?= go
 export PREFIX ?= .
 export REPORT_PATH ?= ./reports
 

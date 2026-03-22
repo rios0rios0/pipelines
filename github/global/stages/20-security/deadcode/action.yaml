@@ -1,0 +1,27 @@
+inputs:
+  language:
+    description: 'Language to analyze (go, python, javascript, java)'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - name: 'Get Scripts'
+      uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - name: 'Execute'
+      shell: 'bash'
+      run: $SCRIPTS_DIR/global/scripts/tools/deadcode/run.sh "${{ inputs.language }}"
+
+    - name: 'Upload Report'
+      uses: 'actions/upload-artifact@v6'
+      with:
+        name: 'deadcode'
+        path: 'build/reports/deadcode/'
+        if-no-files-found: 'warn'
+        overwrite: 'true'
+        retention-days: 10
+      if: always()

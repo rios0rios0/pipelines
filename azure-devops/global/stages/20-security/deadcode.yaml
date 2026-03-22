@@ -1,0 +1,12 @@
+jobs:
+  - job: 'sast_deadcode'
+    displayName: 'sast:deadcode'
+    steps:
+      - template: '../../abstracts/scripts-repo.yaml'
+      - script: $(Scripts.Directory)/global/scripts/tools/deadcode/run.sh "$(DEADCODE_LANGUAGE)"
+        continueOnError: true
+
+      - task: 'PublishPipelineArtifact@1'
+        inputs:
+          artifactName: 'deadcode'
+          targetPath: 'build/reports/deadcode'

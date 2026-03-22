@@ -6,12 +6,13 @@
 #   -include $(SCRIPTS_DIR)/makefiles/python.mk
 #
 # Targets provided: lint, safety, test, cyclonedx
-# Also sets CODEQL_LANGUAGE=python, SEMGREP_LANGUAGE=python for the common.mk SAST target.
+# Also sets CODEQL_LANGUAGE=python, SEMGREP_LANGUAGE=python, DEADCODE_LANGUAGE=python for the common.mk SAST target.
 #
 # Prerequisites: PDM must be installed and the project must have a pyproject.toml.
 
 CODEQL_LANGUAGE ?= python
 SEMGREP_LANGUAGE ?= python
+DEADCODE_LANGUAGE ?= python
 export PREFIX ?= .
 export REPORT_PATH ?= ./reports
 

@@ -6,12 +6,13 @@
 #   -include $(SCRIPTS_DIR)/makefiles/java.mk
 #
 # Targets provided: lint, test
-# Also sets CODEQL_LANGUAGE=java, SEMGREP_LANGUAGE=java for the common.mk sast target.
+# Also sets CODEQL_LANGUAGE=java, SEMGREP_LANGUAGE=java, DEADCODE_LANGUAGE=java for the common.mk sast target.
 #
 # Prerequisites: Gradle wrapper (gradlew) must be present in the project root.
 
 CODEQL_LANGUAGE ?= java
 SEMGREP_LANGUAGE ?= java
+DEADCODE_LANGUAGE ?= java
 
 .PHONY: lint test
 

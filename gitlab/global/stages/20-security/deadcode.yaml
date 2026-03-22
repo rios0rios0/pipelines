@@ -1,0 +1,14 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo-alpine-docker.yaml'
+
+sast:deadcode:
+  extends: '.scripts-repo-alpine-docker'
+  stage: 'security (sca/sast)'
+  script:
+    - $SCRIPTS_DIR/global/scripts/tools/deadcode/run.sh "$DEADCODE_LANGUAGE"
+  artifacts:
+    when: 'always'
+    paths:
+      - "$REPORT_PATH/deadcode.json"
+  dependencies: [] # prevent from fetching artifacts

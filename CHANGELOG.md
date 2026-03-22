@@ -21,6 +21,13 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added Zig as C cross-compiler for Android targets in Go cross-compile check and GoReleaser binary delivery
 - added coverage reporting to `npm.yaml` via `davelosert/vitest-coverage-report-action@v2`, `dorny/test-reporter@v1`, and `actions/upload-artifact@v4`, matching `yarn.yaml` features
 - added optional SonarQube management stage to `npm.yaml` with `sonar_host` input and `sonar_token` secret, matching `yarn.yaml` features
+- added coverage reporting and test results to `go.yaml` via `dorny/test-reporter@v1` and `actions/upload-artifact@v4`
+- added optional SonarQube management stage to `go.yaml` with `sonar_host` input and `sonar_token` secret, matching `yarn.yaml` features
+- added coverage reporting and test results to `gradle.yaml` via `dorny/test-reporter@v1` and `actions/upload-artifact@v4` with JaCoCo detection
+- added optional SonarQube management stage to `gradle.yaml` with `sonar_host` input and `sonar_token` secret, matching `yarn.yaml` features
+- added coverage reporting and test results to `maven.yaml` via `dorny/test-reporter@v1` and `actions/upload-artifact@v4` with JaCoCo detection
+- added optional SonarQube management stage to `maven.yaml` with `sonar_host` input and `sonar_token` secret, matching `yarn.yaml` features
+- added JaCoCo XML report auto-detection for Gradle and Maven in `sonarqube/run.sh`
 - added Python composite actions (`pdm-lint`, `safety`, `tests/all`) under `github/python/stages/`, replacing inline workflow steps and matching Go's composite action pattern
 - added workflow to auto-update major version tags (e.g., `v3`) when a new SemVer release is published, enabling downstream repos to pin to stable `@v3` refs
 
@@ -43,6 +50,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed `maven.yaml` to stages 1-3 only, moving `delivery-release` to variant workflows following Go/PDM pattern
 - changed `npm.yaml` to stages 1-3 only, moving `delivery-release` to variant workflows following Go/PDM pattern
 - changed `npm-docker.yaml` to declare and forward `sonar_host` input and `sonar_token` secret to the inner `npm.yaml` workflow
+- changed `go-docker.yaml`, `go-binary.yaml`, and `go-library.yaml` to declare and forward `sonar_host` input and `sonar_token` secret to the inner `go.yaml` workflow
+- changed `gradle-docker.yaml` to declare and forward `sonar_host` input and `sonar_token` secret to the inner `gradle.yaml` workflow
+- changed `maven-docker.yaml` to declare and forward `sonar_host` input and `sonar_token` secret to the inner `maven.yaml` workflow
+- changed `sonarqube/run.sh` to detect JaCoCo coverage reports at Gradle and Maven standard paths
 - changed `pdm.yaml` to stages 1-3 only (code check, security, tests), moving `delivery-release` to variant workflows following Go's pattern
 - changed `pdm.yaml` to use composite actions instead of inline container-based steps, migrating from `python:3.10-pdm-bullseye` container to `actions/setup-python@v6` with Python `3.13`
 - changed `pdm.yaml` `tests-test_all` dependency chain to include all security jobs (SAST + SCA), matching Go's behavior

@@ -1,0 +1,253 @@
+# see the bottom of the file for more information¹
+# the parent workflow is responsible for setting up the call events²
+on:
+  workflow_call:
+    inputs:
+      sonar_host:
+        description: 'SonarQube/SonarCloud host URL (leave empty to skip SonarQube)'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      sonar_token:
+        description: 'SonarQube authentication token'
+        required: false
+
+jobs:
+  # first stage
+  code_check-basic_checks:
+    name: 'code-check > quality:basic-checks'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/10-code-check/basic-checks@main'
+        with:
+          target_branch: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch || 'main' }}
+    if: "github.event_name == 'pull_request'"
+
+  code_check-style_eslint:
+    name: 'code-check > style:eslint'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+
+      - name: 'Enable Corepack'
+        run: 'corepack enable'
+
+      - name: 'Setup Node.js'
+        uses: 'actions/setup-node@v4'
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - run: |
+          yarn install --immutable
+          yarn lint:ci
+        shell: 'bash'
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
+  # second stage
+  security-sast_codeql:
+    name: 'security > sast:codeql'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
+        with:
+          codeql_language: 'javascript-typescript'
+    needs: [ 'code_check-style_eslint' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sast_semgrep:
+    name: 'security > sast:semgrep'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-semgrep@main'
+        with:
+          semgrep_lang: 'javascript'
+    needs: [ 'code_check-style_eslint' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sast_gitleaks:
+    name: 'security > sast:gitleaks'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-gitleaks@main'
+    needs: [ 'code_check-style_eslint' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sast_hadolint:
+    name: 'security > sast:hadolint'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
+    needs: [ 'code_check-style_eslint' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sast_trivy:
+    name: 'security > sast:trivy'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy@main'
+    needs: [ 'code_check-style_eslint' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sca_trivy:
+    name: 'security > sca:trivy'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy-sca@main'
+    needs: [ 'code_check-style_eslint' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sca_yarn_audit:
+    name: 'security > sca:yarn-audit'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+
+      - name: 'Enable Corepack'
+        run: 'corepack enable'
+
+      - name: 'Setup Node.js'
+        uses: 'actions/setup-node@v4'
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - run: 'yarn npm audit --recursive --severity high'
+        shell: 'bash'
+    needs: [ 'code_check-style_eslint' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
+  # third stage
+  tests-test_all:
+    name: 'tests > test:all'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+
+      - name: 'Enable Corepack'
+        run: 'corepack enable'
+
+      - name: 'Setup Node.js'
+        uses: 'actions/setup-node@v4'
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - run: |
+          yarn install --immutable
+          yarn test:ci
+        shell: 'bash'
+
+      - name: 'Coverage Report'
+        if: "always() && hashFiles('coverage/coverage-summary.json') != '' && hashFiles('coverage/coverage-final.json') != ''"
+        uses: 'davelosert/vitest-coverage-report-action@v2'
+        with:
+          json-summary-path: 'coverage/coverage-summary.json'
+          json-final-path: 'coverage/coverage-final.json'
+          vite-config-path: 'vite.config.ts'
+
+      - name: 'Test Results'
+        if: "always() && hashFiles('junit-report.xml') != ''"
+        uses: 'dorny/test-reporter@v1'
+        with:
+          name: 'Test Results'
+          path: 'junit-report.xml'
+          reporter: 'java-junit'
+
+      - name: 'Upload Coverage Report'
+        if: "always() && hashFiles('coverage/index.html') != ''"
+        uses: 'actions/upload-artifact@v4'
+        with:
+          name: 'coverage-report'
+          path: 'coverage/'
+          retention-days: 30
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_yarn_audit' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  tests-test_build:
+    name: 'tests > test:build'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+
+      - name: 'Enable Corepack'
+        run: 'corepack enable'
+
+      - name: 'Setup Node.js'
+        uses: 'actions/setup-node@v4'
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - run: |
+          yarn install --immutable
+          yarn build
+        shell: 'bash'
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_yarn_audit' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
+  # management stage (optional)
+  management-report_sonarqube:
+    name: 'management > report:sonarqube'
+    runs-on: 'ubuntu-latest'
+    container:
+      image: 'sonarsource/sonar-scanner-cli:6.2.1'
+    needs: ['tests-test_all']
+    if: "inputs.sonar_host != '' && secrets.sonar_token != '' && !startsWith(github.ref, 'refs/tags/')"
+    continue-on-error: true
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: 'Download coverage artifact'
+        uses: 'actions/download-artifact@v4'
+        with:
+          name: 'coverage-report'
+          path: 'coverage/'
+        continue-on-error: true
+
+      - name: 'Checkout scripts'
+        uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+      - name: 'Run SonarQube'
+        run: '${{ env.SCRIPTS_DIR }}/global/scripts/tools/sonarqube/run.sh'
+        shell: 'bash'
+        env:
+          SONAR_HOST_URL: ${{ inputs.sonar_host }}
+          SONAR_TOKEN: ${{ secrets.sonar_token }}
+
+
+
+# 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations
+# 2 - the recommended events to trigger this workflow and permissions are:
+#   on:
+#     push:
+#       branches:
+#         - 'main'
+#       tags:
+#         - '*'
+#     pull_request:
+#       branches:
+#         - 'main'
+#     workflow_dispatch:
+#
+#   permissions:
+#     security-events: 'write' # security-sast_codeql
+#     pull-requests: 'write' # tests-test_all (coverage report comment)
+#     checks: 'write' # tests-test_all (test results annotations)

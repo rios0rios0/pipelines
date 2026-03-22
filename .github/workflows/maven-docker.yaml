@@ -2,8 +2,9 @@ on:
   workflow_call:
 
 jobs:
-  dotnet:
-    uses: 'rios0rios0/pipelines/.github/workflows/dotnet.yaml@main'
+  maven:
+    uses: 'rios0rios0/pipelines/.github/workflows/maven.yaml@main'
+    secrets: inherit
 
   # fourth stage
   delivery-release:
@@ -14,7 +15,7 @@ jobs:
     steps:
       - id: 'release'
         uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
-    needs: [ 'dotnet' ]
+    needs: [ 'maven' ]
     if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore/bump-')"
 
   delivery-docker:
@@ -22,5 +23,5 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/docker@main'
-    needs: [ 'dotnet' ]
+    needs: [ 'maven' ]
     if: "!failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/'))"

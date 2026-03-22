@@ -49,6 +49,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
+- fixed `yarn.yaml` and `npm.yaml` SonarQube job failing at workflow parse time by removing `secrets.sonar_token` from job-level `if` condition (GitHub Actions does not allow `secrets` context in reusable workflow job `if` expressions)
 - fixed `pdm.yaml` display names for `flake8` and `mypy` jobs from `style:` to `quality:` to match their job IDs
 - fixed missing `continue-on-error: true` on `mypy` and `safety` jobs to match Azure DevOps golden standard
 - fixed `pdm-docker.yaml` skipping all code check, security, and test stages when used standalone

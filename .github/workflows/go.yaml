@@ -8,6 +8,15 @@ on:
         required: false
         default: false
         description: 'Enable cross-compilation check for 8 OS/arch targets (runs in parallel via matrix)'
+      sonar_host:
+        description: 'SonarQube/SonarCloud host URL (leave empty to skip SonarQube)'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      sonar_token:
+        description: 'SonarQube authentication token'
+        required: false
 
 # it wasn't needed to set up anything for GoLang because 'ubuntu-latest' has all dependencies
 jobs:
@@ -132,8 +141,61 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/golang/stages/30-tests/all@main'
+
+      - name: 'Test Results'
+        if: "always() && hashFiles('junit.xml') != ''"
+        uses: 'dorny/test-reporter@v1'
+        with:
+          name: 'Test Results'
+          path: 'junit.xml'
+          reporter: 'java-junit'
+
+      - name: 'Upload Coverage Report'
+        if: "always() && hashFiles('coverage.txt') != ''"
+        uses: 'actions/upload-artifact@v4'
+        with:
+          name: 'coverage-report'
+          path: |
+            coverage.txt
+            cobertura.xml
+          if-no-files-found: ignore
+          retention-days: 30
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_govulncheck' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
+
+
+  # management stage (optional)
+  management-report_sonarqube:
+    name: 'management > report:sonarqube'
+    runs-on: 'ubuntu-latest'
+    container:
+      image: 'sonarsource/sonar-scanner-cli:6.2.1'
+    needs: ['tests-test_all']
+    if: "inputs.sonar_host != '' && !startsWith(github.ref, 'refs/tags/')"
+    continue-on-error: true
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: 'Download coverage artifact'
+        uses: 'actions/download-artifact@v4'
+        with:
+          name: 'coverage-report'
+          path: '.'
+        continue-on-error: true
+
+      - name: 'Checkout scripts'
+        uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+      - name: 'Run SonarQube'
+        run: '${{ env.SCRIPTS_DIR }}/global/scripts/tools/sonarqube/run.sh'
+        shell: 'bash'
+        env:
+          SONAR_HOST_URL: ${{ inputs.sonar_host }}
+          SONAR_TOKEN: ${{ secrets.sonar_token }}
 
 
 # 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations
@@ -150,6 +212,5 @@ jobs:
 #   workflow_dispatch:
 #
 # permissions:
-#   checks: 'write' # code_check-style_golangci_lint
+#   checks: 'write' # code_check-style_golangci_lint, tests-test_all (test results annotations)
 #   security-events: 'write' # security-sast_codeql
-#   contents: 'write' # delivery-release

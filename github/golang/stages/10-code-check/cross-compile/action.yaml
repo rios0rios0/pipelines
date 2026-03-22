@@ -1,3 +1,13 @@
+inputs:
+  goos:
+    description: 'Target OS for single-target mode (e.g., linux, darwin, windows, android). Leave empty for all targets.'
+    required: false
+    default: ''
+  goarch:
+    description: 'Target architecture for single-target mode (e.g., amd64, arm64). Leave empty for all targets.'
+    required: false
+    default: ''
+
 runs:
   using: 'composite'
   steps:
@@ -10,7 +20,14 @@ runs:
         go-version-file: 'go.mod'
         cache-dependency-path: 'go.sum'
 
+    - name: 'Setup Zig'
+      if: inputs.goos == 'android' || inputs.goos == ''
+      uses: 'mlugg/setup-zig@v1'
+
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 
     - run: $SCRIPTS_DIR/global/scripts/languages/golang/cross-compile/run.sh
       shell: 'bash'
+      env:
+        CROSS_GOOS: ${{ inputs.goos }}
+        CROSS_GOARCH: ${{ inputs.goarch }}

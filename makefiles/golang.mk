@@ -5,15 +5,17 @@
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #   -include $(SCRIPTS_DIR)/makefiles/golang.mk
 #
-# Targets provided: lint, test, cross-compile, cyclonedx
+# Targets provided: lint, test, cross-compile, cyclonedx, deadcode
 # Also sets CODEQL_LANGUAGE=go, SEMGREP_LANGUAGE=golang for the common.mk sast target.
+# Sets UNUSED_SCRIPT to the deadcode runner for the common.mk unused target.
 
 CODEQL_LANGUAGE ?= go
 SEMGREP_LANGUAGE ?= golang
+UNUSED_SCRIPT = $(SCRIPTS_DIR)/global/scripts/languages/golang/deadcode/run.sh
 export PREFIX ?= .
 export REPORT_PATH ?= ./reports
 
-.PHONY: lint test cross-compile cyclonedx
+.PHONY: lint test cross-compile cyclonedx deadcode
 
 lint:
 	@$(SCRIPTS_DIR)/global/scripts/languages/golang/golangci-lint/run.sh --fix .
@@ -26,3 +28,6 @@ cross-compile:
 
 cyclonedx:
 	@$(SCRIPTS_DIR)/global/scripts/languages/golang/cyclonedx/run.sh
+
+deadcode:
+	-@$(SCRIPTS_DIR)/global/scripts/languages/golang/deadcode/run.sh

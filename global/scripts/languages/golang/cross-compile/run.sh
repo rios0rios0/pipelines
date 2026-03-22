@@ -39,6 +39,10 @@ vet_target() {
     case "$arch" in
       arm64) zig_arch="aarch64" ;;
       amd64) zig_arch="x86_64" ;;
+      *)
+        echo "FAIL: ${os}/${arch} (unsupported Android architecture)"
+        return 1
+        ;;
     esac
     CC="zig cc -target ${zig_arch}-linux-android28" \
     CXX="zig c++ -target ${zig_arch}-linux-android28" \

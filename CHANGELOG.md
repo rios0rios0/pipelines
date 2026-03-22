@@ -53,7 +53,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Removed
 
-- removed CGO skip/fallback logic from Go cross-compile script (replaced by Zig-based Android compilation)
+- simplified CGO skip/fallback logic in Go cross-compile script in favor of Zig-based Android compilation when Zig is available (Android targets are skipped locally if Zig is not installed; CI installs Zig so Android cross-compilation remains validated)
 
 ### Fixed
 

@@ -1,0 +1,19 @@
+name: 'CI/CD Pipeline'
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ '*' ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  security-events: write  # Required for CodeQL
+  contents: write          # Required for releases
+  packages: write          # Required for container registry
+  pull-requests: write     # Required for coverage report comments
+  checks: write            # Required for test result annotations
+
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/yarn-docker.yaml@main'

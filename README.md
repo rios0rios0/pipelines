@@ -48,12 +48,12 @@ pipelines/
 │   ├── go-docker.yaml         # Go with Docker delivery
 │   ├── go-binary.yaml         # Go binary compilation
 │   ├── pdm-docker.yaml        # Python/PDM with Docker
-│   ├── java-docker.yaml       # Java/Gradle with Docker delivery
-│   ├── java-maven-docker.yaml # Java/Maven with Docker delivery
-│   ├── javascript-docker.yaml # JavaScript/Yarn with Docker delivery
-│   ├── javascript-npm-docker.yaml # JavaScript/npm with Docker delivery
-│   ├── php-docker.yaml        # PHP with Docker delivery
-│   ├── ruby-docker.yaml       # Ruby with Docker delivery
+│   ├── gradle-docker.yaml     # Java/Gradle with Docker delivery
+│   ├── maven-docker.yaml      # Java/Maven with Docker delivery
+│   ├── yarn-docker.yaml       # JavaScript/Yarn with Docker delivery
+│   ├── npm-docker.yaml        # JavaScript/npm with Docker delivery
+│   ├── composer-docker.yaml   # PHP/Composer with Docker delivery
+│   ├── bundler-docker.yaml    # Ruby/Bundler with Docker delivery
 │   ├── dotnet-docker.yaml     # .NET with Docker delivery
 │   └── ...
 ├── gitlab/                     # GitLab CI pipeline templates
@@ -155,20 +155,20 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 | `go-binary.yaml`             | Go binary compilation and release          | Go            |
 | `pdm.yaml`                   | Python/PDM testing and quality checks      | Python        |
 | `pdm-docker.yaml`            | Python/PDM with Docker image delivery      | Python        |
-| `java.yaml`                  | Java/Gradle testing and quality checks     | Java          |
-| `java-docker.yaml`           | Java/Gradle with Docker image delivery     | Java          |
-| `javascript.yaml`            | JavaScript/Yarn testing and quality checks | JavaScript    |
-| `javascript-docker.yaml`     | JavaScript/Yarn with Docker image delivery | JavaScript    |
+| `gradle.yaml`                | Java/Gradle testing and quality checks     | Java          |
+| `gradle-docker.yaml`         | Java/Gradle with Docker image delivery     | Java          |
+| `yarn.yaml`                  | JavaScript/Yarn testing and quality checks | JavaScript    |
+| `yarn-docker.yaml`           | JavaScript/Yarn with Docker image delivery | JavaScript    |
 | `dotnet.yaml`                | .NET testing and quality checks            | C#            |
 | `dotnet-docker.yaml`         | .NET with Docker image delivery            | C#            |
-| `javascript-npm.yaml`        | JavaScript/npm testing and quality checks  | JavaScript    |
-| `javascript-npm-docker.yaml` | JavaScript/npm with Docker image delivery  | JavaScript    |
-| `java-maven.yaml`            | Java/Maven testing and quality checks      | Java          |
-| `java-maven-docker.yaml`     | Java/Maven with Docker image delivery      | Java          |
-| `php.yaml`                   | PHP/Composer testing and quality checks    | PHP           |
-| `php-docker.yaml`            | PHP/Composer with Docker image delivery    | PHP           |
-| `ruby.yaml`                  | Ruby/Bundler testing and quality checks    | Ruby          |
-| `ruby-docker.yaml`           | Ruby/Bundler with Docker image delivery    | Ruby          |
+| `npm.yaml`                   | JavaScript/npm testing and quality checks  | JavaScript    |
+| `npm-docker.yaml`            | JavaScript/npm with Docker image delivery  | JavaScript    |
+| `maven.yaml`                 | Java/Maven testing and quality checks      | Java          |
+| `maven-docker.yaml`          | Java/Maven with Docker image delivery      | Java          |
+| `composer.yaml`              | PHP/Composer testing and quality checks    | PHP           |
+| `composer-docker.yaml`       | PHP/Composer with Docker image delivery    | PHP           |
+| `bundler.yaml`               | Ruby/Bundler testing and quality checks    | Ruby          |
+| `bundler-docker.yaml`        | Ruby/Bundler with Docker image delivery    | Ruby          |
 | `terra.yaml`                 | Terra CLI quality, security, and tests     | Terraform/HCL |
 
 #### Usage Example (Go with Docker)
@@ -234,10 +234,10 @@ permissions:
 
 jobs:
   pipeline:
-    uses: 'rios0rios0/pipelines/.github/workflows/java-docker.yaml@main'
+    uses: 'rios0rios0/pipelines/.github/workflows/gradle-docker.yaml@main'
 ```
 
-#### Usage Example (JavaScript with Docker)
+#### Usage Example (JavaScript/Yarn with Docker)
 
 ```yaml
 name: 'CI/CD Pipeline'
@@ -253,10 +253,12 @@ permissions:
   security-events: write
   contents: write
   packages: write
+  pull-requests: write
+  checks: write
 
 jobs:
   pipeline:
-    uses: 'rios0rios0/pipelines/.github/workflows/javascript-docker.yaml@main'
+    uses: 'rios0rios0/pipelines/.github/workflows/yarn-docker.yaml@main'
 ```
 
 #### Usage Example (.NET with Docker)
@@ -297,10 +299,12 @@ permissions:
   security-events: write
   contents: write
   packages: write
+  pull-requests: write
+  checks: write
 
 jobs:
   pipeline:
-    uses: 'rios0rios0/pipelines/.github/workflows/javascript-npm-docker.yaml@main'
+    uses: 'rios0rios0/pipelines/.github/workflows/npm-docker.yaml@main'
 ```
 
 #### Usage Example (Java/Maven with Docker)
@@ -322,7 +326,7 @@ permissions:
 
 jobs:
   pipeline:
-    uses: 'rios0rios0/pipelines/.github/workflows/java-maven-docker.yaml@main'
+    uses: 'rios0rios0/pipelines/.github/workflows/maven-docker.yaml@main'
 ```
 
 #### Usage Example (PHP with Docker)
@@ -343,7 +347,7 @@ permissions:
 
 jobs:
   pipeline:
-    uses: 'rios0rios0/pipelines/.github/workflows/php-docker.yaml@main'
+    uses: 'rios0rios0/pipelines/.github/workflows/composer-docker.yaml@main'
 ```
 
 #### Usage Example (Ruby with Docker)
@@ -365,7 +369,7 @@ permissions:
 
 jobs:
   pipeline:
-    uses: 'rios0rios0/pipelines/.github/workflows/ruby-docker.yaml@main'
+    uses: 'rios0rios0/pipelines/.github/workflows/bundler-docker.yaml@main'
 ```
 
 ![GitHub Actions Example](.docs/github-golang.png)

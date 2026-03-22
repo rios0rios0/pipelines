@@ -19,16 +19,33 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Added
 
 - added Android (`android/amd64`, `android/arm64`) as build targets to Go cross-compile validation and GoReleaser binary template
-- added workflow to auto-update major version tags (e.g., `v3`) when a new SemVer release is published, enabling downstream repos to pin to stable `@v3` refs
+- added coverage reporting to `npm.yaml` via `davelosert/vitest-coverage-report-action@v2`, `dorny/test-reporter@v1`, and `actions/upload-artifact@v4`, matching `yarn.yaml` features
+- added optional SonarQube management stage to `npm.yaml` with `sonar_host` input and `sonar_token` secret, matching `yarn.yaml` features
 - added Python composite actions (`pdm-lint`, `safety`, `tests/all`) under `github/python/stages/`, replacing inline workflow steps and matching Go's composite action pattern
+- added workflow to auto-update major version tags (e.g., `v3`) when a new SemVer release is published, enabling downstream repos to pin to stable `@v3` refs
 
 ### Changed
 
-- changed `python.yaml` to `pdm.yaml` and `python-docker.yaml` to `pdm-docker.yaml`, matching the Azure DevOps and GitLab naming convention (package manager prefix, not language)
-- changed `pdm.yaml` to use composite actions instead of inline container-based steps, migrating from `python:3.10-pdm-bullseye` container to `actions/setup-python@v6` with Python `3.13`
+- **BREAKING CHANGE:** changed `dotnet.yaml` to stages 1-3 only, moving `delivery-release` to `dotnet-docker.yaml` following Go/PDM pattern
+- **BREAKING CHANGE:** changed `java.yaml` to `gradle.yaml` and `java-docker.yaml` to `gradle-docker.yaml`, matching the toolchain naming convention
+- **BREAKING CHANGE:** changed `java-maven.yaml` to `maven.yaml` and `java-maven-docker.yaml` to `maven-docker.yaml`, matching the toolchain naming convention
+- **BREAKING CHANGE:** changed `javascript.yaml` to `yarn.yaml` and `javascript-docker.yaml` to `yarn-docker.yaml`, matching the toolchain naming convention
+- **BREAKING CHANGE:** changed `javascript-npm.yaml` to `npm.yaml` and `javascript-npm-docker.yaml` to `npm-docker.yaml`, matching the toolchain naming convention
+- **BREAKING CHANGE:** changed `php.yaml` to `composer.yaml` and `php-docker.yaml` to `composer-docker.yaml`, matching the toolchain naming convention
+- **BREAKING CHANGE:** changed `ruby.yaml` to `bundler.yaml` and `ruby-docker.yaml` to `bundler-docker.yaml`, matching the toolchain naming convention
+- changed `bundler.yaml` to stages 1-3 only, moving `delivery-release` to variant workflows following Go/PDM pattern
+- changed `composer.yaml` to stages 1-3 only, moving `delivery-release` to variant workflows following Go/PDM pattern
+- changed `gradle.yaml` to stages 1-3 only (code check, security, tests), moving `delivery-release` to variant workflows following Go/PDM pattern
+- changed `maven.yaml` to stages 1-3 only, moving `delivery-release` to variant workflows following Go/PDM pattern
+- changed `npm.yaml` to stages 1-3 only, moving `delivery-release` to variant workflows following Go/PDM pattern
+- changed `npm-docker.yaml` to declare and forward `sonar_host` input and `sonar_token` secret to the inner `npm.yaml` workflow
 - changed `pdm.yaml` to stages 1-3 only (code check, security, tests), moving `delivery-release` to variant workflows following Go's pattern
-- changed `pdm-docker.yaml` to call `pdm.yaml` via `uses:` and add delivery jobs, matching the standard `-docker.yaml` composition pattern used by Go and all other languages
+- changed `pdm.yaml` to use composite actions instead of inline container-based steps, migrating from `python:3.10-pdm-bullseye` container to `actions/setup-python@v6` with Python `3.13`
 - changed `pdm.yaml` `tests-test_all` dependency chain to include all security jobs (SAST + SCA), matching Go's behavior
+- changed `pdm-docker.yaml` to call `pdm.yaml` via `uses:` and add delivery jobs, matching the standard `-docker.yaml` composition pattern used by Go and all other languages
+- changed `python.yaml` to `pdm.yaml` and `python-docker.yaml` to `pdm-docker.yaml`, matching the Azure DevOps and GitLab naming convention (package manager prefix, not language)
+- changed `yarn.yaml` to stages 1-3 only (code check, security, tests, management), moving `delivery-release` to variant workflows following Go/PDM pattern
+- changed `yarn-docker.yaml` to declare and forward `sonar_host` input and `sonar_token` secret to the inner `yarn.yaml` workflow
 
 ### Fixed
 

@@ -14,7 +14,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `docker --version && make --version && go version` - Check dependencies
 
 **Common Pipeline Usage:**
-- **GitHub Actions:** Use `.github/workflows/go-docker.yaml@main`, `pdm-docker.yaml@main`, `java-docker.yaml@main`, `java-maven-docker.yaml@main`, `javascript-docker.yaml@main`, `javascript-npm-docker.yaml@main`, `php-docker.yaml@main`, `ruby-docker.yaml@main`, `dotnet-docker.yaml@main`
+- **GitHub Actions:** Use `.github/workflows/go-docker.yaml@main`, `pdm-docker.yaml@main`, `gradle-docker.yaml@main`, `maven-docker.yaml@main`, `yarn-docker.yaml@main`, `npm-docker.yaml@main`, `composer-docker.yaml@main`, `bundler-docker.yaml@main`, `dotnet-docker.yaml@main`
 - **GitLab CI:** Include `gitlab/golang/go-docker.yaml`, `gitlab/terraform/terra.yaml` from this repo
 - **Azure DevOps:** Template `azure-devops/golang/go-docker.yaml@pipelines`
 
@@ -179,12 +179,12 @@ pipelines/
 │   ├── go-binary.yaml         # Go binary compilation
 │   ├── go-library.yaml        # Go library publishing
 │   ├── pdm-docker.yaml        # Python/PDM with Docker
-│   ├── java-docker.yaml       # Java/Gradle with Docker delivery
-│   ├── java-maven-docker.yaml # Java/Maven with Docker delivery
-│   ├── javascript-docker.yaml # JavaScript/Yarn with Docker delivery
-│   ├── javascript-npm-docker.yaml # JavaScript/npm with Docker delivery
-│   ├── php-docker.yaml        # PHP with Docker delivery
-│   ├── ruby-docker.yaml       # Ruby with Docker delivery
+│   ├── gradle-docker.yaml     # Java/Gradle with Docker delivery
+│   ├── maven-docker.yaml      # Java/Maven with Docker delivery
+│   ├── yarn-docker.yaml       # JavaScript/Yarn with Docker delivery
+│   ├── npm-docker.yaml        # JavaScript/npm with Docker delivery
+│   ├── composer-docker.yaml   # PHP/Composer with Docker delivery
+│   ├── bundler-docker.yaml    # Ruby/Bundler with Docker delivery
 │   ├── dotnet-docker.yaml     # .NET with Docker delivery
 │   └── ...
 ├── github/                     # GitHub Actions pipeline stage templates
@@ -285,7 +285,7 @@ Each platform follows a consistent **5-stage pipeline architecture**:
 | **Terra CLI**          | ✅              | ✅         | ✅            | Terraform/Terragrunt wrapper              |
 
 **Pipeline Templates Available:**
-- **GitHub Actions:** `go.yaml`, `go-docker.yaml`, `go-binary.yaml`, `go-library.yaml`, `pdm.yaml`, `pdm-docker.yaml`, `java.yaml`, `java-docker.yaml`, `java-maven.yaml`, `java-maven-docker.yaml`, `javascript.yaml`, `javascript-docker.yaml`, `javascript-npm.yaml`, `javascript-npm-docker.yaml`, `php.yaml`, `php-docker.yaml`, `ruby.yaml`, `ruby-docker.yaml`, `dotnet.yaml`, `dotnet-docker.yaml`, `terra.yaml`
+- **GitHub Actions:** `go.yaml`, `go-docker.yaml`, `go-binary.yaml`, `go-library.yaml`, `pdm.yaml`, `pdm-docker.yaml`, `gradle.yaml`, `gradle-docker.yaml`, `maven.yaml`, `maven-docker.yaml`, `yarn.yaml`, `yarn-docker.yaml`, `npm.yaml`, `npm-docker.yaml`, `composer.yaml`, `composer-docker.yaml`, `bundler.yaml`, `bundler-docker.yaml`, `dotnet.yaml`, `dotnet-docker.yaml`, `terra.yaml`
 - **GitLab CI:** `go-docker.yaml`, `go-binary.yaml`, `go-docker-k8s-deployment.yaml`, `go-sam.yaml`, `gradle-docker.yaml`, `gradle-docker-k8s-deployment.yaml`, `gradle-library.yaml`, `maven-docker.yaml`, `pdm-docker.yaml`, `pdm-docker-k8s-deployment.yaml`, `pdm-library.yaml`, `yarn-docker.yaml`, `yarn-docker-k8s-deployment.yaml`, `framework.yaml`, `powershell.yaml`, `logstash-docker.yaml`, `terraform/terra.yaml`, `terra/terra.yaml`
 - **Azure DevOps:** `go-docker.yaml`, `go-arm.yaml`, `go-docker-arm.yaml`, `go-docker-k8s.yaml`, `go-docker-with-registry.yaml`, `go-function-arm.yaml`, `go-lambda-sam.yaml`, `go-lambda.yaml`, `go-library.yaml`, `kotlin-gradle.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `core.yaml`, `terraform/terra.yaml`, `terra/terra.yaml`
 
@@ -395,7 +395,7 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/terraform/terra.yaml'
 ```
 
-#### Java with Docker (GitHub Actions)
+#### Java/Gradle with Docker (GitHub Actions)
 ```yaml
 name: 'CI/CD Pipeline'
 on:
@@ -410,10 +410,10 @@ permissions:
   packages: write
 jobs:
   pipeline:
-    uses: 'rios0rios0/pipelines/.github/workflows/java-docker.yaml@main'
+    uses: 'rios0rios0/pipelines/.github/workflows/gradle-docker.yaml@main'
 ```
 
-#### JavaScript with Docker (GitHub Actions)
+#### JavaScript/Yarn with Docker (GitHub Actions)
 ```yaml
 name: 'CI/CD Pipeline'
 on:
@@ -426,9 +426,11 @@ permissions:
   security-events: write
   contents: write
   packages: write
+  pull-requests: write
+  checks: write
 jobs:
   pipeline:
-    uses: 'rios0rios0/pipelines/.github/workflows/javascript-docker.yaml@main'
+    uses: 'rios0rios0/pipelines/.github/workflows/yarn-docker.yaml@main'
 ```
 
 #### .NET with Docker (GitHub Actions)
@@ -462,9 +464,11 @@ permissions:
   security-events: write
   contents: write
   packages: write
+  pull-requests: write
+  checks: write
 jobs:
   pipeline:
-    uses: 'rios0rios0/pipelines/.github/workflows/javascript-npm-docker.yaml@main'
+    uses: 'rios0rios0/pipelines/.github/workflows/npm-docker.yaml@main'
 ```
 
 #### Java/Maven with Docker (GitHub Actions)
@@ -482,10 +486,10 @@ permissions:
   packages: write
 jobs:
   pipeline:
-    uses: 'rios0rios0/pipelines/.github/workflows/java-maven-docker.yaml@main'
+    uses: 'rios0rios0/pipelines/.github/workflows/maven-docker.yaml@main'
 ```
 
-#### PHP with Docker (GitHub Actions)
+#### PHP/Composer with Docker (GitHub Actions)
 ```yaml
 name: 'CI/CD Pipeline'
 on:
@@ -499,10 +503,10 @@ permissions:
   packages: write
 jobs:
   pipeline:
-    uses: 'rios0rios0/pipelines/.github/workflows/php-docker.yaml@main'
+    uses: 'rios0rios0/pipelines/.github/workflows/composer-docker.yaml@main'
 ```
 
-#### Ruby with Docker (GitHub Actions)
+#### Ruby/Bundler with Docker (GitHub Actions)
 ```yaml
 name: 'CI/CD Pipeline'
 on:
@@ -517,7 +521,7 @@ permissions:
   packages: write
 jobs:
   pipeline:
-    uses: 'rios0rios0/pipelines/.github/workflows/ruby-docker.yaml@main'
+    uses: 'rios0rios0/pipelines/.github/workflows/bundler-docker.yaml@main'
 ```
 
 ### Testing Pipeline Changes in Development Branches

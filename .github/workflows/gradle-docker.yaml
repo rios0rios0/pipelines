@@ -1,9 +1,21 @@
 on:
   workflow_call:
+    inputs:
+      sonar_host:
+        description: 'SonarQube/SonarCloud host URL (leave empty to skip SonarQube)'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      sonar_token:
+        description: 'SonarQube authentication token'
+        required: false
 
 jobs:
   gradle:
     uses: 'rios0rios0/pipelines/.github/workflows/gradle.yaml@main'
+    with:
+      sonar_host: ${{ inputs.sonar_host }}
     secrets: inherit
 
   # fourth stage

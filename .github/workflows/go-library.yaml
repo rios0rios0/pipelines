@@ -8,12 +8,24 @@ on:
         required: false
         default: '["", "v"]'
         description: 'JSON array of tag prefixes (e.g., ''["", "v"]''). Use ''[""]'' for no prefix.'
+      sonar_host:
+        description: 'SonarQube/SonarCloud host URL (leave empty to skip SonarQube)'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      sonar_token:
+        description: 'SonarQube authentication token'
+        required: false
 
 jobs:
   go:
     uses: 'rios0rios0/pipelines/.github/workflows/go.yaml@main'
     with:
       cross_compile: true
+      sonar_host: ${{ inputs.sonar_host }}
+    secrets:
+      sonar_token: ${{ secrets.sonar_token }}
 
   # fourth stage
   delivery-release:

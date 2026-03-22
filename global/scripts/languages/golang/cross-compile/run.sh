@@ -17,14 +17,33 @@ TARGETS=(
   "android/arm64"
 )
 
+# Targets that require cgo (external linking). These are checked with CGO_ENABLED=1
+# and skipped when no C cross-compiler is available.
+CGO_REQUIRED_OS="android"
+
 FAILED=0
 for target in "${TARGETS[@]}"; do
   IFS='/' read -r os arch <<< "$target"
   echo "=== Type-checking for ${os}/${arch} ==="
-  if ! CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go vet ./...; then
-    echo "FAIL: ${os}/${arch}"
-    FAILED=1
+
+  cgo_enabled=0
+  if [[ "$os" == "$CGO_REQUIRED_OS" ]]; then
+    cgo_enabled=1
   fi
+
+  output=$(CGO_ENABLED="$cgo_enabled" GOOS="$os" GOARCH="$arch" go vet ./... 2>&1) || {
+    if [[ "$cgo_enabled" -eq 1 ]] && { \
+      [[ "$output" == *"requires external (cgo) linking"* ]] || \
+      [[ "$output" == *"C compiler"* ]] || \
+      [[ "$output" == *"exec: \""*"\": executable file not found"* ]]; \
+    }; then
+      echo "SKIP: ${os}/${arch} (requires cgo; no C cross-compiler available)"
+    else
+      echo "$output"
+      echo "FAIL: ${os}/${arch}"
+      FAILED=1
+    fi
+  }
 done
 
 if [ "$FAILED" -ne 0 ]; then

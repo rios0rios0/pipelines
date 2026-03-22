@@ -1,9 +1,23 @@
 on:
   workflow_call:
+    inputs:
+      sonar_host:
+        description: 'SonarQube/SonarCloud host URL (leave empty to skip SonarQube)'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      sonar_token:
+        description: 'SonarQube authentication token'
+        required: false
 
 jobs:
-  dotnet:
-    uses: 'rios0rios0/pipelines/.github/workflows/dotnet.yaml@main'
+  yarn:
+    uses: 'rios0rios0/pipelines/.github/workflows/yarn.yaml@main'
+    with:
+      sonar_host: ${{ inputs.sonar_host }}
+    secrets:
+      sonar_token: ${{ secrets.sonar_token }}
 
   # fourth stage
   delivery-release:
@@ -14,7 +28,7 @@ jobs:
     steps:
       - id: 'release'
         uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
-    needs: [ 'dotnet' ]
+    needs: [ 'yarn' ]
     if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore/bump-')"
 
   delivery-docker:
@@ -22,5 +36,5 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/docker@main'
-    needs: [ 'dotnet' ]
+    needs: [ 'yarn' ]
     if: "!failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/'))"

@@ -18,7 +18,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added Android (`android/amd64`, `android/arm64`) as build targets to Go cross-compile validation and GoReleaser binary template
+- added Zig as C cross-compiler for Android targets in Go cross-compile check and GoReleaser binary delivery
 - added coverage reporting to `npm.yaml` via `davelosert/vitest-coverage-report-action@v2`, `dorny/test-reporter@v1`, and `actions/upload-artifact@v4`, matching `yarn.yaml` features
 - added optional SonarQube management stage to `npm.yaml` with `sonar_host` input and `sonar_token` secret, matching `yarn.yaml` features
 - added Python composite actions (`pdm-lint`, `safety`, `tests/all`) under `github/python/stages/`, replacing inline workflow steps and matching Go's composite action pattern
@@ -33,6 +33,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - **BREAKING CHANGE:** changed `javascript-npm.yaml` to `npm.yaml` and `javascript-npm-docker.yaml` to `npm-docker.yaml`, matching the toolchain naming convention
 - **BREAKING CHANGE:** changed `php.yaml` to `composer.yaml` and `php-docker.yaml` to `composer-docker.yaml`, matching the toolchain naming convention
 - **BREAKING CHANGE:** changed `ruby.yaml` to `bundler.yaml` and `ruby-docker.yaml` to `bundler-docker.yaml`, matching the toolchain naming convention
+- changed Go cross-compile CI job to run 8 OS/arch targets in parallel via GitHub Actions matrix strategy instead of sequentially
+- changed Go cross-compile Android targets to use Zig as C cross-compiler (`CGO_ENABLED=1`) instead of skipping when no NDK is available
+- changed Go cross-compile script to support single-target mode via `CROSS_GOOS`/`CROSS_GOARCH` environment variables and parallel execution for all-targets mode
+- changed GoReleaser template to use Zig-based `overrides` for Android targets with `CGO_ENABLED=1`, fixing Android binary builds
 - changed `bundler.yaml` to stages 1-3 only, moving `delivery-release` to variant workflows following Go/PDM pattern
 - changed `composer.yaml` to stages 1-3 only, moving `delivery-release` to variant workflows following Go/PDM pattern
 - changed `gradle.yaml` to stages 1-3 only (code check, security, tests), moving `delivery-release` to variant workflows following Go/PDM pattern
@@ -46,6 +50,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed `python.yaml` to `pdm.yaml` and `python-docker.yaml` to `pdm-docker.yaml`, matching the Azure DevOps and GitLab naming convention (package manager prefix, not language)
 - changed `yarn.yaml` to stages 1-3 only (code check, security, tests, management), moving `delivery-release` to variant workflows following Go/PDM pattern
 - changed `yarn-docker.yaml` to declare and forward `sonar_host` input and `sonar_token` secret to the inner `yarn.yaml` workflow
+
+### Removed
+
+- removed CGO skip/fallback logic from Go cross-compile script (replaced by Zig-based Android compilation)
 
 ### Fixed
 

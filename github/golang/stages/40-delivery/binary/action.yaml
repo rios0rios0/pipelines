@@ -31,6 +31,9 @@ runs:
         go-version-file: 'go.mod'
         cache-dependency-path: 'go.sum'
 
+    - name: 'Setup Zig'
+      uses: 'mlugg/setup-zig@v1'
+
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 
     - name: 'Prepare GoReleaser config'

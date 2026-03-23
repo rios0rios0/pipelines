@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed Docker delivery composite action failing with `Password required` by adding `actions/checkout@v6`, defaulting `github_token` to `github.token`, and computing image tags via `docker/metadata-action@v5` when not provided
+
 ## [4.0.0] - 2026-03-23
 
 ### Added

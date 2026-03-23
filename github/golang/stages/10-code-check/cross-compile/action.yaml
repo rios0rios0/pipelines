@@ -23,6 +23,7 @@ runs:
     - name: 'Setup Android NDK'
       if: inputs.goos == 'android' || inputs.goos == ''
       uses: 'nttld/setup-ndk@v1'
+      id: 'setup-ndk'
       with:
         ndk-version: 'r27c'
 

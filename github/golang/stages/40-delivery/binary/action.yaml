@@ -32,7 +32,7 @@ runs:
         cache-dependency-path: 'go.sum'
 
     - name: 'Setup Zig'
-      uses: 'mlugg/setup-zig@v1'
+      uses: 'mlugg/setup-zig@v2'
 
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 

@@ -4,6 +4,11 @@ inputs:
     type: 'string'
     required: false
     default: ''
+  tag_name:
+    description: 'Release version (e.g., 1.2.3). When provided, computes semver Docker tags directly instead of using docker/metadata-action.'
+    type: 'string'
+    required: false
+    default: ''
   tags:
     description: 'Docker image tags (computed automatically via docker/metadata-action if not provided)'
     type: 'string'
@@ -16,6 +21,23 @@ runs:
     - name: 'Checkout code'
       uses: 'actions/checkout@v6'
 
+    - name: 'Compute tags from release version'
+      id: 'release-tags'
+      shell: 'bash'
+      run: |
+        MAJOR_MINOR="${TAG_NAME%.*}"
+        {
+          echo 'tags<<EOF'
+          echo "${IMAGE}:latest"
+          echo "${IMAGE}:${TAG_NAME}"
+          echo "${IMAGE}:${MAJOR_MINOR}"
+          echo 'EOF'
+        } >> "$GITHUB_OUTPUT"
+      env:
+        TAG_NAME: '${{ inputs.tag_name }}'
+        IMAGE: 'ghcr.io/${{ github.repository }}'
+      if: "inputs.tags == '' && inputs.tag_name != ''"
+
     - name: 'Extract Docker metadata'
       id: 'meta'
       uses: 'docker/metadata-action@v5'
@@ -25,7 +47,7 @@ runs:
           type=raw,value=latest,enable={{is_default_branch}}
           type=semver,pattern={{version}}
           type=semver,pattern={{major}}.{{minor}}
-      if: "inputs.tags == ''"
+      if: "inputs.tags == '' && inputs.tag_name == ''"
 
     - name: 'Login to Registry'
       uses: 'docker/login-action@v3'
@@ -40,4 +62,4 @@ runs:
         file: '.ci/stages/40-delivery/app.Dockerfile'
         context: '.'
         push: true
-        tags: '${{ inputs.tags || steps.meta.outputs.tags }}'
+        tags: '${{ inputs.tags || steps.release-tags.outputs.tags || steps.meta.outputs.tags }}'

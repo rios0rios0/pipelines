@@ -44,8 +44,8 @@ vet_target() {
         return 1
         ;;
     esac
-    CC="zig cc -target ${zig_arch}-linux-android28" \
-    CXX="zig c++ -target ${zig_arch}-linux-android28" \
+    CC="zig cc -target ${zig_arch}-linux-android.28" \
+    CXX="zig c++ -target ${zig_arch}-linux-android.28" \
     CGO_ENABLED=1 GOOS="$os" GOARCH="$arch" go vet ./... 2>&1
   else
     CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go vet ./... 2>&1

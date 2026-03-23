@@ -75,6 +75,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed missing `continue-on-error: true` on `mypy` and `safety` jobs to match Azure DevOps golden standard
 - fixed `pdm-docker.yaml` skipping all code check, security, and test stages when used standalone
 - fixed Zig setup action failing with HTTP 404 when downloading Zig 0.15.2 by upgrading `mlugg/setup-zig` from v1 to v2
+- fixed Zig 0.15.x Android cross-compilation by using dot-separated API level format (`android.28`) instead of concatenated (`android28`)
 
 ## [3.4.0] - 2026-03-20
 

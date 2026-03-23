@@ -20,9 +20,11 @@ runs:
         go-version-file: 'go.mod'
         cache-dependency-path: 'go.sum'
 
-    - name: 'Setup Zig'
+    - name: 'Setup Android NDK'
       if: inputs.goos == 'android' || inputs.goos == ''
-      uses: 'mlugg/setup-zig@v2'
+      uses: 'nttld/setup-ndk@v1'
+      with:
+        ndk-version: 'r27c'
 
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 

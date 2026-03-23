@@ -20,7 +20,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - added Claude Code workflow (`claude.yaml`) for AI-assisted issue and PR comment handling via `@claude` mentions
 - added Claude Code Review workflow (`claude-code-review.yaml`) for automated PR code review on open/sync/reopen events
-- added Zig as C cross-compiler for Android targets in Go cross-compile check and GoReleaser binary delivery
+- added Android NDK Clang as C cross-compiler for Android targets in GoReleaser binary delivery via `nttld/setup-ndk@v1`
 - added coverage reporting to `npm.yaml` via `davelosert/vitest-coverage-report-action@v2`, `dorny/test-reporter@v1`, and `actions/upload-artifact@v4`, matching `yarn.yaml` features
 - added optional SonarQube management stage to `npm.yaml` with `sonar_host` input and `sonar_token` secret, matching `yarn.yaml` features
 - added coverage reporting and test results to `go.yaml` via `dorny/test-reporter@v1` and `actions/upload-artifact@v4`
@@ -43,9 +43,9 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - **BREAKING CHANGE:** changed `php.yaml` to `composer.yaml` and `php-docker.yaml` to `composer-docker.yaml`, matching the toolchain naming convention
 - **BREAKING CHANGE:** changed `ruby.yaml` to `bundler.yaml` and `ruby-docker.yaml` to `bundler-docker.yaml`, matching the toolchain naming convention
 - changed Go cross-compile CI job to run 8 OS/arch targets in parallel via GitHub Actions matrix strategy instead of sequentially
-- changed Go cross-compile Android targets to use Zig as C cross-compiler (`CGO_ENABLED=1`) instead of skipping when no NDK is available
+- changed Go cross-compile Android targets to use Android NDK Clang as C cross-compiler (`CGO_ENABLED=1`) instead of Zig, fixing missing bionic libc headers
 - changed Go cross-compile script to support single-target mode via `CROSS_GOOS`/`CROSS_GOARCH` environment variables and parallel execution for all-targets mode
-- changed GoReleaser template to use Zig-based `overrides` for Android targets with `CGO_ENABLED=1`, fixing Android binary builds
+- changed GoReleaser template to use Android NDK Clang `overrides` for Android targets with `CGO_ENABLED=1`, fixing Android binary builds
 - changed `bundler.yaml` to stages 1-3 only, moving `delivery-release` to variant workflows following Go/PDM pattern
 - changed `composer.yaml` to stages 1-3 only, moving `delivery-release` to variant workflows following Go/PDM pattern
 - changed `gradle.yaml` to stages 1-3 only (code check, security, tests), moving `delivery-release` to variant workflows following Go/PDM pattern
@@ -66,7 +66,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Removed
 
-- simplified CGO skip/fallback logic in Go cross-compile script in favor of Zig-based Android compilation when Zig is available (Android targets are skipped locally if Zig is not installed; CI installs Zig so Android cross-compilation remains validated)
+- removed Zig dependency from Go cross-compile check and GoReleaser delivery in favor of `CGO_ENABLED=0` for type-checking and Android NDK Clang for binary builds
 
 ### Fixed
 
@@ -74,8 +74,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed `pdm.yaml` display names for `flake8` and `mypy` jobs from `style:` to `quality:` to match their job IDs
 - fixed missing `continue-on-error: true` on `mypy` and `safety` jobs to match Azure DevOps golden standard
 - fixed `pdm-docker.yaml` skipping all code check, security, and test stages when used standalone
-- fixed Zig setup action failing with HTTP 404 when downloading Zig 0.15.2 by upgrading `mlugg/setup-zig` from v1 to v2
-- fixed Zig 0.15.x Android cross-compilation by using dot-separated API level format (`android.28`) instead of concatenated (`android28`)
+- fixed Android cross-compilation by replacing Zig (which lacks Android bionic libc headers) with Android NDK Clang for GoReleaser binary delivery
 
 ## [3.4.0] - 2026-03-20
 

@@ -23,14 +23,14 @@ builds:
         goarch: 'arm64'
         env:
           - CGO_ENABLED=1
-          - CC=zig cc -target aarch64-linux-android.28
-          - CXX=zig c++ -target aarch64-linux-android.28
+          - CC={{ .Env.ANDROID_NDK_CC_ARM64 }}
+          - CXX={{ .Env.ANDROID_NDK_CXX_ARM64 }}
       - goos: 'android'
         goarch: 'amd64'
         env:
           - CGO_ENABLED=1
-          - CC=zig cc -target x86_64-linux-android.28
-          - CXX=zig c++ -target x86_64-linux-android.28
+          - CC={{ .Env.ANDROID_NDK_CC_AMD64 }}
+          - CXX={{ .Env.ANDROID_NDK_CXX_AMD64 }}
 archives:
   - formats: ['tar.gz']
     name_template: '{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}'

@@ -5,7 +5,10 @@
 # linking (faster), and additionally runs vet diagnostics (printf, structtag, etc.)
 # which may surface issues beyond pure compilation errors.
 #
-# Android targets require CGO_ENABLED=1 with Zig as the C cross-compiler.
+# Android targets require CGO_ENABLED=1 with the Android NDK's bundled Clang
+# as the C cross-compiler. Set ANDROID_NDK_HOME to the NDK installation path
+# to enable Android cross-compile checks; targets are skipped if the NDK is
+# not available (e.g., local development without Android SDK).
 # All other targets use CGO_ENABLED=0 (pure Go, no C toolchain needed).
 #
 # Usage:
@@ -31,21 +34,22 @@ vet_target() {
   echo "=== Type-checking for ${os}/${arch} ==="
 
   if [ "$os" = "android" ]; then
-    if ! command -v zig &>/dev/null; then
-      echo "SKIP: ${os}/${arch} (zig not installed; install Zig to enable Android cross-compile)"
+    if [ -z "${ANDROID_NDK_HOME:-}" ]; then
+      echo "SKIP: ${os}/${arch} (ANDROID_NDK_HOME not set; install Android NDK to enable)"
       return 0
     fi
-    local zig_arch
+    local ndk_arch
     case "$arch" in
-      arm64) zig_arch="aarch64" ;;
-      amd64) zig_arch="x86_64" ;;
+      arm64) ndk_arch="aarch64" ;;
+      amd64) ndk_arch="x86_64" ;;
       *)
         echo "FAIL: ${os}/${arch} (unsupported Android architecture)"
         return 1
         ;;
     esac
-    CC="zig cc -target ${zig_arch}-linux-android.28" \
-    CXX="zig c++ -target ${zig_arch}-linux-android.28" \
+    local ndk_bin="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin"
+    CC="${ndk_bin}/${ndk_arch}-linux-android28-clang" \
+    CXX="${ndk_bin}/${ndk_arch}-linux-android28-clang++" \
     CGO_ENABLED=1 GOOS="$os" GOARCH="$arch" go vet ./... 2>&1
   else
     CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go vet ./... 2>&1

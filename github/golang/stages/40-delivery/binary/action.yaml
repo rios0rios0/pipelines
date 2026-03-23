@@ -31,8 +31,20 @@ runs:
         go-version-file: 'go.mod'
         cache-dependency-path: 'go.sum'
 
-    - name: 'Setup Zig'
-      uses: 'mlugg/setup-zig@v2'
+    - name: 'Setup Android NDK'
+      uses: 'nttld/setup-ndk@v1'
+      id: 'setup-ndk'
+      with:
+        ndk-version: 'r27c'
+
+    - name: 'Configure NDK compilers'
+      run: |
+        NDK_BIN="${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin"
+        echo "ANDROID_NDK_CC_ARM64=${NDK_BIN}/aarch64-linux-android28-clang" >> $GITHUB_ENV
+        echo "ANDROID_NDK_CXX_ARM64=${NDK_BIN}/aarch64-linux-android28-clang++" >> $GITHUB_ENV
+        echo "ANDROID_NDK_CC_AMD64=${NDK_BIN}/x86_64-linux-android28-clang" >> $GITHUB_ENV
+        echo "ANDROID_NDK_CXX_AMD64=${NDK_BIN}/x86_64-linux-android28-clang++" >> $GITHUB_ENV
+      shell: 'bash'
 
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 

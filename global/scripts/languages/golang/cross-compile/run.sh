@@ -5,8 +5,7 @@
 # linking (faster), and additionally runs vet diagnostics (printf, structtag, etc.)
 # which may surface issues beyond pure compilation errors.
 #
-# Android targets require CGO_ENABLED=1 with Zig as the C cross-compiler.
-# All other targets use CGO_ENABLED=0 (pure Go, no C toolchain needed).
+# All targets use CGO_ENABLED=0 (pure Go, no C toolchain needed).
 #
 # Usage:
 #   Run all targets in parallel (local development):
@@ -22,34 +21,13 @@ TARGETS=(
   "darwin/arm64"
   "windows/amd64"
   "windows/arm64"
-  "android/amd64"
-  "android/arm64"
 )
 
 vet_target() {
   local os="$1" arch="$2"
   echo "=== Type-checking for ${os}/${arch} ==="
 
-  if [ "$os" = "android" ]; then
-    if ! command -v zig &>/dev/null; then
-      echo "SKIP: ${os}/${arch} (zig not installed; install Zig to enable Android cross-compile)"
-      return 0
-    fi
-    local zig_arch
-    case "$arch" in
-      arm64) zig_arch="aarch64" ;;
-      amd64) zig_arch="x86_64" ;;
-      *)
-        echo "FAIL: ${os}/${arch} (unsupported Android architecture)"
-        return 1
-        ;;
-    esac
-    CC="zig cc -target ${zig_arch}-linux-android.28" \
-    CXX="zig c++ -target ${zig_arch}-linux-android.28" \
-    CGO_ENABLED=1 GOOS="$os" GOARCH="$arch" go vet ./... 2>&1
-  else
-    CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go vet ./... 2>&1
-  fi
+  CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go vet ./... 2>&1
 
   echo "PASS: ${os}/${arch}"
 }

@@ -57,10 +57,6 @@ jobs:
             goarch: 'amd64'
           - goos: 'windows'
             goarch: 'arm64'
-          - goos: 'android'
-            goarch: 'amd64'
-          - goos: 'android'
-            goarch: 'arm64'
     steps:
       - uses: 'rios0rios0/pipelines/github/golang/stages/10-code-check/cross-compile@main'
         with:

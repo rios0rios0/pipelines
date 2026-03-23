@@ -74,6 +74,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed `pdm.yaml` display names for `flake8` and `mypy` jobs from `style:` to `quality:` to match their job IDs
 - fixed missing `continue-on-error: true` on `mypy` and `safety` jobs to match Azure DevOps golden standard
 - fixed `pdm-docker.yaml` skipping all code check, security, and test stages when used standalone
+- fixed Zig setup action failing with HTTP 404 when downloading Zig 0.15.2 by upgrading `mlugg/setup-zig` from v1 to v2
 
 ## [3.4.0] - 2026-03-20
 

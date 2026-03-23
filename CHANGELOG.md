@@ -41,7 +41,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - **BREAKING CHANGE:** changed `javascript-npm.yaml` to `npm.yaml` and `javascript-npm-docker.yaml` to `npm-docker.yaml`, matching the toolchain naming convention
 - **BREAKING CHANGE:** changed `php.yaml` to `composer.yaml` and `php-docker.yaml` to `composer-docker.yaml`, matching the toolchain naming convention
 - **BREAKING CHANGE:** changed `ruby.yaml` to `bundler.yaml` and `ruby-docker.yaml` to `bundler-docker.yaml`, matching the toolchain naming convention
-- changed Go cross-compile CI job to run 8 OS/arch targets in parallel via GitHub Actions matrix strategy instead of sequentially
+- changed Go cross-compile CI job to run 6 OS/arch targets in parallel via GitHub Actions matrix strategy instead of sequentially
 - changed Go cross-compile script to support single-target mode via `CROSS_GOOS`/`CROSS_GOARCH` environment variables and parallel execution for all-targets mode
 - changed `bundler.yaml` to stages 1-3 only, moving `delivery-release` to variant workflows following Go/PDM pattern
 - changed `composer.yaml` to stages 1-3 only, moving `delivery-release` to variant workflows following Go/PDM pattern

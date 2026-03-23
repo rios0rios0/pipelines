@@ -25,16 +25,17 @@ runs:
       id: 'release-tags'
       shell: 'bash'
       run: |
-        VERSION="${{ inputs.tag_name }}"
-        IMAGE="ghcr.io/${{ github.repository }}"
-        MAJOR_MINOR="${VERSION%.*}"
+        MAJOR_MINOR="${TAG_NAME%.*}"
         {
           echo 'tags<<EOF'
           echo "${IMAGE}:latest"
-          echo "${IMAGE}:${VERSION}"
+          echo "${IMAGE}:${TAG_NAME}"
           echo "${IMAGE}:${MAJOR_MINOR}"
           echo 'EOF'
         } >> "$GITHUB_OUTPUT"
+      env:
+        TAG_NAME: '${{ inputs.tag_name }}'
+        IMAGE: 'ghcr.io/${{ github.repository }}'
       if: "inputs.tags == '' && inputs.tag_name != ''"
 
     - name: 'Extract Docker metadata'

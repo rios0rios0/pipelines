@@ -1,6 +1,6 @@
 inputs:
   goos:
-    description: 'Target OS for single-target mode (e.g., linux, darwin, windows, android). Leave empty for all targets.'
+    description: 'Target OS for single-target mode (e.g., linux, darwin, windows). Leave empty for all targets.'
     required: false
     default: ''
   goarch:
@@ -19,10 +19,6 @@ runs:
       with:
         go-version-file: 'go.mod'
         cache-dependency-path: 'go.sum'
-
-    - name: 'Setup Zig'
-      if: inputs.goos == 'android' || inputs.goos == ''
-      uses: 'mlugg/setup-zig@v2'
 
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 

@@ -7,7 +7,7 @@ on:
         type: 'boolean'
         required: false
         default: false
-        description: 'Enable cross-compilation check for 8 OS/arch targets (runs in parallel via matrix)'
+        description: 'Enable cross-compilation check for 6 OS/arch targets (runs in parallel via matrix)'
       sonar_host:
         description: 'SonarQube/SonarCloud host URL (leave empty to skip SonarQube)'
         required: false

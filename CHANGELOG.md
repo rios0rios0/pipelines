@@ -16,13 +16,18 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-03-24
+
+### Added
+
+- added `major.minor` Docker tag (e.g., `:1.2`) alongside the full SemVer tag on tag pushes
+
 ### Fixed
 
 - fixed Docker delivery composite action failing with `Password required` by adding `actions/checkout@v6`, defaulting `github_token` to `github.token`, and computing image tags via `docker/metadata-action@v5` when not provided
-- fixed Docker delivery tagging with the branch name instead of `latest` on default branch builds
-- fixed Docker delivery not publishing semver tags (`:X.Y.Z`, `:X.Y`) on bump commits by chaining `delivery-docker` after `delivery-release` and computing Docker tags from the release version
+- fixed Docker delivery not publishing SemVer tags (`:X.Y.Z`, `:X.Y`) on bump commits by chaining `delivery-docker` after `delivery-release` and computing Docker tags from the release version
 - fixed Docker delivery skipping on `workflow_dispatch` events by adding the event to the `delivery-docker` condition
-- added `major.minor` Docker tag (e.g., `:1.2`) alongside the full semver tag on tag pushes
+- fixed Docker delivery tagging with the branch name instead of `latest` on default branch builds
 
 ## [4.0.0] - 2026-03-23
 

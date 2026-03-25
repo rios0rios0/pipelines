@@ -32,6 +32,15 @@ stages:
           - script: |
               set -e
 
+              if [ -z "${SONAR_PROJECT_KEY:-}" ]; then
+                export SONAR_PROJECT_KEY="${SYSTEM_TEAMPROJECT}_${BUILD_REPOSITORY_NAME}"
+                echo "Auto-derived SONAR_PROJECT_KEY=$SONAR_PROJECT_KEY"
+              fi
+              if [ -z "${SONAR_PROJECT_NAME:-}" ]; then
+                export SONAR_PROJECT_NAME="${BUILD_REPOSITORY_NAME}"
+                echo "Auto-derived SONAR_PROJECT_NAME=$SONAR_PROJECT_NAME"
+              fi
+
               apt-get update && apt-get install --no-install-recommends -y openjdk-17-jre
               export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
               export PATH=$JAVA_HOME/bin:$PATH

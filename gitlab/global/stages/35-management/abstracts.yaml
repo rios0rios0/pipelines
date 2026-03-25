@@ -13,6 +13,18 @@
     when: 'always'
   script:
     - |
+      # Auto-derive sonar.projectKey and sonar.projectName
+      if ! grep -q '^sonar\.projectKey=' sonar-project.properties 2>/dev/null; then
+        key="${SONAR_PROJECT_KEY:-$(echo "$CI_PROJECT_PATH" | tr '/' '_')}"
+        echo "sonar.projectKey=$key" >> sonar-project.properties
+        echo "Auto-derived sonar.projectKey=$key"
+      fi
+      if ! grep -q '^sonar\.projectName=' sonar-project.properties 2>/dev/null; then
+        name="${SONAR_PROJECT_NAME:-$CI_PROJECT_NAME}"
+        echo "sonar.projectName=$name" >> sonar-project.properties
+        echo "Auto-derived sonar.projectName=$name"
+      fi
+    - |
       # Check if any coverage files exist; if not, clear coverage properties
       # so sonar-scanner doesn't fail looking for files that don't exist
       COVERAGE_FOUND=false

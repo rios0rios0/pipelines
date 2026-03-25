@@ -2,7 +2,7 @@ TAG := latest
 ROOT := global/containers
 CONTAINER_REGISTRY = ghcr.io/rios0rios0/pipelines
 
-.PHONY: login setup-buildx build-and-push test-go-script test-lambda test-yaml-merge test
+.PHONY: login setup-buildx build-and-push test-go-script test-lambda test-yaml-merge test-sonarqube test
 
 login:
 	docker login $(CONTAINER_REGISTRY)
@@ -30,5 +30,9 @@ test-yaml-merge:
 	@echo "Running YAML merge validation..."
 	@./.github/tests/test-yaml-merge.sh
 
-test: test-go-script test-lambda test-yaml-merge
+test-sonarqube:
+	@echo "Running SonarQube auto-derivation validation..."
+	@./.github/tests/test-sonarqube-auto-derive.sh
+
+test: test-go-script test-lambda test-yaml-merge test-sonarqube
 	@echo "All tests completed successfully!"

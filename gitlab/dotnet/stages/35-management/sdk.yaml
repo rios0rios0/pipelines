@@ -9,7 +9,7 @@ report:sonarqube:
   script:
     - |
       if [ -z "${SONAR_PROJECT_KEY:-}" ]; then
-        export SONAR_PROJECT_KEY=$(echo "$CI_PROJECT_PATH" | tr '/' '_')
+        export SONAR_PROJECT_KEY=$(printf '%s' "$CI_PROJECT_PATH" | tr '[:space:]/' '_' | tr -c '[:alnum:]._:-' '_')
         echo "Auto-derived SONAR_PROJECT_KEY=$SONAR_PROJECT_KEY"
       fi
       if [ -z "${SONAR_PROJECT_NAME:-}" ]; then

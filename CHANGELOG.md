@@ -19,6 +19,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Added
 
 - added automatic derivation of `sonar.projectKey` and `sonar.projectName` from CI platform variables (GitHub, Azure DevOps, GitLab), enabling zero-config SonarQube enrollment for new projects
+- added test suite for SonarQube auto-derivation logic covering `normalize_sonar_key`, per-platform derivation, env var overrides, and existing property preservation
+
+### Fixed
+
+- fixed inconsistent SonarQube project key sanitization in GitLab templates — now uses full character sanitization matching `run.sh` and Azure DevOps templates
 
 ## [4.1.0] - 2026-03-24
 

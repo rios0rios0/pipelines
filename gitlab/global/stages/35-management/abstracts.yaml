@@ -15,7 +15,7 @@
     - |
       # Auto-derive sonar.projectKey and sonar.projectName
       if ! grep -Eq '^[[:space:]]*sonar\.projectKey[[:space:]]*=' sonar-project.properties 2>/dev/null; then
-        key="${SONAR_PROJECT_KEY:-$(echo "$CI_PROJECT_PATH" | tr '/' '_')}"
+        key="${SONAR_PROJECT_KEY:-$(printf '%s' "$CI_PROJECT_PATH" | tr '[:space:]/' '_' | tr -c '[:alnum:]._:-' '_')}"
         echo "sonar.projectKey=$key" >> sonar-project.properties
         echo "Auto-derived sonar.projectKey=$key"
       fi

@@ -33,7 +33,9 @@ stages:
               set -e
 
               if [ -z "${SONAR_PROJECT_KEY:-}" ]; then
-                export SONAR_PROJECT_KEY="${SYSTEM_TEAMPROJECT}_${BUILD_REPOSITORY_NAME}"
+                raw_key="${SYSTEM_TEAMPROJECT}_${BUILD_REPOSITORY_NAME}"
+                SONAR_PROJECT_KEY="$(printf '%s' "$raw_key" | tr -c '[:alnum:]._:-' '_')"
+                export SONAR_PROJECT_KEY
                 echo "Auto-derived SONAR_PROJECT_KEY=$SONAR_PROJECT_KEY"
               fi
               if [ -z "${SONAR_PROJECT_NAME:-}" ]; then

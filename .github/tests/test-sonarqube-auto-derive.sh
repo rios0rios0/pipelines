@@ -37,40 +37,81 @@ trap cleanup EXIT
 # Extract the normalize_sonar_key function from run.sh for isolated testing
 eval "$(sed -n '/^normalize_sonar_key()/,/^}/p' "$SONAR_SCRIPT")"
 
-# Extract auto-derivation block (lines 11-45: projectKey + projectName logic)
-# We run the derivation block in a subshell with controlled env vars and a temp
-# sonar-project.properties file.
-run_derivation() {
-  # given
-  local workdir="$TEST_DIR/workdir-$$-$RANDOM"
-  mkdir -p "$workdir"
+# CI platform variables that must be scrubbed between tests to prevent the
+# runner's own environment (e.g. GITHUB_REPOSITORY on GitHub Actions) from
+# leaking into the derivation logic.
+CI_VARS="GITHUB_REPOSITORY SYSTEM_TEAMPROJECT BUILD_REPOSITORY_NAME CI_PROJECT_PATH CI_PROJECT_NAME SONAR_PROJECT_KEY SONAR_PROJECT_NAME"
 
-  # Copy a starter properties file if provided as $1, otherwise create empty
-  if [ -n "${1:-}" ] && [ -f "$1" ]; then
-    cp "$1" "$workdir/sonar-project.properties"
+# Run the auto-derivation logic in an isolated subshell with a clean environment.
+# Usage: props=$(run_derivation [starter-properties-file] [-- VAR1=val1 VAR2=val2 ...])
+# All CI_VARS are unset, then only the explicitly passed VAR=val pairs are exported.
+run_derivation() {
+  local workdir
+  workdir="$(mktemp -d "$TEST_DIR/workdir-XXXXXX")"
+
+  # Parse arguments: optional properties file, then optional -- VAR=val pairs
+  local props_file=""
+  local -a env_pairs=()
+  local past_separator=false
+  for arg in "$@"; do
+    if [ "$arg" = "--" ]; then
+      past_separator=true
+      continue
+    fi
+    if $past_separator; then
+      env_pairs+=("$arg")
+    else
+      props_file="$arg"
+    fi
+  done
+
+  # Copy a starter properties file if provided, otherwise create empty
+  if [ -n "$props_file" ] && [ -f "$props_file" ]; then
+    cp "$props_file" "$workdir/sonar-project.properties"
   else
     touch "$workdir/sonar-project.properties"
   fi
 
-  # Initialize a git repo so `git describe` doesn't fail fatally
-  (cd "$workdir" && git init -q && git commit --allow-empty -m 'init' -q)
+  # Write env pairs to a sidecar file for the subshell to source after scrubbing
+  local envfile="$workdir/.test-env"
+  : > "$envfile"
+  for pair in "${env_pairs[@]+"${env_pairs[@]}"}"; do
+    local var="${pair%%=*}"
+    local val="${pair#*=}"
+    printf 'export %s='\''%s'\''\n' "$var" "$val" >> "$envfile"
+  done
 
-  # when — run the entire script in a subshell, but replace sonar-scanner with true
+  # Initialize a git repo so `git describe` doesn't fail fatally
   (
     cd "$workdir"
+    git init -q
+    git config user.email 'test@test.com'
+    git config user.name 'test'
+    git commit --allow-empty -m 'init' -q
+  )
+
+  # Run the script in a subshell with a scrubbed environment
+  (
+    cd "$workdir"
+
+    # Scrub all CI platform variables
+    for v in $CI_VARS; do
+      unset "$v" 2>/dev/null || true
+    done
+
+    # Apply only the caller-specified variables
+    # shellcheck disable=SC1091
+    . "$workdir/.test-env"
+
     # Override sonar-scanner to no-op
-    sonar_scanner() { :; }
-    alias sonar-scanner=true
     export PATH="$workdir/bin:$PATH"
     mkdir -p "$workdir/bin"
     printf '#!/usr/bin/env sh\nexit 0\n' > "$workdir/bin/sonar-scanner"
     chmod +x "$workdir/bin/sonar-scanner"
 
-    # Source the script (set -e is already active, the script uses set -e too)
     . "$SONAR_SCRIPT"
   ) > /dev/null 2>&1
 
-  # then — return the properties file path for assertions
   echo "$workdir/sonar-project.properties"
 }
 
@@ -113,7 +154,7 @@ echo "TEST 5: Existing projectKey preserved"
 cat > "$TEST_DIR/existing-key.properties" << 'EOF'
 sonar.projectKey=my-existing-key
 EOF
-props=$(GITHUB_REPOSITORY="owner/repo" run_derivation "$TEST_DIR/existing-key.properties")
+props=$(run_derivation "$TEST_DIR/existing-key.properties" -- GITHUB_REPOSITORY=owner/repo)
 if grep -q 'sonar.projectKey=my-existing-key' "$props" && \
    [ "$(grep -c 'sonar.projectKey=' "$props")" -eq 1 ]; then
   print_result 0 "existing projectKey not overwritten"
@@ -128,7 +169,7 @@ echo "TEST 6: Existing projectName preserved"
 cat > "$TEST_DIR/existing-name.properties" << 'EOF'
 sonar.projectName=My Existing Name
 EOF
-props=$(GITHUB_REPOSITORY="owner/repo" run_derivation "$TEST_DIR/existing-name.properties")
+props=$(run_derivation "$TEST_DIR/existing-name.properties" -- GITHUB_REPOSITORY=owner/repo)
 if grep -q 'sonar.projectName=My Existing Name' "$props" && \
    [ "$(grep -c 'sonar.projectName=' "$props")" -eq 1 ]; then
   print_result 0 "existing projectName not overwritten"
@@ -140,7 +181,7 @@ fi
 # Test 7: SONAR_PROJECT_KEY env var override
 # =============================================================================
 echo "TEST 7: SONAR_PROJECT_KEY env var override"
-props=$(SONAR_PROJECT_KEY="custom-key" GITHUB_REPOSITORY="owner/repo" run_derivation)
+props=$(run_derivation -- SONAR_PROJECT_KEY=custom-key GITHUB_REPOSITORY=owner/repo)
 if grep -q 'sonar.projectKey=custom-key' "$props"; then
   print_result 0 "SONAR_PROJECT_KEY override used"
 else
@@ -151,7 +192,7 @@ fi
 # Test 8: SONAR_PROJECT_NAME env var override
 # =============================================================================
 echo "TEST 8: SONAR_PROJECT_NAME env var override"
-props=$(SONAR_PROJECT_NAME="Custom Name" GITHUB_REPOSITORY="owner/repo" run_derivation)
+props=$(run_derivation -- "SONAR_PROJECT_NAME=Custom Name" GITHUB_REPOSITORY=owner/repo)
 if grep -q 'sonar.projectName=Custom Name' "$props"; then
   print_result 0 "SONAR_PROJECT_NAME override used"
 else
@@ -162,7 +203,7 @@ fi
 # Test 9: GitHub — derives key from GITHUB_REPOSITORY
 # =============================================================================
 echo "TEST 9: GitHub — projectKey from GITHUB_REPOSITORY"
-props=$(GITHUB_REPOSITORY="myorg/my-repo" run_derivation)
+props=$(run_derivation -- GITHUB_REPOSITORY=myorg/my-repo)
 if grep -q 'sonar.projectKey=myorg_my-repo' "$props"; then
   print_result 0 "GitHub projectKey derived correctly"
 else
@@ -173,7 +214,7 @@ fi
 # Test 10: GitHub — derives name from GITHUB_REPOSITORY
 # =============================================================================
 echo "TEST 10: GitHub — projectName from GITHUB_REPOSITORY"
-props=$(GITHUB_REPOSITORY="myorg/my-repo" run_derivation)
+props=$(run_derivation -- GITHUB_REPOSITORY=myorg/my-repo)
 if grep -q 'sonar.projectName=my-repo' "$props"; then
   print_result 0 "GitHub projectName derived correctly"
 else
@@ -184,7 +225,7 @@ fi
 # Test 11: Azure DevOps — derives key from SYSTEM_TEAMPROJECT + BUILD_REPOSITORY_NAME
 # =============================================================================
 echo "TEST 11: Azure DevOps — projectKey from SYSTEM_TEAMPROJECT + BUILD_REPOSITORY_NAME"
-props=$(SYSTEM_TEAMPROJECT="MyProject" BUILD_REPOSITORY_NAME="my-repo" run_derivation)
+props=$(run_derivation -- SYSTEM_TEAMPROJECT=MyProject BUILD_REPOSITORY_NAME=my-repo)
 if grep -q 'sonar.projectKey=MyProject_my-repo' "$props"; then
   print_result 0 "Azure DevOps projectKey derived correctly"
 else
@@ -195,7 +236,7 @@ fi
 # Test 12: Azure DevOps — derives name from BUILD_REPOSITORY_NAME
 # =============================================================================
 echo "TEST 12: Azure DevOps — projectName from BUILD_REPOSITORY_NAME"
-props=$(SYSTEM_TEAMPROJECT="MyProject" BUILD_REPOSITORY_NAME="my-repo" run_derivation)
+props=$(run_derivation -- SYSTEM_TEAMPROJECT=MyProject BUILD_REPOSITORY_NAME=my-repo)
 if grep -q 'sonar.projectName=my-repo' "$props"; then
   print_result 0 "Azure DevOps projectName derived correctly"
 else
@@ -206,7 +247,7 @@ fi
 # Test 13: GitLab — derives key from CI_PROJECT_PATH
 # =============================================================================
 echo "TEST 13: GitLab — projectKey from CI_PROJECT_PATH"
-props=$(CI_PROJECT_PATH="group/subgroup/my-repo" CI_PROJECT_NAME="my-repo" run_derivation)
+props=$(run_derivation -- CI_PROJECT_PATH=group/subgroup/my-repo CI_PROJECT_NAME=my-repo)
 if grep -q 'sonar.projectKey=group_subgroup_my-repo' "$props"; then
   print_result 0 "GitLab projectKey derived correctly"
 else
@@ -217,7 +258,7 @@ fi
 # Test 14: GitLab — derives name from CI_PROJECT_NAME
 # =============================================================================
 echo "TEST 14: GitLab — projectName from CI_PROJECT_NAME"
-props=$(CI_PROJECT_PATH="group/subgroup/my-repo" CI_PROJECT_NAME="my-repo" run_derivation)
+props=$(run_derivation -- CI_PROJECT_PATH=group/subgroup/my-repo CI_PROJECT_NAME=my-repo)
 if grep -q 'sonar.projectName=my-repo' "$props"; then
   print_result 0 "GitLab projectName derived correctly"
 else

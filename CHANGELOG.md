@@ -16,15 +16,17 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
-### Changed
-
-- changed the terraform pipeline version from `1.14.7` to `1.14.8`
+## [4.2.0] - 2026-03-26
 
 ### Added
 
 - added `release.yaml` workflow to automatically create GitHub Releases and tags when bump PRs are merged, enabling the `update-major-version-tag.yaml` chain
 - added automatic derivation of `sonar.projectKey` and `sonar.projectName` from CI platform variables (GitHub, Azure DevOps, GitLab), enabling zero-config SonarQube enrollment for new projects
-- added test suite for SonarQube auto-derivation logic covering `normalize_sonar_key`, per-platform derivation, env var overrides, and existing property preservation
+- added test suite for SonarQube auto-derivation logic covering `normalize_sonar_key`, per-platform derivation, environment variable overrides, and existing property preservation
+
+### Changed
+
+- changed the Terraform pipeline version from `1.14.7` to `1.14.8`
 
 ### Fixed
 

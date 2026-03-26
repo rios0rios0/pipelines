@@ -1,0 +1,17 @@
+name: 'Release'
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: 'write'
+
+jobs:
+  delivery-release:
+    name: 'delivery > release'
+    runs-on: 'ubuntu-latest'
+    if: "contains(github.event.head_commit.message, 'chore/bump-')"
+    steps:
+      - id: 'release'
+        uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'

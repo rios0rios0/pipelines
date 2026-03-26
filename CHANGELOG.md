@@ -9,7 +9,7 @@ When a new release is proposed:
 1. Create a new branch `bump/x.x.x` (this isn't a long-lived branch!!!);
 2. The Unreleased section on `CHANGELOG.md` gets a version number and date;
 3. Open a Pull Request with the bump version changes targeting the `main` branch;
-4. When the Pull Request is merged, a new Git tag must be created using [GitHub environment](https://github.com/rios0rios0/pipelines/tags).
+4. When the Pull Request is merged, the `release.yaml` workflow automatically creates a Git tag and GitHub Release.
 
 Releases to productive environments should run from a tagged version.
 Exceptions are acceptable depending on the circumstances (critical bug fixes that can be cherry-picked, etc.).
@@ -22,6 +22,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
+- added `release.yaml` workflow to automatically create GitHub Releases and tags when bump PRs are merged, enabling the `update-major-version-tag.yaml` chain
 - added automatic derivation of `sonar.projectKey` and `sonar.projectName` from CI platform variables (GitHub, Azure DevOps, GitLab), enabling zero-config SonarQube enrollment for new projects
 - added test suite for SonarQube auto-derivation logic covering `normalize_sonar_key`, per-platform derivation, env var overrides, and existing property preservation
 

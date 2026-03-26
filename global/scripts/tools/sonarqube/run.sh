@@ -1,6 +1,49 @@
 #!/usr/bin/env sh
 set -e
 
+# Normalize a candidate SonarQube project key:
+# - Replace whitespace and '/' with '_'
+# - Replace any remaining unsupported characters with '_'
+normalize_sonar_key() {
+  printf '%s' "$1" | tr '[:space:]/' '_' | sed 's/[^A-Za-z0-9._:-]/_/g'
+}
+
+# Auto-derive sonar.projectKey if not already in properties file
+if ! grep -Eq '^[[:space:]]*sonar\.projectKey[[:space:]]*=' sonar-project.properties 2>/dev/null; then
+  key=""
+  if [ -n "${SONAR_PROJECT_KEY:-}" ]; then
+    key="$SONAR_PROJECT_KEY"
+  elif [ -n "${GITHUB_REPOSITORY:-}" ]; then
+    key=$(normalize_sonar_key "$GITHUB_REPOSITORY")
+  elif [ -n "${SYSTEM_TEAMPROJECT:-}" ] && [ -n "${BUILD_REPOSITORY_NAME:-}" ]; then
+    key=$(normalize_sonar_key "${SYSTEM_TEAMPROJECT}_${BUILD_REPOSITORY_NAME}")
+  elif [ -n "${CI_PROJECT_PATH:-}" ]; then
+    key=$(normalize_sonar_key "$CI_PROJECT_PATH")
+  fi
+  if [ -n "$key" ]; then
+    echo "sonar.projectKey=$key" >> sonar-project.properties
+    echo "Auto-derived sonar.projectKey=$key"
+  fi
+fi
+
+# Auto-derive sonar.projectName if not already in properties file
+if ! grep -Eq '^[[:space:]]*sonar\.projectName[[:space:]]*=' sonar-project.properties 2>/dev/null; then
+  name=""
+  if [ -n "${SONAR_PROJECT_NAME:-}" ]; then
+    name="$SONAR_PROJECT_NAME"
+  elif [ -n "${GITHUB_REPOSITORY:-}" ]; then
+    name="${GITHUB_REPOSITORY#*/}"
+  elif [ -n "${BUILD_REPOSITORY_NAME:-}" ]; then
+    name="$BUILD_REPOSITORY_NAME"
+  elif [ -n "${CI_PROJECT_NAME:-}" ]; then
+    name="$CI_PROJECT_NAME"
+  fi
+  if [ -n "$name" ]; then
+    echo "sonar.projectName=$name" >> sonar-project.properties
+    echo "Auto-derived sonar.projectName=$name"
+  fi
+fi
+
 version=$(git describe --tags --abbrev=0) || true
 if [ -z "$version" ]; then version="latest"; echo "No version tag found in the repository, setting version to $version"; fi
 echo "sonar.projectVersion=$version" >> sonar-project.properties

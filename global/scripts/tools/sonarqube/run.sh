@@ -33,8 +33,8 @@ if ! grep -Eq '^[[:space:]]*sonar\.projectName[[:space:]]*=' sonar-project.prope
     name="$SONAR_PROJECT_NAME"
   elif [ -n "${GITHUB_REPOSITORY:-}" ]; then
     name="${GITHUB_REPOSITORY#*/}"
-  elif [ -n "${BUILD_REPOSITORY_NAME:-}" ]; then
-    name="$BUILD_REPOSITORY_NAME"
+  elif [ -n "${SYSTEM_TEAMPROJECT:-}" ] && [ -n "${BUILD_REPOSITORY_NAME:-}" ]; then
+    name="${SYSTEM_TEAMPROJECT}/${BUILD_REPOSITORY_NAME}"
   elif [ -n "${CI_PROJECT_NAME:-}" ]; then
     name="$CI_PROJECT_NAME"
   fi

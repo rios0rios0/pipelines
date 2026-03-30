@@ -39,7 +39,7 @@ stages:
                 echo "Auto-derived SONAR_PROJECT_KEY=$SONAR_PROJECT_KEY"
               fi
               if [ -z "${SONAR_PROJECT_NAME:-}" ]; then
-                export SONAR_PROJECT_NAME="${BUILD_REPOSITORY_NAME}"
+                export SONAR_PROJECT_NAME="${SYSTEM_TEAMPROJECT}/${BUILD_REPOSITORY_NAME}"
                 echo "Auto-derived SONAR_PROJECT_NAME=$SONAR_PROJECT_NAME"
               fi
 

@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- changed Azure DevOps `sonar.projectName` derivation to use `project/repository` format instead of just the repository name
+
 ## [4.2.0] - 2026-03-26
 
 ### Added

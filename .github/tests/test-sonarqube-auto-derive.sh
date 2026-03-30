@@ -233,7 +233,7 @@ else
 fi
 
 # =============================================================================
-# Test 12: Azure DevOps — derives name from BUILD_REPOSITORY_NAME
+# Test 12: Azure DevOps — derives name from SYSTEM_TEAMPROJECT/BUILD_REPOSITORY_NAME
 # =============================================================================
 echo "TEST 12: Azure DevOps — projectName from SYSTEM_TEAMPROJECT/BUILD_REPOSITORY_NAME"
 props=$(run_derivation -- SYSTEM_TEAMPROJECT=MyProject BUILD_REPOSITORY_NAME=my-repo)

@@ -233,11 +233,11 @@ else
 fi
 
 # =============================================================================
-# Test 12: Azure DevOps — derives name from BUILD_REPOSITORY_NAME
+# Test 12: Azure DevOps — derives name from SYSTEM_TEAMPROJECT/BUILD_REPOSITORY_NAME
 # =============================================================================
-echo "TEST 12: Azure DevOps — projectName from BUILD_REPOSITORY_NAME"
+echo "TEST 12: Azure DevOps — projectName from SYSTEM_TEAMPROJECT/BUILD_REPOSITORY_NAME"
 props=$(run_derivation -- SYSTEM_TEAMPROJECT=MyProject BUILD_REPOSITORY_NAME=my-repo)
-if grep -q 'sonar.projectName=my-repo' "$props"; then
+if grep -q 'sonar.projectName=MyProject/my-repo' "$props"; then
   print_result 0 "Azure DevOps projectName derived correctly"
 else
   print_result 1 "Azure DevOps projectName derivation failed (contents: $(grep 'sonar.projectName' "$props" 2>/dev/null || echo 'missing'))"

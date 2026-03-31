@@ -80,9 +80,14 @@ else
   cp "$defaultYamlFile" "$mergedYamlFile"
 fi
 
+GOLANGCI_LINT=""
 if command -v golangci-lint > /dev/null 2>&1; then
-  GOLANGCI_LINT="golangci-lint"
-else
+  DETECTED_MAJOR=$(golangci-lint version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 | cut -d. -f1)
+  if [ "$DETECTED_MAJOR" -ge 2 ] 2>/dev/null; then
+    GOLANGCI_LINT="golangci-lint"
+  fi
+fi
+if [ -z "$GOLANGCI_LINT" ]; then
   wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh
   GOLANGCI_LINT="./bin/golangci-lint"
 fi

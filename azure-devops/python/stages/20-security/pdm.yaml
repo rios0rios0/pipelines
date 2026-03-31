@@ -24,3 +24,13 @@ stages:
           - script: pdm run safety-scan
             displayName: 'Run Safety dependency check'
         continueOnError: true
+
+      - job: 'sast_vulture'
+        displayName: 'sast:vulture'
+        steps:
+          - template: '../../abstracts/pdm-python3.14.yaml'
+          - script: |
+              pip install vulture --quiet
+              vulture . --min-confidence 80
+            displayName: 'Run Vulture dead code detection'
+        continueOnError: true

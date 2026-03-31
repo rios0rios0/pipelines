@@ -4,6 +4,12 @@ on:
   release:
     types:
       - 'published'
+  workflow_call:
+    inputs:
+      tag_name:
+        required: true
+        type: 'string'
+        description: 'The SemVer tag name (e.g., "4.2.0" or "v4.2.0")'
 
 permissions:
   contents: write
@@ -13,8 +19,9 @@ jobs:
     name: 'update major version tag'
     runs-on: 'ubuntu-latest'
     if: >-
-      !github.event.release.prerelease &&
-      contains(github.event.release.tag_name, '.')
+      github.event_name == 'workflow_call' ||
+      (!github.event.release.prerelease &&
+      contains(github.event.release.tag_name, '.'))
     steps:
       - uses: 'actions/checkout@v4'
 
@@ -33,7 +40,7 @@ jobs:
           echo "major=v${MAJOR}" >> "${GITHUB_OUTPUT}"
           echo "semver=${RAW_TAG}" >> "${GITHUB_OUTPUT}"
         env:
-          GITHUB_EVENT_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+          GITHUB_EVENT_RELEASE_TAG_NAME: ${{ inputs.tag_name || github.event.release.tag_name }}
 
       - name: 'Force-update major version tag'
         run: |

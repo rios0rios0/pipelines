@@ -26,6 +26,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed Go unused code detection to rely on existing `golangci-lint` linters (`unused`, `unparam`, `wastedassign`) instead of a standalone `deadcode` tool
 - changed Azure DevOps `sonar.projectName` derivation to use `project/repository` format instead of just the repository name
 
+### Fixed
+
+- fixed major version tag (e.g. `v4`) not updating on automated releases — `GITHUB_TOKEN` events don't cascade to other workflows, so `release.yaml` now calls `update-major-version-tag.yaml` as a reusable workflow via `workflow_call`
+
 ## [4.2.0] - 2026-03-26
 
 ### Added

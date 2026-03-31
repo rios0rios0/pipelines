@@ -12,6 +12,16 @@ jobs:
     name: 'delivery > release'
     runs-on: 'ubuntu-latest'
     if: "contains(github.event.head_commit.message, 'chore/bump-')"
+    outputs:
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - id: 'release'
         uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
+
+  update-major-tag:
+    name: 'delivery > update major version tag'
+    needs: 'delivery-release'
+    if: "needs.delivery-release.outputs.tag_name != ''"
+    uses: './.github/workflows/update-major-version-tag.yaml'
+    with:
+      tag_name: ${{ needs.delivery-release.outputs.tag_name }}

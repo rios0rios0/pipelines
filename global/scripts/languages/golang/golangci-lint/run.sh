@@ -80,8 +80,13 @@ else
   cp "$defaultYamlFile" "$mergedYamlFile"
 fi
 
-wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh
-./bin/golangci-lint run \
+if command -v golangci-lint > /dev/null 2>&1; then
+  GOLANGCI_LINT="golangci-lint"
+else
+  wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh
+  GOLANGCI_LINT="./bin/golangci-lint"
+fi
+$GOLANGCI_LINT run \
   --config "merged.yml" \
   --color "always" \
   --timeout "10m" \

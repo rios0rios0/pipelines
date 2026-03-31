@@ -12,6 +12,45 @@ jobs:
     name: 'delivery > release'
     runs-on: 'ubuntu-latest'
     if: "contains(github.event.head_commit.message, 'chore/bump-')"
+    outputs:
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - id: 'release'
         uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
+
+  update-major-tag:
+    name: 'delivery > update major version tag'
+    needs: 'delivery-release'
+    runs-on: 'ubuntu-latest'
+    if: "needs.delivery-release.outputs.tag_name != ''"
+    steps:
+      - uses: 'actions/checkout@v4'
+
+      - name: 'Extract major version'
+        id: 'extract'
+        run: |
+          TAG="${TAG_NAME#v}"
+          MAJOR="v${TAG%%.*}"
+          echo "major=${MAJOR}" >> "${GITHUB_OUTPUT}"
+        env:
+          TAG_NAME: ${{ needs.delivery-release.outputs.tag_name }}
+
+      - name: 'Force-update major version tag'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -fa "${MAJOR}" -m "Update ${MAJOR} to ${TAG_NAME}"
+          git push origin "${MAJOR}" --force
+        env:
+          MAJOR: ${{ steps.extract.outputs.major }}
+          TAG_NAME: ${{ needs.delivery-release.outputs.tag_name }}
+
+      - name: 'Create or update GitHub Release'
+        uses: 'softprops/action-gh-release@v2'
+        with:
+          tag_name: ${{ steps.extract.outputs.major }}
+          name: ${{ steps.extract.outputs.major }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          make_latest: false

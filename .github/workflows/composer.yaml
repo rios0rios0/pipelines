@@ -100,6 +100,25 @@ jobs:
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
+  security-sast_phpmd:
+    name: 'security > sast:phpmd'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v4'
+
+      - name: 'Setup PHP'
+        uses: 'shivammathur/setup-php@v2'
+        with:
+          php-version: '8.3'
+          tools: 'phpmd'
+
+      - run: phpmd . text unusedcode
+        shell: 'bash'
+    needs: [ 'code_check-style_php_lint' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
 
   # third stage
   tests-test_all:
@@ -119,7 +138,7 @@ jobs:
           composer install --no-interaction --prefer-dist
           composer run test
         shell: 'bash'
-    needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_composer_audit' ]
+    needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_composer_audit', 'security-sast_phpmd' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 

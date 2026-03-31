@@ -28,15 +28,3 @@ stages:
               "$(go env GOPATH)/bin/govulncheck" ./...
             displayName: 'Run govulncheck'
         continueOnError: true
-
-      - job: 'sast_deadcode'
-        displayName: 'sast:deadcode'
-        variables:
-          GOPATH: "$(Pipeline.Workspace)/.go"
-        steps:
-          - template: '../../abstracts/go.yaml'
-          - script: |
-              go install golang.org/x/tools/cmd/deadcode@latest
-              "$(go env GOPATH)/bin/deadcode" -test ./...
-            displayName: 'Run deadcode'
-        continueOnError: true

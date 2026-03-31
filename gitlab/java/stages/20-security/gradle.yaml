@@ -29,6 +29,15 @@ sca:dependency-check:
         - "$PREFIX$REPORT_PATH/dependency-check-report.xml"
   allow_failure: true
 
+sast:pmd:
+  extends: '.gradle'
+  stage: 'security (sca/sast)'
+  script:
+    - wget -q "https://github.com/pmd/pmd/releases/download/pmd_releases%2F7.13.0/pmd-dist-7.13.0-bin.zip" -O /tmp/pmd.zip
+    - unzip -q /tmp/pmd.zip -d /tmp
+    - /tmp/pmd-bin-7.13.0/bin/pmd check -d . -R "category/java/bestpractices.xml/UnusedAssignment,category/java/bestpractices.xml/UnusedFormalParameter,category/java/bestpractices.xml/UnusedLocalVariable,category/java/bestpractices.xml/UnusedPrivateField,category/java/bestpractices.xml/UnusedPrivateMethod" -f json --no-cache
+  allow_failure: true
+
 # TODO: check this https://gitlab.com/gitlab-org/gitlab/-/issues/299363
 #sast:spotbugs:
 #  extends: '.gradle'

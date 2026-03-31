@@ -11,7 +11,8 @@ fileName="$(pwd)/$REPORT_PATH/phpmd.json"
 if ! command -v phpmd > /dev/null 2>&1; then
   echo "Installing PHPMD..."
   composer global require phpmd/phpmd --quiet
-  export PATH="$PATH:$(composer global config bin-dir --absolute --quiet 2>/dev/null || echo "$HOME/.composer/vendor/bin")"
+  COMPOSER_BIN_DIR="$(composer global config bin-dir --absolute --quiet 2>/dev/null || echo "$HOME/.composer/vendor/bin")"
+  export PATH="$PATH:$COMPOSER_BIN_DIR"
 fi
 
 echo "Running PHPMD unused code analysis..."

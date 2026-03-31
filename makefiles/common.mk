@@ -7,9 +7,6 @@
 # Targets provided: setup codeql semgrep trivy hadolint gitleaks sast unused
 # Requires: SCRIPTS_DIR to be set. SEMGREP_LANGUAGE and CODEQL_LANGUAGE should be set by a language
 #           .mk file (e.g. golang.mk) or manually before including this file.
-# UNUSED_SCRIPT is set automatically by each language .mk file (e.g. golang.mk, python.mk).
-
-UNUSED_SCRIPT ?=
 
 .PHONY: setup codeql semgrep trivy hadolint gitleaks sast unused
 
@@ -32,13 +29,6 @@ gitleaks:
 	-@$(SCRIPTS_DIR)/global/scripts/tools/gitleaks/run.sh
 
 unused:
-# Note: UNUSED_SCRIPT must be set before this target is invoked.
-# Language-specific .mk files (golang.mk, python.mk, javascript.mk) set UNUSED_SCRIPT
-# and must be included AFTER common.mk to ensure the variable is defined at parse time.
-ifdef UNUSED_SCRIPT
-	-@$(UNUSED_SCRIPT)
-else
-	@echo "No unused code scanner configured. Set UNUSED_SCRIPT in your language .mk file."
-endif
+	@$(if $(UNUSED_SCRIPT),$(UNUSED_SCRIPT),echo "No unused code scanner configured. Set UNUSED_SCRIPT in your language .mk file.")
 
 sast: codeql semgrep trivy hadolint gitleaks unused

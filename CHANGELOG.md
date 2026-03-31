@@ -18,13 +18,12 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added unused code detection to stage 10 (code-check) for Python (`vulture`), JavaScript/TypeScript (`knip`), Java (ProGuard `-printusage`), Ruby (`debride`), and PHP (`phpmd`) across all supported platforms
-- added default PMD ruleset for Java with unused code rules at `global/scripts/languages/java/pmd/pmd-ruleset.xml`
+- added whole-project unused code detection (stage 10, code-check) for Python (`vulture`), JavaScript/TypeScript (`knip`), Java (ProGuard `-printusage`), Ruby (`debride`), and PHP (`phpmd`) — integrated into `make lint` and CI pipelines across GitHub Actions, GitLab CI, and Azure DevOps
+- added default PMD ruleset with unused code rules at `global/scripts/languages/java/pmd/pmd-ruleset.xml` for downstream Gradle/Maven projects
 
 ### Changed
 
-- changed Go unused code detection to rely on `golangci-lint` (`unused`, `unparam`, `wastedassign` linters) instead of a standalone `deadcode` tool
-- changed unused code tools to run in `make lint` instead of a separate `make unused` target
+- changed Go unused code detection to rely on existing `golangci-lint` linters (`unused`, `unparam`, `wastedassign`) instead of a standalone `deadcode` tool
 - changed Azure DevOps `sonar.projectName` derivation to use `project/repository` format instead of just the repository name
 
 ## [4.2.0] - 2026-03-26

@@ -29,6 +29,27 @@ stages:
         displayName: 'quality:knip'
         steps:
           - template: '../../abstracts/corepack-node20.18.3-no-cache.yaml'
+
+          - script: ${{ parameters.RUN_BEFORE_CODE_CHECK }}
+            displayName: 'Before code check'
+            workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+
+          - script: |
+              if [ -f yarn.lock ]; then
+                yarn install --immutable --check-cache
+              elif [ -f package-lock.json ]; then
+                npm ci
+              else
+                npm install
+              fi
+            displayName: 'Install dependencies'
+            workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+
           - script: npx --yes knip
             displayName: 'Run Knip unused code detection'
+            workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+
+          - script: ${{ parameters.RUN_AFTER_CODE_CHECK }}
+            displayName: 'After code check'
+            workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
         continueOnError: true

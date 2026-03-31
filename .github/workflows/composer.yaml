@@ -48,7 +48,9 @@ jobs:
           php-version: '8.3'
           tools: 'phpmd'
 
-      - run: phpmd . text unusedcode
+      - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+      - run: $SCRIPTS_DIR/global/scripts/languages/php/phpmd/run.sh
         shell: 'bash'
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"

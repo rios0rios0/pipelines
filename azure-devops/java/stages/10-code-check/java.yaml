@@ -32,7 +32,7 @@ stages:
              java -jar /tmp/proguard-7.6.1/lib/proguard.jar \
                -injars "$INPUT_JAR" -outjars /dev/null \
                -libraryjars "$JAVA_HOME/jmods/java.base.jmod(!**.jar;!module-info.class)" \
-               -dontoptimize -dontobfuscate -dontwarn \
+               -dontoptimize -dontobfuscate -dontwarn ** \
                -keep "public class * { public static void main(java.lang.String[]); }" \
                -keep "public class * { public protected *; }" \
                -printusage proguard-usage.txt

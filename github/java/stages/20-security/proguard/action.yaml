@@ -1,0 +1,27 @@
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - name: 'Setup Java'
+      uses: 'actions/setup-java@v5'
+      with:
+        distribution: 'temurin'
+        java-version: '21'
+        cache: 'gradle'
+
+    - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - run: $SCRIPTS_DIR/global/scripts/languages/java/proguard/run.sh
+      shell: 'bash'
+
+    - name: 'Upload Report'
+      uses: 'actions/upload-artifact@v6'
+      with:
+        name: 'proguard'
+        path: 'build/reports/proguard/'
+        if-no-files-found: 'error'
+        overwrite: 'true'
+        retention-days: 10
+      if: always()

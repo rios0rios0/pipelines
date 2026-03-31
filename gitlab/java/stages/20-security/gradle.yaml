@@ -29,6 +29,27 @@ sca:dependency-check:
         - "$PREFIX$REPORT_PATH/dependency-check-report.xml"
   allow_failure: true
 
+sast:proguard:
+  extends: '.gradle'
+  stage: 'security (sca/sast)'
+  script:
+    - gradle classes --quiet
+    - wget -q "https://github.com/Guardsquare/proguard/releases/download/v7.6.1/proguard-7.6.1.tar.gz" -O /tmp/proguard.tar.gz
+    - tar xzf /tmp/proguard.tar.gz -C /tmp
+    - |
+      INPUT_JAR=$(find . -path "*/build/libs/*.jar" -not -name "*-sources.jar" -not -name "*-javadoc.jar" | head -1)
+      if [ -z "$INPUT_JAR" ]; then INPUT_JAR=$(find . -path "*/build/classes/java/main" -type d | head -1); fi
+      if [ -z "$INPUT_JAR" ]; then echo "No compiled classes found"; exit 0; fi
+      java -jar /tmp/proguard-7.6.1/lib/proguard.jar \
+        -injars "$INPUT_JAR" -outjars /dev/null \
+        -libraryjars "$JAVA_HOME/jmods/java.base.jmod(!**.jar;!module-info.class)" \
+        -dontoptimize -dontobfuscate -dontwarn \
+        -keep 'public class * { public static void main(java.lang.String[]); }' \
+        -keep 'public class * { public protected *; }' \
+        -printusage proguard-usage.txt
+      cat proguard-usage.txt
+  allow_failure: true
+
 # TODO: check this https://gitlab.com/gitlab-org/gitlab/-/issues/299363
 #sast:spotbugs:
 #  extends: '.gradle'

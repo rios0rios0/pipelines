@@ -7,6 +7,7 @@
 #
 # Targets provided: lint, test, cross-compile, cyclonedx
 # Also sets CODEQL_LANGUAGE=go, SEMGREP_LANGUAGE=golang for the common.mk sast target.
+# Note: Unused code detection is handled by golangci-lint (unused, unparam, wastedassign linters).
 
 CODEQL_LANGUAGE ?= go
 SEMGREP_LANGUAGE ?= golang

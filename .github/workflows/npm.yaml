@@ -45,6 +45,17 @@ jobs:
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 
+  code_check-quality_knip:
+    name: 'code-check > quality:knip'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/javascript/stages/10-code-check/knip@main'
+        with:
+          package_manager: 'npm'
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
   # second stage
   security-sast_codeql:
     name: 'security > sast:codeql'
@@ -53,7 +64,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
         with:
           codeql_language: 'javascript-typescript'
-    needs: [ 'code_check-style_eslint' ]
+    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_semgrep:
@@ -63,7 +74,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-semgrep@main'
         with:
           semgrep_lang: 'javascript'
-    needs: [ 'code_check-style_eslint' ]
+    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_gitleaks:
@@ -71,7 +82,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-gitleaks@main'
-    needs: [ 'code_check-style_eslint' ]
+    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_hadolint:
@@ -79,7 +90,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
-    needs: [ 'code_check-style_eslint' ]
+    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -88,7 +99,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy@main'
-    needs: [ 'code_check-style_eslint' ]
+    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -97,7 +108,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy-sca@main'
-    needs: [ 'code_check-style_eslint' ]
+    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -118,7 +129,7 @@ jobs:
           npm ci
           npm audit --audit-level=high
         shell: 'bash'
-    needs: [ 'code_check-style_eslint' ]
+    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 

@@ -7,7 +7,13 @@
     <description>
         Default PMD ruleset shipped by the pipelines library.
         Focuses on unused code detection rules from the bestpractices category.
-        Projects can override this by placing a custom PMD ruleset in their build configuration.
+
+        Usage in Gradle (build.gradle.kts):
+            pmd { ruleSetFiles = files("path/to/pipelines/global/scripts/languages/java/pmd/pmd-ruleset.xml") }
+
+        Usage in Maven (pom.xml):
+            &lt;plugin&gt;&lt;artifactId&gt;maven-pmd-plugin&lt;/artifactId&gt;
+            &lt;configuration&gt;&lt;rulesets&gt;&lt;ruleset&gt;path/to/pmd-ruleset.xml&lt;/ruleset&gt;&lt;/rulesets&gt;&lt;/configuration&gt;&lt;/plugin&gt;
     </description>
 
     <!-- Unused code detection rules -->

@@ -11,7 +11,7 @@ fileName="$(pwd)/$REPORT_PATH/vulture.txt"
 # Install vulture if not already available
 if ! command -v vulture > /dev/null 2>&1; then
   echo "Installing vulture..."
-  pip install vulture --quiet
+  python -m pip install vulture --quiet
 fi
 
 # Include a project-level whitelist if present to suppress known false positives
@@ -22,7 +22,7 @@ fi
 
 echo "Running vulture unused code analysis..."
 # shellcheck disable=SC2086
-vulture . $whitelistArgs --min-confidence 80 > "$fileName" 2>&1 || EXIT_CODE=$?
+python -m vulture . $whitelistArgs --min-confidence 80 > "$fileName" 2>&1 || EXIT_CODE=$?
 
 echo "vulture analysis complete. Results written to: $fileName"
 exit ${EXIT_CODE:-0}

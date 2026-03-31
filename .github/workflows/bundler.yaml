@@ -45,9 +45,9 @@ jobs:
         with:
           ruby-version: '3.3'
 
-      - run: |
-          gem install debride --no-document
-          debride .
+      - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+      - run: $SCRIPTS_DIR/global/scripts/languages/ruby/debride/run.sh
         shell: 'bash'
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"

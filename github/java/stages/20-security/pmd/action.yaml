@@ -4,22 +4,22 @@ runs:
     - name: 'Checkout code'
       uses: 'actions/checkout@v6'
 
-    - name: 'Setup Go'
-      uses: 'actions/setup-go@v6'
+    - name: 'Setup Java'
+      uses: 'actions/setup-java@v5'
       with:
-        go-version-file: 'go.mod'
-        cache-dependency-path: 'go.sum'
+        distribution: 'temurin'
+        java-version: '21'
 
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 
-    - run: $SCRIPTS_DIR/global/scripts/languages/golang/deadcode/run.sh
+    - run: $SCRIPTS_DIR/global/scripts/languages/java/pmd/run.sh
       shell: 'bash'
 
     - name: 'Upload Report'
       uses: 'actions/upload-artifact@v6'
       with:
-        name: 'deadcode'
-        path: 'build/reports/deadcode/'
+        name: 'pmd'
+        path: 'build/reports/pmd/'
         if-no-files-found: 'error'
         overwrite: 'true'
         retention-days: 10

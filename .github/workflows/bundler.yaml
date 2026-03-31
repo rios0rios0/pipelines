@@ -110,6 +110,26 @@ jobs:
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
+  security-sast_debride:
+    name: 'security > sast:debride'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+
+      - name: 'Setup Ruby'
+        uses: 'ruby/setup-ruby@v1'
+        with:
+          ruby-version: '3.3'
+
+      - run: |
+          gem install debride --no-document
+          debride .
+        shell: 'bash'
+    needs: [ 'code_check-style_rubocop' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
 
   # third stage
   tests-test_all:
@@ -127,7 +147,7 @@ jobs:
 
       - run: bundle exec rake test
         shell: 'bash'
-    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_bundle_audit' ]
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_bundle_audit', 'security-sast_debride' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 

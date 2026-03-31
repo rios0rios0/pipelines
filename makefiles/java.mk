@@ -7,6 +7,8 @@
 #
 # Targets provided: lint, test, pmd
 # Also sets CODEQL_LANGUAGE=java, SEMGREP_LANGUAGE=java for the common.mk sast target.
+# Note: PMD provides source-level unused code detection. For stricter bytecode-level
+# analysis, configure SpotBugs (Gradle plugin) or ProGuard -printusage in your project.
 #
 # Prerequisites: Gradle wrapper (gradlew) must be present in the project root.
 

@@ -141,15 +141,6 @@ jobs:
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
-  security-sast_pmd:
-    name: 'security > sast:pmd'
-    runs-on: 'ubuntu-latest'
-    steps:
-      - uses: 'rios0rios0/pipelines/github/java/stages/20-security/pmd@main'
-    needs: [ 'code_check-style_maven_verify' ]
-    continue-on-error: true
-    if: "!startsWith(github.ref, 'refs/tags/')"
-
 
   # third stage
   tests-test_all:
@@ -184,7 +175,7 @@ jobs:
           name: 'coverage-report'
           path: 'target/site/jacoco/'
           retention-days: 30
-    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_dependency_check', 'security-sast_pmd' ]
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_dependency_check' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 

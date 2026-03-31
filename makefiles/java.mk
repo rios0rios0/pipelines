@@ -5,24 +5,20 @@
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #   -include $(SCRIPTS_DIR)/makefiles/java.mk
 #
-# Targets provided: lint, test, pmd
+# Targets provided: lint, test
 # Also sets CODEQL_LANGUAGE=java, SEMGREP_LANGUAGE=java for the common.mk sast target.
-# Note: PMD provides source-level unused code detection. For stricter bytecode-level
-# analysis, configure SpotBugs (Gradle plugin) or ProGuard -printusage in your project.
+# Note: Unused code detection is handled by PMD via Gradle/Maven (stage 10, code-check).
+# For stricter bytecode-level analysis, configure SpotBugs or ProGuard -printusage in your project.
 #
 # Prerequisites: Gradle wrapper (gradlew) must be present in the project root.
 
 CODEQL_LANGUAGE ?= java
 SEMGREP_LANGUAGE ?= java
-UNUSED_SCRIPT ?= $(SCRIPTS_DIR)/global/scripts/languages/java/pmd/run.sh
 
-.PHONY: lint test pmd
+.PHONY: lint test
 
 lint:
 	@./gradlew check
 
 test:
 	@./gradlew test
-
-pmd:
-	-@$(SCRIPTS_DIR)/global/scripts/languages/java/pmd/run.sh

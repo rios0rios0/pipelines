@@ -18,7 +18,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added unused code detection SAST stage for Python (`vulture`), JavaScript/TypeScript (`knip`), Java (`pmd` — source-level baseline), Ruby (`debride`), and PHP (`phpmd`) across all supported platforms
+- added unused code detection SAST stage for Python (`vulture`), JavaScript/TypeScript (`knip`), Ruby (`debride`), and PHP (`phpmd`) across all supported platforms
 - added `make unused` target to `common.mk` with language-specific scanners via `UNUSED_SCRIPT`
 
 ### Changed

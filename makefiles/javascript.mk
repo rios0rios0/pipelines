@@ -7,13 +7,12 @@
 #
 # Targets provided: lint, test, knip
 # Also sets CODEQL_LANGUAGE=javascript, SEMGREP_LANGUAGE=javascript for the common.mk sast target.
-# Sets UNUSED_SCRIPT to the knip runner for the common.mk unused target.
 #
 # Prerequisites: Yarn must be installed and the project must have a package.json.
 
 CODEQL_LANGUAGE ?= javascript
 SEMGREP_LANGUAGE ?= javascript
-UNUSED_SCRIPT = $(SCRIPTS_DIR)/global/scripts/languages/javascript/knip/run.sh
+UNUSED_SCRIPT ?= $(SCRIPTS_DIR)/global/scripts/languages/javascript/knip/run.sh
 
 .PHONY: lint test knip
 

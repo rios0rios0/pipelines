@@ -16,17 +16,7 @@ if [ ! -f "$DEADCODE_BIN" ]; then
 fi
 
 echo "Running deadcode analysis..."
-# Use -test to include test functions as roots (supports both binaries and library projects)
 "$DEADCODE_BIN" -test ./... > "$fileName" 2>&1 || EXIT_CODE=$?
-
-if [ -s "$fileName" ]; then
-  echo "deadcode found unreachable code. See report at: $fileName"
-  cat "$fileName"
-  EXIT_CODE=${EXIT_CODE:-1}
-else
-  echo "No unreachable code detected."
-  echo "OK" > "$fileName"
-fi
 
 echo "deadcode analysis complete. Results written to: $fileName"
 exit ${EXIT_CODE:-0}

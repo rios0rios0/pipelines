@@ -15,11 +15,3 @@ sca:safety:
   stage: 'security (sca/sast)'
   script:
     - pdm run safety-scan
-
-sast:vulture:
-  extends: '.pdm'
-  stage: 'security (sca/sast)'
-  script:
-    - pip install vulture --quiet
-    - vulture . --min-confidence 80
-  allow_failure: true

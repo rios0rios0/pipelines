@@ -16,10 +16,3 @@ sca:yarn-audit:
   script:
     - yarn npm audit --recursive --severity high
   allow_failure: true
-
-sast:knip:
-  extends: '.yarn'
-  stage: 'security (sca/sast)'
-  script:
-    - npx --yes knip
-  allow_failure: true

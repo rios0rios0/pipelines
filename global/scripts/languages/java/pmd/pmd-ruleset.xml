@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<ruleset name="Pipelines Default PMD Ruleset"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>
+        Default PMD ruleset shipped by the pipelines library.
+        Focuses on unused code detection rules from the bestpractices category.
+        Projects can override this by placing a custom PMD ruleset in their build configuration.
+    </description>
+
+    <!-- Unused code detection rules -->
+    <rule ref="category/java/bestpractices.xml/UnusedAssignment" />
+    <rule ref="category/java/bestpractices.xml/UnusedFormalParameter" />
+    <rule ref="category/java/bestpractices.xml/UnusedLocalVariable" />
+    <rule ref="category/java/bestpractices.xml/UnusedPrivateField" />
+    <rule ref="category/java/bestpractices.xml/UnusedPrivateMethod" />
+
+</ruleset>

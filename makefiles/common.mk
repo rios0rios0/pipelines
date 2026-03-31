@@ -4,11 +4,11 @@
 #   SCRIPTS_DIR ?= $(HOME)/Development/github.com/rios0rios0/pipelines
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #
-# Targets provided: setup codeql semgrep trivy hadolint gitleaks sast unused
+# Targets provided: setup codeql semgrep trivy hadolint gitleaks sast
 # Requires: SCRIPTS_DIR to be set. SEMGREP_LANGUAGE and CODEQL_LANGUAGE should be set by a language
 #           .mk file (e.g. golang.mk) or manually before including this file.
 
-.PHONY: setup codeql semgrep trivy hadolint gitleaks sast unused
+.PHONY: setup codeql semgrep trivy hadolint gitleaks sast
 
 setup:
 	@curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
@@ -28,7 +28,4 @@ hadolint:
 gitleaks:
 	-@$(SCRIPTS_DIR)/global/scripts/tools/gitleaks/run.sh
 
-unused:
-	@$(if $(UNUSED_SCRIPT),$(UNUSED_SCRIPT),echo "No unused code scanner configured. Set UNUSED_SCRIPT in your language .mk file.")
-
-sast: codeql semgrep trivy hadolint gitleaks unused
+sast: codeql semgrep trivy hadolint gitleaks

@@ -5,22 +5,19 @@
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #   -include $(SCRIPTS_DIR)/makefiles/javascript.mk
 #
-# Targets provided: lint, test, knip
+# Targets provided: lint, test
 # Also sets CODEQL_LANGUAGE=javascript, SEMGREP_LANGUAGE=javascript for the common.mk sast target.
 #
 # Prerequisites: Yarn must be installed and the project must have a package.json.
 
 CODEQL_LANGUAGE ?= javascript
 SEMGREP_LANGUAGE ?= javascript
-UNUSED_SCRIPT ?= $(SCRIPTS_DIR)/global/scripts/languages/javascript/knip/run.sh
 
-.PHONY: lint test knip
+.PHONY: lint test
 
 lint:
 	@yarn lint
+	-@$(SCRIPTS_DIR)/global/scripts/languages/javascript/knip/run.sh
 
 test:
 	@yarn test
-
-knip:
-	-@$(SCRIPTS_DIR)/global/scripts/languages/javascript/knip/run.sh

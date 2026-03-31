@@ -1,4 +1,8 @@
 #!/usr/bin/env sh
+# PMD provides SOURCE-LEVEL unused code detection (pattern matching on AST).
+# For stricter BYTECODE-LEVEL analysis (whole-program call graph), use:
+#   - SpotBugs (requires Gradle/Maven plugin: id 'com.github.spotbugs')
+#   - ProGuard with -printusage (requires compiled bytecode + entry point config)
 
 if [ -z "$SCRIPTS_DIR" ]; then
   SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"

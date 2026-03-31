@@ -18,15 +18,12 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added unused code detection SAST stage for Python (`vulture`), JavaScript/TypeScript (`knip`), Java (`pmd`), Ruby (`debride`), and PHP (`phpmd`) across all supported platforms
+- added unused code detection SAST stage for Python (`vulture`), JavaScript/TypeScript (`knip`), Java (`pmd` — source-level baseline), Ruby (`debride`), and PHP (`phpmd`) across all supported platforms
 - added `make unused` target to `common.mk` with language-specific scanners via `UNUSED_SCRIPT`
 
 ### Changed
 
 - changed Go unused code detection to rely on `golangci-lint` (`unused`, `unparam`, `wastedassign` linters) instead of a standalone `deadcode` tool
-
-### Changed
-
 - changed Azure DevOps `sonar.projectName` derivation to use `project/repository` format instead of just the repository name
 
 ## [4.2.0] - 2026-03-26

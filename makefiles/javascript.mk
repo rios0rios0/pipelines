@@ -17,6 +17,7 @@ SEMGREP_LANGUAGE ?= javascript
 
 lint:
 	@yarn lint
+	-@$(SCRIPTS_DIR)/global/scripts/languages/javascript/knip/run.sh
 
 test:
 	@yarn test

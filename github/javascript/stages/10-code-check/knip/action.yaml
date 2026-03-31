@@ -1,0 +1,47 @@
+inputs:
+  package_manager:
+    required: false
+    default: 'npm'
+    description: 'Package manager to use (npm or yarn)'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - name: 'Enable Corepack'
+      if: inputs.package_manager == 'yarn'
+      run: corepack enable
+      shell: 'bash'
+
+    - name: 'Setup Node.js'
+      uses: 'actions/setup-node@v4'
+      with:
+        node-version: '20'
+        cache: '${{ inputs.package_manager }}'
+
+    - name: 'Install dependencies (npm)'
+      if: inputs.package_manager == 'npm'
+      run: npm ci
+      shell: 'bash'
+
+    - name: 'Install dependencies (yarn)'
+      if: inputs.package_manager == 'yarn'
+      run: yarn install --immutable
+      shell: 'bash'
+
+    - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - run: $SCRIPTS_DIR/global/scripts/languages/javascript/knip/run.sh
+      shell: 'bash'
+
+    - name: 'Upload Report'
+      uses: 'actions/upload-artifact@v6'
+      with:
+        name: 'knip'
+        path: 'build/reports/knip/'
+        if-no-files-found: 'error'
+        overwrite: 'true'
+        retention-days: 10
+      if: always()

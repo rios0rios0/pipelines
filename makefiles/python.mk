@@ -15,7 +15,6 @@ SEMGREP_LANGUAGE ?= python
 export PREFIX ?= .
 export REPORT_PATH ?= ./reports
 
-
 .PHONY: lint safety test cyclonedx
 
 lint:
@@ -23,6 +22,7 @@ lint:
 	@pdm run black .
 	@pdm run flake8 .
 	@pdm run mypy .
+	-@$(SCRIPTS_DIR)/global/scripts/languages/python/vulture/run.sh
 
 safety:
 	@pdm run safety

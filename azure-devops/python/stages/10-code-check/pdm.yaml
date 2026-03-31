@@ -37,3 +37,13 @@ stages:
               pdm run type-check
             displayName: 'Run "mypy" check'
         continueOnError: true
+
+      - job: 'quality_vulture'
+        displayName: 'quality:vulture'
+        steps:
+          - template: '../../abstracts/pdm-python3.14.yaml'
+          - script: |
+              pip install vulture --quiet
+              vulture . --min-confidence 80
+            displayName: 'Run Vulture dead code detection'
+        continueOnError: true

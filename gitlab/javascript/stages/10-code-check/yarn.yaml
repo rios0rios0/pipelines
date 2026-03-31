@@ -11,3 +11,10 @@ style:eslint:
     - !reference [ .style:eslint, after_script ]
   cache:
     paths: !reference [ .style:eslint, cache, paths ]
+
+quality:knip:
+  extends: '.yarn'
+  stage: 'code check (style/quality)'
+  script:
+    - npx --yes knip
+  allow_failure: true

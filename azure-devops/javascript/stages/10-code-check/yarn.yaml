@@ -24,3 +24,11 @@ stages:
               WORKING_DIRECTORY: "${{ parameters.WORKING_DIRECTORY }}"
               RUN_BEFORE_CODE_CHECK: ${{ parameters.RUN_BEFORE_CODE_CHECK }}
               RUN_AFTER_CODE_CHECK: ${{ parameters.RUN_AFTER_CODE_CHECK }}
+
+      - job: 'quality_knip'
+        displayName: 'quality:knip'
+        steps:
+          - template: '../../abstracts/corepack-node20.18.3-no-cache.yaml'
+          - script: npx --yes knip
+            displayName: 'Run Knip unused code detection'
+        continueOnError: true

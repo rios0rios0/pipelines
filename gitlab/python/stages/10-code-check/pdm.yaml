@@ -24,3 +24,11 @@ quality:mypy:
   stage: 'code check (style/quality)'
   script:
     - pdm run type-check
+
+quality:vulture:
+  extends: '.pdm'
+  stage: 'code check (style/quality)'
+  script:
+    - pip install vulture --quiet
+    - vulture . --min-confidence 80
+  allow_failure: true

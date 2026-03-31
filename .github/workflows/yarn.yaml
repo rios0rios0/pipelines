@@ -48,6 +48,17 @@ jobs:
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 
+  code_check-quality_knip:
+    name: 'code-check > quality:knip'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/javascript/stages/10-code-check/knip@main'
+        with:
+          package_manager: 'yarn'
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
   # second stage
   security-sast_codeql:
     name: 'security > sast:codeql'
@@ -56,7 +67,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
         with:
           codeql_language: 'javascript-typescript'
-    needs: [ 'code_check-style_eslint' ]
+    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_semgrep:
@@ -66,7 +77,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-semgrep@main'
         with:
           semgrep_lang: 'javascript'
-    needs: [ 'code_check-style_eslint' ]
+    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_gitleaks:
@@ -74,7 +85,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-gitleaks@main'
-    needs: [ 'code_check-style_eslint' ]
+    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_hadolint:
@@ -82,7 +93,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
-    needs: [ 'code_check-style_eslint' ]
+    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -91,7 +102,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy@main'
-    needs: [ 'code_check-style_eslint' ]
+    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -100,7 +111,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy-sca@main'
-    needs: [ 'code_check-style_eslint' ]
+    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -122,18 +133,7 @@ jobs:
 
       - run: 'yarn npm audit --recursive --severity high'
         shell: 'bash'
-    needs: [ 'code_check-style_eslint' ]
-    continue-on-error: true
-    if: "!startsWith(github.ref, 'refs/tags/')"
-
-  security-sast_knip:
-    name: 'security > sast:knip'
-    runs-on: 'ubuntu-latest'
-    steps:
-      - uses: 'rios0rios0/pipelines/github/javascript/stages/20-security/knip@main'
-        with:
-          package_manager: 'yarn'
-    needs: [ 'code_check-style_eslint' ]
+    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -183,7 +183,7 @@ jobs:
           name: 'coverage-report'
           path: 'coverage/'
           retention-days: 30
-    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_yarn_audit', 'security-sast_knip' ]
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_yarn_audit' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   tests-test_build:
@@ -206,7 +206,7 @@ jobs:
           yarn install --immutable
           yarn build
         shell: 'bash'
-    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_yarn_audit', 'security-sast_knip' ]
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_yarn_audit' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 

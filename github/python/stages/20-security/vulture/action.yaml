@@ -15,6 +15,12 @@ runs:
       with:
         python-version: '${{ inputs.python_version }}'
 
+    - name: 'Install PDM and dependencies'
+      run: |
+        python -m pip install pdm
+        pdm install -v
+      shell: 'bash'
+
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 
     - run: $SCRIPTS_DIR/global/scripts/languages/python/vulture/run.sh

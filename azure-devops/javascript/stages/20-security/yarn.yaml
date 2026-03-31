@@ -24,3 +24,11 @@ stages:
           - script: yarn npm audit --recursive --severity high
             displayName: 'Run yarn npm audit'
         continueOnError: true
+
+      - job: 'sast_knip'
+        displayName: 'sast:knip'
+        steps:
+          - template: '../../abstracts/corepack-node20.18.3-no-cache.yaml'
+          - script: npx --yes knip
+            displayName: 'Run Knip unused code detection'
+        continueOnError: true

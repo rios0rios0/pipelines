@@ -17,3 +17,11 @@ sca:govulncheck:
     - go install golang.org/x/vuln/cmd/govulncheck@latest
     - govulncheck ./...
   allow_failure: true
+
+sast:deadcode:
+  extends: '.go'
+  stage: 'security (sca/sast)'
+  script:
+    - go install golang.org/x/tools/cmd/deadcode@latest
+    - deadcode -test ./...
+  allow_failure: true

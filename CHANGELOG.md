@@ -18,8 +18,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added unused code detection SAST stage for Go (`deadcode`), Python (`vulture`), and JavaScript/TypeScript (`knip`) with composite actions, wrapper scripts, and `make unused` target
-- added `deadcode`, `vulture`, and `knip` named Makefile targets to `golang.mk`, `python.mk`, and `javascript.mk` respectively
+- added unused code detection SAST stage for Go (`deadcode`), Python (`vulture`), and JavaScript/TypeScript (`knip`) across GitHub Actions, GitLab CI, and Azure DevOps
+- added `deadcode`, `vulture`, `knip`, and `unused` Makefile targets to `golang.mk`, `python.mk`, `javascript.mk`, and `common.mk` respectively
 
 ### Changed
 

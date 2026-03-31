@@ -23,15 +23,22 @@ fi
 # Build the project to produce bytecode
 if [ -f "gradlew" ]; then
   echo "Building project with Gradle..."
-  ./gradlew classes --quiet 2>/dev/null || true
+  if ! ./gradlew classes --quiet 2>&1; then
+    echo "BUILD FAILED: Gradle compilation failed. Skipping ProGuard analysis."
+    echo "SKIP: compilation failed" > "$fileName"
+    exit 1
+  fi
   INPUT_JARS=$(find . -path "*/build/libs/*.jar" -not -name "*-sources.jar" -not -name "*-javadoc.jar" 2>/dev/null | head -1)
   if [ -z "$INPUT_JARS" ]; then
-    # Fall back to classes directories
     INPUT_JARS=$(find . -path "*/build/classes/java/main" -type d 2>/dev/null | head -1)
   fi
 elif [ -f "pom.xml" ]; then
   echo "Building project with Maven..."
-  mvn compile -q 2>/dev/null || true
+  if ! mvn compile -q 2>&1; then
+    echo "BUILD FAILED: Maven compilation failed. Skipping ProGuard analysis."
+    echo "SKIP: compilation failed" > "$fileName"
+    exit 1
+  fi
   INPUT_JARS=$(find . -path "*/target/*.jar" -not -name "*-sources.jar" -not -name "*-javadoc.jar" 2>/dev/null | head -1)
   if [ -z "$INPUT_JARS" ]; then
     INPUT_JARS=$(find . -path "*/target/classes" -type d 2>/dev/null | head -1)

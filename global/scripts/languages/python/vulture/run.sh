@@ -22,7 +22,7 @@ fi
 
 echo "Running vulture unused code analysis..."
 # shellcheck disable=SC2086
-python -m vulture . $whitelistArgs --min-confidence 80 > "$fileName" 2>&1 || EXIT_CODE=$?
+python -m vulture . $whitelistArgs --min-confidence 80 --exclude .venv > "$fileName" 2>&1 || EXIT_CODE=$?
 
 echo "vulture analysis complete. Results written to: $fileName"
 exit ${EXIT_CODE:-0}

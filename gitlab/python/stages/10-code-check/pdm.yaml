@@ -30,5 +30,5 @@ quality:vulture:
   stage: 'code check (style/quality)'
   script:
     - pip install vulture --quiet
-    - vulture . --min-confidence 80
+    - vulture . --min-confidence 80 --exclude .venv
   allow_failure: true

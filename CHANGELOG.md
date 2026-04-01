@@ -28,6 +28,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
+- fixed `golangci-lint` script to use a local binary when available (v2+) before attempting to download, improving portability for environments like Android/Termux
+
 - fixed major version tag (e.g. `v4`) not updating on automated releases — `GITHUB_TOKEN` events don't cascade to other workflows, so `release.yaml` now calls `update-major-version-tag.yaml` as a reusable workflow via `workflow_call`
 
 ## [4.2.0] - 2026-03-26

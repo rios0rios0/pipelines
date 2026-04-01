@@ -91,7 +91,7 @@ if [ -z "$GOLANGCI_LINT" ]; then
   wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh
   GOLANGCI_LINT="./bin/golangci-lint"
 fi
-$GOLANGCI_LINT run \
+"$GOLANGCI_LINT" run \
   --config "merged.yml" \
   --color "always" \
   --timeout "10m" \

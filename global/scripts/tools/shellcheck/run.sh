@@ -9,13 +9,13 @@ TOOL_NAME="shellcheck" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
 fileName="$(pwd)/$REPORT_PATH/shellcheck.json"
 
 # Find all shell scripts in the project
-SHELL_SCRIPTS=$(find "$(pwd)" -name "*.sh" \
+SCRIPT_LIST=$(find "$(pwd)" -name "*.sh" \
   -not -path "*/.git/*" \
   -not -path "*/node_modules/*" \
   -not -path "*/vendor/*" \
   -not -path "*/.codeql-db/*")
 
-if [ -z "$SHELL_SCRIPTS" ]; then
+if [ -z "$SCRIPT_LIST" ]; then
   echo "No shell scripts found, skipping ShellCheck analysis."
   echo "[]" > "$fileName"
   echo "Empty report written to: $fileName"
@@ -48,10 +48,14 @@ fi
 
 echo "Running ShellCheck analysis..."
 echo "Checking scripts:"
-echo "$SHELL_SCRIPTS" | while read -r f; do echo "  - $f"; done
+echo "$SCRIPT_LIST" | while read -r f; do echo "  - $f"; done
 
-# shellcheck disable=SC2086
-shellcheck --format=json1 --severity=warning $SHELL_SCRIPTS > "$fileName" 2>&1 || EXIT_CODE=$?
+find "$(pwd)" -name "*.sh" \
+  -not -path "*/.git/*" \
+  -not -path "*/node_modules/*" \
+  -not -path "*/vendor/*" \
+  -not -path "*/.codeql-db/*" \
+  -print0 | xargs -0 shellcheck --format=json1 --severity=warning > "$fileName" || EXIT_CODE=$?
 
 echo "ShellCheck analysis complete. Results written to: $fileName"
 exit ${EXIT_CODE:-0}

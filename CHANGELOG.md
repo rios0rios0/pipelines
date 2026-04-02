@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added ShellCheck tool at `global/scripts/tools/shellcheck/run.sh` with auto-installation when the binary is not available locally, following the same pattern as Hadolint
+
 ## [4.3.0] - 2026-04-01
 
 ### Added

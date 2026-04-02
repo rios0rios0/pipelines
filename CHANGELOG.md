@@ -19,6 +19,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Added
 
 - added ShellCheck tool at `global/scripts/tools/shellcheck/run.sh` with auto-installation when the binary is not available locally, following the same pattern as Hadolint
+- added ShellCheck platform integration stage files for GitHub Actions, GitLab CI, and Azure DevOps under `20-security`
 
 ## [4.3.0] - 2026-04-01
 

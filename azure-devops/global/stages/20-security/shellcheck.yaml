@@ -1,0 +1,12 @@
+jobs:
+  - job: 'sast_shellcheck'
+    displayName: 'sast:shellcheck'
+    steps:
+      - template: '../../abstracts/scripts-repo.yaml'
+      - script: $(Scripts.Directory)/global/scripts/tools/shellcheck/run.sh
+        continueOnError: true
+
+      - task: 'PublishPipelineArtifact@1'
+        inputs:
+          artifactName: 'shellcheck'
+          targetPath: 'build/reports/shellcheck'

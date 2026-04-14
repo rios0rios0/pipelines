@@ -16,6 +16,14 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- changed the GitLab CI and the global `golang.1.26-awscli` container Go version from `1.26.1` to `1.26.2` to align with the Azure DevOps bump in 4.4.1
+
+### Fixed
+
+- fixed `update-major-version-tag.yaml` silently skipping on every bump release — the previous `github.event_name == 'workflow_call'` guard never matched because reusable workflows inherit the caller's `event_name` (e.g. `push`), so the `v4` tag had been stuck at `4.1.0` since PR #327; now detects `workflow_call` via the `inputs.tag_name` presence check
+
 ## [4.4.1] - 2026-04-14
 
 ### Changed

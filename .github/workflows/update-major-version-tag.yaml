@@ -19,7 +19,7 @@ jobs:
     name: 'update major version tag'
     runs-on: 'ubuntu-latest'
     if: >-
-      inputs.tag_name != '' ||
+      (github.event_name != 'release' && inputs.tag_name != '') ||
       (github.event_name == 'release' &&
       !github.event.release.prerelease &&
       contains(github.event.release.tag_name, '.'))

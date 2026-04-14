@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [4.4.1] - 2026-04-14
+
 ### Changed
 
 - changed the Azure DevOps GoLang version from `1.26.1` to `1.26.2`

@@ -1,0 +1,6 @@
+stages:
+  - stage: 'delivery'
+    displayName: 'delivery'
+    condition: and(not(failed()), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - template: '../../../global/stages/40-delivery/release.yaml'

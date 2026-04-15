@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [4.5.0] - 2026-04-15
+
 ### Added
 
 - added `azure-devops/terraform/stages/40-delivery/terra.yaml` wiring the shared `release.yaml` tag-creation job into the Azure DevOps Terraform pipeline, so that merges of `chore/bump-X.Y.Z` branches automatically create an annotated Git tag — previously the `40-delivery` stage was commented out in `azure-devops/terraform/terra.yaml` and the directory was empty, leaving Terraform module bumps without any automatic tagging

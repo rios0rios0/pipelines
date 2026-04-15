@@ -16,8 +16,13 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added `azure-devops/terraform/stages/40-delivery/terra.yaml` wiring the shared `release.yaml` tag-creation job into the Azure DevOps Terraform pipeline, so that merges of `chore/bump-X.Y.Z` branches automatically create an annotated Git tag — previously the `40-delivery` stage was commented out in `terraform/terra.yaml` and the directory was empty, leaving Terraform module bumps without any automatic tagging
+
 ### Changed
 
+- changed `azure-devops/terraform/terra.yaml` to include the new `stages/40-delivery/terra.yaml` stage (previously commented out)
 - changed the GitLab CI and the global `golang.1.26-awscli` container Go version from `1.26.1` to `1.26.2` to align with the Azure DevOps bump in 4.4.1
 
 ### Fixed

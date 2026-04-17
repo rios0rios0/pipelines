@@ -1,3 +1,9 @@
+inputs:
+  pre_script:
+    required: false
+    default: ''
+    description: 'Shell commands run before Trivy. Useful for configuring SSH so the Terraform parser can clone private modules referenced via `source = "git@..."`.'
+
 runs:
   using: 'composite'
   steps:
@@ -6,6 +12,13 @@ runs:
 
     - name: 'Get Scripts'
       uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - name: 'Pre-steps'
+      if: "inputs.pre_script != ''"
+      shell: 'bash'
+      env:
+        PRE_SCRIPT: ${{ inputs.pre_script }}
+      run: eval "$PRE_SCRIPT"
 
     - name: 'Execute'
       shell: 'bash'

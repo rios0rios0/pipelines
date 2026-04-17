@@ -1,8 +1,20 @@
+parameters:
+  # Steps injected before Trivy runs. Useful for consumers that need extra
+  # setup (e.g., configuring SSH to clone private Terraform modules so the
+  # Trivy Terraform parser can resolve `source = "git@..."` references).
+  - name: 'PRE_STEPS'
+    type: 'stepList'
+    default: []
+
 jobs:
   - job: 'sast_trivy'
     displayName: 'sast:trivy'
     steps:
       - template: '../../abstracts/scripts-repo.yaml'
+
+      - ${{ each step in parameters.PRE_STEPS }}:
+          - ${{ step }}
+
       - script: $(Scripts.Directory)/global/scripts/tools/trivy/run.sh
         continueOnError: true
 

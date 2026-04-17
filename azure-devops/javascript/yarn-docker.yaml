@@ -27,13 +27,6 @@ parameters:
     type: 'string'
     default: 'echo "No after script"'
 
-  - name: 'RUN_BEFORE_DEPLOYMENT'
-    type: 'string'
-    default: 'echo "No before script"'
-  - name: 'RUN_AFTER_DEPLOYMENT'
-    type: 'string'
-    default: 'echo "No after script"'
-
 stages:
   - template: 'stages/10-code-check/yarn.yaml'
     parameters:
@@ -57,8 +50,3 @@ stages:
     parameters:
       RUN_BEFORE_DELIVERY: ${{ parameters.RUN_BEFORE_DELIVERY }}
       RUN_AFTER_DELIVERY: ${{ parameters.RUN_AFTER_DELIVERY }}
-
-  - template: 'stages/50-deployment/k8s.yaml'
-    parameters:
-      RUN_BEFORE_DEPLOYMENT: ${{ parameters.RUN_BEFORE_DEPLOYMENT }}
-      RUN_AFTER_DEPLOYMENT: ${{ parameters.RUN_AFTER_DEPLOYMENT }}

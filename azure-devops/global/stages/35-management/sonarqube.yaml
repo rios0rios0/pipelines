@@ -1,3 +1,17 @@
+parameters:
+  # When `true`, the job downloads a pipeline artifact named after
+  # `COVERAGE_ARTIFACT_NAME` (expected to be produced by an earlier test
+  # stage) before invoking `sonar-scanner`. Consumers without a coverage
+  # stage (e.g., pure Terraform projects) pass `false` so the download
+  # step is skipped entirely instead of emitting `##[error]Artifact <name>
+  # was not found` and turning the job yellow.
+  - name: 'DOWNLOAD_COVERAGE_ARTIFACT'
+    type: 'boolean'
+    default: true
+  - name: 'COVERAGE_ARTIFACT_NAME'
+    type: 'string'
+    default: 'coverage'
+
 jobs:
   - job: 'report_sonarqube'
     displayName: 'report:sonarqube'
@@ -12,12 +26,13 @@ jobs:
         fetchDepth: 0
         fetchTags: true
 
-      - task: 'DownloadPipelineArtifact@2'
-        inputs:
-          artifactName: 'coverage'
-          targetPath: "$(Build.SourcesDirectory)"
-        displayName: 'Download Coverage File'
-        continueOnError: true
+      - ${{ if eq(parameters.DOWNLOAD_COVERAGE_ARTIFACT, true) }}:
+          - task: 'DownloadPipelineArtifact@2'
+            inputs:
+              artifactName: '${{ parameters.COVERAGE_ARTIFACT_NAME }}'
+              targetPath: "$(Build.SourcesDirectory)"
+            displayName: 'Download Coverage File'
+            continueOnError: true
 
       - task: 'Cache@2'
         inputs:

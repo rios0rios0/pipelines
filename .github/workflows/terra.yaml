@@ -7,6 +7,12 @@
 # the parent workflow is responsible for setting up the call events²
 on:
   workflow_call:
+    inputs:
+      pre_script:
+        required: false
+        type: 'string'
+        default: ''
+        description: 'Shell commands run before Trivy and Semgrep. Useful for configuring SSH so the Terraform parser can clone private modules referenced via `source = "git@..."`.'
 
 jobs:
   # first stage
@@ -81,6 +87,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-semgrep@main'
         with:
           semgrep_lang: 'terraform'
+          pre_script: ${{ inputs.pre_script }}
     needs: [ 'code_check-style_terra_format' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -106,6 +113,8 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy@main'
+        with:
+          pre_script: ${{ inputs.pre_script }}
     needs: [ 'code_check-style_terra_format' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"

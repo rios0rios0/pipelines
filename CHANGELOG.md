@@ -18,7 +18,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
-- fixed `global/scripts/tools/trivy/run.sh` crashing with a nil-URL `SIGSEGV` in `pkg/report/sarif.go:103` when Terraform `source =` pins reference an SSH remote like `git@host:path/repo?ref=x` (Go's `net/url` rejects the colon in the first path segment). Switched `--format sarif` to `--format json` and the output filename to `trivy.json`; the existing `trivy-sca.json`, `govulncheck.json`, and `semgrep.json` reports are already JSON, so this aligns the Trivy IaC report with the rest of the tool scripts. SARIF was only useful for consumers that publish to GitHub Code Scanning, and no consumer currently wires that upload path.
+- fixed `global/scripts/tools/trivy/run.sh` crashing with a nil-URL `SIGSEGV` in `pkg/report/sarif.go:103` when Terraform `source =` pins reference an SSH remote like `git@host:path/repo?ref=x` (Go's `net/url` rejects the colon in the first path segment). The script now produces `trivy.json` as the primary report via `--format json` (aligned with `trivy-sca.json`, `govulncheck.json`, and the other tool outputs), and additionally runs `trivy convert --format sarif` best-effort to preserve `trivy.sarif` for consumers that publish to GitHub Code Scanning. Convert failures are swallowed so the SIGSEGV no longer fails the job; consumers fall back to `trivy.json` when the SARIF conversion hits the broken path.
 
 ### Added
 

@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed `global/scripts/tools/trivy/run.sh` crashing with a nil-URL `SIGSEGV` in `pkg/report/sarif.go:103` when Terraform `source =` pins reference an SSH remote like `git@host:path/repo?ref=x` (Go's `net/url` rejects the colon in the first path segment). Switched `--format sarif` to `--format json` and the output filename to `trivy.json`; the existing `trivy-sca.json`, `govulncheck.json`, and `semgrep.json` reports are already JSON, so this aligns the Trivy IaC report with the rest of the tool scripts. SARIF was only useful for consumers that publish to GitHub Code Scanning, and no consumer currently wires that upload path.
+
 ### Added
 
 - added a `PRE_STEPS` `stepList` parameter to `azure-devops/terra/terra.yaml`, forwarded through `stages/20-security/terra.yaml` into the `sast:trivy` (`azure-devops/global/stages/20-security/trivy.yaml`) and `sast:semgrep` (`azure-devops/global/stages/20-security/docker.yaml`) jobs, so consumers with private Terraform modules can inject SSH setup before the scanners parse `source = "git@..."` references — previously Trivy and Semgrep failed to clone remote modules and `sast:*` jobs reported `succeededWithIssues` on every build

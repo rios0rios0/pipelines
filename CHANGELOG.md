@@ -19,6 +19,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Fixed
 
 - fixed `global/scripts/tools/trivy/run.sh` crashing with a nil-URL `SIGSEGV` in `pkg/report/sarif.go:103` when Terraform `source =` pins reference an SSH remote like `git@host:path/repo?ref=x` (Go's `net/url` rejects the colon in the first path segment). The script now produces `trivy.json` as the primary report via `--format json` (aligned with `trivy-sca.json`, `govulncheck.json`, and the other tool outputs), and additionally runs `trivy convert --format sarif` best-effort to preserve `trivy.sarif` for consumers that publish to GitHub Code Scanning. Convert failures are swallowed so the SIGSEGV no longer fails the job; consumers fall back to `trivy.json` when the SARIF conversion hits the broken path.
+- fixed `gitlab/global/stages/20-security/trivy.yaml` collecting only `trivy.sarif` as an artifact, which would produce missing-artifact warnings for GitLab consumers now that `trivy.json` is the primary output; the job now collects both `trivy.json` (always produced) and `trivy.sarif` (best-effort).
 
 ### Added
 

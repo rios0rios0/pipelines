@@ -1,3 +1,10 @@
+parameters:
+  # Steps forwarded to the Terraform SAST jobs (`sast:trivy`, `sast:semgrep`)
+  # so consumers can configure SSH for private Terraform module cloning.
+  - name: 'PRE_STEPS'
+    type: 'stepList'
+    default: []
+
 stages:
   - stage: 'security'
     displayName: 'security (sca/sast)'
@@ -6,9 +13,12 @@ stages:
       - template: '../../../global/stages/20-security/docker.yaml'
         parameters:
           SEMGREP_LANGUAGE: 'terraform'
+          PRE_STEPS: ${{ parameters.PRE_STEPS }}
 
       - template: '../../../global/stages/20-security/hadolint.yaml'
 
       - template: '../../../global/stages/20-security/trivy.yaml'
+        parameters:
+          PRE_STEPS: ${{ parameters.PRE_STEPS }}
 
       - template: '../../../global/stages/20-security/trivy-sca.yaml'

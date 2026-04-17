@@ -7,6 +7,13 @@
 #   include:
 #     - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/terra/terra.yaml'
 #
+#   # Optionally set `SAST_PRE_SCRIPT` to inject SSH setup (or other
+#   # prerequisites) before the Terraform SAST scanners (Trivy, Semgrep)
+#   # run, so the parsers can clone private modules referenced via
+#   # `source = "git@..."`:
+#   variables:
+#     SAST_PRE_SCRIPT: 'eval "$(ssh-agent -s)" && ssh-add <(echo "$SSH_PRIVATE_KEY")'
+#
 #   # Add your project-specific delivery stage:
 #   delivery:
 #     stage: 'delivery'

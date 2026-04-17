@@ -16,7 +16,9 @@ runs:
     - name: 'Pre-steps'
       if: "inputs.pre_script != ''"
       shell: 'bash'
-      run: ${{ inputs.pre_script }}
+      env:
+        PRE_SCRIPT: ${{ inputs.pre_script }}
+      run: eval "$PRE_SCRIPT"
 
     - name: 'Execute'
       shell: 'bash'

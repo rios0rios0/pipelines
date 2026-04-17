@@ -4,6 +4,11 @@ stages:
     condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
     jobs:
       - template: '../../../global/stages/35-management/sonarqube.yaml'
+        parameters:
+          # Terraform consumers don't produce a `coverage` artifact, so the
+          # default download step emits `##[error]Artifact coverage was not
+          # found` and turns the job yellow. Skip it.
+          DOWNLOAD_COVERAGE_ARTIFACT: false
 
       - job: 'report_dependency_track'
         displayName: 'report:dependency-track'

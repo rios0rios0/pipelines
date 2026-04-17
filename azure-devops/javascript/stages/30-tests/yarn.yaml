@@ -33,7 +33,7 @@ stages:
           pool:
             name: "${{ parameters.SELF_HOSTED_POOL }}"
         steps:
-          - template: 'jobs/test-e2e.yaml'
+          - template: 'steps/test-e2e.yaml'
             parameters:
               WORKING_DIRECTORY: "${{ parameters.WORKING_DIRECTORY }}"
               RUN_BEFORE_TESTS: ${{ parameters.RUN_BEFORE_TESTS }}

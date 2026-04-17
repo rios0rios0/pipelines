@@ -14,5 +14,6 @@ sast:trivy:
   artifacts:
     when: 'always'
     paths:
+      - "$REPORT_PATH/trivy.json"
       - "$REPORT_PATH/trivy.sarif"
   dependencies: [] # prevent from fetching artifacts

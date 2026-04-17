@@ -17,25 +17,24 @@ stages:
     displayName: 'tests'
     condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
     jobs:
-      jobs:
-        - job: 'test_all'
-          displayName: 'test:all'
-          steps:
-            - template: 'steps/test-all.yaml'
-              parameters:
-                WORKING_DIRECTORY: "${{ parameters.WORKING_DIRECTORY }}"
-                RUN_BEFORE_TESTS: ${{ parameters.RUN_BEFORE_TESTS }}
-                RUN_AFTER_TESTS: ${{ parameters.RUN_AFTER_TESTS }}
+      - job: 'test_all'
+        displayName: 'test:all'
+        steps:
+          - template: 'steps/test-all.yaml'
+            parameters:
+              WORKING_DIRECTORY: "${{ parameters.WORKING_DIRECTORY }}"
+              RUN_BEFORE_TESTS: ${{ parameters.RUN_BEFORE_TESTS }}
+              RUN_AFTER_TESTS: ${{ parameters.RUN_AFTER_TESTS }}
 
-        - job: 'test_e2e'
-          displayName: 'test:e2e'
-          continueOnError: true
-          ${{ if ne(parameters.SELF_HOSTED_POOL, '') }}:
-            pool:
-              name: "${{ parameters.SELF_HOSTED_POOL }}"
-          steps:
-            - template: 'jobs/test-e2e.yaml'
-              parameters:
-                WORKING_DIRECTORY: "${{ parameters.WORKING_DIRECTORY }}"
-                RUN_BEFORE_TESTS: ${{ parameters.RUN_BEFORE_TESTS }}
-                RUN_AFTER_TESTS: ${{ parameters.RUN_AFTER_TESTS }}
+      - job: 'test_e2e'
+        displayName: 'test:e2e'
+        continueOnError: true
+        ${{ if ne(parameters.SELF_HOSTED_POOL, '') }}:
+          pool:
+            name: "${{ parameters.SELF_HOSTED_POOL }}"
+        steps:
+          - template: 'jobs/test-e2e.yaml'
+            parameters:
+              WORKING_DIRECTORY: "${{ parameters.WORKING_DIRECTORY }}"
+              RUN_BEFORE_TESTS: ${{ parameters.RUN_BEFORE_TESTS }}
+              RUN_AFTER_TESTS: ${{ parameters.RUN_AFTER_TESTS }}

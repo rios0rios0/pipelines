@@ -32,7 +32,12 @@ if ! command -v trivy > /dev/null 2>&1; then
   export PATH="/tmp:$PATH"
 fi
 
-PROJECT_NAME="${DT_PROJECT_NAME:-$(basename -s .git "$(git remote get-url origin 2>/dev/null || echo unknown)")}"
+# `basename -s` is a GNU extension and breaks on BusyBox/Alpine, so strip
+# the `.git` suffix with POSIX parameter expansion instead.
+originUrl="$(git remote get-url origin 2>/dev/null || echo unknown)"
+originRepo="$(basename "$originUrl")"
+originRepo="${originRepo%.git}"
+PROJECT_NAME="${DT_PROJECT_NAME:-$originRepo}"
 PROJECT_VERSION="${DT_PROJECT_VERSION:-$(git describe --tags --abbrev=0 2>/dev/null || echo latest)}"
 
 echo "Generating CycloneDX BOM for Terraform project '$PROJECT_NAME' ($PROJECT_VERSION)..."

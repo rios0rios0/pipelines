@@ -6,7 +6,7 @@ if [ -z "$SCRIPTS_DIR" ]; then
 fi
 TOOL_NAME="trivy" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
 
-fileName="$(pwd)/$REPORT_PATH/trivy.sarif"
+fileName="$(pwd)/$REPORT_PATH/trivy.json"
 
 # Install Trivy if not already available
 if ! command -v trivy > /dev/null 2>&1; then
@@ -24,9 +24,16 @@ if [ ! -f ".trivyignore" ]; then
 fi
 
 echo "Running Trivy IaC misconfiguration scan..."
+# Use `--format json` instead of `sarif`: Trivy's SARIF writer crashes with
+# a nil-URL SIGSEGV when a Terraform `source` references an SSH remote like
+# `git@host:path/repo?ref=x` because `net/url` rejects the colon in the
+# first path segment (see `pkg/report/sarif.go:103` in trivy@v0.70.0). JSON
+# is compatible with the rest of the tool scripts (`trivy-sca.json`,
+# `govulncheck.json`, `semgrep.json`) and does not exercise the broken
+# code path.
 trivy filesystem \
   --scanners misconfig \
-  --format sarif \
+  --format json \
   --output "$fileName" \
   --exit-code 1 \
   "$(pwd)" || EXIT_CODE=$?

@@ -19,9 +19,21 @@ if [ ! -f ".semgrepignore" ]; then
   cp "$defaultFile" .
 fi
 
+# Forward SSH config from the host so that PRE_STEPS-based SSH setup
+# (e.g., for cloning private Terraform modules referenced via
+# `source = "git@..."`) propagates into the Semgrep container.
+sshMounts=""
+if [ -d "$HOME/.ssh" ]; then
+  sshMounts="$sshMounts -v $HOME/.ssh:/root/.ssh:ro"
+fi
+if [ -n "$SSH_AUTH_SOCK" ] && [ -S "$SSH_AUTH_SOCK" ]; then
+  sshMounts="$sshMounts -v $SSH_AUTH_SOCK:/ssh-agent -e SSH_AUTH_SOCK=/ssh-agent"
+fi
+
 # shellcheck disable=SC2086,SC2027,SC2140
 dockerRun="docker run \
   -v "$(pwd):$CONTAINER_PATH" \
+  $sshMounts \
   --workdir "$CONTAINER_PATH" \
   returntocorp/semgrep:latest \
   semgrep \

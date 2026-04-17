@@ -20,6 +20,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - added a `PRE_STEPS` `stepList` parameter to `azure-devops/terra/terra.yaml`, forwarded through `stages/20-security/terra.yaml` into the `sast:trivy` (`azure-devops/global/stages/20-security/trivy.yaml`) and `sast:semgrep` (`azure-devops/global/stages/20-security/docker.yaml`) jobs, so consumers with private Terraform modules can inject SSH setup before the scanners parse `source = "git@..."` references — previously Trivy and Semgrep failed to clone remote modules and `sast:*` jobs reported `succeededWithIssues` on every build
 - added SSH config and `SSH_AUTH_SOCK` forwarding to `global/scripts/tools/semgrep/run.sh` so that `PRE_STEPS`-based SSH setup propagates into the Semgrep Docker container, enabling private Terraform module cloning during scans
+- added a `pre_script` input to the GitHub Actions `docker-semgrep` and `trivy` composite actions and to the `terra.yaml` reusable workflow, mirroring the Azure DevOps `PRE_STEPS` hook so consumers can configure SSH before the Terraform SAST scanners run
+- added a `SAST_PRE_SCRIPT` variable hook to the GitLab CI `sast:semgrep` and `sast:trivy` jobs, mirroring the Azure DevOps `PRE_STEPS` hook so consumers can configure SSH before the Terraform SAST scanners run
 
 ## [4.5.0] - 2026-04-15
 

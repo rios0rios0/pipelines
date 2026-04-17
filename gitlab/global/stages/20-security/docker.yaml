@@ -6,7 +6,11 @@ include:
 sast:semgrep:
   extends: '.scripts-repo-alpine-docker'
   stage: 'security (sca/sast)'
+  # Consumers can configure SSH (or other prerequisites) so the Semgrep
+  # Terraform parser can clone private modules referenced via
+  # `source = "git@..."` by setting the `SAST_PRE_SCRIPT` variable.
   script:
+    - if [ -n "$SAST_PRE_SCRIPT" ]; then sh -c "$SAST_PRE_SCRIPT"; fi
     - $SCRIPTS_DIR/global/scripts/tools/semgrep/run.sh $SEMGREP_LANG # it takes the first param as the main language
   artifacts:
     when: 'always'

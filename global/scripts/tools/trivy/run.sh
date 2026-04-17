@@ -39,21 +39,49 @@ trivy filesystem \
 # `source` pin references an SSH remote like `git@host:path/repo?ref=x`
 # because Go's `net/url` rejects the colon in the first path segment and
 # `SarifWriter.addSarifResult` dereferences the nil result. To sidestep
-# the panic, every `git@host:path` string in `trivy.json` is rewritten to
-# the equivalent valid RFC 3986 URL `ssh://git@host/path` before
-# conversion. `jq`'s `walk` traverses the full JSON tree so finding
-# locations, artifact paths, and any other embedded URI reference are all
-# normalized in one pass. The fallback `|| echo` is kept as a safety net
-# for unrelated convert failures.
-echo "Sanitizing SSH-style module URIs in Trivy JSON before SARIF conversion..."
-jq 'walk(if type == "string" and test("^git@[^:]+:") then sub("^git@(?<h>[^:]+):(?<p>.+)$"; "ssh://git@\(.h)/\(.p)") else . end)' \
-  "$jsonFile" > "$jsonFile.sanitized" && mv "$jsonFile.sanitized" "$jsonFile"
+# the panic, every `git@host:path` string in a *copy* of `trivy.json` is
+# rewritten to the equivalent valid RFC 3986 URL `ssh://git@host/path`
+# before conversion — `trivy.json` itself stays untouched so it remains
+# the authoritative artifact consumers archive or parse. `jq`'s `walk`
+# traverses the full JSON tree so finding locations, artifact paths, and
+# any other embedded URI reference are all normalized in one pass. `walk`
+# is redefined inline for compatibility with `jq` versions older than
+# `1.6` (where the builtin was introduced). The fallback `|| echo` is
+# kept as a safety net for unrelated convert failures.
+sanitizedJsonFile="$(pwd)/$REPORT_PATH/trivy.sanitized.json"
+convertInput="$jsonFile"
+if [ -f "$jsonFile" ] && command -v jq > /dev/null 2>&1; then
+  echo "Sanitizing SSH-style module URIs in a Trivy JSON copy before SARIF conversion..."
+  if jq '
+    def walk(f):
+      . as $in
+      | if type == "object" then
+          reduce keys[] as $key
+            ({}; . + { ($key): ($in[$key] | walk(f)) }) | f
+        elif type == "array" then
+          map(walk(f)) | f
+        else
+          f
+        end;
+    walk(if type == "string" and test("^git@[^:]+:") then sub("^git@(?<h>[^:]+):(?<p>.+)$"; "ssh://git@\(.h)/\(.p)") else . end)
+  ' "$jsonFile" > "$sanitizedJsonFile"; then
+    convertInput="$sanitizedJsonFile"
+  else
+    rm -f "$sanitizedJsonFile"
+    echo "Trivy JSON sanitization failed; falling back to original trivy.json for SARIF conversion."
+  fi
+else
+  echo "Skipping Trivy JSON sanitization; jq is unavailable or trivy.json was not created."
+fi
 
 echo "Converting Trivy JSON report to SARIF..."
 trivy convert \
   --format sarif \
   --output "$sarifFile" \
-  "$jsonFile" || echo "SARIF conversion failed; trivy.json is authoritative."
+  "$convertInput" || echo "SARIF conversion failed; trivy.json is authoritative."
+
+# Remove the intermediate sanitized copy; trivy.json remains the authoritative artifact.
+rm -f "$sanitizedJsonFile"
 
 if [ "$ignoreFileExists" = false ]; then
   rm -f .trivyignore

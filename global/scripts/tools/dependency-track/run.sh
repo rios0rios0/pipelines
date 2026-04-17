@@ -3,6 +3,19 @@
 
 # read and sanitize project name
 bomFile="$PREFIX$REPORT_PATH/bom.json"
+
+# Skip the upload cleanly when no CycloneDX BOM was produced. This happens
+# for consumers without a language-specific BOM generator (e.g., Terraform
+# — see `azure-devops/terra/stages/35-management/terra.yaml` where the
+# job still carries a `TODO: Missing CycloneDX for Terraform` marker).
+# Without this guard, `cat` errored with `No such file or directory` and
+# the downstream `curl` failed with HTTP 401 on an empty upload, turning
+# the job red on every build.
+if [ ! -f "$bomFile" ]; then
+  echo "No CycloneDX BOM at $bomFile — skipping Dependency-Track upload."
+  exit 0
+fi
+
 projectName=$(cat "$bomFile" | jq -r '.metadata.component.name' | sed 's/\//-/g')
 projectVersion=$(cat "$bomFile" | jq -r '.metadata.component.version')
 

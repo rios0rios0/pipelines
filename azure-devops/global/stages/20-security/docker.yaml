@@ -1,12 +1,24 @@
 parameters:
   - name: 'SEMGREP_LANGUAGE'
     type: 'string'
+  # Steps injected before Semgrep runs. Useful for consumers that need extra
+  # setup (e.g., configuring SSH to clone private Terraform modules so the
+  # Semgrep Terraform parser can resolve `source = "git@..."` references).
+  # Only applied to the `sast:semgrep` job — `sast:gitleaks` scans local git
+  # history and does not need module resolution.
+  - name: 'PRE_STEPS'
+    type: 'stepList'
+    default: []
 
 jobs:
   - job: 'sast_semgrep'
     displayName: 'sast:semgrep'
     steps:
       - template: '../../abstracts/scripts-repo.yaml'
+
+      - ${{ each step in parameters.PRE_STEPS }}:
+          - ${{ step }}
+
       - script: $(Scripts.Directory)/global/scripts/tools/semgrep/run.sh "${{ parameters.SEMGREP_LANGUAGE }}" # it takes the first param as the main language
         continueOnError: true
 

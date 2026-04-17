@@ -34,14 +34,22 @@ trivy filesystem \
   --exit-code 1 \
   "$(pwd)" || EXIT_CODE=$?
 
-# SARIF is produced best-effort via `trivy convert` for consumers that
-# publish to GitHub Code Scanning. Trivy's SARIF writer crashes with a
-# nil-URL SIGSEGV in `pkg/report/sarif.go:103` when a Terraform `source`
-# pin references an SSH remote like `git@host:path/repo?ref=x` (Go's
-# `net/url` rejects the colon in the first path segment). Swallowing the
-# convert failure keeps the job green; consumers fall back to `trivy.json`
-# when SARIF is missing.
-echo "Converting Trivy JSON report to SARIF (best-effort)..."
+# SARIF is produced via `trivy convert`. Trivy's SARIF writer panics with
+# a nil-URL `SIGSEGV` in `pkg/report/sarif.go:103` when a Terraform
+# `source` pin references an SSH remote like `git@host:path/repo?ref=x`
+# because Go's `net/url` rejects the colon in the first path segment and
+# `SarifWriter.addSarifResult` dereferences the nil result. To sidestep
+# the panic, every `git@host:path` string in `trivy.json` is rewritten to
+# the equivalent valid RFC 3986 URL `ssh://git@host/path` before
+# conversion. `jq`'s `walk` traverses the full JSON tree so finding
+# locations, artifact paths, and any other embedded URI reference are all
+# normalized in one pass. The fallback `|| echo` is kept as a safety net
+# for unrelated convert failures.
+echo "Sanitizing SSH-style module URIs in Trivy JSON before SARIF conversion..."
+jq 'walk(if type == "string" and test("^git@[^:]+:") then sub("^git@(?<h>[^:]+):(?<p>.+)$"; "ssh://git@\(.h)/\(.p)") else . end)' \
+  "$jsonFile" > "$jsonFile.sanitized" && mv "$jsonFile.sanitized" "$jsonFile"
+
+echo "Converting Trivy JSON report to SARIF..."
 trivy convert \
   --format sarif \
   --output "$sarifFile" \

@@ -15,9 +15,15 @@ stages:
         variables:
           REPORT_PATH: 'build/reports'
         steps:
-          # TODO: see https://www.reddit.com/r/Terraform/comments/1g9go7p/what_do_you_use_to_generate_sbom_for_terraform/
-          - script: echo "$(date "+%Y-%m-%d %H:%M:%S") - Missing CycloneDX for Terraform..."
-
           - template: '../../../global/abstracts/scripts-repo.yaml'
+
+          # Generate a CycloneDX BOM for the Terraform project via
+          # `trivy fs --format cyclonedx`. Captures provider pins from
+          # `.terraform.lock.hcl` and module source references. Writes to
+          # `$(REPORT_PATH)/bom.json` so the upload script below finds it.
+          - script: $(Scripts.Directory)/global/scripts/languages/terraform/cyclonedx/run.sh
+            displayName: 'generate CycloneDX BOM'
+
           - script: $(Scripts.Directory)/global/scripts/tools/dependency-track/run.sh
+            displayName: 'upload BOM to Dependency-Track'
         continueOnError: true

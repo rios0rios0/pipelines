@@ -31,6 +31,8 @@ jobs:
       contains(github.event.release.tag_name, '.'))
     steps:
       - uses: 'actions/checkout@v4'
+        with:
+          fetch-tags: true
 
       - name: 'Extract major version'
         id: 'extract'
@@ -53,7 +55,9 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git tag -fa "${{ steps.extract.outputs.major }}" \
+          # Anchor the major tag to the SemVer tag's commit, not HEAD, so the
+          # workflow stays correct regardless of which ref triggered it.
+          git tag -fa "${{ steps.extract.outputs.major }}" "${{ steps.extract.outputs.semver }}" \
             -m "Update ${{ steps.extract.outputs.major }} to ${{ steps.extract.outputs.semver }}"
           git push origin "${{ steps.extract.outputs.major }}" --force
 

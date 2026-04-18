@@ -57,28 +57,24 @@ jobs:
             -m "Update ${{ steps.extract.outputs.major }} to ${{ steps.extract.outputs.semver }}"
           git push origin "${{ steps.extract.outputs.major }}" --force
 
-      - name: 'Delete existing major version release'
+      - name: 'Recreate major version GitHub Release'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           MAJOR='${{ steps.extract.outputs.major }}'
-          if gh release view "${MAJOR}" --repo '${{ github.repository }}' >/dev/null 2>&1; then
+          REPO='${{ github.repository }}'
+          if gh release view "${MAJOR}" --repo "${REPO}" >/dev/null 2>&1; then
             echo "Deleting existing release ${MAJOR} so it can be recreated with a fresh publishedAt and body."
-            gh release delete "${MAJOR}" --yes --repo '${{ github.repository }}'
+            gh release delete "${MAJOR}" --yes --repo "${REPO}"
           else
             echo "No existing release for ${MAJOR}; nothing to delete."
           fi
-
-      - name: 'Create or update GitHub Release'
-        uses: 'softprops/action-gh-release@v2'
-        with:
-          tag_name: ${{ steps.extract.outputs.major }}
-          name: ${{ steps.extract.outputs.major }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          # Quoted 'false' string: softprops expects the literal strings
-          # 'true' | 'false' | 'legacy'. A bare YAML boolean gets coerced
-          # elsewhere and the release silently becomes "Latest", displacing
-          # the SemVer release.
-          make_latest: 'false'
+          # Using `gh release create` directly (not softprops/action-gh-release) because
+          # the action does not honor `make_latest: false` on create; the rolling
+          # major-version release must NOT steal the "Latest" badge from the SemVer
+          # release.
+          gh release create "${MAJOR}" \
+            --repo "${REPO}" \
+            --title "${MAJOR}" \
+            --generate-notes \
+            --latest=false

@@ -32,7 +32,9 @@ jobs:
     steps:
       - uses: 'actions/checkout@v4'
         with:
-          fetch-tags: true
+          # Need full history + tags so the SemVer tag (e.g., `4.6.0`) is
+          # resolvable when anchoring the major-version tag to its commit.
+          fetch-depth: 0
 
       - name: 'Extract major version'
         id: 'extract'

@@ -10,6 +10,12 @@ on:
         required: true
         type: 'string'
         description: 'The SemVer tag name (e.g., "4.2.0" or "v4.2.0")'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        required: true
+        type: 'string'
+        description: 'The SemVer tag name (e.g., "4.2.0" or "v4.2.0")'
 
 permissions:
   contents: write
@@ -25,6 +31,10 @@ jobs:
       contains(github.event.release.tag_name, '.'))
     steps:
       - uses: 'actions/checkout@v4'
+        with:
+          # Need full history + tags so the SemVer tag (e.g., `4.6.0`) is
+          # resolvable when anchoring the major-version tag to its commit.
+          fetch-depth: 0
 
       - name: 'Extract major version'
         id: 'extract'
@@ -47,16 +57,36 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git tag -fa "${{ steps.extract.outputs.major }}" \
+          # Anchor the major tag to the SemVer tag's commit, not HEAD, so the
+          # workflow stays correct regardless of which ref triggered it.
+          git tag -fa "${{ steps.extract.outputs.major }}" "${{ steps.extract.outputs.semver }}" \
             -m "Update ${{ steps.extract.outputs.major }} to ${{ steps.extract.outputs.semver }}"
           git push origin "${{ steps.extract.outputs.major }}" --force
 
-      - name: 'Create or update GitHub Release'
-        uses: 'softprops/action-gh-release@v2'
-        with:
-          tag_name: ${{ steps.extract.outputs.major }}
-          name: ${{ steps.extract.outputs.major }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          make_latest: false
+      - name: 'Recreate major version GitHub Release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          MAJOR='${{ steps.extract.outputs.major }}'
+          SEMVER='${{ steps.extract.outputs.semver }}'
+          REPO='${{ github.repository }}'
+          if gh release view "${MAJOR}" --repo "${REPO}" >/dev/null 2>&1; then
+            echo "Deleting existing release ${MAJOR} so it can be recreated with a fresh publishedAt and body."
+            gh release delete "${MAJOR}" --yes --repo "${REPO}"
+          else
+            echo "No existing release for ${MAJOR}; nothing to delete."
+          fi
+          # `gh release create --latest=false` is not enough on its own: GitHub's
+          # "Latest" badge is resolved dynamically from the newest non-draft,
+          # non-prerelease release by created_at, and `make_latest=false` on a
+          # brand-new release does not actually prevent this. The only reliable
+          # way to keep the SemVer release (e.g., `4.6.0`) flagged as Latest is
+          # to re-assert `make_latest=true` on it after creating the major tag.
+          gh release create "${MAJOR}" \
+            --repo "${REPO}" \
+            --title "${MAJOR}" \
+            --generate-notes \
+            --latest=false
+          echo "Reasserting SemVer release ${SEMVER} as Latest."
+          SEMVER_ID="$(gh api "repos/${REPO}/releases/tags/${SEMVER}" --jq '.id')"
+          gh api --method PATCH "repos/${REPO}/releases/${SEMVER_ID}" -f make_latest=true >/dev/null

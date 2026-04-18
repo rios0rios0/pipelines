@@ -26,4 +26,16 @@ stages:
 
           - script: $(Scripts.Directory)/global/scripts/tools/dependency-track/run.sh
             displayName: 'upload BOM to Dependency-Track'
+            # Azure Pipelines does NOT auto-expose secret variables to the
+            # script's environment — the value of `$(DEPENDENCY_TRACK_TOKEN)`
+            # is substituted at task-parse time, but the shell's
+            # `$DEPENDENCY_TRACK_TOKEN` only exists if explicitly mapped
+            # here. Without this block, `run.sh` would send
+            # `X-Api-Key: ` (empty) and DT would reject every upload with
+            # `HTTP 401`. `DEPENDENCY_TRACK_HOST_URL` is mapped alongside
+            # for symmetry, even though non-secret variables are already
+            # auto-exposed.
+            env:
+              DEPENDENCY_TRACK_TOKEN: $(DEPENDENCY_TRACK_TOKEN)
+              DEPENDENCY_TRACK_HOST_URL: $(DEPENDENCY_TRACK_HOST_URL)
         continueOnError: true

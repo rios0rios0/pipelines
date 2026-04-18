@@ -22,6 +22,14 @@ steps:
   - script: $(Scripts.Directory)/global/scripts/tools/dependency-track/run.sh
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
     displayName: "Send SBOM to Dependency Track"
+    # Explicit mapping so the secret `$(DEPENDENCY_TRACK_TOKEN)` reaches
+    # the shell as `$DEPENDENCY_TRACK_TOKEN`. Azure Pipelines gates
+    # secret variables from the process environment; without this block
+    # the script sends an empty `X-Api-Key` header and DT returns
+    # `HTTP 401`.
+    env:
+      DEPENDENCY_TRACK_TOKEN: $(DEPENDENCY_TRACK_TOKEN)
+      DEPENDENCY_TRACK_HOST_URL: $(DEPENDENCY_TRACK_HOST_URL)
 
   - script: ${{ parameters.RUN_AFTER_MANAGEMENT }}
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"

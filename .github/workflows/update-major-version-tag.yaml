@@ -62,6 +62,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           MAJOR='${{ steps.extract.outputs.major }}'
+          SEMVER='${{ steps.extract.outputs.semver }}'
           REPO='${{ github.repository }}'
           if gh release view "${MAJOR}" --repo "${REPO}" >/dev/null 2>&1; then
             echo "Deleting existing release ${MAJOR} so it can be recreated with a fresh publishedAt and body."
@@ -69,12 +70,17 @@ jobs:
           else
             echo "No existing release for ${MAJOR}; nothing to delete."
           fi
-          # Using `gh release create` directly (not softprops/action-gh-release) because
-          # the action does not honor `make_latest: false` on create; the rolling
-          # major-version release must NOT steal the "Latest" badge from the SemVer
-          # release.
+          # `gh release create --latest=false` is not enough on its own: GitHub's
+          # "Latest" badge is resolved dynamically from the newest non-draft,
+          # non-prerelease release by created_at, and `make_latest=false` on a
+          # brand-new release does not actually prevent this. The only reliable
+          # way to keep the SemVer release (e.g., `4.6.0`) flagged as Latest is
+          # to re-assert `make_latest=true` on it after creating the major tag.
           gh release create "${MAJOR}" \
             --repo "${REPO}" \
             --title "${MAJOR}" \
             --generate-notes \
             --latest=false
+          echo "Reasserting SemVer release ${SEMVER} as Latest."
+          SEMVER_ID="$(gh api "repos/${REPO}/releases/tags/${SEMVER}" --jq '.id')"
+          gh api --method PATCH "repos/${REPO}/releases/${SEMVER_ID}" -f make_latest=true >/dev/null

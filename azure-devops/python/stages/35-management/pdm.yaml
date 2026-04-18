@@ -4,6 +4,8 @@ stages:
     condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
     jobs:
       - template: '../../../global/stages/35-management/sonarqube.yaml'
+        parameters:
+          COVERAGE_ARTIFACT_TARGET_PATH: "$(Build.SourcesDirectory)/build/reports"
 
       - job: 'report_dependency_track'
         displayName: 'report:dependency-track'

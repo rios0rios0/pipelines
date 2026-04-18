@@ -11,6 +11,14 @@ parameters:
   - name: 'COVERAGE_ARTIFACT_NAME'
     type: 'string'
     default: 'coverage'
+  # Target path where the coverage artifact is downloaded. Defaults to the
+  # repo root so Go's coverage.txt lands at the root (as sonar-scanner
+  # expects). Python callers should override to 'build/reports' so that
+  # cobertura.xml is restored to build/reports/cobertura.xml, matching
+  # sonar.python.coverage.reportPaths in sonar-project.properties.
+  - name: 'COVERAGE_ARTIFACT_TARGET_PATH'
+    type: 'string'
+    default: "$(Build.SourcesDirectory)"
 
 jobs:
   - job: 'report_sonarqube'
@@ -30,7 +38,7 @@ jobs:
           - task: 'DownloadPipelineArtifact@2'
             inputs:
               artifactName: '${{ parameters.COVERAGE_ARTIFACT_NAME }}'
-              targetPath: "$(Build.SourcesDirectory)"
+              targetPath: "${{ parameters.COVERAGE_ARTIFACT_TARGET_PATH }}"
             displayName: 'Download Coverage File'
             continueOnError: true
 

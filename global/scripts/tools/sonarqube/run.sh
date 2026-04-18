@@ -65,6 +65,7 @@ for pattern in \
   "coverage/*.json" \
   "coverage/*.lcov" \
   "build/reports/coverage*" \
+  "build/reports/cobertura.xml" \
   "build/reports/jacoco/test/jacocoTestReport.xml" \
   "target/site/jacoco/jacoco.xml" \
   "TestResults/*.xml" \

@@ -77,4 +77,8 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-          make_latest: false
+          # Quoted 'false' string: softprops expects the literal strings
+          # 'true' | 'false' | 'legacy'. A bare YAML boolean gets coerced
+          # elsewhere and the release silently becomes "Latest", displacing
+          # the SemVer release.
+          make_latest: 'false'

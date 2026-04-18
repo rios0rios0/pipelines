@@ -51,6 +51,18 @@ jobs:
             -m "Update ${{ steps.extract.outputs.major }} to ${{ steps.extract.outputs.semver }}"
           git push origin "${{ steps.extract.outputs.major }}" --force
 
+      - name: 'Delete existing major version release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          MAJOR='${{ steps.extract.outputs.major }}'
+          if gh release view "${MAJOR}" --repo '${{ github.repository }}' >/dev/null 2>&1; then
+            echo "Deleting existing release ${MAJOR} so it can be recreated with a fresh publishedAt and body."
+            gh release delete "${MAJOR}" --yes --repo '${{ github.repository }}'
+          else
+            echo "No existing release for ${MAJOR}; nothing to delete."
+          fi
+
       - name: 'Create or update GitHub Release'
         uses: 'softprops/action-gh-release@v2'
         with:

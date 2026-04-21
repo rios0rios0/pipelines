@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- changed the terraform pipeline version from `1.14.8` to `1.14.9`
+
 ### Fixed
 
 - fixed `global/scripts/tools/gitleaks/run.sh` silently overwriting and deleting any project-local `.gitleaks.toml` during the second (GitLab-rule) pass, so consumers had no way to keep their own rules + allowlist across both passes. The wrapper now mounts the bundled GitLab config read-only into the container and selects it via `--config` for the second pass, leaving the project's working tree untouched. Both passes still auto-discover the project's `.gitleaksignore` (fingerprint allowlist) at the source root, so suppressed findings stay suppressed in both passes.

@@ -35,7 +35,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - fixed `global/scripts/languages/terraform/terra-test/run.sh` to skip the phantom iteration when `modules/` exists without subdirectories. POSIX `sh` has no `nullglob`, so `for mod in modules/*/` previously ran once with the literal glob and recorded a fake module named `*`, producing incorrect coverage and module lists
 - fixed `azure-devops/terra/stages/30-tests/terra.yaml` `PublishPipelineArtifact@1` input key from `artifact` to `artifactName` for consistency with every other Azure DevOps template in the repo (e.g., `azure-devops/global/stages/20-security/codeql.yaml`). Prevents the task from silently ignoring the artifact name
-- added the standard `SCRIPTS_DIR` auto-detection preamble to `global/scripts/languages/terraform/terra-test/run.sh` to match the convention used by every other `run.sh` script in the repo (per `CLAUDE.md` Script Conventions)
+- added the standard `SCRIPTS_DIR` auto-detection preamble to `global/scripts/languages/terraform/terra-test/run.sh` and `global/scripts/languages/terraform/terratest/run.sh` to match the convention used by every other `run.sh` script in the repo (per `CLAUDE.md` Script Conventions)
 
 ## [4.6.2] - 2026-04-21
 

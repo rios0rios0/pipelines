@@ -34,6 +34,18 @@ stages:
               testRunTitle: 'terra-test'
               failTaskOnFailedTests: true
 
+          # Render the Code Coverage tab in the build summary. Terraform
+          # has no line-coverage concept, so the runner emits a Cobertura
+          # XML where each module is one "class" with one "line" (covered
+          # iff the module has a tests/*.tftest.hcl). The ADO tab then
+          # shows `tested_modules / total_modules` as a percentage.
+          - task: 'PublishCodeCoverageResults@2'
+            displayName: 'Publish Terra module coverage'
+            condition: always()
+            inputs:
+              summaryFileLocation: '$(REPORT_PATH)/terra-coverage.xml'
+              pathToSources: 'modules'
+
           # Publish the whole reports directory — the coverage markdown, the
           # JSON summary, and the per-module JUnit files. Downstream stages
           # (Sonar, Dependency-Track, custom dashboards) can grab them by

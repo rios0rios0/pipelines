@@ -5,7 +5,7 @@
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #   -include $(SCRIPTS_DIR)/makefiles/terra.mk
 #
-# Targets provided: format, lint, test, coverage, validate
+# Targets provided: format, lint, test, test-terratest, coverage, validate
 # Also sets SEMGREP_LANGUAGE=terraform for the common.mk sast target.
 # Note: CodeQL does not support Terraform; CODEQL_LANGUAGE is left unset.
 #
@@ -15,7 +15,7 @@
 SEMGREP_LANGUAGE ?= terraform
 REPORT_PATH ?= build/reports
 
-.PHONY: format lint test coverage validate
+.PHONY: format lint test test-terratest coverage validate
 
 format:
 	@echo "Formatting Terraform files with Terra..."
@@ -38,9 +38,20 @@ lint:
 test:
 	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/terra-test/run.sh
 
+# `test-terratest` drives the consumer's Go test suite in `tests/terratest/`
+# via the shared runner. Skipped as a no-op when the directory doesn't exist
+# (see the runner for the opt-in contract). Covers the gap `terraform test`
+# can't fill: stacks + environments that reference private git-SSH modules
+# or resolve dependency outputs — a real `terraform validate` there needs
+# credentials, whereas Terratest can drive `terraform fmt`, HCL parsing,
+# and cross-module invariants offline.
+test-terratest:
+	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/terratest/run.sh
+
 coverage:
 	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/terra-test/run.sh || true
-	@echo "Coverage report: $(REPORT_PATH)/terra-coverage.md"
+	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/terratest/run.sh || true
+	@echo "Coverage reports: $(REPORT_PATH)/terra-coverage.md $(REPORT_PATH)/junit-terratest.xml"
 
-validate: format lint test
-	@echo "All validations passed (format, lint, test)."
+validate: format lint test test-terratest
+	@echo "All validations passed (format, lint, test, test-terratest)."

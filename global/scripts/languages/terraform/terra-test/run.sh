@@ -1,6 +1,13 @@
 #!/usr/bin/env sh
 set -eu
 
+# GitLab CI/CD leverages this variable to source shared helpers from the
+# pipelines checkout. Matches the preamble used by every other run.sh.
+if [ -z "${SCRIPTS_DIR:-}" ]; then
+  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
+  export SCRIPTS_DIR
+fi
+
 # Runs `terraform test` across every module under modules/<name>/tests/,
 # writing one JUnit file per module (requires Terraform >= 1.11, which the
 # terra CLI already pins via `terra install`), aggregates them into one
@@ -43,6 +50,10 @@ tested_list=""
 exit_code=0
 
 for mod in modules/*/; do
+  # POSIX sh has no nullglob — an empty modules/ still enters the loop
+  # once with the literal `modules/*/`, which would be counted as a
+  # phantom module. Skip iterations where the glob didn't expand.
+  [ -d "${mod}" ] || continue
   mod="${mod%/}"
   name="${mod##*/}"
   total=$((total + 1))

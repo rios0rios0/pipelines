@@ -55,7 +55,7 @@ stages:
             condition: always()
             inputs:
               targetPath: '$(REPORT_PATH)'
-              artifact: 'terra-coverage'
+              artifactName: 'terra-coverage'
               publishLocation: 'pipeline'
 
       # Go-based Terratest suite for cross-module invariants, stack/env

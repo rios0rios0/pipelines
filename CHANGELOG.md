@@ -31,6 +31,12 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed `makefiles/terra.mk` `test` target to delegate to the new shared runner instead of an inline shell loop. Adds JUnit + coverage generation as a side effect of `make test`; existing consumers continue to work because the runner still exits non-zero when any module fails its `terraform test`
 - changed `azure-devops/terra/stages/30-tests/terra.yaml` to call the new runner, then publish the aggregated JUnit via `PublishTestResults@2` (surfaces per-case results in the build's Tests tab with `failTaskOnFailedTests: true`) and the whole `build/reports/` directory as the `terra-coverage` pipeline artifact via `PublishPipelineArtifact@1`. Both publish tasks use `condition: always()` so a red module still publishes everything green alongside it; the runner's non-zero exit code is what fails the job
 
+### Fixed
+
+- fixed `global/scripts/languages/terraform/terra-test/run.sh` to skip the phantom iteration when `modules/` exists without subdirectories. POSIX `sh` has no `nullglob`, so `for mod in modules/*/` previously ran once with the literal glob and recorded a fake module named `*`, producing incorrect coverage and module lists
+- fixed `azure-devops/terra/stages/30-tests/terra.yaml` `PublishPipelineArtifact@1` input key from `artifact` to `artifactName` for consistency with every other Azure DevOps template in the repo (e.g., `azure-devops/global/stages/20-security/codeql.yaml`). Prevents the task from silently ignoring the artifact name
+- added the standard `SCRIPTS_DIR` auto-detection preamble to `global/scripts/languages/terraform/terra-test/run.sh` to match the convention used by every other `run.sh` script in the repo (per `CLAUDE.md` Script Conventions)
+
 ## [4.6.2] - 2026-04-21
 
 ### Changed

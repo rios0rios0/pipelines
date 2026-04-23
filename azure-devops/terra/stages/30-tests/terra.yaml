@@ -2,24 +2,46 @@ stages:
   - stage: 'tests'
     displayName: 'tests'
     condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    variables:
+      REPORT_PATH: 'build/reports'
     jobs:
       - job: 'test_all'
         displayName: 'test:all'
         steps:
           - template: '../../abstracts/terra.yaml'
 
-          - script: |
-              if [ -d "modules" ]; then
-                for module in modules/*/; do
-                  if [ -d "$$module/tests" ]; then
-                    echo "Testing $$module...";
-                    (cd "$$module" && terraform init -upgrade && terraform test) || exit 1;
-                  else
-                    echo "Skipping $${module%/} (no tests/ directory).";
-                  fi;
-                done;
-                echo "All module tests passed.";
-              else
-                echo "No modules/ directory found, skipping tests.";
-              fi
-            displayName: 'Run Terraform module tests'
+          # Delegate to the shared runner so the Makefile-driven local flow
+          # (`make test`) and the CI flow go through exactly the same logic:
+          # one JUnit file per module, an aggregated bundle, and a coverage
+          # summary under $(REPORT_PATH)/. `terraform test -junit-xml` needs
+          # Terraform >= 1.11 — `terra install` in the abstract above pins a
+          # modern Terraform for us.
+          - script: $(Scripts.Directory)/global/scripts/languages/terraform/terra-test/run.sh
+            displayName: 'Run Terraform module tests + emit coverage'
+            env:
+              REPORT_PATH: $(REPORT_PATH)
+
+          # Surface per-case results in the build's Tests tab. `condition:
+          # always()` so a red module still publishes everything green
+          # alongside it — the runner propagates the non-zero exit code, so
+          # the job fails regardless.
+          - task: 'PublishTestResults@2'
+            displayName: 'Publish Terraform test results'
+            condition: always()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(REPORT_PATH)/terra-tests.xml'
+              testRunTitle: 'terra-test'
+              failTaskOnFailedTests: true
+
+          # Publish the whole reports directory — the coverage markdown, the
+          # JSON summary, and the per-module JUnit files. Downstream stages
+          # (Sonar, Dependency-Track, custom dashboards) can grab them by
+          # name from the `terra-coverage` artifact.
+          - task: 'PublishPipelineArtifact@1'
+            displayName: 'Publish Terra coverage report'
+            condition: always()
+            inputs:
+              targetPath: '$(REPORT_PATH)'
+              artifact: 'terra-coverage'
+              publishLocation: 'pipeline'

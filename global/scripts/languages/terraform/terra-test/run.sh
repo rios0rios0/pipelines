@@ -1,0 +1,244 @@
+#!/usr/bin/env sh
+set -eu
+
+# GitLab CI/CD leverages this variable to source shared helpers from the
+# pipelines checkout. Matches the preamble used by every other run.sh.
+if [ -z "${SCRIPTS_DIR:-}" ]; then
+  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
+  export SCRIPTS_DIR
+fi
+
+# Runs `terraform test` across every module under modules/<name>/tests/,
+# writing one JUnit file per module (requires Terraform >= 1.11, which the
+# terra CLI already pins via `terra install`), aggregates them into one
+# testsuites bundle, and emits a coverage summary.
+#
+# Outputs (under $REPORT_PATH, default build/reports/):
+#   - terra-tests/<module>.xml   per-module JUnit (from `terraform test -junit-xml`)
+#   - terra-tests.xml            aggregated <testsuites> bundle (for PublishTestResults)
+#   - terra-coverage.md          human-readable coverage report
+#   - terra-coverage.json        machine-readable coverage summary
+#
+# Exits non-zero when any module's `terraform test` exits non-zero.
+#
+# Why coverage ≠ line coverage:
+# Terraform has no line-coverage concept — a plan/apply exercises every
+# expression or none. This script measures *breadth* (share of modules that
+# run at least one `terraform test` case) plus *case counts* aggregated from
+# JUnit, which together answer "how much of the module tree is exercised?".
+
+REPORT_PATH="${REPORT_PATH:-build/reports}"
+TESTS_DIR="${REPORT_PATH}/terra-tests"
+AGGREGATE_JUNIT="${REPORT_PATH}/terra-tests.xml"
+COVERAGE_MD="${REPORT_PATH}/terra-coverage.md"
+COVERAGE_JSON="${REPORT_PATH}/terra-coverage.json"
+COVERAGE_COBERTURA="${REPORT_PATH}/terra-coverage.xml"
+
+mkdir -p "${TESTS_DIR}"
+
+# ---------- Guard: modules/ is optional ----------
+if [ ! -d modules ]; then
+  echo "No modules/ directory; skipping terra-test."
+  exit 0
+fi
+
+# ---------- Per-module run ----------
+total=0
+tested=0
+skipped_list=""
+tested_list=""
+exit_code=0
+
+for mod in modules/*/; do
+  # POSIX sh has no nullglob — an empty modules/ still enters the loop
+  # once with the literal `modules/*/`, which would be counted as a
+  # phantom module. Skip iterations where the glob didn't expand.
+  [ -d "${mod}" ] || continue
+  mod="${mod%/}"
+  name="${mod##*/}"
+  total=$((total + 1))
+
+  if [ ! -d "${mod}/tests" ]; then
+    skipped_list="${skipped_list} ${name}"
+    continue
+  fi
+
+  # Skip empty tests/ directories — they would trip `terraform test` with
+  # "no test files found" and mask real failures.
+  if ! ls "${mod}"/tests/*.tftest.hcl > /dev/null 2>&1; then
+    skipped_list="${skipped_list} ${name}"
+    continue
+  fi
+
+  tested=$((tested + 1))
+  tested_list="${tested_list} ${name}"
+  junit_file="${TESTS_DIR}/${name}.xml"
+
+  echo "Testing ${mod}..."
+  # `-junit-xml` was added in Terraform 1.11. `terraform init -upgrade` makes
+  # the module self-contained so parallel module builds don't share state.
+  # Absolute path is required because `terraform test` runs from ${mod}.
+  junit_abs="$(cd "$(dirname "${junit_file}")" && pwd)/$(basename "${junit_file}")"
+  if ! (cd "${mod}" && terraform init -upgrade > /dev/null && terraform test -junit-xml="${junit_abs}"); then
+    exit_code=1
+    # Keep going so we still emit JUnit + coverage for the rest of the tree —
+    # `exit_code` is honored at the end so CI correctly fails.
+  fi
+done
+
+# ---------- Aggregate JUnit ----------
+# Flatten every per-module <testsuites>/<testsuite> into one bundle. A plain
+# concatenation breaks the XML (one <?xml?> header per file, multiple root
+# elements); this sed drops the XML declarations and the outer <testsuites>
+# wrappers, producing a single well-formed document.
+{
+  printf '<?xml version="1.0" encoding="UTF-8"?>\n<testsuites name="terra-test">\n'
+  if ls "${TESTS_DIR}"/*.xml > /dev/null 2>&1; then
+    # Strip the XML prolog and the outer <testsuites ...> / </testsuites>
+    # lines. Keeps every <testsuite> block intact.
+    sed -e '/<?xml/d' \
+        -e 's|<testsuites[^>]*>||g' \
+        -e 's|</testsuites>||g' \
+        "${TESTS_DIR}"/*.xml
+  fi
+  printf '</testsuites>\n'
+} > "${AGGREGATE_JUNIT}"
+
+# ---------- Parse aggregate counts ----------
+# Sum every `tests=` and `failures=` attribute across all <testsuite> lines.
+# Using `grep -oE` + awk keeps this dependency-free (no xmllint/jq needed).
+tests_total=$(grep -oE '<testsuite [^>]*tests="[0-9]+"' "${AGGREGATE_JUNIT}" 2>/dev/null \
+              | grep -oE 'tests="[0-9]+"' | grep -oE '[0-9]+' \
+              | awk '{s+=$1} END{print s+0}')
+failures_total=$(grep -oE '<testsuite [^>]*failures="[0-9]+"' "${AGGREGATE_JUNIT}" 2>/dev/null \
+                 | grep -oE 'failures="[0-9]+"' | grep -oE '[0-9]+' \
+                 | awk '{s+=$1} END{print s+0}')
+errors_total=$(grep -oE '<testsuite [^>]*errors="[0-9]+"' "${AGGREGATE_JUNIT}" 2>/dev/null \
+               | grep -oE 'errors="[0-9]+"' | grep -oE '[0-9]+' \
+               | awk '{s+=$1} END{print s+0}')
+passed_total=$((tests_total - failures_total - errors_total))
+
+if [ "${total}" -gt 0 ]; then
+  module_pct=$(( (tested * 100) / total ))
+else
+  module_pct=0
+fi
+
+# ---------- Markdown report ----------
+{
+  printf '# Terra Test Coverage\n\n'
+  printf 'Generated by `global/scripts/languages/terraform/terra-test/run.sh`.\n\n'
+  printf '## Summary\n\n'
+  printf '| Metric | Value |\n'
+  printf '|--------|-------|\n'
+  printf '| Modules tested | **%d / %d (%d%%)** |\n' "${tested}" "${total}" "${module_pct}"
+  printf '| Test cases | %d |\n' "${tests_total}"
+  printf '| Passed | %d |\n' "${passed_total}"
+  printf '| Failed | %d |\n' "${failures_total}"
+  printf '| Errored | %d |\n\n' "${errors_total}"
+
+  printf '## Modules with tests\n\n'
+  if [ -z "${tested_list}" ]; then
+    printf '_None._\n\n'
+  else
+    for n in ${tested_list}; do printf -- '- `%s`\n' "${n}"; done
+    printf '\n'
+  fi
+
+  printf '## Modules without tests\n\n'
+  if [ -z "${skipped_list}" ]; then
+    printf '_All modules have tests._\n\n'
+  else
+    printf '_Add a `tests/<name>.tftest.hcl` to include these._\n\n'
+    for n in ${skipped_list}; do printf -- '- `%s`\n' "${n}"; done
+    printf '\n'
+  fi
+
+  printf '## Notes\n\n'
+  printf -- '- Terraform has no native line-coverage metric. "Coverage" here is the share of modules exercised by at least one `terraform test` case, combined with the aggregate pass/fail counts from JUnit.\n'
+  printf -- '- JUnit bundle: `%s` (point `PublishTestResults@2` at it).\n' "${AGGREGATE_JUNIT#${REPORT_PATH}/}"
+} > "${COVERAGE_MD}"
+
+# ---------- Cobertura XML ----------
+# Azure DevOps's `PublishCodeCoverageResults@2` renders the Code Coverage
+# tab from a Cobertura XML. Terraform has no line-coverage metric, so we
+# map our breadth signal onto the schema verbatim:
+#
+#   - Each module = one <class>.
+#   - Each module treats "has a tests/ directory with a .tftest.hcl" as
+#     a single line of covered code; no tests = one uncovered line.
+#   - lines-valid = total modules; lines-covered = tested modules.
+#
+# That makes the DevOps Code Coverage tab show `tested/total` as a
+# percentage — exactly the metric operators care about, published
+# through the standard Azure channel instead of a bespoke artifact.
+if [ "${total}" -gt 0 ]; then
+  line_rate=$(awk -v c="${tested}" -v t="${total}" 'BEGIN{printf "%.4f", c/t}')
+else
+  line_rate="0.0"
+fi
+timestamp=$(date +%s)
+{
+  printf '<?xml version="1.0" encoding="UTF-8"?>\n'
+  printf '<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">\n'
+  printf '<coverage line-rate="%s" branch-rate="0" lines-covered="%d" lines-valid="%d" branches-covered="0" branches-valid="0" complexity="0" version="terra-test" timestamp="%d">\n' \
+    "${line_rate}" "${tested}" "${total}" "${timestamp}"
+  printf '  <sources><source>modules</source></sources>\n'
+  printf '  <packages>\n'
+  printf '    <package name="modules" line-rate="%s" branch-rate="0" complexity="0">\n' "${line_rate}"
+  printf '      <classes>\n'
+  # Cover both tested and untested modules so the per-class view in ADO
+  # reflects the full module tree, not just the passing subset.
+  for n in ${tested_list}; do
+    printf '        <class name="%s" filename="modules/%s/tests/" line-rate="1.0" branch-rate="0" complexity="0">\n' "${n}" "${n}"
+    printf '          <methods/>\n'
+    printf '          <lines><line number="1" hits="1"/></lines>\n'
+    printf '        </class>\n'
+  done
+  for n in ${skipped_list}; do
+    printf '        <class name="%s" filename="modules/%s/" line-rate="0.0" branch-rate="0" complexity="0">\n' "${n}" "${n}"
+    printf '          <methods/>\n'
+    printf '          <lines><line number="1" hits="0"/></lines>\n'
+    printf '        </class>\n'
+  done
+  printf '      </classes>\n'
+  printf '    </package>\n'
+  printf '  </packages>\n'
+  printf '</coverage>\n'
+} > "${COVERAGE_COBERTURA}"
+
+# ---------- JSON report ----------
+# Minimal JSON without jq — keeps this runnable on a cold CI agent.
+json_list() {
+  # $1: space-separated list of names
+  printed=0
+  printf '['
+  for n in $1; do
+    [ "${printed}" -eq 1 ] && printf ','
+    printf '"%s"' "${n}"
+    printed=1
+  done
+  printf ']'
+}
+
+{
+  printf '{\n'
+  printf '  "modules": { "tested": %d, "total": %d, "percent": %d },\n' \
+    "${tested}" "${total}" "${module_pct}"
+  printf '  "test_cases": { "total": %d, "passed": %d, "failed": %d, "errored": %d },\n' \
+    "${tests_total}" "${passed_total}" "${failures_total}" "${errors_total}"
+  printf '  "tested_modules": '; json_list "${tested_list}"; printf ',\n'
+  printf '  "untested_modules": '; json_list "${skipped_list}"; printf '\n'
+  printf '}\n'
+} > "${COVERAGE_JSON}"
+
+echo
+echo "terra-test coverage:"
+echo "  modules tested   : ${tested}/${total} (${module_pct}%)"
+echo "  test cases       : ${tests_total} (passed=${passed_total} failed=${failures_total} errored=${errors_total})"
+echo "  junit bundle     : ${AGGREGATE_JUNIT}"
+echo "  coverage md      : ${COVERAGE_MD}"
+echo "  coverage json    : ${COVERAGE_JSON}"
+echo "  coverage cobertura: ${COVERAGE_COBERTURA}"
+
+exit "${exit_code}"

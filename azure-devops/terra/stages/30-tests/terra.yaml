@@ -2,24 +2,87 @@ stages:
   - stage: 'tests'
     displayName: 'tests'
     condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    variables:
+      REPORT_PATH: 'build/reports'
     jobs:
       - job: 'test_all'
         displayName: 'test:all'
         steps:
           - template: '../../abstracts/terra.yaml'
 
-          - script: |
-              if [ -d "modules" ]; then
-                for module in modules/*/; do
-                  if [ -d "$$module/tests" ]; then
-                    echo "Testing $$module...";
-                    (cd "$$module" && terraform init -upgrade && terraform test) || exit 1;
-                  else
-                    echo "Skipping $${module%/} (no tests/ directory).";
-                  fi;
-                done;
-                echo "All module tests passed.";
-              else
-                echo "No modules/ directory found, skipping tests.";
-              fi
-            displayName: 'Run Terraform module tests'
+          # Delegate to the shared runner so the Makefile-driven local flow
+          # (`make test`) and the CI flow go through exactly the same logic:
+          # one JUnit file per module, an aggregated bundle, and a coverage
+          # summary under $(REPORT_PATH)/. `terraform test -junit-xml` needs
+          # Terraform >= 1.11 — `terra install` in the abstract above pins a
+          # modern Terraform for us.
+          - script: $(Scripts.Directory)/global/scripts/languages/terraform/terra-test/run.sh
+            displayName: 'Run Terraform module tests + emit coverage'
+            env:
+              REPORT_PATH: $(REPORT_PATH)
+
+          # Surface per-case results in the build's Tests tab. `condition:
+          # always()` so a red module still publishes everything green
+          # alongside it — the runner propagates the non-zero exit code, so
+          # the job fails regardless.
+          - task: 'PublishTestResults@2'
+            displayName: 'Publish Terraform test results'
+            condition: always()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(REPORT_PATH)/terra-tests.xml'
+              testRunTitle: 'terra-test'
+              failTaskOnFailedTests: true
+
+          # Render the Code Coverage tab in the build summary. Terraform
+          # has no line-coverage concept, so the runner emits a Cobertura
+          # XML where each module is one "class" with one "line" (covered
+          # iff the module has a tests/*.tftest.hcl). The ADO tab then
+          # shows `tested_modules / total_modules` as a percentage.
+          - task: 'PublishCodeCoverageResults@2'
+            displayName: 'Publish Terra module coverage'
+            condition: always()
+            inputs:
+              summaryFileLocation: '$(REPORT_PATH)/terra-coverage.xml'
+              pathToSources: 'modules'
+
+          # Publish the whole reports directory — the coverage markdown, the
+          # JSON summary, and the per-module JUnit files. Downstream stages
+          # (Sonar, Dependency-Track, custom dashboards) can grab them by
+          # name from the `terra-coverage` artifact.
+          - task: 'PublishPipelineArtifact@1'
+            displayName: 'Publish Terra coverage report'
+            condition: always()
+            inputs:
+              targetPath: '$(REPORT_PATH)'
+              artifactName: 'terra-coverage'
+              publishLocation: 'pipeline'
+
+      # Go-based Terratest suite for cross-module invariants, stack/env
+      # HCL parsing, and `terraform fmt` checks. The runner is a no-op when
+      # the consumer has no `tests/terratest/` directory, so this job is
+      # safe to always emit — consumers opt in by creating the directory.
+      - job: 'test_terratest'
+        displayName: 'test:terratest'
+        dependsOn: []
+        steps:
+          - template: '../../abstracts/terra.yaml'
+
+          - task: 'GoTool@0'
+            displayName: 'Use Go 1.23'
+            inputs:
+              version: '1.23'
+
+          - script: $(Scripts.Directory)/global/scripts/languages/terraform/terratest/run.sh
+            displayName: 'Run Terratest suite'
+            env:
+              REPORT_PATH: $(REPORT_PATH)
+
+          - task: 'PublishTestResults@2'
+            displayName: 'Publish Terratest results'
+            condition: always()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(REPORT_PATH)/junit-terratest.xml'
+              testRunTitle: 'terratest'
+              failTaskOnFailedTests: true

@@ -25,6 +25,7 @@ TESTS_DIR="${REPORT_PATH}/terra-tests"
 AGGREGATE_JUNIT="${REPORT_PATH}/terra-tests.xml"
 COVERAGE_MD="${REPORT_PATH}/terra-coverage.md"
 COVERAGE_JSON="${REPORT_PATH}/terra-coverage.json"
+COVERAGE_COBERTURA="${REPORT_PATH}/terra-coverage.xml"
 
 mkdir -p "${TESTS_DIR}"
 
@@ -147,6 +148,54 @@ fi
   printf -- '- JUnit bundle: `%s` (point `PublishTestResults@2` at it).\n' "${AGGREGATE_JUNIT#${REPORT_PATH}/}"
 } > "${COVERAGE_MD}"
 
+# ---------- Cobertura XML ----------
+# Azure DevOps's `PublishCodeCoverageResults@2` renders the Code Coverage
+# tab from a Cobertura XML. Terraform has no line-coverage metric, so we
+# map our breadth signal onto the schema verbatim:
+#
+#   - Each module = one <class>.
+#   - Each module treats "has a tests/ directory with a .tftest.hcl" as
+#     a single line of covered code; no tests = one uncovered line.
+#   - lines-valid = total modules; lines-covered = tested modules.
+#
+# That makes the DevOps Code Coverage tab show `tested/total` as a
+# percentage — exactly the metric operators care about, published
+# through the standard Azure channel instead of a bespoke artifact.
+if [ "${total}" -gt 0 ]; then
+  line_rate=$(awk -v c="${tested}" -v t="${total}" 'BEGIN{printf "%.4f", c/t}')
+else
+  line_rate="0.0"
+fi
+timestamp=$(date +%s)
+{
+  printf '<?xml version="1.0" encoding="UTF-8"?>\n'
+  printf '<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">\n'
+  printf '<coverage line-rate="%s" branch-rate="0" lines-covered="%d" lines-valid="%d" branches-covered="0" branches-valid="0" complexity="0" version="terra-test" timestamp="%d">\n' \
+    "${line_rate}" "${tested}" "${total}" "${timestamp}"
+  printf '  <sources><source>modules</source></sources>\n'
+  printf '  <packages>\n'
+  printf '    <package name="modules" line-rate="%s" branch-rate="0" complexity="0">\n' "${line_rate}"
+  printf '      <classes>\n'
+  # Cover both tested and untested modules so the per-class view in ADO
+  # reflects the full module tree, not just the passing subset.
+  for n in ${tested_list}; do
+    printf '        <class name="%s" filename="modules/%s/tests/" line-rate="1.0" branch-rate="0" complexity="0">\n' "${n}" "${n}"
+    printf '          <methods/>\n'
+    printf '          <lines><line number="1" hits="1"/></lines>\n'
+    printf '        </class>\n'
+  done
+  for n in ${skipped_list}; do
+    printf '        <class name="%s" filename="modules/%s/" line-rate="0.0" branch-rate="0" complexity="0">\n' "${n}" "${n}"
+    printf '          <methods/>\n'
+    printf '          <lines><line number="1" hits="0"/></lines>\n'
+    printf '        </class>\n'
+  done
+  printf '      </classes>\n'
+  printf '    </package>\n'
+  printf '  </packages>\n'
+  printf '</coverage>\n'
+} > "${COVERAGE_COBERTURA}"
+
 # ---------- JSON report ----------
 # Minimal JSON without jq — keeps this runnable on a cold CI agent.
 json_list() {
@@ -174,10 +223,11 @@ json_list() {
 
 echo
 echo "terra-test coverage:"
-echo "  modules tested : ${tested}/${total} (${module_pct}%)"
-echo "  test cases     : ${tests_total} (passed=${passed_total} failed=${failures_total} errored=${errors_total})"
-echo "  junit bundle   : ${AGGREGATE_JUNIT}"
-echo "  coverage md    : ${COVERAGE_MD}"
-echo "  coverage json  : ${COVERAGE_JSON}"
+echo "  modules tested   : ${tested}/${total} (${module_pct}%)"
+echo "  test cases       : ${tests_total} (passed=${passed_total} failed=${failures_total} errored=${errors_total})"
+echo "  junit bundle     : ${AGGREGATE_JUNIT}"
+echo "  coverage md      : ${COVERAGE_MD}"
+echo "  coverage json    : ${COVERAGE_JSON}"
+echo "  coverage cobertura: ${COVERAGE_COBERTURA}"
 
 exit "${exit_code}"

@@ -16,6 +16,27 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added `global/scripts/languages/terraform/terra-test/run.sh` — a shared test runner that iterates `modules/*/tests/*.tftest.hcl`, invokes `terraform test -junit-xml=<path>` per module (requires Terraform `1.11+`, already pinned by `terra install`), aggregates every per-module JUnit into a single `<testsuites>` bundle at `build/reports/terra-tests.xml`, and emits a coverage summary at `build/reports/terra-coverage.{md,json}`. Coverage measures *breadth* (`tested_modules / total_modules`) plus aggregate case counts (passed / failed / errored) because Terraform has no native line-coverage concept — a plan/apply exercises every expression or none. Skips modules without a `tests/` directory (or with an empty `tests/` that would trip `terraform test` with "no test files found") so consumers onboard incrementally instead of all-at-once
+- added `global/scripts/languages/terraform/terratest/run.sh` — a shared [Terratest](https://terratest.gruntwork.io/) runner that drives the consumer's Go test suite under `tests/terratest/` and publishes the results as JUnit XML at `build/reports/junit-terratest.xml`. Complements the `terra-test` runner by covering what native `terraform test` can't: stacks and environments that reference private git-SSH modules or resolve `dependency.*.outputs.*` (where a real `terraform validate` would need credentials), plus cross-module invariants that are awkward to express in a `.tftest.hcl` file. Auto-installs `go-junit-report` on first run so agents don't need it pre-provisioned. No-op when the consumer has no `tests/terratest/` directory — opt-in by creating the directory
+- added `test-terratest` target to `makefiles/terra.mk` — calls the Terratest runner. The existing `test` target still covers `terraform test` (modules); `test-terratest` is the complementary call for stack/environment / cross-module coverage. The `validate` composite target now chains `format lint test test-terratest` so both tiers run from `make validate`
+- added a second job `test_terratest` to `azure-devops/terra/stages/30-tests/terra.yaml` that pins Go 1.23 via `GoTool@0`, runs the Terratest runner, and publishes the JUnit via `PublishTestResults@2` (`failTaskOnFailedTests: true`). `dependsOn: []` so it runs in parallel with the `test_all` job for fast feedback
+- added `coverage` target to `makefiles/terra.mk` — reuses both runners (terra-test + terratest) but wraps each in `|| true` so operators can pull the full report off a red branch without masking CI failures. `REPORT_PATH` is overridable (defaults to `build/reports`)
+- added Cobertura emission to `global/scripts/languages/terraform/terra-test/run.sh` — writes `build/reports/terra-coverage.xml` alongside the existing Markdown + JSON summaries. Each module is one `<class>` with one `<line>`: `hits=1` when the module has `tests/*.tftest.hcl`, `hits=0` when it doesn't. `lines-valid = total_modules`, `lines-covered = tested_modules`, so the `line-rate` attribute matches the breadth percentage
+- added `PublishCodeCoverageResults@2` task to `azure-devops/terra/stages/30-tests/terra.yaml` pointing at `terra-coverage.xml`. Azure DevOps renders the **Code Coverage** tab on every build showing `tested / total` modules as a percentage — no bespoke dashboard required. Terraform has no line-coverage concept, so the runner deliberately maps its breadth metric onto the Cobertura schema; there's nothing else meaningful to measure at plan time
+
+### Changed
+
+- changed `makefiles/terra.mk` `test` target to delegate to the new shared runner instead of an inline shell loop. Adds JUnit + coverage generation as a side effect of `make test`; existing consumers continue to work because the runner still exits non-zero when any module fails its `terraform test`
+- changed `azure-devops/terra/stages/30-tests/terra.yaml` to call the new runner, then publish the aggregated JUnit via `PublishTestResults@2` (surfaces per-case results in the build's Tests tab with `failTaskOnFailedTests: true`) and the whole `build/reports/` directory as the `terra-coverage` pipeline artifact via `PublishPipelineArtifact@1`. Both publish tasks use `condition: always()` so a red module still publishes everything green alongside it; the runner's non-zero exit code is what fails the job
+
+### Fixed
+
+- fixed `global/scripts/languages/terraform/terra-test/run.sh` to skip the phantom iteration when `modules/` exists without subdirectories. POSIX `sh` has no `nullglob`, so `for mod in modules/*/` previously ran once with the literal glob and recorded a fake module named `*`, producing incorrect coverage and module lists
+- fixed `azure-devops/terra/stages/30-tests/terra.yaml` `PublishPipelineArtifact@1` input key from `artifact` to `artifactName` for consistency with every other Azure DevOps template in the repo (e.g., `azure-devops/global/stages/20-security/codeql.yaml`). Prevents the task from silently ignoring the artifact name
+- added the standard `SCRIPTS_DIR` auto-detection preamble to `global/scripts/languages/terraform/terra-test/run.sh` and `global/scripts/languages/terraform/terratest/run.sh` to match the convention used by every other `run.sh` script in the repo (per `CLAUDE.md` Script Conventions)
+
 ## [4.6.2] - 2026-04-21
 
 ### Changed

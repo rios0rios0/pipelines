@@ -45,3 +45,32 @@ stages:
               targetPath: '$(REPORT_PATH)'
               artifact: 'terra-coverage'
               publishLocation: 'pipeline'
+
+      # Go-based Terratest suite for cross-module invariants, stack/env
+      # HCL parsing, and `terraform fmt` checks. The runner is a no-op when
+      # the consumer has no `tests/terratest/` directory, so this job is
+      # safe to always emit — consumers opt in by creating the directory.
+      - job: 'test_terratest'
+        displayName: 'test:terratest'
+        dependsOn: []
+        steps:
+          - template: '../../abstracts/terra.yaml'
+
+          - task: 'GoTool@0'
+            displayName: 'Use Go 1.23'
+            inputs:
+              version: '1.23'
+
+          - script: $(Scripts.Directory)/global/scripts/languages/terraform/terratest/run.sh
+            displayName: 'Run Terratest suite'
+            env:
+              REPORT_PATH: $(REPORT_PATH)
+
+          - task: 'PublishTestResults@2'
+            displayName: 'Publish Terratest results'
+            condition: always()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(REPORT_PATH)/junit-terratest.xml'
+              testRunTitle: 'terratest'
+              failTaskOnFailedTests: true

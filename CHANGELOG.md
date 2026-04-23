@@ -16,6 +16,16 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added `global/scripts/languages/terraform/terra-test/run.sh` — a shared test runner that iterates `modules/*/tests/*.tftest.hcl`, invokes `terraform test -junit-xml=<path>` per module (requires Terraform `1.11+`, already pinned by `terra install`), aggregates every per-module JUnit into a single `<testsuites>` bundle at `build/reports/terra-tests.xml`, and emits a coverage summary at `build/reports/terra-coverage.{md,json}`. Coverage measures *breadth* (`tested_modules / total_modules`) plus aggregate case counts (passed / failed / errored) because Terraform has no native line-coverage concept — a plan/apply exercises every expression or none. Skips modules without a `tests/` directory (or with an empty `tests/` that would trip `terraform test` with "no test files found") so consumers onboard incrementally instead of all-at-once
+- added `coverage` target to `makefiles/terra.mk` — reuses the same runner but wraps it in `|| true` so operators can pull the coverage report off a red branch without masking CI failures. `REPORT_PATH` is overridable (defaults to `build/reports`)
+
+### Changed
+
+- changed `makefiles/terra.mk` `test` target to delegate to the new shared runner instead of an inline shell loop. Adds JUnit + coverage generation as a side effect of `make test`; existing consumers continue to work because the runner still exits non-zero when any module fails its `terraform test`
+- changed `azure-devops/terra/stages/30-tests/terra.yaml` to call the new runner, then publish the aggregated JUnit via `PublishTestResults@2` (surfaces per-case results in the build's Tests tab with `failTaskOnFailedTests: true`) and the whole `build/reports/` directory as the `terra-coverage` pipeline artifact via `PublishPipelineArtifact@1`. Both publish tasks use `condition: always()` so a red module still publishes everything green alongside it; the runner's non-zero exit code is what fails the job
+
 ## [4.6.2] - 2026-04-21
 
 ### Changed

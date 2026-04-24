@@ -38,14 +38,14 @@ test:
 	@if [ ! -d tests ] || ! ls tests/*.tftest.hcl >/dev/null 2>&1; then \
 		echo "No tests/*.tftest.hcl found; skipping terraform test."; \
 		echo "(Run 'make test-gen' to bootstrap a plan-time smoke suite.)"; \
-		exit 0; \
+	else \
+		mkdir -p "$(REPORT_PATH)" && \
+		terraform init -backend=false -input=false -upgrade=false >/dev/null && \
+		terraform test -junit-xml="$(REPORT_PATH)/junit-terra-tests.xml"; \
 	fi
-	@mkdir -p "$(REPORT_PATH)"
-	@terraform init -backend=false -input=false -upgrade=false >/dev/null
-	@terraform test -junit-xml="$(REPORT_PATH)/junit-terra-tests.xml"
 
 # `test-gen` generates a baseline `tests/smoke.tftest.hcl` for the current
 # module via the shared tftest-gen script. Idempotent — respects
 # hand-written tests (marker on line 1).
 test-gen:
-	@bash "$(SCRIPTS_DIR)/global/scripts/languages/terraform/tftest-gen/run.sh"
+	@sh "$(SCRIPTS_DIR)/global/scripts/languages/terraform/tftest-gen/run.sh"

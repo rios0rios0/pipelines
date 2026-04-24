@@ -238,6 +238,53 @@ assert_true "run.sh is executable" \
   "[ -x '$RUN_SH' ]"
 
 # =============================================================================
+# Test 7: makefiles/terraform.mk `test` recipe guard really short-circuits
+#   (regression guard: GNU Make runs each tab-indented recipe line in its
+#    own shell, so `exit 0` inside an `if ... fi` only terminates that
+#    shell. Joining the guard and the init/test chain into a single
+#    `if ... else ... fi` block is the fix -- this test proves the next
+#    shell lines don't run when tests/ is absent)
+# =============================================================================
+echo "TEST 7: terraform.mk test recipe skips init/test when tests/ absent"
+# given
+REPO7="$TEST_DIR/repo7"
+mkdir -p "$REPO7"
+cp "$SCRIPTS_DIR/makefiles/terraform.mk" "$REPO7/Makefile"
+
+# when -- run `make test` in a module with no tests/, with a shim that
+# would fail loudly if terraform init / test ever runs
+STUB_BIN="$TEST_DIR/stub-bin"
+mkdir -p "$STUB_BIN"
+cat > "$STUB_BIN/terraform" << 'SHIM'
+#!/usr/bin/env sh
+echo "UNEXPECTED: terraform $* invoked inside guard" >&2
+exit 99
+SHIM
+chmod +x "$STUB_BIN/terraform"
+
+# then
+# shellcheck disable=SC2034  # used inside assert_true's eval'd argument
+MAKE_OUTPUT=$(cd "$REPO7" && PATH="$STUB_BIN:$PATH" make -s test 2>&1 || true)
+assert_true "make test prints skip message when tests/ absent" \
+  "echo \"\$MAKE_OUTPUT\" | grep -q 'skipping terraform test'"
+# Stub would print 'UNEXPECTED: terraform ... invoked inside guard' if the
+# guard failed to short-circuit. Its absence means init/test never ran.
+assert_true "make test does NOT invoke terraform binary when tests/ absent" \
+  "! echo \"\$MAKE_OUTPUT\" | grep -q 'UNEXPECTED: terraform'"
+
+# given -- create a tests/*.tftest.hcl so the else branch runs
+mkdir -p "$REPO7/tests"
+echo "run \"noop\" { command = plan }" > "$REPO7/tests/smoke.tftest.hcl"
+
+# when -- now the shim terraform should be invoked and fail loudly
+# shellcheck disable=SC2034  # used inside assert_true's eval'd argument
+MAKE_OUTPUT2=$(cd "$REPO7" && PATH="$STUB_BIN:$PATH" make -s test 2>&1 || true)
+
+# then
+assert_true "make test invokes terraform init when tests/ present" \
+  "echo \"\$MAKE_OUTPUT2\" | grep -q 'UNEXPECTED: terraform init'"
+
+# =============================================================================
 # Summary
 # =============================================================================
 echo ""

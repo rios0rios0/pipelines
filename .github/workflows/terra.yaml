@@ -151,11 +151,34 @@ jobs:
       - name: 'Checkout code'
         uses: 'actions/checkout@v6'
 
-      # Go 1.24 is a lower bound — `GOTOOLCHAIN=auto` (the Go 1.21+ default)
-      # auto-fetches a newer toolchain when the consumer's `go.mod` under
-      # `tests/terratest/` requires one (Terratest suites frequently pin
-      # `go 1.26`+).
-      - name: 'Setup Go'
+      # Mirror the `go-version-file: 'go.mod'` pattern used by every
+      # `github/golang/stages/**/action.yaml` in this repo: derive the Go
+      # version from the consumer's `tests/terratest/go.mod` (honoring the
+      # `TESTS_DIR` env override, same contract as the tier runners) so the
+      # toolchain tracks whatever the consumer's Terratest suite declares.
+      # Falls back to a conservative `1.24` pin when no terratest `go.mod`
+      # exists (stack-only repos with only `modules/*/tests/*.tftest.hcl`,
+      # or repos with no Terra tests at all) — `setup-go` errors out when
+      # `go-version-file` points at a missing file.
+      - name: 'Detect terratest go.mod'
+        id: 'terratest-gomod'
+        shell: 'bash'
+        run: |
+          tests_dir="${TESTS_DIR:-tests/terratest}"
+          if [ -f "${tests_dir}/go.mod" ]; then
+            echo "path=${tests_dir}/go.mod" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 'Setup Go (from terratest go.mod)'
+        if: "steps.terratest-gomod.outputs.path != ''"
+        uses: 'actions/setup-go@v6'
+        with:
+          go-version-file: ${{ steps.terratest-gomod.outputs.path }}
+
+      - name: 'Setup Go (fallback when no terratest go.mod)'
+        if: "steps.terratest-gomod.outputs.path == ''"
         uses: 'actions/setup-go@v6'
         with:
           go-version: '1.24'

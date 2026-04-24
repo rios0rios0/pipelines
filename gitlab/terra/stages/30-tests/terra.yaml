@@ -1,5 +1,6 @@
 include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/terra/abstracts/terra.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
 
 # Single unified job that orchestrates both tiers of Terraform testing
 # behind one `test:all` entry: native `terraform test` over
@@ -26,3 +27,32 @@ test:all:
       coverage_report:
         coverage_format: 'cobertura'
         path: "${REPORT_PATH}/terra-coverage.xml"
+
+# Third tier — repo-convention assertions the consumer owns. Runs
+# `tests/structural.sh` if it exists and publishes the resulting JUnit.
+# The script is deliberately not shipped here; every repo has its own
+# conventions (customer dir naming, bootstrap self-containedness, shared
+# root.hcl presence) that can't live upstream. Skipped silently when the
+# consumer has no structural script.
+#
+# Extends `.scripts-repo` (not `.terra`) because the shell runner is
+# deps-free: no terra CLI, no Terraform, no Go. Uses a minimal
+# `alpine/git` image instead of `golang:1.24` so the job starts cold in
+# seconds and costs nothing to schedule. The `terra` alias was tempting
+# for symmetry with `test:all`, but pulling a full Go toolchain just to
+# run `sh tests/structural.sh` contradicts the offline / deps-free
+# intent documented above.
+test:structural:
+  extends: '.scripts-repo'
+  stage: 'tests'
+  image: 'alpine/git:latest'
+  variables:
+    REPORT_PATH: 'build/reports'
+  script:
+    - "$SCRIPTS_DIR/global/scripts/languages/terraform/structural/run.sh"
+  artifacts:
+    when: 'always'
+    paths:
+      - "${REPORT_PATH}/"
+    reports:
+      junit: "${REPORT_PATH}/junit-structural.xml"

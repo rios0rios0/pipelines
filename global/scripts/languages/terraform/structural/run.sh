@@ -28,10 +28,18 @@ set -eu
 # Matches the opt-in contract already established by the sibling
 # `terra-test` and `terratest` runners.
 
+REPORT_PATH="${REPORT_PATH:-build/reports}"
+JUNIT="${REPORT_PATH}/junit-structural.xml"
 SCRIPT="${STRUCTURAL_SCRIPT:-tests/structural.sh}"
+
+mkdir -p "${REPORT_PATH}"
 
 if [ ! -f "${SCRIPT}" ]; then
   echo "No ${SCRIPT} found; skipping structural runner."
+  # Emit an empty but valid JUnit so downstream publishers
+  # (`PublishTestResults@2` in Azure DevOps, `artifacts:reports:junit`
+  # in GitLab CI) don't warn about a missing report file.
+  printf '<?xml version="1.0" encoding="UTF-8"?>\n<testsuites name="structural"/>\n' > "${JUNIT}"
   exit 0
 fi
 
@@ -40,5 +48,10 @@ if [ ! -x "${SCRIPT}" ]; then
   exit 1
 fi
 
+# Execute via `${SCRIPT}` directly rather than `./${SCRIPT}` so both
+# relative (`tests/structural.sh`) and absolute (`/tmp/structural.sh`)
+# override values work. A `./` prefix would turn an absolute path into
+# a nonexistent `./tmp/structural.sh` and double-prefix an override
+# that already starts with `./`.
 echo "Running structural tests: ${SCRIPT}"
-"./${SCRIPT}"
+"${SCRIPT}"

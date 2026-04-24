@@ -109,8 +109,17 @@ stages:
               if [ -d tests/e2e ] && ls tests/e2e/*.tftest.hcl >/dev/null 2>&1; then
                 HAS_TFTEST=true
               fi
+              # `go.mod` is required by `terratest/run.sh` (it runs
+              # `go test -v ./...` from `tests/terratest/`), so an opt-in
+              # without one would fail with a Go module error mid-stage.
+              # Treat a missing `go.mod` as opt-out and surface the reason
+              # so operators see *why* the tier didn't run.
               if [ -d tests/terratest ] && ls tests/terratest/*.go >/dev/null 2>&1; then
-                HAS_TERRATEST=true
+                if [ -f tests/terratest/go.mod ]; then
+                  HAS_TERRATEST=true
+                else
+                  echo "tests/terratest/*.go present but tests/terratest/go.mod missing; skipping terratest tier."
+                fi
               fi
               echo "##vso[task.setvariable variable=HAS_TFTEST]$HAS_TFTEST"
               echo "##vso[task.setvariable variable=HAS_TERRATEST]$HAS_TERRATEST"
@@ -125,21 +134,68 @@ stages:
           # Kind is a single Go binary. Install by curl to avoid the
           # overhead of a dedicated install task. Matching the same
           # pattern already used for tflint in `10-code-check`.
+          #
+          # The binary is verified against the upstream `.sha256sum` so a
+          # tampered mirror or a corrupted download is caught before the
+          # binary is executed -- this is a shared template that runs in
+          # every `terraform-modules` pipeline, so the supply-chain risk
+          # is non-trivial. Architecture is detected at runtime so the
+          # template works on `arm64` agents (Linux ARM agent pools are
+          # already in rotation in some Azure DevOps subscriptions).
+          # Installs into a job-local directory and prepends it to PATH
+          # so passwordless `sudo` is not required, which would break on
+          # locked-down self-hosted pools.
           - script: |
               set -eu
               if [ "${SKIP_E2E:-}" = "true" ]; then exit 0; fi
-              curl -fsSL -o /tmp/kind \
-                https://kind.sigs.k8s.io/dl/v0.24.0/kind-linux-amd64
-              chmod +x /tmp/kind
-              sudo mv /tmp/kind /usr/local/bin/kind
-              kind version
+              kind_version='v0.24.0'
+              case "$(uname -m)" in
+                x86_64)
+                  kind_arch='amd64'
+                  ;;
+                aarch64|arm64)
+                  kind_arch='arm64'
+                  ;;
+                *)
+                  echo "Unsupported architecture for kind: $(uname -m)" >&2
+                  exit 1
+                  ;;
+              esac
+              kind_binary="kind-linux-${kind_arch}"
+              kind_url="https://kind.sigs.k8s.io/dl/${kind_version}/${kind_binary}"
+              local_bin_dir="$(Agent.TempDirectory)/bin"
+              mkdir -p "${local_bin_dir}"
+              curl -fsSL -o "/tmp/${kind_binary}" "${kind_url}"
+              curl -fsSL -o "/tmp/${kind_binary}.sha256sum" "${kind_url}.sha256sum"
+              # Upstream `.sha256sum` files vary -- some contain just the
+              # hash, others contain `<hash>  <filename>`. Extract only the
+              # hash and feed `sha256sum -c` a normalised line so the
+              # check is format-agnostic.
+              expected_sha="$(awk '{print $1}' "/tmp/${kind_binary}.sha256sum")"
+              echo "${expected_sha}  /tmp/${kind_binary}" | sha256sum -c -
+              chmod +x "/tmp/${kind_binary}"
+              mv "/tmp/${kind_binary}" "${local_bin_dir}/kind"
+              rm -f "/tmp/${kind_binary}.sha256sum"
+              echo "##vso[task.prependpath]${local_bin_dir}"
+              "${local_bin_dir}/kind" version
             displayName: 'Install kind'
             condition: and(succeeded(), ne(variables['SKIP_E2E'], 'true'))
 
+          # The kind node image is pinned alongside the kind binary
+          # version so the cluster's Kubernetes version stays
+          # reproducible across agents and across re-runs of the same
+          # commit. Without `--image`, kind picks its current default,
+          # which drifts every kind release and turns "did the test
+          # actually break?" into a forensics exercise. The pinned
+          # digest matches the default published in the kind `v0.24.0`
+          # release notes (Kubernetes `v1.31.0`).
           - script: |
               set -eu
               if [ "${SKIP_E2E:-}" = "true" ]; then exit 0; fi
-              kind create cluster --name "$(KIND_CLUSTER_NAME)" --wait 120s
+              kind create cluster \
+                --name "$(KIND_CLUSTER_NAME)" \
+                --image 'kindest/node:v1.31.0' \
+                --wait 120s
               kind get kubeconfig --name "$(KIND_CLUSTER_NAME)" > "$(Agent.TempDirectory)/kubeconfig"
               # `KUBECONFIG` is what kubectl, client-go, and terratest
               # read. `KUBE_CONFIG_PATH` is what the Terraform
@@ -150,7 +206,17 @@ stages:
               # Verified locally against a kind cluster before shipping.
               echo "##vso[task.setvariable variable=KUBECONFIG]$(Agent.TempDirectory)/kubeconfig"
               echo "##vso[task.setvariable variable=KUBE_CONFIG_PATH]$(Agent.TempDirectory)/kubeconfig"
-              kubectl --kubeconfig "$(Agent.TempDirectory)/kubeconfig" get nodes
+              # `kubectl` is best-effort verification; not every agent
+              # image has it pre-installed, and the actual e2e tests
+              # talk to the kind API via terratest / `terraform`
+              # providers that bring their own clients. Skip the
+              # verification cleanly instead of failing the whole stage
+              # before the real tests run.
+              if command -v kubectl >/dev/null 2>&1; then
+                kubectl --kubeconfig "$(Agent.TempDirectory)/kubeconfig" get nodes
+              else
+                echo "kubectl is not installed on this agent; skipping node verification."
+              fi
             displayName: 'Provision kind cluster'
             condition: and(succeeded(), ne(variables['SKIP_E2E'], 'true'))
 
@@ -182,14 +248,26 @@ stages:
           # writes `junit-terratest.xml`; rename to
           # `junit-e2e-terratest.xml` so it has a clear name in the
           # Tests tab.
+          #
+          # The runner's exit code is captured before the rename so a
+          # red test still produces a renamed artifact. With a naive
+          # `set -e`, a non-zero exit from `run.sh` would abort the
+          # script before the `mv`, hiding the JUnit from the publish
+          # step and surfacing as "no test results" instead of "tests
+          # failed". The script re-exits with the runner's original
+          # status so the job still fails on red tests.
           - script: |
               set -eu
+              set +e
               TESTS_DIR=tests/terratest REPORT_PATH="$(REPORT_PATH)" \
                 "$(Scripts.Directory)/global/scripts/languages/terraform/terratest/run.sh"
+              terratest_exit_code=$?
+              set -e
               if [ -f "$(REPORT_PATH)/junit-terratest.xml" ]; then
                 mv "$(REPORT_PATH)/junit-terratest.xml" \
                    "$(REPORT_PATH)/junit-e2e-terratest.xml"
               fi
+              exit "${terratest_exit_code}"
             displayName: 'Tier 2: apply-time via terratest'
             condition: and(succeeded(), eq(variables['HAS_TERRATEST'], 'true'))
 

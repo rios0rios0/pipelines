@@ -15,6 +15,14 @@ stages:
       - job: 'test_all'
         displayName: 'test:all'
         steps:
+          # Clone rios0rios0/pipelines into a temp dir and expose its path
+          # as `$(Scripts.Directory)`. Required by the `run.sh` invocation
+          # below — without it the variable resolves to empty, the command
+          # becomes `/global/scripts/...`, and the job fails with exit
+          # `127` ("command not found"). Sibling stages (`35-management`)
+          # already follow this pattern.
+          - template: '../../../global/abstracts/scripts-repo.yaml'
+
           - template: '../../abstracts/terra.yaml'
 
           # Pin a Go toolchain high enough to satisfy consumer `go.mod`

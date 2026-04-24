@@ -16,6 +16,18 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added `.github/tests/test-release-tag-idempotency.sh` — a regression test that exercises the HTTP-status → outcome mapping used by the `Create Tag` step in `azure-devops/global/stages/40-delivery/release.yaml`. Covers `200`/`201` (created), `409` (idempotent skip), and `400`/`401`/`403`/`404`/`422`/`500` (genuine failure). Wired into `make test` and the CI required-files check so any future edit that reintroduces `curl --fail` or breaks 409 idempotency is caught before merge — directly addresses the regression that red-lined `terraform-modules/azm-k8s-cluster` builds 34692/34725 and left several other modules in PartiallySucceeded.
+
+### Changed
+
+- changed the `azure-devops/global/stages/40-delivery/release.yaml` stage gate to fire on every merged commit to `refs/heads/main` instead of only when `Build.SourceVersionMessage` contains the substrings `chore/bump-` or `chore(bump)`. The old substring guard was a false-positive trap — a commit like `refactor: clarified chore(bump) workflow` would pass and waste a job spin-up even though the bash regex inside the step would correctly set `SKIP_RELEASE=true` and no-op. It was also a false-negative trap waiting to happen if anyone renamed the bump convention. The bash regex inside the step is now the single source of truth: non-bump commits set `SKIP_RELEASE=true` and the tag-creation steps exit cleanly. Cost: one short job spin-up per merged commit on `main`; benefit: correctness + one less knob to keep in sync.
+
+### Fixed
+
+- fixed `azure-devops/global/stages/40-delivery/release.yaml` to treat HTTP 409 from the `annotatedtags` endpoint as success instead of a pipeline failure. When AutoBump pushes the version tag as part of opening the `chore/bump-X.Y.Z` PR, the post-merge release stage on `main` would then `curl --fail -X POST .../annotatedtags` and abort with `curl: (22) ... error: 409` because the tag already existed — symptom seen in `terraform-modules/azm-k8s-cluster` builds 34692 (1.8.0) and 34725 (1.9.0), plus PartiallySucceeded runs on `azm-key-vault`, `helm-opensearch`, `k8s-namespace`, and `tf-container-image`. The step now captures the HTTP status via `-w "%{http_code}"`, emits a clear "tag already exists" log on 409, retries only on 429/5xx, and surfaces the response body on genuine 4xx failures (400/401/403/404) so operators can distinguish a real problem from the AutoBump race.
+
 ## [4.7.0] - 2026-04-24
 
 ### Added

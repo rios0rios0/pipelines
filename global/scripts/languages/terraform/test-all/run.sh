@@ -66,7 +66,17 @@ TESTS_DIR="${TESTS_DIR:-tests/terratest}"
 # here is safe and matches HashiCorp's documented guidance for shared
 # CI caches. Consumers can override either variable before invoking this
 # script.
-export TF_PLUGIN_CACHE_DIR="${TF_PLUGIN_CACHE_DIR:-${HOME}/.terraform.d/plugin-cache}"
+if [ -z "${TF_PLUGIN_CACHE_DIR:-}" ]; then
+  # Guard `HOME` so `set -u` doesn't abort on minimal CI/container images
+  # that launch without it. Fall back to `TMPDIR` (or `/tmp`) so the cache
+  # still lands on a writable path.
+  if [ -n "${HOME:-}" ]; then
+    TF_PLUGIN_CACHE_DIR="${HOME}/.terraform.d/plugin-cache"
+  else
+    TF_PLUGIN_CACHE_DIR="${TMPDIR:-/tmp}/terraform-plugin-cache"
+  fi
+fi
+export TF_PLUGIN_CACHE_DIR
 export TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE="${TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE:-true}"
 mkdir -p "${TF_PLUGIN_CACHE_DIR}"
 

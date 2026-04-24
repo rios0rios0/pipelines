@@ -18,6 +18,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
+- added `global/scripts/languages/terraform/tftest-gen/` — a generator that emits `tests/smoke.tftest.hcl` for a single terraform-module repo (per-repo-is-module layout, complementing the `modules/<name>/` layout handled by `customer-clusters/tests/generators/gen_smoke_tests.py`). Parses `variables.tf` + `main.tf` / `providers.tf`, emits one `mock_provider "<local>" {}` per required provider plus a `run "smoke_plans_successfully"` block with type-valid stubs for every required variable (name-hint table tuned for Azure / Cloudflare / Kubernetes / Helm / Keycloak / OpenSearch). For every required variable that has a `validation {}` block, also emits a `run "validation_rejects_invalid_<var>"` block with an invalid stub and `expect_failures = [var.<var>]` so guards are exercised instead of just declared. Respects hand-written tests (auto-generated files carry a marker on line 1). Piloted on `azm-resource-group` (no validations) and `azm-storage-account` (validations) — both green under `terraform test`.
+
 - added `.github/tests/test-release-tag-idempotency.sh` — a regression test that exercises the HTTP-status → outcome mapping used by the `Create Tag` step in `azure-devops/global/stages/40-delivery/release.yaml`. Covers `200`/`201` (created), `409` (idempotent skip), and `400`/`401`/`403`/`404`/`422`/`500` (genuine failure). Wired into `make test` and the CI required-files check so any future edit that reintroduces `curl --fail` or breaks 409 idempotency is caught before merge — directly addresses the regression that red-lined `terraform-modules/azm-k8s-cluster` builds 34692/34725 and left several other modules in PartiallySucceeded.
 
 ### Changed

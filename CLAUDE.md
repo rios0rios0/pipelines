@@ -24,7 +24,7 @@ Test scripts live in `.github/tests/`. The CI workflow (`.github/workflows/ci.ya
 All platforms follow consistent numbered stages:
 1. **10 - Code Check** — Linting, formatting, basic checks (rebase verification, changelog validation)
 2. **20 - Security** — SAST (CodeQL, Semgrep, Gitleaks, Hadolint, Trivy) and SCA
-3. **30 - Tests** — Unit/integration tests, coverage
+3. **30 - Tests** — Unit/integration tests, coverage. For the Azure DevOps `terraform` template, this stage runs three opt-in test tiers as parallel jobs: a plan-time smoke job (`tests/*.tftest.hcl` via `terraform test` with `mock_provider`) and an apply-time e2e job that provisions a disposable [kind](https://kind.sigs.k8s.io/) cluster and runs both `tests/e2e/*.tftest.hcl` (via `terraform test`) and `tests/terratest/*.go` (via the shared `terratest/run.sh`). All tiers are blocking so a red apply-time regression prevents `35-management` and `40-delivery` from running. The earlier `45-e2e` design was merged into `30-test` so smoke and apply-time feedback land in the same stage.
 4. **35 - Management** — SBOM generation, dependency tracking
 5. **40 - Delivery** — Artifact builds, container images
 6. **50 - Deployment** — Azure DevOps only (ARM, Lambda, K8s)

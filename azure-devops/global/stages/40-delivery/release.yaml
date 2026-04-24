@@ -7,14 +7,25 @@ parameters:
 jobs:
   - job: 'release'
     displayName: 'release'
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), or(contains(variables['Build.SourceVersionMessage'], 'chore/bump-'), contains(variables['Build.SourceVersionMessage'], 'chore(bump)')))
+    # Gate on main-only. The previous `contains()` substring match on
+    # `Build.SourceVersionMessage` was a false-positive trap — any commit
+    # message that happened to include the literal text `chore/bump-` or
+    # `chore(bump)` (e.g. `refactor: clarified chore(bump) workflow`) would
+    # pass the condition. The bash regex below is the actual source of truth:
+    # it matches only the two canonical bump formats and sets SKIP_RELEASE=true
+    # for anything else, so the subsequent tag-creation steps no-op cleanly.
+    # Cost of dropping the substring filter is one ~30s job spin-up per merged
+    # commit on main — acceptable for correctness.
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
     steps:
       - script: |
           set -eux
 
           COMMIT_MESSAGE="$(git log -1 --pretty=%B)"
-          # Azure DevOps format: "Merge branch 'chore/bump-X.X.X'"
-          # Conventional commit format: "chore(bump): bumped version to X.X.X"
+          # Canonical bump commit formats. Anything else → SKIP_RELEASE=true.
+          #   - Azure DevOps auto-merge: "Merge branch 'chore/bump-X.Y.Z'..."
+          #   - Conventional commit:     "chore(bump): bumped version to X.Y.Z"
+          # `\3` captures the branch-style version, `\4` the conventional one.
           REGEX="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)'.*$|.*chore\(bump\):.*version to ([0-9]+\.[0-9]+\.[0-9]+).*"
 
           if echo -n "$COMMIT_MESSAGE" | grep -Eq "$REGEX"; then
@@ -50,18 +61,41 @@ jobs:
                 \"message\": $RELEASE_NOTES
               }"
 
-              # `curl` exits 0 on HTTP 4xx/5xx unless `--fail` is passed, and
-              # `set -e` only reacts to non-zero exits. Without these flags a
-              # throttled or failed call to `annotatedtags` silently leaves the
-              # tag uncreated while the build reports green. Use curl's standard
-              # retry handling to absorb transient throttling (429) or temporary
-              # server failures (5xx), while still failing fast on non-retryable
-              # HTTP errors (400/401/403/404/409)
-              curl --fail --show-error --retry 5 --retry-delay 5 \
-                   -X POST "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_apis/git/repositories/$(Build.Repository.ID)/annotatedtags?api-version=7.1-preview.1" \
-                   --header "Authorization: Bearer $(System.AccessToken)" \
-                   --header "Content-Type: application/json" \
-                   --data "$DATA"
+              # Tag creation is idempotent:
+              #   * If the tag already exists (AutoBump pre-created it when opening the bump PR,
+              #     or a prior pipeline run partially succeeded), the `annotatedtags` endpoint
+              #     returns HTTP 409 Conflict. That is a no-op, not a failure.
+              #   * 429 / 5xx are transient and retried.
+              #   * 400 / 401 / 403 / 404 are genuine failures and must abort the stage.
+              # `curl` exits 0 on HTTP 4xx/5xx unless `--fail` is passed, and `set -e` only
+              # reacts to non-zero exits. So we capture the body + status, pick the outcome
+              # from the status, and surface the body on genuine failures.
+              TAG_NAME="${VERSION_PREFIX}${RELEASE_VERSION}"
+              RESPONSE_FILE=$(mktemp)
+              # Ensure the temp file is cleaned up on every exit path: normal
+              # completion, `exit 1` in the default case, or `set -e` aborting
+              # on a curl failure (network/TLS/etc).
+              trap 'rm -f "$RESPONSE_FILE"' EXIT
+              HTTP_STATUS=$(curl --silent --show-error --retry 5 --retry-delay 5 \
+                                 --retry-on-http-error 429,500,502,503,504 \
+                                 -o "$RESPONSE_FILE" -w "%{http_code}" \
+                                 -X POST "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_apis/git/repositories/$(Build.Repository.ID)/annotatedtags?api-version=7.1-preview.1" \
+                                 --header "Authorization: Bearer $(System.AccessToken)" \
+                                 --header "Content-Type: application/json" \
+                                 --data "$DATA")
+              case "$HTTP_STATUS" in
+                200|201)
+                  echo "Tag '$TAG_NAME' created."
+                  ;;
+                409)
+                  echo "Tag '$TAG_NAME' already exists (HTTP 409). Skipping — AutoBump or a prior run already created it."
+                  ;;
+                *)
+                  echo "Tag creation failed with HTTP $HTTP_STATUS. Response body:"
+                  cat "$RESPONSE_FILE"
+                  exit 1
+                  ;;
+              esac
             displayName: "Create Tag w/ Prefix '${{ prefix }}'"
             env:
               VERSION_PREFIX: "${{ prefix }}"

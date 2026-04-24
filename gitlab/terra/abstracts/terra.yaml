@@ -6,7 +6,12 @@ include:
 # correct versions of both tools automatically.
 .terra:
   extends: '.scripts-repo'
-  image: 'golang:1.23'
+  # Go 1.24 is a lower bound — `GOTOOLCHAIN=auto` (the Go 1.21+ default)
+  # auto-fetches a newer toolchain when the consumer's `go.mod` under
+  # `tests/terratest/` requires one (Terratest suites frequently pin
+  # `go 1.26`+). Bumping from 1.23 unblocks consumers whose terratest
+  # `go.mod` declares a Go version the base image can't satisfy.
+  image: 'golang:1.24'
   before_script:
     - !reference [.scripts-repo, before_script]
     - curl -fsSL https://raw.githubusercontent.com/rios0rios0/terra/main/install.sh | sh

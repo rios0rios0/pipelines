@@ -5,7 +5,7 @@
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #   -include $(SCRIPTS_DIR)/makefiles/terra.mk
 #
-# Targets provided: format, lint, test, test-terratest, coverage, validate
+# Targets provided: format, lint, test, test-terra-test, test-terratest, coverage, validate
 # Also sets SEMGREP_LANGUAGE=terraform for the common.mk sast target.
 # Note: CodeQL does not support Terraform; CODEQL_LANGUAGE is left unset.
 #
@@ -15,7 +15,7 @@
 SEMGREP_LANGUAGE ?= terraform
 REPORT_PATH ?= build/reports
 
-.PHONY: format lint test test-terratest coverage validate
+.PHONY: format lint test test-terra-test test-terratest coverage validate
 
 format:
 	@echo "Formatting Terraform files with Terra..."
@@ -29,29 +29,38 @@ lint:
 	@tflint --chdir . --recursive
 	@echo "Lint check passed."
 
-# `test` delegates to the shared runner, which emits one JUnit file per
-# module under $(REPORT_PATH)/terra-tests/, an aggregated JUnit bundle at
-# $(REPORT_PATH)/terra-tests.xml (for PublishTestResults@2), and a coverage
-# summary at $(REPORT_PATH)/terra-coverage.{md,json}. Consumers that want
-# the report without failing on a red build call `make coverage` instead,
-# which re-runs the same script but never exits non-zero.
+# `test` delegates to the unified runner, which orchestrates both tiers
+# (`terra-test` over modules + `terratest` over `tests/terratest/`) behind a
+# single entry point. Emits per-tier artifacts plus a merged JUnit at
+# $(REPORT_PATH)/junit-terra-all.xml and a Cobertura coverage summary at
+# $(REPORT_PATH)/terra-coverage.xml. Exits 0 cleanly when neither tier has
+# tests, so stack-only repos don't need a bespoke opt-out.
 test:
+	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/test-all/run.sh
+
+# `test-terra-test` and `test-terratest` still work as escape hatches for
+# operators who want to exercise one tier at a time (e.g., during debugging
+# of a misbehaving terratest suite without re-running the full `terraform
+# test` matrix). The default `test` target covers both tiers.
+test-terra-test:
 	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/terra-test/run.sh
 
-# `test-terratest` drives the consumer's Go test suite in `tests/terratest/`
-# via the shared runner. Skipped as a no-op when the directory doesn't exist
-# (see the runner for the opt-in contract). Covers the gap `terraform test`
-# can't fill: stacks + environments that reference private git-SSH modules
-# or resolve dependency outputs — a real `terraform validate` there needs
-# credentials, whereas Terratest can drive `terraform fmt`, HCL parsing,
-# and cross-module invariants offline.
 test-terratest:
 	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/terratest/run.sh
 
 coverage:
-	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/terra-test/run.sh || true
-	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/terratest/run.sh || true
-	@echo "Coverage reports: $(REPORT_PATH)/terra-coverage.md $(REPORT_PATH)/junit-terratest.xml"
+	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/test-all/run.sh || true
+	@artifacts=""; \
+	for report in "$(REPORT_PATH)/terra-coverage.md" "$(REPORT_PATH)/terra-coverage.xml" "$(REPORT_PATH)/terra-coverage.json" "$(REPORT_PATH)/junit-terra-all.xml"; do \
+		if [ -f "$$report" ]; then \
+			artifacts="$$artifacts $$report"; \
+		fi; \
+	done; \
+	if [ -n "$$artifacts" ]; then \
+		echo "Coverage reports:$$artifacts"; \
+	else \
+		echo "Coverage reports: none generated"; \
+	fi
 
-validate: format lint test test-terratest
-	@echo "All validations passed (format, lint, test, test-terratest)."
+validate: format lint test
+	@echo "All validations passed (format, lint, test)."

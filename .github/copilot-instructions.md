@@ -145,6 +145,17 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 |-----------------|------------------------------|-----------------------------------------------|
 | **Checkstyle**  | Java code style enforcement  | `global/scripts/languages/java/checkstyle/`   |
 
+#### Terraform / Terra Tools
+
+The Terra CLI pipeline test stage runs through a single unified `test:all` job on every platform (Azure DevOps, GitLab CI, GitHub Actions) that delegates to the runner below. The orchestrator auto-detects which tiers the consumer has, runs only those, merges the JUnit outputs into `build/reports/junit-terra-all.xml`, and exits `0` when neither tier has tests so stack-only repos pass without a bespoke opt-out.
+
+| Tool                     | Purpose                                            | Script Location                                         |
+|--------------------------|----------------------------------------------------|---------------------------------------------------------|
+| **Terra Test (unified)** | Orchestrates both tiers behind one `test:all` job  | `global/scripts/languages/terraform/test-all/run.sh`    |
+| **terra-test**           | `terraform test` over `modules/*/tests/*.tftest.hcl` | `global/scripts/languages/terraform/terra-test/run.sh`  |
+| **Terratest**            | Go test suite under `tests/terratest/*.go`         | `global/scripts/languages/terraform/terratest/run.sh`   |
+| **Terraform CycloneDX**  | SBOM generation for Terraform projects             | `global/scripts/languages/terraform/cyclonedx/run.sh`   |
+
 ### Container Images
 
 **Available Pre-built Images:**

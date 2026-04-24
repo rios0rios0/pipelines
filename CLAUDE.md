@@ -35,7 +35,10 @@ All platforms follow consistent numbered stages:
 - `gitlab/<language>/` — GitLab CI templates with `stages/`, `scripts/`, `abstracts/` subdirs
 - `azure-devops/<language>/` — Azure DevOps templates, same structure as GitLab
 - `global/scripts/tools/` — Platform-agnostic security tools (codeql, gitleaks, semgrep, hadolint, trivy, sonarqube, dependency-track)
-- `global/scripts/languages/` — Language-specific scripts (golang, python)
+- `global/scripts/languages/` — Language-specific scripts (golang, python, terraform). Most `run.sh` scripts follow shared conventions, but the Terraform helpers below are documented exceptions: they write reports directly under `build/reports/` and do not rely on the common `cleanup.sh` / Docker-in-Docker pattern.
+  - `terraform/terra-test/` — `terraform test` runner over `modules/*/tests/*.tftest.hcl` (emits JUnit + Markdown/JSON/Cobertura coverage under `build/reports/`)
+  - `terraform/terratest/` — Go Terratest runner over `tests/terratest/*.go` (emits JUnit under `build/reports/`)
+  - `terraform/test-all/` — unified orchestrator; runs both tiers when present, merges JUnits into `build/reports/junit-terra-all.xml`, exits `0` when neither tier has tests (stack-only repos)
 - `global/scripts/shared/` — Shared utilities (cleanup.sh, rebase-check.sh, changelog-check.sh)
 - `global/containers/` — Docker image definitions for CI environments
 - `makefiles/` — Includable `.mk` fragments for downstream projects (`common.mk`, `golang.mk`, `python.mk`, etc.)
@@ -75,6 +78,17 @@ All `run.sh` scripts follow this pattern:
 - Source `cleanup.sh` to set up report directory cleanup
 - Generate reports to `build/reports/<tool-name>/`
 - Use Docker-in-Docker for tool isolation
+
+### Terra Test Tiers
+
+The Terra CLI pipeline test stage exposes a single `test:all` job on every platform (Azure DevOps, GitLab CI, GitHub Actions) that delegates to `global/scripts/languages/terraform/test-all/run.sh`. The unified runner orchestrates two tiers:
+
+| Tier          | Input                              | Tool                             | Output                          |
+|---------------|------------------------------------|----------------------------------|---------------------------------|
+| `terra-test`  | `modules/*/tests/*.tftest.hcl`     | `terraform test -junit-xml`      | `terra-tests.xml`, `terra-coverage.{md,json,xml}` |
+| `terratest`   | `tests/terratest/*.go`             | `go test ./...` + `go-junit-report` | `junit-terratest.xml`         |
+
+The merged JUnit (`junit-terra-all.xml`) is the portable contract — GitLab CI's `artifacts:reports:junit` and GitHub Actions' `upload-artifact` both only take one file. When neither tier has tests (e.g., a stack-only repo without `modules/` or `tests/terratest/`), the runner emits an empty-but-valid JUnit and exits `0` so the job passes without a bespoke opt-out.
 
 ### Makefile Include Pattern
 

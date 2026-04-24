@@ -1,3 +1,14 @@
+parameters:
+  # Steps injected before the Terraform `test-all` runner invokes
+  # `terraform init` + `terraform test` on each module. Consumers whose
+  # modules pin private `source = "git@..."` paths pass the setup steps
+  # that configure SSH so that `terraform init` can resolve those
+  # references from the tests job (where the management-stage SSH
+  # setup is not available).
+  - name: 'PRE_STEPS'
+    type: 'stepList'
+    default: []
+
 stages:
   - stage: 'tests'
     displayName: 'tests'
@@ -24,6 +35,16 @@ stages:
           - template: '../../../global/abstracts/scripts-repo.yaml'
 
           - template: '../../abstracts/terra.yaml'
+
+          # Run consumer-provided pre-steps (e.g. configuring SSH for
+          # private-git module sources) before `test-all/run.sh` calls
+          # `terraform init` per module. Without this hook, modules that
+          # reference `source = "git@..."` in their bodies fail init from
+          # the tests job with `ssh: Could not resolve hostname`. The
+          # sibling `20-security` stage threads the same parameter into
+          # its SAST tools — consumers already maintain one `PRE_STEPS`
+          # list; we just reuse it here.
+          - ${{ parameters.PRE_STEPS }}
 
           # Pin a Go toolchain high enough to satisfy consumer `go.mod`
           # directives. `GOTOOLCHAIN=auto` (the Go 1.21+ default) will

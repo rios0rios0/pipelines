@@ -31,4 +31,6 @@ stages:
     parameters:
       PRE_STEPS: ${{ parameters.PRE_STEPS }}
   - template: 'stages/30-tests/terra.yaml'
+    parameters:
+      PRE_STEPS: ${{ parameters.PRE_STEPS }}
   - template: 'stages/35-management/terra.yaml'

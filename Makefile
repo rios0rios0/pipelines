@@ -2,7 +2,7 @@ TAG := latest
 ROOT := global/containers
 CONTAINER_REGISTRY = ghcr.io/rios0rios0/pipelines
 
-.PHONY: login setup-buildx build-and-push test-go-script test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test
+.PHONY: login setup-buildx build-and-push test-go-script test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test
 
 login:
 	docker login $(CONTAINER_REGISTRY)
@@ -38,5 +38,9 @@ test-release-tag-idempotency:
 	@echo "Running release tag idempotency validation..."
 	@./.github/tests/test-release-tag-idempotency.sh
 
-test: test-go-script test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency
+test-tftest-gen:
+	@echo "Running tftest-gen generator validation..."
+	@./.github/tests/test-tftest-gen.sh
+
+test: test-go-script test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen
 	@echo "All tests completed successfully!"

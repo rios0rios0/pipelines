@@ -80,3 +80,36 @@ stages:
               targetPath: '$(REPORT_PATH)'
               artifactName: 'terra-coverage'
               publishLocation: 'pipeline'
+
+      # Third tier — repo-convention assertions the consumer owns. Runs
+      # `tests/structural.sh` if it exists, publishes the resulting JUnit.
+      # The script itself is deliberately not shipped here — every
+      # repo has its own conventions (customer dir naming, bootstrap
+      # self-containedness, shared root.hcl presence) that can't live
+      # upstream. The runner is just the glue.
+      #
+      # `dependsOn: []` makes this job start in parallel with `test:all`;
+      # the shell tier is offline, deps-free, and finishes in under a
+      # second, so there's no reason to wait. A consumer without
+      # `tests/structural.sh` sees the job run, emit a skip message, and
+      # exit 0 — no spurious failure.
+      - job: 'test_structural'
+        displayName: 'test:structural'
+        dependsOn: []
+        steps:
+          - template: '../../../global/abstracts/scripts-repo.yaml'
+
+          - script: $(Scripts.Directory)/global/scripts/languages/terraform/structural/run.sh
+            displayName: 'Run repo-convention structural tests'
+            env:
+              REPORT_PATH: $(REPORT_PATH)
+
+          - task: 'PublishTestResults@2'
+            displayName: 'Publish structural test results'
+            condition: always()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(REPORT_PATH)/junit-structural.xml'
+              testRunTitle: 'structural'
+              failTaskOnFailedTests: true
+              mergeTestResults: false

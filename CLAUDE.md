@@ -38,7 +38,8 @@ All platforms follow consistent numbered stages:
 - `global/scripts/languages/` — Language-specific scripts (golang, python, terraform). Most `run.sh` scripts follow shared conventions, but the Terraform helpers below are documented exceptions: they write reports directly under `build/reports/` and do not rely on the common `cleanup.sh` / Docker-in-Docker pattern.
   - `terraform/terra-test/` — `terraform test` runner over `modules/*/tests/*.tftest.hcl` (emits JUnit + Markdown/JSON/Cobertura coverage under `build/reports/`)
   - `terraform/terratest/` — Go Terratest runner over `tests/terratest/*.go` (emits JUnit under `build/reports/`)
-  - `terraform/test-all/` — unified orchestrator; runs both tiers when present, merges JUnits into `build/reports/junit-terra-all.xml`, exits `0` when neither tier has tests (stack-only repos)
+  - `terraform/test-all/` — unified orchestrator for the first two tiers; runs both when present, merges JUnits into `build/reports/junit-terra-all.xml`, exits `0` when neither tier has tests (stack-only repos)
+  - `terraform/structural/` — third tier runner for `tests/structural.sh` (repo-convention assertions the consumer owns); emits `build/reports/junit-structural.xml` (empty-but-valid on skip). Runs on its own parallel job (`test:structural`) instead of through `test-all` because the shell tier is offline and deps-free and shouldn't block on the heavier tiers
 - `global/scripts/shared/` — Shared utilities (cleanup.sh, rebase-check.sh, changelog-check.sh)
 - `global/containers/` — Docker image definitions for CI environments
 - `makefiles/` — Includable `.mk` fragments for downstream projects (`common.mk`, `golang.mk`, `python.mk`, etc.)
@@ -81,14 +82,22 @@ All `run.sh` scripts follow this pattern:
 
 ### Terra Test Tiers
 
-The Terra CLI pipeline test stage exposes a single `test:all` job on every platform (Azure DevOps, GitLab CI, GitHub Actions) that delegates to `global/scripts/languages/terraform/test-all/run.sh`. The unified runner orchestrates two tiers:
+The Terra CLI pipeline test stage exposes two parallel jobs on every platform (Azure DevOps, GitLab CI, GitHub Actions):
 
-| Tier          | Input                              | Tool                             | Output                          |
-|---------------|------------------------------------|----------------------------------|---------------------------------|
-| `terra-test`  | `modules/*/tests/*.tftest.hcl`     | `terraform test -junit-xml`      | `terra-tests.xml`, `terra-coverage.{md,json,xml}` |
-| `terratest`   | `tests/terratest/*.go`             | `go test ./...` + `go-junit-report` | `junit-terratest.xml`         |
+1. **`test:all`** — the unified test job, delegates to `global/scripts/languages/terraform/test-all/run.sh` which orchestrates the two heavier tiers:
 
-The merged JUnit (`junit-terra-all.xml`) is the portable contract — GitLab CI's `artifacts:reports:junit` and GitHub Actions' `upload-artifact` both only take one file. When neither tier has tests (e.g., a stack-only repo without `modules/` or `tests/terratest/`), the runner emits an empty-but-valid JUnit and exits `0` so the job passes without a bespoke opt-out.
+   | Tier          | Input                              | Tool                             | Output                          |
+   |---------------|------------------------------------|----------------------------------|---------------------------------|
+   | `terra-test`  | `modules/*/tests/*.tftest.hcl`     | `terraform test -junit-xml`      | `terra-tests.xml`, `terra-coverage.{md,json,xml}` |
+   | `terratest`   | `tests/terratest/*.go`             | `go test ./...` + `go-junit-report` | `junit-terratest.xml`         |
+
+2. **`test:structural`** — third-tier shell runner, delegates to `global/scripts/languages/terraform/structural/run.sh`:
+
+   | Tier          | Input                              | Tool                             | Output                          |
+   |---------------|------------------------------------|----------------------------------|---------------------------------|
+   | `structural`  | `tests/structural.sh` (consumer-owned) | executes the script directly | `junit-structural.xml`          |
+
+The merged JUnit (`junit-terra-all.xml`) is the portable contract for `test:all` — GitLab CI's `artifacts:reports:junit` and GitHub Actions' `upload-artifact` both only take one file. `test:structural` publishes its own `junit-structural.xml` on a separate pipeline surface because it runs on its own job. When a tier has no tests (e.g., a stack-only repo without `modules/`, `tests/terratest/`, or `tests/structural.sh`), the corresponding runner emits an empty-but-valid JUnit and exits `0` so the job passes without a bespoke opt-out. `test:structural` runs on a parallel job rather than through `test-all` because the shell tier is offline and deps-free — queuing it behind the heavier Go / Terraform tiers would waste feedback time.
 
 ### Makefile Include Pattern
 

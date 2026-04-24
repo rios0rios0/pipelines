@@ -412,7 +412,8 @@ def main() -> int:
     smoke = tests_dir / "smoke.tftest.hcl"
 
     if smoke.exists() and not args.force:
-        first_line = smoke.read_text().splitlines()[0] if smoke.read_text() else ""
+        existing = smoke.read_text()
+        first_line = existing.splitlines()[0] if existing else ""
         if MARKER not in first_line:
             print(f"SKIP hand-written smoke at {smoke} (use --force to overwrite)")
             return 0

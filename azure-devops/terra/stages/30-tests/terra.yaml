@@ -30,9 +30,9 @@ stages:
           # transparently fetch a newer toolchain when `go.mod` requires
           # it, so this pin is a lower bound, not a hard version.
           - task: 'GoTool@0'
-            displayName: 'Use Go 1.24 (toolchain auto-upgrades per go.mod)'
+            displayName: 'Use Go (toolchain auto-upgrades per go.mod)'
             inputs:
-              version: '1.24'
+              version: '1.26'
 
           # Delegate to the shared unified runner so `make test` and the CI
           # flow exercise identical logic: run terra-test, run terratest if

@@ -40,6 +40,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed `gitlab/terra/abstracts/terra.yaml` base image from `golang:1.23` to `golang:1.24` for the same reason — `GOTOOLCHAIN=auto` handles anything higher required by the consumer's `go.mod`
 - changed `.github/workflows/terra.yaml` `Setup Go` step in the `tests-test_all` job to read the Go version from the consumer's `tests/terratest/go.mod` via `actions/setup-go`'s `go-version-file`, matching the `go-version-file: 'go.mod'` pattern already used by every other `github/golang/stages/**/action.yaml` in this repo. Falls back to a `1.24` baseline when no terratest `go.mod` exists (stack-only repos, or repos with no Terra tests at all) because `setup-go` errors on a missing file. The `code_check-style_terra_format` job still uses the `1.24` pin because it never reads consumer Go code
 - changed `makefiles/terra.mk` `test` target to delegate to the unified `test-all/run.sh` runner instead of a single-tier shell call. `make test` now runs both tiers (when present) and produces the merged JUnit + coverage artifacts in one pass. The `validate` composite target simplifies to `format lint test` because `test` already covers every tier
+- changed the golang pipeline version from `1.24` to `1.26`
 
 ### Fixed
 

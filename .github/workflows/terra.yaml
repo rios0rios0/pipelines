@@ -13,6 +13,11 @@ on:
         type: 'string'
         default: ''
         description: 'Shell commands run before Trivy and Semgrep. Useful for configuring SSH so the Terraform parser can clone private modules referenced via `source = "git@..."`.'
+      pipelines_ref:
+        required: false
+        type: 'string'
+        default: ''
+        description: 'Optional ref (branch, tag, or SHA) to check out `rios0rios0/pipelines` at when sourcing shared scripts. Defaults to the ref this reusable workflow was invoked with (parsed from `github.workflow_ref`), so scripts and workflow stay version-locked when consumers pin to a tag/SHA.'
 
 jobs:
   # first stage
@@ -161,11 +166,30 @@ jobs:
           terra install
         shell: 'bash'
 
+      # Derive the pipelines ref from the reusable workflow's own invocation
+      # ref so the shared scripts stay in sync with the workflow. When the
+      # consumer calls `uses: 'rios0rios0/pipelines/.github/workflows/terra.yaml@v4.6.2'`,
+      # `github.workflow_ref` resolves to
+      # `rios0rios0/pipelines/.github/workflows/terra.yaml@refs/tags/v4.6.2`;
+      # stripping everything up to the last `@` yields the ref that
+      # `actions/checkout` accepts. The `pipelines_ref` input overrides this
+      # for consumers who deliberately want a different script version.
+      - name: 'Resolve pipelines ref'
+        id: 'pipelines-ref'
+        shell: 'bash'
+        run: |
+          if [ -n "${{ inputs.pipelines_ref }}" ]; then
+            ref="${{ inputs.pipelines_ref }}"
+          else
+            ref="${GITHUB_WORKFLOW_REF##*@}"
+          fi
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+
       - name: 'Checkout pipelines repo for shared scripts'
         uses: 'actions/checkout@v6'
         with:
           repository: 'rios0rios0/pipelines'
-          ref: 'main'
+          ref: ${{ steps.pipelines-ref.outputs.ref }}
           path: '.pipelines'
 
       - name: 'Run Terraform tests (terra-test + terratest)'

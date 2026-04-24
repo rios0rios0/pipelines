@@ -35,10 +35,10 @@ All platforms follow consistent numbered stages:
 - `gitlab/<language>/` — GitLab CI templates with `stages/`, `scripts/`, `abstracts/` subdirs
 - `azure-devops/<language>/` — Azure DevOps templates, same structure as GitLab
 - `global/scripts/tools/` — Platform-agnostic security tools (codeql, gitleaks, semgrep, hadolint, trivy, sonarqube, dependency-track)
-- `global/scripts/languages/` — Language-specific scripts (golang, python, terraform)
-  - `terraform/terra-test/` — `terraform test` runner over `modules/*/tests/*.tftest.hcl` (emits JUnit + Markdown/JSON/Cobertura coverage)
-  - `terraform/terratest/` — Go Terratest runner over `tests/terratest/*.go` (emits JUnit)
-  - `terraform/test-all/` — unified orchestrator; runs both tiers when present, merges JUnits into `junit-terra-all.xml`, exits `0` when neither tier has tests (stack-only repos)
+- `global/scripts/languages/` — Language-specific scripts (golang, python, terraform). Most `run.sh` scripts follow shared conventions, but the Terraform helpers below are documented exceptions: they write reports directly under `build/reports/` and do not rely on the common `cleanup.sh` / Docker-in-Docker pattern.
+  - `terraform/terra-test/` — `terraform test` runner over `modules/*/tests/*.tftest.hcl` (emits JUnit + Markdown/JSON/Cobertura coverage under `build/reports/`)
+  - `terraform/terratest/` — Go Terratest runner over `tests/terratest/*.go` (emits JUnit under `build/reports/`)
+  - `terraform/test-all/` — unified orchestrator; runs both tiers when present, merges JUnits into `build/reports/junit-terra-all.xml`, exits `0` when neither tier has tests (stack-only repos)
 - `global/scripts/shared/` — Shared utilities (cleanup.sh, rebase-check.sh, changelog-check.sh)
 - `global/containers/` — Docker image definitions for CI environments
 - `makefiles/` — Includable `.mk` fragments for downstream projects (`common.mk`, `golang.mk`, `python.mk`, etc.)

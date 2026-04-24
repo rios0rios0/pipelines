@@ -29,6 +29,18 @@ fi
 
 REPORT_PATH="${REPORT_PATH:-build/reports}"
 TESTS_DIR="${REPORT_PATH}/terra-tests"
+
+# Share one provider cache across every `terraform init` in the loop below.
+# Without this, each module downloads its own ~300 MB copy of `azurerm`,
+# `kubernetes`, `helm`, etc. into `modules/<name>/.terraform/providers/...`
+# and fills the runner disk. `test-all/run.sh` exports the same defaults,
+# so this block is a no-op when this script is invoked via the orchestrator
+# — it exists so the `test-terra-test` escape hatch still gets the cache
+# when operators bypass `test-all`. See `test-all/run.sh` for the rationale
+# behind `TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE`.
+export TF_PLUGIN_CACHE_DIR="${TF_PLUGIN_CACHE_DIR:-${HOME}/.terraform.d/plugin-cache}"
+export TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE="${TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE:-true}"
+mkdir -p "${TF_PLUGIN_CACHE_DIR}"
 AGGREGATE_JUNIT="${REPORT_PATH}/terra-tests.xml"
 COVERAGE_MD="${REPORT_PATH}/terra-coverage.md"
 COVERAGE_JSON="${REPORT_PATH}/terra-coverage.json"

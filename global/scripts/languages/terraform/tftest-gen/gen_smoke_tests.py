@@ -28,8 +28,9 @@ the auto-generated marker on line 1 (so hand-written tests stay untouched).
 from __future__ import annotations
 
 import argparse
-import os
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -137,10 +138,13 @@ def parse_required_providers(text: str) -> list[tuple[str, str]]:
                 break
         i += 1
     body = text[start:i]
-    return [
-        (em.group(1), (RE_SOURCE.search(em.group(2)) or re.match("", "")).group(1) if RE_SOURCE.search(em.group(2)) else "unknown")
-        for em in RE_PROVIDER_ENTRY.finditer(body)
-    ]
+    providers = []
+    for em in RE_PROVIDER_ENTRY.finditer(body):
+        source_match = RE_SOURCE.search(em.group(2))
+        providers.append(
+            (em.group(1), source_match.group(1) if source_match else "unknown")
+        )
+    return providers
 
 
 # ---------- Name-based stubs (tuned for Azure / Cloudflare / K8s / Keycloak) ----------
@@ -290,19 +294,25 @@ def gen_stub(type_expr: str, var_name: str | None = None) -> str:
     return '"test"'
 
 
-def _invalid_stub(var: dict) -> str:
+def _invalid_stub(var: dict) -> str | None:
+    # Returns a value that is type-valid (so `terraform plan` reaches the
+    # validation block) but value-invalid (so the validation fails). Returns
+    # None when we can't reliably construct one -- `object(...)` and
+    # `tuple(...)` require specific required fields/positions, so `{}` and
+    # `[]` fail the type check *before* any validation runs. The caller
+    # must skip generating a validation_rejects test in that case.
     t = var["type"].strip()
-    if t.startswith("string") or t == "any":
+    if t == "string" or t.startswith("string") or t == "any":
         return '""'
-    if t.startswith("number"):
+    if t == "number" or t.startswith("number"):
         return "-1"
-    if t.startswith("bool"):
-        return "false"
-    if t.startswith(("list(", "set(", "tuple(")):
+    if t.startswith(("list(", "set(")):
         return "[]"
-    if t.startswith("map(") or t.startswith("object("):
+    if t.startswith("map("):
         return "{}"
-    return '""'
+    # bool, object(...), tuple(...) -- no safe type-valid-but-value-invalid
+    # stub is derivable from the type expression alone.
+    return None
 
 
 # ---------- File emission ----------
@@ -352,9 +362,14 @@ def render_smoke(providers: list[tuple[str, str]], variables: list[dict]) -> str
 
     validation_parts: list[str] = []
     for v in [vv for vv in variables if vv["validation"] and vv["required"]]:
+        invalid = _invalid_stub(v)
+        if invalid is None:
+            # Skip: type (object / tuple / bool) has no reliable
+            # type-valid-but-value-invalid stub. Hand-write the test.
+            continue
         vars_block_lines = ["  variables {"]
         for other in required:
-            val = _invalid_stub(other) if other["name"] == v["name"] else valid_stubs[other["name"]]
+            val = invalid if other["name"] == v["name"] else valid_stubs[other["name"]]
             vars_block_lines.append(f"    {other['name']} = {val}")
         vars_block_lines.append("  }")
         validation_parts.append(
@@ -415,8 +430,20 @@ def main() -> int:
     smoke.write_text(content)
     print(f"wrote {smoke} (providers={len(providers)}, vars={len(variables)}, validations={sum(1 for v in variables if v['validation'])})")
 
-    # Canonicalise formatting
-    os.system(f"terraform -chdir={repo} fmt tests/ > /dev/null 2>&1")
+    # Canonicalise formatting. Use argv (no shell) so repo paths with spaces
+    # don't break and an adversarial --repo-dir can't inject shell tokens.
+    if shutil.which("terraform") is None:
+        print("warning: terraform not on PATH; skipping `terraform fmt` on generated file", file=sys.stderr)
+        return 0
+    fmt = subprocess.run(
+        ["terraform", f"-chdir={repo}", "fmt", "tests/"],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if fmt.returncode != 0:
+        print(f"warning: `terraform fmt` exited {fmt.returncode}: {fmt.stderr.strip()}", file=sys.stderr)
     return 0
 
 

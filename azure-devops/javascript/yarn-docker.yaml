@@ -40,13 +40,16 @@ stages:
     parameters:
       RUN_BEFORE_TESTS: ${{ parameters.RUN_BEFORE_TESTS }}
       RUN_AFTER_TESTS: ${{ parameters.RUN_AFTER_TESTS }}
+      WORKING_DIRECTORY: "$(System.DefaultWorkingDirectory)"
 
   - template: 'stages/35-management/yarn.yaml'
     parameters:
       RUN_BEFORE_MANAGEMENT: ${{ parameters.RUN_BEFORE_MANAGEMENT }}
       RUN_AFTER_MANAGEMENT: ${{ parameters.RUN_AFTER_MANAGEMENT }}
+      WORKING_DIRECTORY: "$(System.DefaultWorkingDirectory)"
 
   - template: 'stages/40-delivery/docker.yaml'
     parameters:
       RUN_BEFORE_DELIVERY: ${{ parameters.RUN_BEFORE_DELIVERY }}
       RUN_AFTER_DELIVERY: ${{ parameters.RUN_AFTER_DELIVERY }}
+      WORKING_DIRECTORY: "$(System.DefaultWorkingDirectory)"

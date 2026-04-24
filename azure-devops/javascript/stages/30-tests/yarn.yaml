@@ -1,7 +1,16 @@
 parameters:
-  - name: 'SELF_HOSTED_POOL' # optional parameter for heavy workloads within JS language
+  # Optional parameter for heavy workloads within JS language. The previous
+  # default ``"$(SELF_HOSTED_POOL)"`` was a runtime variable reference that
+  # is never an empty string at compile time, so the
+  # ``${{ if ne(parameters.SELF_HOSTED_POOL, '') }}`` guard below always
+  # emitted a ``pool: name: $(SELF_HOSTED_POOL)`` block. Consumers that do
+  # not define the variable saw the job fail during ``Prepare job`` with
+  # "Could not find a pool with name ``$(SELF_HOSTED_POOL)``". The default
+  # is now an empty string so the guard correctly omits the block when
+  # no self-hosted pool is requested.
+  - name: 'SELF_HOSTED_POOL'
     type: 'string'
-    default: "$(SELF_HOSTED_POOL)"
+    default: ''
   - name: 'WORKING_DIRECTORY'
     type: 'string'
     default: ''

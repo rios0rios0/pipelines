@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Generate tests/smoke.tftest.hcl for a single terraform-module repo.
+#
+# Usage:
+#   run.sh                     # generate in the current repo root
+#   run.sh --force             # overwrite even hand-written tests (dangerous)
+#   run.sh --repo-dir /path    # target a specific repo root
+#
+# Companion to `terraform test` (via `terra-test/run.sh`). Produces a
+# plan-time smoke + per-variable-validation coverage suite with mocked
+# providers so no credentials or network access are required.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PY="${SCRIPT_DIR}/gen_smoke_tests.py"
+
+if [ ! -x "$(command -v python3)" ]; then
+  echo "ERROR: python3 is required on PATH" >&2
+  exit 1
+fi
+
+exec python3 "$PY" "$@"

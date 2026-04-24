@@ -31,7 +31,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
     A module with neither `tests/e2e/` nor `tests/terratest/` no-ops the e2e job silently — there are 9+ `azm-*` / `clf-*` repos that can't apply against kind at all. Modules with neither `tests/*.tftest.hcl` nor the e2e dirs no-op the entire stage. All three tiers are **blocking**: a failure in any of them prevents `35-management` and `40-delivery` from running, so a bad apply-time regression can't produce a tag.
 
-    Wired into `azure-devops/terraform/terra.yaml` as the fifth stage; skipped on tag builds where re-running tests gates nothing.
+    Wired into `azure-devops/terraform/terra.yaml` as the third stage (between `20-security` and `35-management`); skipped on tag builds where re-running tests gates nothing. **Note:** earlier drafts of this feature scaffolded a separate `45-e2e` stage slotted *after* `40-delivery` as a soft (non-blocking) gate. The current implementation merges that work into `30-test` as a parallel job and keeps it **blocking** so a red apply-time regression can't produce a tag — the design changed during review and the PR description for #375 is from the earlier draft. The implementation here is the source of truth.
 
 ### Changed
 

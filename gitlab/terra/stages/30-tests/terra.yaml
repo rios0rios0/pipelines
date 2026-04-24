@@ -1,18 +1,28 @@
 include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/terra/abstracts/terra.yaml'
 
+# Single unified job that orchestrates both tiers of Terraform testing
+# behind one `test:all` entry: native `terraform test` over
+# `modules/*/tests/*.tftest.hcl` (tier 1) followed by the Go Terratest
+# suite under `tests/terratest/` (tier 2). The runner auto-detects which
+# tiers the consumer has, runs only those, and exits 0 when neither is
+# present — so stack-only repos (no `modules/` tests, no `tests/terratest/`)
+# pass the stage without a bespoke opt-out.
 test:all:
   extends: '.terra'
   stage: 'tests'
+  variables:
+    REPORT_PATH: 'build/reports'
   script:
-    - |
-      echo "Running Terraform module tests..."
-      if [ -f "Makefile" ] && grep -q "test" Makefile; then
-        make test
-      else
-        echo "No Makefile test target found. Running terraform test on all modules..."
-        find modules -maxdepth 1 -mindepth 1 -type d | while read -r module; do
-          echo "Testing $module..."
-          (cd "$module" && terraform init -upgrade && terraform test) || exit 1
-        done
-      fi
+    - "$SCRIPTS_DIR/global/scripts/languages/terraform/test-all/run.sh"
+  artifacts:
+    when: 'always'
+    paths:
+      - "${REPORT_PATH}/"
+    reports:
+      junit: "${REPORT_PATH}/junit-terra-all.xml"
+      # GitLab renders a coverage percentage from the Cobertura file when
+      # the terra-test tier ran; missing-file is not an error for GitLab.
+      coverage_report:
+        coverage_format: 'cobertura'
+        path: "${REPORT_PATH}/terra-coverage.xml"

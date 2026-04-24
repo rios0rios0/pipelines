@@ -5,7 +5,7 @@
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #   -include $(SCRIPTS_DIR)/makefiles/terra.mk
 #
-# Targets provided: format, lint, test, test-terra-test, test-terratest, coverage, validate
+# Targets provided: format, lint, test, test-terra-test, test-terratest, test-structural, coverage, validate
 # Also sets SEMGREP_LANGUAGE=terraform for the common.mk sast target.
 # Note: CodeQL does not support Terraform; CODEQL_LANGUAGE is left unset.
 #
@@ -15,7 +15,7 @@
 SEMGREP_LANGUAGE ?= terraform
 REPORT_PATH ?= build/reports
 
-.PHONY: format lint test test-terra-test test-terratest coverage validate
+.PHONY: format lint test test-terra-test test-terratest test-structural coverage validate
 
 format:
 	@echo "Formatting Terraform files with Terra..."
@@ -47,6 +47,14 @@ test-terra-test:
 
 test-terratest:
 	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/terratest/run.sh
+
+# `test-structural` runs the consumer's `tests/structural.sh` (if any) and
+# emits `$(REPORT_PATH)/junit-structural.xml`. The script is consumer-owned
+# because repo conventions vary — the runner is just the glue. No-op when
+# `tests/structural.sh` is absent, so stack-only / convention-free repos
+# don't need a bespoke opt-out.
+test-structural:
+	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/structural/run.sh
 
 coverage:
 	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/test-all/run.sh || true

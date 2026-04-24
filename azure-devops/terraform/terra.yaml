@@ -4,4 +4,5 @@ stages:
   - template: 'stages/30-test/terra.yaml'
   - template: 'stages/35-management/terra.yaml'
   - template: 'stages/40-delivery/terra.yaml'
+  - template: 'stages/45-e2e/terra.yaml'
   #- template: 'stages/50-deployment/terra.yaml'

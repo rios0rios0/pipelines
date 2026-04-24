@@ -1,0 +1,121 @@
+stages:
+  - stage: 'e2e'
+    displayName: 'e2e (apply-time)'
+    # Opt-in tier. Runs only when the module ships Go tests under
+    # `tests/e2e/`. Purpose: catch regressions a plan-only smoke can't —
+    # templating bugs, provider-side validations that fire at apply, CRDs
+    # that don't exist in the `terraform test` mock, helm chart renders
+    # with real values. Skip on tag builds (the tag carries the green
+    # state from the merge on main).
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    variables:
+      REPORT_PATH: 'build/reports'
+      # Kind cluster name scoped per build so concurrent pipeline runs on
+      # the same agent pool don't collide. `Build.BuildId` is unique per
+      # run across the project.
+      KIND_CLUSTER_NAME: 'tfmod-e2e-$(Build.BuildId)'
+    jobs:
+      - job: 'test_e2e'
+        displayName: 'test:e2e'
+        steps:
+          - template: '../../../global/abstracts/scripts-repo.yaml'
+          - template: '../../abstracts/terra-terraform.yaml'
+
+          # Bail out early when the module hasn't opted in — keeps the
+          # stage silent for the 10+ terraform-modules repos that will
+          # never be apply-testable (kck-*, helm-* needing external
+          # services, tf-container-image needing a registry, etc.).
+          - script: |
+              set -eu
+              if [ ! -d tests/e2e ] || ! ls tests/e2e/*.go >/dev/null 2>&1; then
+                echo "No tests/e2e/*.go in this module; skipping e2e stage."
+                echo "##vso[task.setvariable variable=SKIP_E2E]true"
+              fi
+            displayName: 'Detect tests/e2e/ opt-in'
+
+          # Kind is a single Go binary. Install by curl to avoid the
+          # overhead of a dedicated install task. Matching the same
+          # pattern already used for tflint in `10-code-check`.
+          - script: |
+              set -eu
+              if [ "${SKIP_E2E:-}" = "true" ]; then exit 0; fi
+              curl -fsSL -o /tmp/kind \
+                https://kind.sigs.k8s.io/dl/v0.24.0/kind-linux-amd64
+              chmod +x /tmp/kind
+              sudo mv /tmp/kind /usr/local/bin/kind
+              kind version
+            displayName: 'Install kind'
+            condition: and(succeeded(), ne(variables['SKIP_E2E'], 'true'))
+
+          - script: |
+              set -eu
+              if [ "${SKIP_E2E:-}" = "true" ]; then exit 0; fi
+              kind create cluster --name "$(KIND_CLUSTER_NAME)" --wait 120s
+              kind get kubeconfig --name "$(KIND_CLUSTER_NAME)" > "$(Agent.TempDirectory)/kubeconfig"
+              # KUBECONFIG is what kubectl, client-go, and terratest read.
+              # KUBE_CONFIG_PATH is what the Terraform `kubernetes` provider
+              # reads — it does NOT fall back to KUBECONFIG automatically,
+              # and without this env var an apply-time test fails with
+              # `Post "http://localhost/api/v1/...": connection refused`.
+              # Verified locally against a kind cluster before shipping.
+              echo "##vso[task.setvariable variable=KUBECONFIG]$(Agent.TempDirectory)/kubeconfig"
+              echo "##vso[task.setvariable variable=KUBE_CONFIG_PATH]$(Agent.TempDirectory)/kubeconfig"
+              kubectl --kubeconfig "$(Agent.TempDirectory)/kubeconfig" get nodes
+            displayName: 'Provision kind cluster'
+            condition: and(succeeded(), ne(variables['SKIP_E2E'], 'true'))
+
+          # Pin Go high enough to satisfy modern `go.mod` directives.
+          # `GOTOOLCHAIN=auto` (Go 1.21+ default) will transparently fetch
+          # a newer toolchain when the consumer's `go.mod` requires it.
+          - task: 'GoTool@0'
+            displayName: 'Use Go (toolchain auto-upgrades per go.mod)'
+            condition: and(succeeded(), ne(variables['SKIP_E2E'], 'true'))
+            inputs:
+              version: '1.26'
+
+          # Reuse the shared `terratest/run.sh` with TESTS_DIR pointed at
+          # tests/e2e so the same go-junit-report plumbing emits JUnit
+          # into a distinct filename and the existing `terratest`
+          # semantics (auto-install go-junit-report, propagate exit code)
+          # carry over. The runner writes to $REPORT_PATH/junit-terratest.xml;
+          # we rename it after so e2e and non-e2e terratest tiers don't
+          # clobber each other.
+          - script: |
+              set -eu
+              if [ "${SKIP_E2E:-}" = "true" ]; then exit 0; fi
+              TESTS_DIR=tests/e2e REPORT_PATH="$(REPORT_PATH)" \
+                $(Scripts.Directory)/global/scripts/languages/terraform/terratest/run.sh
+              if [ -f "$(REPORT_PATH)/junit-terratest.xml" ]; then
+                mv "$(REPORT_PATH)/junit-terratest.xml" \
+                   "$(REPORT_PATH)/junit-e2e.xml"
+              fi
+            displayName: 'Run apply-time e2e tests (terratest)'
+            condition: and(succeeded(), ne(variables['SKIP_E2E'], 'true'))
+
+          # Tear the cluster down regardless of test outcome. Without
+          # `condition: always()` a red test would leak the cluster until
+          # the agent's next cleanup pass.
+          - script: |
+              set -eu
+              if [ "${SKIP_E2E:-}" = "true" ]; then exit 0; fi
+              kind delete cluster --name "$(KIND_CLUSTER_NAME)" || true
+            displayName: 'Tear down kind cluster'
+            condition: always()
+
+          - task: 'PublishTestResults@2'
+            displayName: 'Publish e2e test results'
+            condition: and(always(), ne(variables['SKIP_E2E'], 'true'))
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(REPORT_PATH)/junit-e2e.xml'
+              testRunTitle: 'terraform-e2e'
+              failTaskOnFailedTests: true
+              mergeTestResults: false
+
+          - task: 'PublishPipelineArtifact@1'
+            displayName: 'Publish e2e reports'
+            condition: and(always(), ne(variables['SKIP_E2E'], 'true'))
+            inputs:
+              targetPath: '$(REPORT_PATH)'
+              artifactName: 'terraform-e2e-reports'
+              publishLocation: 'pipeline'

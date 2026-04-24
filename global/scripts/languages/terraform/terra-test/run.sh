@@ -38,7 +38,17 @@ TESTS_DIR="${REPORT_PATH}/terra-tests"
 # — it exists so the `test-terra-test` escape hatch still gets the cache
 # when operators bypass `test-all`. See `test-all/run.sh` for the rationale
 # behind `TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE`.
-export TF_PLUGIN_CACHE_DIR="${TF_PLUGIN_CACHE_DIR:-${HOME}/.terraform.d/plugin-cache}"
+if [ -z "${TF_PLUGIN_CACHE_DIR:-}" ]; then
+  # Guard `HOME` so `set -u` doesn't abort on minimal CI/container images
+  # that launch without it. Fall back to `TMPDIR` (or `/tmp`) so the cache
+  # still lands on a writable path.
+  if [ -n "${HOME:-}" ]; then
+    TF_PLUGIN_CACHE_DIR="${HOME}/.terraform.d/plugin-cache"
+  else
+    TF_PLUGIN_CACHE_DIR="${TMPDIR:-/tmp}/terraform-plugin-cache"
+  fi
+fi
+export TF_PLUGIN_CACHE_DIR
 export TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE="${TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE:-true}"
 mkdir -p "${TF_PLUGIN_CACHE_DIR}"
 AGGREGATE_JUNIT="${REPORT_PATH}/terra-tests.xml"

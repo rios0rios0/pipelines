@@ -50,7 +50,17 @@ test-terratest:
 
 coverage:
 	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/test-all/run.sh || true
-	@echo "Coverage reports: $(REPORT_PATH)/terra-coverage.md $(REPORT_PATH)/junit-terra-all.xml"
+	@artifacts=""; \
+	for report in "$(REPORT_PATH)/terra-coverage.md" "$(REPORT_PATH)/terra-coverage.xml" "$(REPORT_PATH)/terra-coverage.json" "$(REPORT_PATH)/junit-terra-all.xml"; do \
+		if [ -f "$$report" ]; then \
+			artifacts="$$artifacts $$report"; \
+		fi; \
+	done; \
+	if [ -n "$$artifacts" ]; then \
+		echo "Coverage reports:$$artifacts"; \
+	else \
+		echo "Coverage reports: none generated"; \
+	fi
 
 validate: format lint test
 	@echo "All validations passed (format, lint, test)."

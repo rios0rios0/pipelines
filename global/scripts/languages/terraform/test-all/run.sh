@@ -37,6 +37,11 @@ fi
 # overwrites the first. The merged file is the portable contract.
 
 REPORT_PATH="${REPORT_PATH:-build/reports}"
+# Honor the same `TESTS_DIR` override that `terratest/run.sh` exposes so
+# consumers with a non-standard Terratest location (e.g., `test/terratest/`
+# or `e2e/terratest/`) get consistent detection + execution from both the
+# orchestrator and the tier runner. Defaults match the tier runner.
+TESTS_DIR="${TESTS_DIR:-tests/terratest}"
 MERGED_JUNIT="${REPORT_PATH}/junit-terra-all.xml"
 TERRA_JUNIT="${REPORT_PATH}/terra-tests.xml"
 TERRATEST_JUNIT="${REPORT_PATH}/junit-terratest.xml"
@@ -60,7 +65,7 @@ if [ -d modules ]; then
   done
 fi
 
-if [ -d tests/terratest ] && ls tests/terratest/*.go > /dev/null 2>&1; then
+if [ -d "${TESTS_DIR}" ] && ls "${TESTS_DIR}"/*.go > /dev/null 2>&1; then
   has_terratest=1
 fi
 
@@ -69,7 +74,7 @@ mkdir -p "${REPORT_PATH}"
 if [ "${has_terra_tests}" -eq 0 ] && [ "${has_terratest}" -eq 0 ]; then
   echo "No Terraform tests detected:"
   echo "  - no modules/*/tests/*.tftest.hcl files"
-  echo "  - no tests/terratest/*.go files"
+  echo "  - no ${TESTS_DIR}/*.go files"
   echo "Emitting an empty JUnit so the CI publisher doesn't fail and skipping."
   # Valid empty JUnit keeps `PublishTestResults@2` / GitLab / GitHub happy.
   printf '<?xml version="1.0" encoding="UTF-8"?>\n<testsuites name="terra-all"/>\n' > "${MERGED_JUNIT}"
@@ -89,10 +94,10 @@ fi
 rc_terratest=0
 if [ "${has_terratest}" -eq 1 ]; then
   echo
-  echo "=== Tier 2: terratest (Go suite under tests/terratest/) ==="
-  REPORT_PATH="${REPORT_PATH}" sh "${TERRATEST_RUNNER}" || rc_terratest=$?
+  echo "=== Tier 2: terratest (Go suite under ${TESTS_DIR}/) ==="
+  REPORT_PATH="${REPORT_PATH}" TESTS_DIR="${TESTS_DIR}" sh "${TERRATEST_RUNNER}" || rc_terratest=$?
 else
-  echo "Tier 2 skipped: no tests/terratest/*.go detected."
+  echo "Tier 2 skipped: no ${TESTS_DIR}/*.go detected."
 fi
 
 # ---------- Merge JUnit files ----------

@@ -35,7 +35,7 @@ jobs:
       - name: 'Setup Go'
         uses: 'actions/setup-go@v6'
         with:
-          go-version: '1.23'
+          go-version: '1.24'
 
       - name: 'Install terra CLI'
         run: |
@@ -130,17 +130,30 @@ jobs:
 
 
   # third stage
+  # Single unified job that orchestrates both tiers of Terraform testing
+  # behind one `test:all` entry: native `terraform test` over
+  # `modules/*/tests/*.tftest.hcl` (tier 1) followed by the Go Terratest
+  # suite under `tests/terratest/` (tier 2). The runner auto-detects which
+  # tiers the consumer has, runs only those, and exits 0 when neither is
+  # present — so stack-only repos (no `modules/` tests, no `tests/terratest/`)
+  # pass the stage without a bespoke opt-out.
   tests-test_all:
     name: 'tests > test:all'
     runs-on: 'ubuntu-latest'
+    env:
+      REPORT_PATH: 'build/reports'
     steps:
       - name: 'Checkout code'
         uses: 'actions/checkout@v6'
 
+      # Go 1.24 is a lower bound — `GOTOOLCHAIN=auto` (the Go 1.21+ default)
+      # auto-fetches a newer toolchain when the consumer's `go.mod` under
+      # `tests/terratest/` requires one (Terratest suites frequently pin
+      # `go 1.26`+).
       - name: 'Setup Go'
         uses: 'actions/setup-go@v6'
         with:
-          go-version: '1.23'
+          go-version: '1.24'
 
       - name: 'Install terra CLI'
         run: |
@@ -148,18 +161,26 @@ jobs:
           terra install
         shell: 'bash'
 
-      - name: 'Run tests'
+      - name: 'Checkout pipelines repo for shared scripts'
+        uses: 'actions/checkout@v6'
+        with:
+          repository: 'rios0rios0/pipelines'
+          ref: 'main'
+          path: '.pipelines'
+
+      - name: 'Run Terraform tests (terra-test + terratest)'
         run: |
-          if [ -f "Makefile" ] && grep -q "test" Makefile; then
-            make test
-          else
-            echo "No Makefile test target found. Running terraform test on all modules..."
-            find modules -maxdepth 1 -mindepth 1 -type d | while read -r module; do
-              echo "Testing $module..."
-              (cd "$module" && terraform init -upgrade && terraform test) || exit 1
-            done
-          fi
+          export SCRIPTS_DIR="$GITHUB_WORKSPACE/.pipelines"
+          "$SCRIPTS_DIR/global/scripts/languages/terraform/test-all/run.sh"
         shell: 'bash'
+
+      - name: 'Publish test results'
+        if: 'always()'
+        uses: 'actions/upload-artifact@v4'
+        with:
+          name: 'terra-coverage'
+          path: "${{ env.REPORT_PATH }}"
+          if-no-files-found: 'warn'
     needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 

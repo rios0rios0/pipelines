@@ -26,3 +26,23 @@ test:all:
       coverage_report:
         coverage_format: 'cobertura'
         path: "${REPORT_PATH}/terra-coverage.xml"
+
+# Third tier — repo-convention assertions the consumer owns. Runs
+# `tests/structural.sh` if it exists and publishes the resulting JUnit.
+# The script is deliberately not shipped here; every repo has its own
+# conventions (customer dir naming, bootstrap self-containedness, shared
+# root.hcl presence) that can't live upstream. Skipped silently when the
+# consumer has no structural script.
+test:structural:
+  extends: '.terra'
+  stage: 'tests'
+  variables:
+    REPORT_PATH: 'build/reports'
+  script:
+    - "$SCRIPTS_DIR/global/scripts/languages/terraform/structural/run.sh"
+  artifacts:
+    when: 'always'
+    paths:
+      - "${REPORT_PATH}/"
+    reports:
+      junit: "${REPORT_PATH}/junit-structural.xml"

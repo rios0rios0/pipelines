@@ -50,7 +50,15 @@ jobs:
                 \"message\": $RELEASE_NOTES
               }"
 
-              curl -X POST "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_apis/git/repositories/$(Build.Repository.ID)/annotatedtags?api-version=7.1-preview.1" \
+              # `curl` exits 0 on HTTP 4xx/5xx unless `--fail` is passed, and
+              # `set -e` only reacts to non-zero exits. Without these flags a
+              # throttled or failed call to `annotatedtags` silently leaves the
+              # tag uncreated while the build reports green. Use curl's standard
+              # retry handling to absorb transient throttling (429) or temporary
+              # server failures (5xx), while still failing fast on non-retryable
+              # HTTP errors (400/401/403/404/409)
+              curl --fail --show-error --retry 5 --retry-delay 5 \
+                   -X POST "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_apis/git/repositories/$(Build.Repository.ID)/annotatedtags?api-version=7.1-preview.1" \
                    --header "Authorization: Bearer $(System.AccessToken)" \
                    --header "Content-Type: application/json" \
                    --data "$DATA"

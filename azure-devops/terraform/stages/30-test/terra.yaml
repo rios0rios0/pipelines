@@ -1,38 +1,45 @@
 stages:
   - stage: 'test'
-    displayName: 'test (terraform test)'
-    # Skip on tag builds — re-running tests against an already-released
+    displayName: 'test (all tiers)'
+    # Skip on tag builds -- re-running tests against an already-released
     # commit gates nothing, and the tag carries the green CI state from
     # the merge commit on main.
     condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
     variables:
       REPORT_PATH: 'build/reports'
+      # Kind cluster name scoped per build so concurrent pipeline runs
+      # on the same agent pool don't collide. `Build.BuildId` is unique
+      # per run across the project.
+      KIND_CLUSTER_NAME: 'tfmod-e2e-$(Build.BuildId)'
     jobs:
-      # Drives `terraform test -junit-xml=...` against the module's
-      # `tests/*.tftest.hcl` suite. Single-module layout (the module IS
-      # the repo), unlike the `azure-devops/terra/` test stage which
-      # iterates over `modules/<name>/` inside a single repo.
+      # =========================================================
+      # Tier 0 -- plan-time smoke.
+      # =========================================================
+      # `terraform test` with `mock_provider` blocks in every
+      # `tests/*.tftest.hcl`. No network, no credentials, no cluster.
+      # Runs in parallel with `test_e2e` so smoke feedback lands in
+      # under a minute even when the e2e job is provisioning kind.
       #
-      # No-op when `tests/` is missing so modules onboard incrementally;
-      # the makefile target from `makefiles/terraform.mk` emits a clear
-      # "skipping" message and exits 0. Run `make test-gen` locally to
-      # bootstrap a baseline suite before enabling this stage.
-      - job: 'test_terraform'
-        displayName: 'test:terraform'
+      # No-op when `tests/*.tftest.hcl` is missing so modules onboard
+      # incrementally; the makefile target from `makefiles/terraform.mk`
+      # emits a matching "skipping" message. Run `make test-gen` locally
+      # to bootstrap a baseline suite.
+      - job: 'test_smoke'
+        displayName: 'test:smoke (plan-time)'
         steps:
           - template: '../../abstracts/terra-terraform.yaml'
 
           - script: |
               set -eu
               if [ ! -d tests ] || ! ls tests/*.tftest.hcl >/dev/null 2>&1; then
-                echo "No tests/*.tftest.hcl in this module; skipping terraform test."
+                echo "No tests/*.tftest.hcl in this module; skipping plan-time smoke."
                 echo "Run 'make test-gen' locally to bootstrap a smoke suite."
                 exit 0
               fi
               mkdir -p "$(REPORT_PATH)"
               terraform init -backend=false -input=false -upgrade=false
               terraform test -junit-xml="$(REPORT_PATH)/junit-terra-tests.xml"
-            displayName: 'Run terraform test'
+            displayName: 'Run terraform test (plan-time smoke)'
             env:
               REPORT_PATH: $(REPORT_PATH)
 
@@ -40,19 +47,186 @@ stages:
           # its JUnit and the Tests tab shows what went wrong. The script
           # above propagates the non-zero exit, so the job still fails.
           - task: 'PublishTestResults@2'
-            displayName: 'Publish terraform test results'
+            displayName: 'Publish smoke test results'
             condition: always()
             inputs:
               testResultsFormat: 'JUnit'
               testResultsFiles: '$(REPORT_PATH)/junit-terra-tests.xml'
-              testRunTitle: 'terraform-test'
+              testRunTitle: 'terraform-test-smoke'
               failTaskOnFailedTests: true
               mergeTestResults: false
 
           - task: 'PublishPipelineArtifact@1'
-            displayName: 'Publish terraform test reports'
+            displayName: 'Publish smoke test reports'
             condition: always()
             inputs:
               targetPath: '$(REPORT_PATH)'
-              artifactName: 'terraform-test-reports'
+              artifactName: 'terraform-test-smoke-reports'
+              publishLocation: 'pipeline'
+
+      # =========================================================
+      # Tier 1+2 -- apply-time against a disposable kind cluster.
+      # =========================================================
+      # Opt-in. Drives the real providers against a `kind` cluster
+      # provisioned below. Purpose: catch regressions a mocked plan
+      # can't -- admission-time validations, provider authentication
+      # drift, CRDs missing from the mock catalogue, Helm render
+      # failures with real values.
+      #
+      # The job runs two complementary tiers sharing one cluster:
+      #
+      #   Tier 1 -- `tests/e2e/*.tftest.hcl` via `terraform test`
+      #     Native framework, same language as smoke, no Go toolchain
+      #     needed. Assertions limited to `output` values and
+      #     `expect_failures`. Good for "apply must succeed, module
+      #     must expose output X".
+      #
+      #   Tier 2 -- `tests/terratest/*.go` via `terratest/run.sh`
+      #     Go + terratest library, can call `client-go`, `helm-sdk`,
+      #     etc. Assertions are arbitrary code. Good for "pod is
+      #     Running, service has endpoints, secret has expected
+      #     base64 shape".
+      #
+      # A module opts into whichever tier(s) make sense. Modules with
+      # neither directory no-op the whole job (there are 9+ `azm-*` /
+      # `clf-*` repos that can't apply against kind at all).
+      #
+      # `dependsOn: []` makes this run in parallel with `test_smoke`.
+      # Both jobs need to succeed before `35-management` / `40-delivery`
+      # proceed, so an apply-time regression blocks tag creation -- the
+      # whole point of apply-time testing is to catch real bugs.
+      - job: 'test_e2e'
+        displayName: 'test:e2e (apply-time)'
+        dependsOn: []
+        steps:
+          - template: '../../../global/abstracts/scripts-repo.yaml'
+          - template: '../../abstracts/terra-terraform.yaml'
+
+          - script: |
+              set -eu
+              HAS_TFTEST=false
+              HAS_TERRATEST=false
+              if [ -d tests/e2e ] && ls tests/e2e/*.tftest.hcl >/dev/null 2>&1; then
+                HAS_TFTEST=true
+              fi
+              if [ -d tests/terratest ] && ls tests/terratest/*.go >/dev/null 2>&1; then
+                HAS_TERRATEST=true
+              fi
+              echo "##vso[task.setvariable variable=HAS_TFTEST]$HAS_TFTEST"
+              echo "##vso[task.setvariable variable=HAS_TERRATEST]$HAS_TERRATEST"
+              if [ "$HAS_TFTEST" = "false" ] && [ "$HAS_TERRATEST" = "false" ]; then
+                echo "Neither tests/e2e/*.tftest.hcl nor tests/terratest/*.go present; skipping e2e job."
+                echo "##vso[task.setvariable variable=SKIP_E2E]true"
+              else
+                echo "Detected tiers: tftest=$HAS_TFTEST, terratest=$HAS_TERRATEST"
+              fi
+            displayName: 'Detect e2e opt-ins'
+
+          # Kind is a single Go binary. Install by curl to avoid the
+          # overhead of a dedicated install task. Matching the same
+          # pattern already used for tflint in `10-code-check`.
+          - script: |
+              set -eu
+              if [ "${SKIP_E2E:-}" = "true" ]; then exit 0; fi
+              curl -fsSL -o /tmp/kind \
+                https://kind.sigs.k8s.io/dl/v0.24.0/kind-linux-amd64
+              chmod +x /tmp/kind
+              sudo mv /tmp/kind /usr/local/bin/kind
+              kind version
+            displayName: 'Install kind'
+            condition: and(succeeded(), ne(variables['SKIP_E2E'], 'true'))
+
+          - script: |
+              set -eu
+              if [ "${SKIP_E2E:-}" = "true" ]; then exit 0; fi
+              kind create cluster --name "$(KIND_CLUSTER_NAME)" --wait 120s
+              kind get kubeconfig --name "$(KIND_CLUSTER_NAME)" > "$(Agent.TempDirectory)/kubeconfig"
+              # `KUBECONFIG` is what kubectl, client-go, and terratest
+              # read. `KUBE_CONFIG_PATH` is what the Terraform
+              # `kubernetes` / `helm` providers read -- they do NOT fall
+              # back to `KUBECONFIG` automatically, and without this env
+              # var an apply-time test fails with
+              # `Post "http://localhost/api/v1/...": connection refused`.
+              # Verified locally against a kind cluster before shipping.
+              echo "##vso[task.setvariable variable=KUBECONFIG]$(Agent.TempDirectory)/kubeconfig"
+              echo "##vso[task.setvariable variable=KUBE_CONFIG_PATH]$(Agent.TempDirectory)/kubeconfig"
+              kubectl --kubeconfig "$(Agent.TempDirectory)/kubeconfig" get nodes
+            displayName: 'Provision kind cluster'
+            condition: and(succeeded(), ne(variables['SKIP_E2E'], 'true'))
+
+          # Go toolchain only when the terratest tier is opted in --
+          # saves ~20s per build on modules that stop at the tftest-hcl
+          # tier. `GOTOOLCHAIN=auto` (Go 1.21+ default) will
+          # transparently fetch a newer toolchain when the consumer's
+          # `go.mod` requires it, so this pin is a lower bound.
+          - task: 'GoTool@0'
+            displayName: 'Use Go (for terratest tier)'
+            condition: and(succeeded(), eq(variables['HAS_TERRATEST'], 'true'))
+            inputs:
+              version: '1.26'
+
+          # Tier 1: native `terraform test` with real providers. Drives
+          # `tests/e2e/*.tftest.hcl`. Auto-destroys at end-of-file so a
+          # red test still cleans up; `kind delete cluster` below is
+          # the backstop.
+          - script: |
+              set -eu
+              mkdir -p "$(REPORT_PATH)"
+              terraform init -backend=false -input=false -upgrade=false >/dev/null
+              terraform test -test-directory=tests/e2e \
+                -junit-xml="$(REPORT_PATH)/junit-e2e-tftest.xml"
+            displayName: 'Tier 1: apply-time via terraform test'
+            condition: and(succeeded(), eq(variables['HAS_TFTEST'], 'true'))
+
+          # Tier 2: terratest via the shared Go runner. The runner
+          # writes `junit-terratest.xml`; rename to
+          # `junit-e2e-terratest.xml` so it has a clear name in the
+          # Tests tab.
+          - script: |
+              set -eu
+              TESTS_DIR=tests/terratest REPORT_PATH="$(REPORT_PATH)" \
+                "$(Scripts.Directory)/global/scripts/languages/terraform/terratest/run.sh"
+              if [ -f "$(REPORT_PATH)/junit-terratest.xml" ]; then
+                mv "$(REPORT_PATH)/junit-terratest.xml" \
+                   "$(REPORT_PATH)/junit-e2e-terratest.xml"
+              fi
+            displayName: 'Tier 2: apply-time via terratest'
+            condition: and(succeeded(), eq(variables['HAS_TERRATEST'], 'true'))
+
+          # Tear the cluster down regardless of test outcome. Without
+          # `condition: always()` a red test would leak the cluster
+          # until the agent's next cleanup pass.
+          - script: |
+              set -eu
+              if [ "${SKIP_E2E:-}" = "true" ]; then exit 0; fi
+              kind delete cluster --name "$(KIND_CLUSTER_NAME)" || true
+            displayName: 'Tear down kind cluster'
+            condition: always()
+
+          - task: 'PublishTestResults@2'
+            displayName: 'Publish tftest-hcl e2e results'
+            condition: and(always(), eq(variables['HAS_TFTEST'], 'true'))
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(REPORT_PATH)/junit-e2e-tftest.xml'
+              testRunTitle: 'terraform-e2e-tftest'
+              failTaskOnFailedTests: true
+              mergeTestResults: false
+
+          - task: 'PublishTestResults@2'
+            displayName: 'Publish terratest e2e results'
+            condition: and(always(), eq(variables['HAS_TERRATEST'], 'true'))
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(REPORT_PATH)/junit-e2e-terratest.xml'
+              testRunTitle: 'terraform-e2e-terratest'
+              failTaskOnFailedTests: true
+              mergeTestResults: false
+
+          - task: 'PublishPipelineArtifact@1'
+            displayName: 'Publish e2e reports'
+            condition: and(always(), ne(variables['SKIP_E2E'], 'true'))
+            inputs:
+              targetPath: '$(REPORT_PATH)'
+              artifactName: 'terraform-test-e2e-reports'
               publishLocation: 'pipeline'

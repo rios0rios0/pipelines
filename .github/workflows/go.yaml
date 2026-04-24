@@ -139,21 +139,21 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/golang/stages/30-tests/all@main'
 
       - name: 'Test Results'
-        if: "always() && hashFiles('junit.xml') != ''"
+        if: "always() && hashFiles('build/reports/junit.xml') != ''"
         uses: 'dorny/test-reporter@v1'
         with:
           name: 'Test Results'
-          path: 'junit.xml'
+          path: 'build/reports/junit.xml'
           reporter: 'java-junit'
 
       - name: 'Upload Coverage Report'
-        if: "always() && hashFiles('coverage.txt') != ''"
+        if: "always() && hashFiles('build/reports/coverage.txt') != ''"
         uses: 'actions/upload-artifact@v4'
         with:
           name: 'coverage-report'
           path: |
-            coverage.txt
-            cobertura.xml
+            build/reports/coverage.txt
+            build/reports/cobertura.xml
           if-no-files-found: ignore
           retention-days: 30
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_govulncheck' ]

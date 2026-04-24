@@ -169,11 +169,11 @@ jobs:
           vite-config-path: 'vite.config.ts'
 
       - name: 'Test Results'
-        if: "always() && hashFiles('junit-report.xml') != ''"
+        if: "always() && hashFiles('build/reports/junit-report.xml') != ''"
         uses: 'dorny/test-reporter@v1'
         with:
           name: 'Test Results'
-          path: 'junit-report.xml'
+          path: 'build/reports/junit-report.xml'
           reporter: 'java-junit'
 
       - name: 'Upload Coverage Report'

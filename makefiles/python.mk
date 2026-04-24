@@ -13,7 +13,7 @@
 CODEQL_LANGUAGE ?= python
 SEMGREP_LANGUAGE ?= python
 export PREFIX ?= .
-export REPORT_PATH ?= ./reports
+export REPORT_PATH ?= build/reports
 
 .PHONY: lint safety test cyclonedx
 

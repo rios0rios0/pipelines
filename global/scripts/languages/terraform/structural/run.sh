@@ -1,6 +1,13 @@
 #!/usr/bin/env sh
 set -eu
 
+# GitLab CI/CD leverages this variable to source shared helpers from the
+# pipelines checkout. Matches the preamble used by every other run.sh.
+if [ -z "${SCRIPTS_DIR:-}" ]; then
+  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
+  export SCRIPTS_DIR
+fi
+
 # Runs the consumer's repo-local structural test script and publishes the
 # results as JUnit XML. Complements the `terra-test` runner (native
 # `terraform test` over modules) and the `terratest` runner (Go suite over

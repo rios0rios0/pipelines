@@ -36,7 +36,7 @@ jobs:
           for f in CONTRIBUTING.md CHANGELOG.md README.md Makefile clone.sh; do
             test -f "$f" && echo "  ✓ $f" || { echo "  ✗ $f is missing"; exit 1; }
           done
-          for f in .github/tests/test-go-validation.sh .github/tests/test-lambda-templates.sh .github/tests/test-sonarqube-auto-derive.sh; do
+          for f in .github/tests/test-go-validation.sh .github/tests/test-lambda-templates.sh .github/tests/test-sonarqube-auto-derive.sh .github/tests/test-release-tag-idempotency.sh; do
             test -f "$f" && echo "  ✓ $f" || { echo "  ✗ $f is missing"; exit 1; }
           done
 

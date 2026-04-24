@@ -12,7 +12,7 @@
 CODEQL_LANGUAGE ?= go
 SEMGREP_LANGUAGE ?= golang
 export PREFIX ?= .
-export REPORT_PATH ?= ./reports
+export REPORT_PATH ?= build/reports
 
 .PHONY: lint test cross-compile cyclonedx
 

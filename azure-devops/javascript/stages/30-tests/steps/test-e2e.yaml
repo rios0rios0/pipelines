@@ -25,10 +25,10 @@ steps:
   - task: 'PublishTestResults@2'
     inputs:
       testResultsFormat: 'JUnit'
-      testResultsFiles: "${{ parameters.WORKING_DIRECTORY }}/**/junit.xml"
+      testResultsFiles: "${{ parameters.WORKING_DIRECTORY }}/build/reports/junit.xml"
     displayName: 'Publish Test Results'
 
   - task: 'PublishCodeCoverageResults@2'
     inputs:
-      summaryFileLocation: "${{ parameters.WORKING_DIRECTORY }}/cobertura.xml"
+      summaryFileLocation: "${{ parameters.WORKING_DIRECTORY }}/build/reports/cobertura.xml"
     displayName: 'Publish Code Coverage Results'

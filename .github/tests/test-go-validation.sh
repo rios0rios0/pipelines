@@ -134,7 +134,7 @@ echo "Running comprehensive coverage test..."
 if /home/runner/work/pipelines/pipelines/global/scripts/languages/golang/test/run.sh; then
   echo "✓ Test 1 PASSED: Comprehensive coverage with build tags"
   echo "Verifying that untested package appears in coverage:"
-  if grep -q "pkg/utils" coverage.txt; then
+  if grep -q "pkg/utils" build/reports/coverage.txt; then
     echo "✓ Untested package correctly included in coverage report"
   else
     echo "✗ ERROR: Untested package missing from coverage report"
@@ -238,7 +238,7 @@ cd "$TEST_DIR_NO_TAGS"
 echo "Running backward compatibility test with complete coverage..."
 if /home/runner/work/pipelines/pipelines/global/scripts/languages/golang/test/run.sh; then
   echo "✓ Test 2 PASSED: Backward compatibility with complete coverage"
-  if grep -q "pkg/utils" coverage.txt; then
+  if grep -q "pkg/utils" build/reports/coverage.txt; then
     echo "✓ Untested package correctly included in coverage report"
   else
     echo "✗ ERROR: Untested package missing from coverage report"
@@ -396,17 +396,17 @@ if /home/runner/work/pipelines/pipelines/global/scripts/languages/golang/test/ru
   echo "✓ Test 4 PASSED: Test folder exclusion scenario"
   
   # Verify that test packages are NOT included in coverage
-  if cat coverage.txt | grep -q "/test/domain/\|/test/infrastructure/\|\.go:.*test/"; then
+  if cat build/reports/coverage.txt | grep -q "/test/domain/\|/test/infrastructure/\|\.go:.*test/"; then
     echo "✗ ERROR: Test packages incorrectly included in coverage report"
     echo "Coverage content:"
-    cat coverage.txt
+    cat build/reports/coverage.txt
     exit 1
   else
     echo "✓ Test packages correctly excluded from coverage report"
   fi
-  
+
   # Verify that only production packages are in the coverage output
-  if cat coverage.txt | grep -q "/cmd/app/\|/internal/service/"; then
+  if cat build/reports/coverage.txt | grep -q "/cmd/app/\|/internal/service/"; then
     echo "✓ Production packages correctly included in coverage report"
   else
     echo "✗ ERROR: Production packages missing from coverage report"

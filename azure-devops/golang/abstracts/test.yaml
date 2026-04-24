@@ -7,16 +7,16 @@ steps:
   - task: 'PublishTestResults@2'
     inputs:
       testResultsFormat: 'JUnit'
-      testResultsFiles: '**/junit.xml'
+      testResultsFiles: 'build/reports/junit.xml'
     displayName: 'Publish JUnit XML Results'
 
   - task: 'PublishCodeCoverageResults@2'
     inputs:
-      summaryFileLocation: 'cobertura.xml'
+      summaryFileLocation: 'build/reports/cobertura.xml'
     displayName: 'Publish Cobertura XML Results'
 
   - task: 'PublishPipelineArtifact@1'
     inputs:
       artifactName: 'coverage'
-      targetPath: "$(System.DefaultWorkingDirectory)/coverage.txt"
+      targetPath: "$(System.DefaultWorkingDirectory)/build/reports/coverage.txt"
     displayName: 'Publish Coverage Files'

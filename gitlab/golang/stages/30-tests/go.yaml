@@ -11,11 +11,11 @@ test:all:
   artifacts:
     when: 'always'
     paths:
-      - 'coverage.*'
+      - 'build/reports/*'
     reports:
       coverage_report:
         coverage_format: 'cobertura'
-        path: 'coverage.xml'
+        path: 'build/reports/cobertura.xml'
 
 test:build:
   extends: '.go'

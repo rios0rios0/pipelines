@@ -93,7 +93,7 @@ if [ "$COVERAGE_FOUND" = "false" ]; then
   echo "Cleared coverage report path properties in sonar-project.properties."
 else
   GO_REPORT_PATH=
-  for p in coverage.out coverage.txt coverage/coverage.out coverage/coverage.txt coverage/*.txt coverage/*.out; do
+  for p in build/reports/coverage.txt build/reports/coverage.out coverage.out coverage.txt coverage/coverage.out coverage/coverage.txt coverage/*.txt coverage/*.out; do
     for f in $p; do
       [ -f "$f" ] || continue
       GO_REPORT_PATH="$f"

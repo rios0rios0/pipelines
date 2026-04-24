@@ -235,10 +235,14 @@ stages:
           # `tests/e2e/*.tftest.hcl`. Auto-destroys at end-of-file so a
           # red test still cleans up; `kind delete cluster` below is
           # the backstop.
+          # `terraform init` output is kept on stdout/stderr -- if init
+          # fails (network, provider registry, auth), the diagnostics are
+          # the most useful signal for triage and silencing them turns a
+          # 30-second debug into a multi-pass log dive.
           - script: |
               set -eu
               mkdir -p "$(REPORT_PATH)"
-              terraform init -backend=false -input=false -upgrade=false >/dev/null
+              terraform init -backend=false -input=false -upgrade=false
               terraform test -test-directory=tests/e2e \
                 -junit-xml="$(REPORT_PATH)/junit-e2e-tftest.xml"
             displayName: 'Tier 1: apply-time via terraform test'

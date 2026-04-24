@@ -1,0 +1,58 @@
+stages:
+  - stage: 'test'
+    displayName: 'test (terraform test)'
+    # Skip on tag builds — re-running tests against an already-released
+    # commit gates nothing, and the tag carries the green CI state from
+    # the merge commit on main.
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    variables:
+      REPORT_PATH: 'build/reports'
+    jobs:
+      # Drives `terraform test -junit-xml=...` against the module's
+      # `tests/*.tftest.hcl` suite. Single-module layout (the module IS
+      # the repo), unlike the `azure-devops/terra/` test stage which
+      # iterates over `modules/<name>/` inside a single repo.
+      #
+      # No-op when `tests/` is missing so modules onboard incrementally;
+      # the makefile target from `makefiles/terraform.mk` emits a clear
+      # "skipping" message and exits 0. Run `make test-gen` locally to
+      # bootstrap a baseline suite before enabling this stage.
+      - job: 'test_terraform'
+        displayName: 'test:terraform'
+        steps:
+          - template: '../../abstracts/terra-terraform.yaml'
+
+          - script: |
+              set -eu
+              if [ ! -d tests ] || ! ls tests/*.tftest.hcl >/dev/null 2>&1; then
+                echo "No tests/*.tftest.hcl in this module; skipping terraform test."
+                echo "Run 'make test-gen' locally to bootstrap a smoke suite."
+                exit 0
+              fi
+              mkdir -p "$(REPORT_PATH)"
+              terraform init -backend=false -input=false -upgrade=false
+              terraform test -junit-xml="$(REPORT_PATH)/junit-terra-tests.xml"
+            displayName: 'Run terraform test'
+            env:
+              REPORT_PATH: $(REPORT_PATH)
+
+          # `condition: always()` so a failing test run still publishes
+          # its JUnit and the Tests tab shows what went wrong. The script
+          # above propagates the non-zero exit, so the job still fails.
+          - task: 'PublishTestResults@2'
+            displayName: 'Publish terraform test results'
+            condition: always()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(REPORT_PATH)/junit-terra-tests.xml'
+              testRunTitle: 'terraform-test'
+              failTaskOnFailedTests: true
+              mergeTestResults: false
+
+          - task: 'PublishPipelineArtifact@1'
+            displayName: 'Publish terraform test reports'
+            condition: always()
+            inputs:
+              targetPath: '$(REPORT_PATH)'
+              artifactName: 'terraform-test-reports'
+              publishLocation: 'pipeline'

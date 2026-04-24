@@ -42,6 +42,34 @@ REPORT_PATH="${REPORT_PATH:-build/reports}"
 # or `e2e/terratest/`) get consistent detection + execution from both the
 # orchestrator and the tier runner. Defaults match the tier runner.
 TESTS_DIR="${TESTS_DIR:-tests/terratest}"
+
+# ---------- Shared Terraform provider cache ----------
+# Both tiers run `terraform init` repeatedly — tier 1 once per module under
+# `modules/*/`, tier 2 every time a Terratest Go test exercises a fixture.
+# Without a shared plugin cache, every invocation downloads full copies of
+# every provider into the local `.terraform/providers/...` tree. With
+# provider binaries in the 100-300 MB range (`hashicorp/azurerm`,
+# `hashicorp/kubernetes`, `hashicorp/helm`, `hashicorp/aws`, ...) and
+# module counts in the dozens, peak disk use blows past the ~14 GB free
+# space on a standard Azure-hosted / GitHub-hosted runner.
+#
+# Setting `TF_PLUGIN_CACHE_DIR` makes Terraform hard-link providers from
+# a single cache directory, dropping peak disk use from tens of GB to
+# ~1 GB regardless of how many modules run. `mkdir -p` is required:
+# Terraform refuses to use a non-existent cache dir.
+#
+# `TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=true` lets Terraform
+# populate the cache even when `.terraform.lock.hcl` pins `zh:` (zip)
+# hashes that don't match the already-extracted provider in the cache.
+# Since the test harness runs against ephemeral state (plan-only via
+# `mock_provider`, or apply against mocks), relaxing lock-file strictness
+# here is safe and matches HashiCorp's documented guidance for shared
+# CI caches. Consumers can override either variable before invoking this
+# script.
+export TF_PLUGIN_CACHE_DIR="${TF_PLUGIN_CACHE_DIR:-${HOME}/.terraform.d/plugin-cache}"
+export TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE="${TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE:-true}"
+mkdir -p "${TF_PLUGIN_CACHE_DIR}"
+
 MERGED_JUNIT="${REPORT_PATH}/junit-terra-all.xml"
 TERRA_JUNIT="${REPORT_PATH}/terra-tests.xml"
 TERRATEST_JUNIT="${REPORT_PATH}/junit-terratest.xml"

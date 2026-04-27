@@ -1,16 +1,19 @@
 parameters:
-  # Steps injected before `terraform init` runs in both the smoke
-  # (`test:smoke`) and apply-time (`test:e2e`) jobs of the `30-test`
-  # stage. Required for any module whose `*.tf` files reference
-  # private-git submodules — e.g. the `git@dev.azure.com-arancia:` host
-  # alias used by `k8s-deployment` to fetch `tf-container-image`. Without
-  # the alias configured on the agent, `terraform init` aborts with
-  # `ssh: Could not resolve hostname dev.azure.com-arancia`.
+  # Steps injected before each stage that needs to resolve private
+  # Terraform sources -- the `20-security` SAST scanners (Semgrep, Trivy)
+  # which parse `*.tf` files, and the `30-test` smoke (`test:smoke`) and
+  # apply-time (`test:e2e`) jobs which run `terraform init`.
+  #
+  # Required for any module whose `*.tf` files reference private-git
+  # submodules -- e.g. the `git@dev.azure.com-arancia:` host alias used
+  # by `k8s-deployment` to fetch `tf-container-image`. Without the alias
+  # configured on the agent, both the SAST parsers and `terraform init`
+  # abort with `ssh: Could not resolve hostname dev.azure.com-arancia`.
   #
   # Mirrors the `PRE_STEPS` hook already accepted by the `terra/`
   # template family used by customer-clusters / shared-toolbox /
-  # central-clusters; consumers maintain a single setup-steps list and
-  # pass it here.
+  # central-clusters; consumers maintain a single setup-steps list that
+  # covers both security scans and tests.
   - name: 'PRE_STEPS'
     type: 'stepList'
     default: []
@@ -18,6 +21,8 @@ parameters:
 stages:
   - template: 'stages/10-code-check/terra.yaml'
   - template: 'stages/20-security/terra.yaml'
+    parameters:
+      PRE_STEPS: ${{ parameters.PRE_STEPS }}
   - template: 'stages/30-test/terra.yaml'
     parameters:
       PRE_STEPS: ${{ parameters.PRE_STEPS }}

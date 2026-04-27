@@ -7,9 +7,13 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests
+- `make test` - Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen)
 - `make test-go-script` - Test Go script changes specifically
+- `make test-lambda` - Test Lambda template validation specifically
 - `make test-yaml-merge` - Test YAML merge validation specifically
+- `make test-sonarqube` - Test SonarQube auto-derivation specifically
+- `make test-release-tag-idempotency` - Test release tag idempotency specifically
+- `make test-tftest-gen` - Test tftest-gen generator specifically
 - `bash global/scripts/shared/cleanup.sh` - Clean up build reports
 - `docker --version && make --version && go version` - Check dependencies
 
@@ -154,6 +158,8 @@ The Terra CLI pipeline test stage runs through a single unified `test:all` job o
 | **Terra Test (unified)** | Orchestrates both tiers behind one `test:all` job  | `global/scripts/languages/terraform/test-all/run.sh`    |
 | **terra-test**           | `terraform test` over `modules/*/tests/*.tftest.hcl` | `global/scripts/languages/terraform/terra-test/run.sh`  |
 | **Terratest**            | Go test suite under `tests/terratest/*.go`         | `global/scripts/languages/terraform/terratest/run.sh`   |
+| **Structural**           | Third-tier runner for `tests/structural.sh`        | `global/scripts/languages/terraform/structural/run.sh`  |
+| **tftest-gen**           | Generates `tests/smoke.tftest.hcl` for modules     | `global/scripts/languages/terraform/tftest-gen/run.sh`  |
 | **Terraform CycloneDX**  | SBOM generation for Terraform projects             | `global/scripts/languages/terraform/cyclonedx/run.sh`   |
 
 ### Container Images
@@ -237,9 +243,13 @@ pipelines/
 │   │   │   ├── trivy/         # IaC misconfiguration scanning
 │   │   │   └── dependency-track/ # SCA analysis
 │   │   ├── languages/         # Language-specific scripts
-│   │   │   ├── golang/        # Go scripts (test, cyclonedx, golangci-lint, goreleaser, init)
-│   │   │   ├── java/          # Java scripts (checkstyle)
-│   │   │   └── python/        # Python scripts (cyclonedx)
+│   │   │   ├── golang/        # Go scripts (test, cyclonedx, golangci-lint, goreleaser, govulncheck, cross-compile, init)
+│   │   │   ├── java/          # Java scripts (checkstyle, pmd)
+│   │   │   ├── javascript/    # JavaScript scripts (unused-code detection)
+│   │   │   ├── php/           # PHP scripts (unused-code detection)
+│   │   │   ├── python/        # Python scripts (cyclonedx, unused-code detection)
+│   │   │   ├── ruby/          # Ruby scripts (unused-code detection)
+│   │   │   └── terraform/     # Terraform scripts (terra-test, terratest, test-all, structural, cyclonedx, tftest-gen)
 │   │   └── shared/            # Common utilities
 │   ├── containers/            # Custom Docker images
 │   │   ├── golang.*/          # Go development images
@@ -623,13 +633,16 @@ docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/
 
 ### Test Suite Usage
 ```bash
-# Run all validation tests (Go test script + Lambda templates + YAML merge)
+# Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen)
 make test
 
 # Run individual test suites
 make test-go-script
 make test-lambda
 make test-yaml-merge
+make test-sonarqube
+make test-release-tag-idempotency
+make test-tftest-gen
 ```
 
 Test scripts are located in `.github/tests/`.

@@ -8,8 +8,8 @@ parameters:
   #
   # Mirrors the `PRE_STEPS` hook already accepted by `terra/` for
   # customer-clusters etc. Consumers pass a single list of steps that
-  # cover both the SAST tier (`20-security`, when its template is
-  # extended similarly) and the test tier (`30-test`).
+  # covers both the SAST tier (`20-security`) and the test tier
+  # (`30-test`).
   - name: 'PRE_STEPS'
     type: 'stepList'
     default: []

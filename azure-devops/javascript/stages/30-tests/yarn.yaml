@@ -11,6 +11,9 @@ parameters:
   - name: 'RUN_AFTER_TESTS'
     type: 'string'
     default: 'echo "No after script"'
+  - name: 'LCOV_RELATIVE_PATH'
+    type: 'string'
+    default: ''
 
 stages:
   - stage: 'tests'
@@ -25,6 +28,7 @@ stages:
               WORKING_DIRECTORY: "${{ parameters.WORKING_DIRECTORY }}"
               RUN_BEFORE_TESTS: ${{ parameters.RUN_BEFORE_TESTS }}
               RUN_AFTER_TESTS: ${{ parameters.RUN_AFTER_TESTS }}
+              LCOV_RELATIVE_PATH: ${{ parameters.LCOV_RELATIVE_PATH }}
 
       - job: 'test_e2e'
         displayName: 'test:e2e'

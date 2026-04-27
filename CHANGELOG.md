@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added `PRE_STEPS` parameter to `azure-devops/terraform/terra.yaml` and the `30-test` stage it composes, mirroring the hook already accepted by the `terra/` template family used by customer-clusters / shared-toolbox / central-clusters. Steps passed via `PRE_STEPS` are spliced into both the `test:smoke` and `test:e2e` jobs before `terraform init` runs, so consumers whose modules pin private-git submodules (e.g. `k8s-deployment` references `git@dev.azure.com-arancia:v3/ZestSecurity/terraform-modules/tf-container-image?ref=1.0.1`) can ship their SSH setup steps once and have both tiers resolve `terraform init`. Without this hook the init aborts with `ssh: Could not resolve hostname dev.azure.com-arancia`. Caught when `k8s-deployment` `!11632` failed CI for a different reason than the rest of the first batch and traced to a missing host alias on the agent.
+
 ### Fixed
 
 - fixed `azure-devops/terraform/stages/30-test/terra.yaml` Tier 1 e2e job: the `terraform init` step now passes `-test-directory=tests/e2e` so that `module { source = "./tests/e2e/setup" }` blocks referenced from `.tftest.hcl` files have their submodules installed before `terraform test` runs. Without this flag, init only walks the root module and `terraform test` aborts with `Error: Module not installed`. Caught when the first three e2e PRs (k8s-secret-docker `!11628`, helm-postgresql `!11630`, k8s-deployment `!11632`) failed in their first CI runs after PR `#375` merged. Modules whose tests use a setup submodule (which is the standard pattern for any module that requires a namespace, secret, or other prerequisite Kubernetes object before its own apply) all hit this. k8s-execute `!11631` was unaffected because its e2e doesn't use a setup submodule.

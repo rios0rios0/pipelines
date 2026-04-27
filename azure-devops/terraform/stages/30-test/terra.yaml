@@ -1,3 +1,19 @@
+parameters:
+  # Steps injected before `terraform init` in both the smoke and e2e
+  # jobs. Required for any module that references private-git submodules
+  # (e.g. `k8s-deployment` pulling `tf-container-image` via the
+  # `git@dev.azure.com-arancia:` host alias) -- without the alias
+  # configured on the agent, `terraform init` aborts with
+  # `ssh: Could not resolve hostname dev.azure.com-arancia`.
+  #
+  # Mirrors the `PRE_STEPS` hook already accepted by `terra/` for
+  # customer-clusters etc. Consumers pass a single list of steps that
+  # cover both the SAST tier (`20-security`, when its template is
+  # extended similarly) and the test tier (`30-test`).
+  - name: 'PRE_STEPS'
+    type: 'stepList'
+    default: []
+
 stages:
   - stage: 'test'
     displayName: 'test (all tiers)'
@@ -28,6 +44,13 @@ stages:
         displayName: 'test:smoke (plan-time)'
         steps:
           - template: '../../abstracts/terra-terraform.yaml'
+
+          # Splice consumer-provided pre-steps (typically SSH setup for
+          # private-git module sources) before `terraform init` so
+          # submodule fetches resolve. The `each` loop avoids the empty-
+          # list gotcha of `- ${{ parameters.PRE_STEPS }}`.
+          - ${{ each step in parameters.PRE_STEPS }}:
+              - ${{ step }}
 
           - script: |
               set -eu
@@ -101,6 +124,13 @@ stages:
         steps:
           - template: '../../../global/abstracts/scripts-repo.yaml'
           - template: '../../abstracts/terra-terraform.yaml'
+
+          # Splice consumer-provided pre-steps (typically SSH setup for
+          # private-git module sources) before opt-in detection /
+          # `terraform init` so submodule fetches resolve. Same pattern
+          # as the smoke job above.
+          - ${{ each step in parameters.PRE_STEPS }}:
+              - ${{ step }}
 
           - script: |
               set -eu

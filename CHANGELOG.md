@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed `azure-devops/terraform/stages/30-test/terra.yaml` Tier 1 e2e job: the `terraform init` step now passes `-test-directory=tests/e2e` so that `module { source = "./tests/e2e/setup" }` blocks referenced from `.tftest.hcl` files have their submodules installed before `terraform test` runs. Without this flag, init only walks the root module and `terraform test` aborts with `Error: Module not installed`. Caught when the first three e2e PRs (k8s-secret-docker `!11628`, helm-postgresql `!11630`, k8s-deployment `!11632`) failed in their first CI runs after PR `#375` merged. Modules whose tests use a setup submodule (which is the standard pattern for any module that requires a namespace, secret, or other prerequisite Kubernetes object before its own apply) all hit this. k8s-execute `!11631` was unaffected because its e2e doesn't use a setup submodule.
+
 ### Changed
 
 - refreshed `CLAUDE.md` and `.github/copilot-instructions.md` to document the full `make test` suite (6 targets), all 7 language directories under `global/scripts/languages/`, the `shellcheck` tool, and the newer Terraform helpers (`cyclonedx`, `tftest-gen`, `structural`)

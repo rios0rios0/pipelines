@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- refreshed `CLAUDE.md` and `.github/copilot-instructions.md` to document the full `make test` suite (6 targets), all 7 language directories under `global/scripts/languages/`, the `shellcheck` tool, and the newer Terraform helpers (`cyclonedx`, `tftest-gen`, `structural`)
+
 ### Added
 
 - added `global/scripts/languages/terraform/tftest-gen/` — a generator that emits `tests/smoke.tftest.hcl` for a single terraform-module repo (per-repo-is-module layout, complementing the `modules/<name>/` layout handled by `customer-clusters/tests/generators/gen_smoke_tests.py`). Parses `variables.tf` + `main.tf` / `providers.tf`, emits one `mock_provider "<local>" {}` per required provider plus a `run "smoke_plans_successfully"` block with type-valid stubs for every required variable (name-hint table tuned for Azure / Cloudflare / Kubernetes / Helm / Keycloak / OpenSearch). For every required variable that has a `validation {}` block, also emits a `run "validation_rejects_invalid_<var>"` block with an invalid stub and `expect_failures = [var.<var>]` so guards are exercised instead of just declared. Respects hand-written tests (auto-generated files carry a marker on line 1). Piloted on `azm-resource-group` (no validations) and `azm-storage-account` (validations) — both green under `terraform test`.

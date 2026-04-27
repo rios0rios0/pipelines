@@ -242,7 +242,17 @@ stages:
           - script: |
               set -eu
               mkdir -p "$(REPORT_PATH)"
-              terraform init -backend=false -input=false -upgrade=false
+              # Init the root module AND the test directory together so
+              # any `module { source = "./tests/e2e/setup" }` blocks
+              # referenced from `.tftest.hcl` files get their submodules
+              # installed. Without `-test-directory`, init only walks the
+              # root module and `terraform test` then aborts with
+              # `Module not installed` when a run block references a
+              # local helper module (e.g. a setup module that creates a
+              # namespace before the parent module applies). Caught on
+              # the first three e2e PRs that landed after #375.
+              terraform init -backend=false -input=false -upgrade=false \
+                -test-directory=tests/e2e
               terraform test -test-directory=tests/e2e \
                 -junit-xml="$(REPORT_PATH)/junit-e2e-tftest.xml"
             displayName: 'Tier 1: apply-time via terraform test'

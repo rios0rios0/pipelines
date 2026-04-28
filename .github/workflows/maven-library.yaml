@@ -1,0 +1,70 @@
+# see the bottom of the file for more information¹
+# the parent workflow is responsible for setting up the call events²
+on:
+  workflow_call:
+    inputs:
+      sonar_host:
+        description: 'SonarQube/SonarCloud host URL (leave empty to skip SonarQube)'
+        required: false
+        type: string
+        default: ''
+      tag_prefixes:
+        type: 'string'
+        required: false
+        default: '[""]'
+        description: 'JSON array of tag prefixes (e.g., ''["", "v"]''). Use ''[""]'' for no prefix.'
+    secrets:
+      NVD_API_KEY:
+        required: false
+      sonar_token:
+        description: 'SonarQube authentication token'
+        required: false
+
+jobs:
+  maven:
+    uses: 'rios0rios0/pipelines/.github/workflows/maven.yaml@main'
+    with:
+      sonar_host: '${{ inputs.sonar_host }}'
+    secrets:
+      NVD_API_KEY: '${{ secrets.NVD_API_KEY }}'
+      sonar_token: '${{ secrets.sonar_token }}'
+
+  # fourth stage
+  delivery-release:
+    name: 'delivery > release'
+    runs-on: 'ubuntu-latest'
+    outputs:
+      tag_name: '${{ steps.release.outputs.tag_name }}'
+    strategy:
+      matrix:
+        prefix: ${{ fromJSON(inputs.tag_prefixes) }}
+    steps:
+      - id: 'release'
+        uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
+        with:
+          tag_prefix: '${{ matrix.prefix }}'
+    needs: [ 'maven' ]
+    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore/bump-')"
+
+
+# 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations
+# 2 - the recommended events to trigger this workflow and permissions are:
+#   on:
+#     push:
+#       branches:
+#         - 'main'
+#       tags:
+#         - '*'
+#     pull_request:
+#       branches:
+#         - 'main'
+#     workflow_dispatch:
+#
+#   permissions:
+#     checks: 'write' # tests-test_all (test results annotations)
+#     security-events: 'write' # security-sast_codeql
+#     contents: 'write' # delivery-release
+#
+# This workflow validates a Maven (Java) library and creates a release tag when
+# a commit with "chore/bump-" message is pushed to main. Pass tag_prefixes='["", "v"]'
+# to publish both a plain tag (e.g., "1.0.0") and a v-prefixed tag (e.g., "v1.0.0").

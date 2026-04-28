@@ -37,6 +37,46 @@ jobs:
           fi
         displayName: 'Extract Release Version'
 
+      - script: |
+          set -eux
+
+          if [ "${SKIP_RELEASE:-}" = "true" ]; then
+            echo "Skipping static curl bootstrap because no bump commit was detected."
+            exit 0
+          fi
+
+          # Install a recent static curl (>=8.9) so `--retry-on-http-error` is supported.
+          # Microsoft-hosted ubuntu-24.04 (and ubuntu-latest, which currently maps to
+          # ubuntu-24.04) ship curl 8.5.0; the option landed in curl 8.9.0 (Jul-2024).
+          # Using the system curl produces `option --retry-on-http-error: is unknown`
+          # and `Bash exited with code '2'`. The static binary is pinned by SHA256 to
+          # avoid supply-chain drift; bump CURL_VERSION + checksums together when
+          # rolling forward. Bootstrap runs once per job and the resulting binary
+          # path is exposed via the STATIC_CURL pipeline variable so every per-prefix
+          # tag step reuses it instead of re-downloading + extracting (which would
+          # otherwise repeat the network round-trip + integrity check N times for an
+          # N-element TAG_PREFIXES list, e.g. twice for the common `['', 'v']` case).
+          CURL_VERSION="8.19.0"
+          CURL_ARCH="$(uname -m)"
+          case "$CURL_ARCH" in
+            x86_64)  CURL_SHA256="6f7947edef5dc66fab1de22e4c41fa4dfac70edf94044b09ce62132582b6e048" ;;
+            aarch64) CURL_SHA256="7478156f659e3ffa3368a60e177bf34b9f3e260104f90f4e96f143eb45c6b376" ;;
+            *) echo "Unsupported runner arch for static curl install: $CURL_ARCH"; exit 1 ;;
+          esac
+          CURL_TARBALL="curl-linux-${CURL_ARCH}-glibc-${CURL_VERSION}.tar.xz"
+          CURL_URL="https://github.com/stunnel/static-curl/releases/download/${CURL_VERSION}/${CURL_TARBALL}"
+          CURL_DIR="$(mktemp -d)"
+          # Bootstrap with system curl; only this download depends on the old version.
+          curl --silent --show-error --fail --location \
+               --retry 5 --retry-delay 5 \
+               -o "$CURL_DIR/$CURL_TARBALL" "$CURL_URL"
+          echo "${CURL_SHA256}  $CURL_DIR/$CURL_TARBALL" | sha256sum -c -
+          tar -xJf "$CURL_DIR/$CURL_TARBALL" -C "$CURL_DIR"
+          # Hand the absolute path to subsequent steps. The temp dir is reaped with
+          # the agent workspace at end-of-job, so no explicit cleanup is needed.
+          echo "##vso[task.setvariable variable=STATIC_CURL]$CURL_DIR/curl"
+        displayName: 'Install Static Curl'
+
       - ${{ each prefix in parameters.TAG_PREFIXES }}:
           - script: |
               set -eux
@@ -47,35 +87,11 @@ jobs:
                 exit 0
               fi
 
-              # Install a recent static curl (>=8.9) so `--retry-on-http-error` is supported.
-              # Microsoft-hosted ubuntu-24.04 (and ubuntu-latest, which currently maps to
-              # ubuntu-24.04) ship curl 8.5.0; the option landed in curl 8.9.0 (Jul-2024).
-              # Using the system curl produces `option --retry-on-http-error: is unknown`
-              # and `Bash exited with code '2'`. The static binary is pinned by SHA256 to
-              # avoid supply-chain drift; bump CURL_VERSION + checksums together when
-              # rolling forward.
-              CURL_VERSION="8.19.0"
-              CURL_ARCH="$(uname -m)"
-              case "$CURL_ARCH" in
-                x86_64)  CURL_SHA256="6f7947edef5dc66fab1de22e4c41fa4dfac70edf94044b09ce62132582b6e048" ;;
-                aarch64) CURL_SHA256="7478156f659e3ffa3368a60e177bf34b9f3e260104f90f4e96f143eb45c6b376" ;;
-                *) echo "Unsupported runner arch for static curl install: $CURL_ARCH"; exit 1 ;;
-              esac
-              CURL_TARBALL="curl-linux-${CURL_ARCH}-glibc-${CURL_VERSION}.tar.xz"
-              CURL_URL="https://github.com/stunnel/static-curl/releases/download/${CURL_VERSION}/${CURL_TARBALL}"
-              CURL_DIR="$(mktemp -d)"
               RESPONSE_FILE=$(mktemp)
-              # Ensure the temp dir + response file are cleaned up on every exit path:
-              # normal completion, `exit 1` in the default case, or `set -e` aborting
-              # on a curl failure (network/TLS/etc).
-              trap 'rm -rf "$CURL_DIR" "$RESPONSE_FILE"' EXIT
-              # Bootstrap with system curl; only this download depends on the old version.
-              curl --silent --show-error --fail --location \
-                   --retry 5 --retry-delay 5 \
-                   -o "$CURL_DIR/$CURL_TARBALL" "$CURL_URL"
-              echo "${CURL_SHA256}  $CURL_DIR/$CURL_TARBALL" | sha256sum -c -
-              tar -xJf "$CURL_DIR/$CURL_TARBALL" -C "$CURL_DIR"
-              CURL="$CURL_DIR/curl"
+              # Cleanup the response body file on every exit path: normal completion,
+              # `exit 1` in the default case, or `set -e` aborting on a curl failure
+              # (network/TLS/etc).
+              trap 'rm -f "$RESPONSE_FILE"' EXIT
 
               RELEASE_NOTES=""
               if [ -f CHANGELOG.md ]; then
@@ -101,7 +117,7 @@ jobs:
               # reacts to non-zero exits. So we capture the body + status, pick the outcome
               # from the status, and surface the body on genuine failures.
               TAG_NAME="${VERSION_PREFIX}${RELEASE_VERSION}"
-              HTTP_STATUS=$("$CURL" --silent --show-error --retry 5 --retry-delay 5 \
+              HTTP_STATUS=$("$STATIC_CURL" --silent --show-error --retry 5 --retry-delay 5 \
                                  --retry-on-http-error 429,500,502,503,504 \
                                  -o "$RESPONSE_FILE" -w "%{http_code}" \
                                  -X POST "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_apis/git/repositories/$(Build.Repository.ID)/annotatedtags?api-version=7.1-preview.1" \

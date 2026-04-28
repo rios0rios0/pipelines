@@ -18,12 +18,12 @@ jobs:
   delivery-release:
     name: 'delivery > release'
     runs-on: 'ubuntu-latest'
-    if: "contains(github.event.head_commit.message, 'chore/bump-')"
+    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore/bump-')"
     outputs:
       tag_name: '${{ steps.release.outputs.tag_name }}'
     strategy:
       matrix:
-        prefix: ${{ fromJSON(inputs.tag_prefixes || '[""]') }}
+        prefix: ${{ fromJSON(github.event_name == 'workflow_call' && inputs.tag_prefixes || '[""]') }}
     steps:
       - id: 'release'
         uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'

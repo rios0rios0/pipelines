@@ -12,6 +12,21 @@ inputs:
     type: 'string'
     required: true
     description: 'Tag name to use for the release'
+  gpg_sign:
+    type: 'string'
+    required: false
+    default: 'false'
+    description: 'When ''true'', import the GPG key from gpg_private_key (decrypted with gpg_passphrase) and expose its fingerprint to GoReleaser as GPG_FINGERPRINT. Required for projects whose `.goreleaser.yaml` has a `signs:` block (e.g., Terraform providers that must publish a signed `SHA256SUMS.sig`).'
+  gpg_private_key:
+    type: 'string'
+    required: false
+    default: ''
+    description: 'Armored GPG private key used to sign release artifacts. Only consumed when gpg_sign is ''true'' and scoped to the GPG import step so it is not inherited by GoReleaser or other inner steps.'
+  gpg_passphrase:
+    type: 'string'
+    required: false
+    default: ''
+    description: 'Passphrase for the GPG key in gpg_private_key. Only consumed when gpg_sign is ''true'' and scoped to the GPG import step.'
 
 runs:
   using: 'composite'
@@ -43,6 +58,30 @@ runs:
           "${{ inputs.binary_path }}"
       shell: 'bash'
 
+    - name: 'Validate GPG inputs'
+      if: "inputs.gpg_sign == 'true'"
+      shell: 'bash'
+      env:
+        GPG_PRIVATE_KEY: "${{ inputs.gpg_private_key }}"
+        GPG_PASSPHRASE: "${{ inputs.gpg_passphrase }}"
+      run: |
+        if [ -z "${GPG_PRIVATE_KEY}" ]; then
+          echo "::error::gpg_sign is 'true' but gpg_private_key is empty. Pass it via the gpg_private_key input (typically wired from a workflow_call secret in the wrapper workflow)."
+          exit 1
+        fi
+        if [ -z "${GPG_PASSPHRASE}" ]; then
+          echo "::error::gpg_sign is 'true' but gpg_passphrase is empty. Pass it via the gpg_passphrase input (typically wired from a workflow_call secret in the wrapper workflow)."
+          exit 1
+        fi
+
+    - name: 'Import GPG key'
+      id: 'import_gpg'
+      if: "inputs.gpg_sign == 'true'"
+      uses: 'crazy-max/ghaction-import-gpg@v6'
+      with:
+        gpg_private_key: "${{ inputs.gpg_private_key }}"
+        passphrase: "${{ inputs.gpg_passphrase }}"
+
     - name: 'Run GoReleaser'
       uses: 'goreleaser/goreleaser-action@v6'
       with:
@@ -50,5 +89,6 @@ runs:
         version: '~> v2'
         args: 'release --clean'
       env:
-        GITHUB_TOKEN: ${{ github.token }}
-        GORELEASER_CURRENT_TAG: ${{ inputs.tag_name }}
+        GITHUB_TOKEN: '${{ github.token }}'
+        GORELEASER_CURRENT_TAG: '${{ inputs.tag_name }}'
+        GPG_FINGERPRINT: '${{ steps.import_gpg.outputs.fingerprint }}'

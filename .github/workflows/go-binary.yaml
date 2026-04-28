@@ -17,6 +17,11 @@ on:
         required: false
         type: string
         default: ''
+      deliver_docker:
+        type: 'boolean'
+        required: false
+        default: false
+        description: 'Also build and push a Docker image to ghcr.io/${{ github.repository }}. Mirrors the delivery-docker job from go-docker.yaml, publishing latest on main pushes and workflow_dispatch runs, and versioned images for tags/releases.'
     secrets:
       sonar_token:
         description: 'SonarQube authentication token'
@@ -54,6 +59,16 @@ jobs:
     needs: [ 'go', 'delivery-release' ]
     if: "!failure() && (startsWith(github.ref, 'refs/tags/') || needs.delivery-release.outputs.tag_name != '')"
 
+  delivery-docker:
+    name: 'delivery > docker'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/docker@main'
+        with:
+          tag_name: "${{ needs.delivery-release.outputs.tag_name }}"
+    needs: [ 'go', 'delivery-release' ]
+    if: "inputs.deliver_docker && !failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))"
+
 
 # 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations
 # 2 - the recommended events to trigger this workflow and permissions are:
@@ -72,5 +87,6 @@ jobs:
 #     checks: 'write' # code_check-style_golangci_lint
 #     security-events: 'write' # security-sast_codeql
 #     contents: 'write' # delivery-release
+#     packages: 'write' # delivery-docker (only when deliver_docker: true, to push to ghcr.io)
 #
 # workflow_dispatch inputs can only be defined in the workflow that is directly triggered

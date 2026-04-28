@@ -1,0 +1,72 @@
+# Configures SSH on the agent so `terraform init` can clone private-git
+# Terraform modules referenced by `source = "git@<alias>:..."` paths.
+# Mirrors `azure-devops/terra/abstracts/setup-modules-repo.yaml` from the
+# Zest-private `terra/` family so single-tier `terraform-modules/*`
+# consumers can use the same one-liner setup pattern as the multi-tier
+# `terra/` consumers (`customer-clusters`, `central-clusters`,
+# `shared-toolbox`).
+#
+# Usage from a `terraform-modules/*` consumer's `azure-pipelines.yml`:
+#
+#   stages:
+#     - template: 'azure-devops/terraform/terra.yaml@pipelines'
+#       parameters:
+#         PRE_STEPS:
+#           - template: 'azure-devops/terraform/abstracts/setup-ssh-modules.yaml@pipelines'
+#
+# Prerequisites in the consuming ADO project:
+#   1. The SSH private key must be uploaded as a Secure File matching
+#      `SSH_PRIVATE_KEY_SECURE_FILE` (default `azure_devops_ssh_private_key`)
+#      and authorized for use in pipelines.
+#   2. The corresponding public key must be registered on an ADO user or
+#      service-account profile with read access to every repo whose
+#      modules are referenced via the SSH alias.
+parameters:
+  # Name of the Secure File holding the SSH private key. The same key is
+  # reused across the Zest org so the default matches the file name
+  # already in use by the `terra/` consumers.
+  - name: 'SSH_PRIVATE_KEY_SECURE_FILE'
+    type: 'string'
+    default: 'azure_devops_ssh_private_key'
+
+  # SSH host alias used in `terraform-modules` git URLs (matches the
+  # pattern `git@dev.azure.com-arancia:v3/ZestSecurity/terraform-modules/...`).
+  # Aliased to `ssh.dev.azure.com` so `terraform init` resolves the host
+  # without a global `~/.ssh/config` on the agent image.
+  - name: 'SSH_HOST_ALIAS'
+    type: 'string'
+    default: 'dev.azure.com-arancia'
+
+steps:
+  - task: 'DownloadSecureFile@1'
+    displayName: 'Download SSH Private Key'
+    name: 'modulesRepoSshKey'
+    inputs:
+      secureFile: '${{ parameters.SSH_PRIVATE_KEY_SECURE_FILE }}'
+
+  - script: |
+      set -euo pipefail
+
+      mkdir -p ~/.ssh && chmod 700 ~/.ssh
+
+      cp "$(modulesRepoSshKey.secureFilePath)" ~/.ssh/id_rsa
+      chmod 600 ~/.ssh/id_rsa
+
+      cat > ~/.ssh/config << 'EOF'
+      Host ${{ parameters.SSH_HOST_ALIAS }}
+        HostName ssh.dev.azure.com
+        IdentityFile ~/.ssh/id_rsa
+        IdentitiesOnly yes
+        StrictHostKeyChecking no
+        UserKnownHostsFile /dev/null
+      EOF
+      chmod 600 ~/.ssh/config
+
+      eval "$(ssh-agent -s)"
+      ssh-add ~/.ssh/id_rsa
+
+      # Smoke-test the alias. `ssh -T git@<host>` to Azure DevOps always
+      # exits non-zero with a "successfully authenticated" message; treat
+      # the exit code as informational, not as a failure signal.
+      ssh -T git@${{ parameters.SSH_HOST_ALIAS }} || true
+    displayName: "Configure SSH for 'terraform-modules' Repository"

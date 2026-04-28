@@ -12,6 +12,11 @@ inputs:
     type: 'string'
     required: true
     description: 'Tag name to use for the release'
+  gpg_sign:
+    type: 'string'
+    required: false
+    default: 'false'
+    description: 'When ''true'', import the GPG key from GPG_PRIVATE_KEY (decrypted with GPG_PASSPHRASE) and expose its fingerprint to GoReleaser as GPG_FINGERPRINT. Required for projects whose `.goreleaser.yaml` has a `signs:` block (e.g., Terraform providers that must publish a signed `SHA256SUMS.sig`).'
 
 runs:
   using: 'composite'
@@ -43,6 +48,14 @@ runs:
           "${{ inputs.binary_path }}"
       shell: 'bash'
 
+    - name: 'Import GPG key'
+      id: 'import_gpg'
+      if: "inputs.gpg_sign == 'true'"
+      uses: 'crazy-max/ghaction-import-gpg@v6'
+      with:
+        gpg_private_key: '${{ env.GPG_PRIVATE_KEY }}'
+        passphrase: '${{ env.GPG_PASSPHRASE }}'
+
     - name: 'Run GoReleaser'
       uses: 'goreleaser/goreleaser-action@v6'
       with:
@@ -50,5 +63,6 @@ runs:
         version: '~> v2'
         args: 'release --clean'
       env:
-        GITHUB_TOKEN: ${{ github.token }}
-        GORELEASER_CURRENT_TAG: ${{ inputs.tag_name }}
+        GITHUB_TOKEN: '${{ github.token }}'
+        GORELEASER_CURRENT_TAG: '${{ inputs.tag_name }}'
+        GPG_FINGERPRINT: '${{ steps.import_gpg.outputs.fingerprint }}'

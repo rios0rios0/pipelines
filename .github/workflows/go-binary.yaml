@@ -68,9 +68,8 @@ jobs:
           binary_path: "${{ inputs.binary_path }}"
           tag_name: "${{ needs.delivery-release.outputs.tag_name || github.ref_name }}"
           gpg_sign: "${{ inputs.gpg_sign }}"
-        env:
-          GPG_PRIVATE_KEY: '${{ secrets.gpg_private_key }}'
-          GPG_PASSPHRASE: '${{ secrets.gpg_passphrase }}'
+          gpg_private_key: "${{ inputs.gpg_sign && secrets.gpg_private_key || '' }}"
+          gpg_passphrase: "${{ inputs.gpg_sign && secrets.gpg_passphrase || '' }}"
     needs: [ 'go', 'delivery-release' ]
     if: "!failure() && (startsWith(github.ref, 'refs/tags/') || needs.delivery-release.outputs.tag_name != '')"
 

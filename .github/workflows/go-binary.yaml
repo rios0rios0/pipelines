@@ -21,7 +21,7 @@ on:
         type: 'boolean'
         required: false
         default: false
-        description: 'Also build and push a Docker image to ghcr.io/${{ github.repository }} after the release is cut. Mirrors the delivery-docker job from go-docker.yaml.'
+        description: 'Also build and push a Docker image to ghcr.io/${{ github.repository }}. Mirrors the delivery-docker job from go-docker.yaml, publishing latest on main pushes and workflow_dispatch runs, and versioned images for tags/releases.'
     secrets:
       sonar_token:
         description: 'SonarQube authentication token'
@@ -87,5 +87,6 @@ jobs:
 #     checks: 'write' # code_check-style_golangci_lint
 #     security-events: 'write' # security-sast_codeql
 #     contents: 'write' # delivery-release
+#     packages: 'write' # delivery-docker (only when deliver_docker: true, to push to ghcr.io)
 #
 # workflow_dispatch inputs can only be defined in the workflow that is directly triggered

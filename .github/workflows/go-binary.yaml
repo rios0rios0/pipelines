@@ -21,7 +21,7 @@ on:
         type: 'boolean'
         required: false
         default: false
-        description: 'Also build and push a Docker image to ghcr.io/${{ github.repository }}. Mirrors the delivery-docker job from go-docker.yaml, publishing latest on main pushes and workflow_dispatch runs, and versioned images for tags/releases.'
+        description: 'Also build and push a Docker image to ghcr.io/<owner>/<repo>. Mirrors the delivery-docker job from go-docker.yaml, publishing latest on main pushes and workflow_dispatch runs, and versioned images for tags/releases.'
     secrets:
       sonar_token:
         description: 'SonarQube authentication token'

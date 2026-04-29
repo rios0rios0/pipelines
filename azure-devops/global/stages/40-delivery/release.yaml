@@ -37,59 +37,6 @@ jobs:
           fi
         displayName: 'Extract Release Version'
 
-      - script: |
-          set -eux
-
-          if [ "${SKIP_RELEASE:-}" = "true" ]; then
-            echo "Skipping static curl bootstrap because no bump commit was detected."
-            exit 0
-          fi
-
-          # Install a recent static curl (>=8.9) so `--retry-on-http-error` is supported.
-          # Microsoft-hosted ubuntu-24.04 (and ubuntu-latest, which currently maps to
-          # ubuntu-24.04) ship curl 8.5.0; the option landed in curl 8.9.0 (Jul-2024).
-          # Using the system curl produces `option --retry-on-http-error: is unknown`
-          # and `Bash exited with code '2'`. The static binary is pinned by SHA256 to
-          # avoid supply-chain drift; bump CURL_VERSION + checksums together when
-          # rolling forward. Bootstrap runs once per job and the resulting binary
-          # path is exposed via the STATIC_CURL pipeline variable so every per-prefix
-          # tag step reuses it instead of re-downloading + extracting (which would
-          # otherwise repeat the network round-trip + integrity check N times for an
-          # N-element TAG_PREFIXES list, e.g. twice for the common `['', 'v']` case).
-          CURL_VERSION="8.19.0"
-          CURL_ARCH="$(uname -m)"
-          case "$CURL_ARCH" in
-            x86_64)  CURL_SHA256="6f7947edef5dc66fab1de22e4c41fa4dfac70edf94044b09ce62132582b6e048" ;;
-            aarch64) CURL_SHA256="7478156f659e3ffa3368a60e177bf34b9f3e260104f90f4e96f143eb45c6b376" ;;
-            *) echo "Unsupported runner arch for static curl install: $CURL_ARCH"; exit 1 ;;
-          esac
-          CURL_TARBALL="curl-linux-${CURL_ARCH}-glibc-${CURL_VERSION}.tar.xz"
-          CURL_URL="https://github.com/stunnel/static-curl/releases/download/${CURL_VERSION}/${CURL_TARBALL}"
-          CURL_DIR="$(mktemp -d)"
-          # Bootstrap with system curl; only this download depends on the old version.
-          curl --silent --show-error --fail --location \
-               --retry 5 --retry-delay 5 \
-               -o "$CURL_DIR/$CURL_TARBALL" "$CURL_URL"
-          # Upstream publishes the SHA256 of the extracted `curl` binary (not the
-          # `.tar.xz` wrapper) in its release body, so we have to extract before
-          # we can verify. Tarball-level checksums are not maintained by
-          # stunnel/static-curl. Stream-extract only the `curl` entry via
-          # `tar -O` (`--to-stdout`) instead of writing tar entries to disk
-          # first: this bypasses any tar-metadata path-traversal or symlink
-          # tricks (`../escape`, absolute paths, symlinks pointing outside
-          # `$CURL_DIR`) that a malicious/corrupted tarball could carry, since
-          # we never honor the entry's claimed destination — we just take its
-          # byte stream and write it to a path we control. The SHA check then
-          # guarantees those bytes are the upstream-published curl binary
-          # before we mark it executable.
-          tar -xJf "$CURL_DIR/$CURL_TARBALL" -O curl > "$CURL_DIR/curl"
-          echo "${CURL_SHA256}  $CURL_DIR/curl" | sha256sum -c -
-          chmod +x "$CURL_DIR/curl"
-          # Hand the absolute path to subsequent steps. The temp dir is reaped with
-          # the agent workspace at end-of-job, so no explicit cleanup is needed.
-          echo "##vso[task.setvariable variable=STATIC_CURL]$CURL_DIR/curl"
-        displayName: 'Install Static Curl'
-
       - ${{ each prefix in parameters.TAG_PREFIXES }}:
           - script: |
               set -eux
@@ -124,19 +71,59 @@ jobs:
               #   * If the tag already exists (AutoBump pre-created it when opening the bump PR,
               #     or a prior pipeline run partially succeeded), the `annotatedtags` endpoint
               #     returns HTTP 409 Conflict. That is a no-op, not a failure.
-              #   * 429 / 5xx are transient and retried.
+              #   * 429 / 5xx are transient and retried in bash (see loop below).
               #   * 400 / 401 / 403 / 404 are genuine failures and must abort the stage.
               # `curl` exits 0 on HTTP 4xx/5xx unless `--fail` is passed, and `set -e` only
               # reacts to non-zero exits. So we capture the body + status, pick the outcome
               # from the status, and surface the body on genuine failures.
+              #
+              # Retry handling: curl's own `--retry` only kicks in when curl itself exits
+              # non-zero (which requires `--fail`), but `--fail` would make 409 abort the
+              # script before we can recognize it as success. So we drive the retry loop
+              # in bash on the captured HTTP_STATUS — same behaviour, no curl-version
+              # dependency, no extra binaries to install.
+              #
+              # Transport-level failures (DNS/TLS/timeout/connection reset) make curl exit
+              # non-zero before any HTTP_STATUS is captured. Under `set -e` that would abort
+              # the step instantly and skip the retry loop, so the curl invocation runs with
+              # `set +e` around it: we capture the exit code, synthesize HTTP_STATUS="000"
+              # on transport failure, and let the same retry case-statement handle it.
               TAG_NAME="${VERSION_PREFIX}${RELEASE_VERSION}"
-              HTTP_STATUS=$("$STATIC_CURL" --silent --show-error --retry 5 --retry-delay 5 \
-                                 --retry-on-http-error 429,500,502,503,504 \
-                                 -o "$RESPONSE_FILE" -w "%{http_code}" \
-                                 -X POST "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_apis/git/repositories/$(Build.Repository.ID)/annotatedtags?api-version=7.1-preview.1" \
-                                 --header "Authorization: Bearer $(System.AccessToken)" \
-                                 --header "Content-Type: application/json" \
-                                 --data "$DATA")
+              MAX_ATTEMPTS=5
+              RETRY_DELAY=5
+              HTTP_STATUS=""
+              CURL_EXIT_CODE=0
+              for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+                set +e
+                HTTP_STATUS=$(curl --silent --show-error \
+                                   -o "$RESPONSE_FILE" -w "%{http_code}" \
+                                   -X POST "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_apis/git/repositories/$(Build.Repository.ID)/annotatedtags?api-version=7.1-preview.1" \
+                                   --header "Authorization: Bearer $(System.AccessToken)" \
+                                   --header "Content-Type: application/json" \
+                                   --data "$DATA")
+                CURL_EXIT_CODE=$?
+                set -e
+
+                if [ "$CURL_EXIT_CODE" -ne 0 ]; then
+                  HTTP_STATUS="000"
+                fi
+
+                case "$HTTP_STATUS" in
+                  000|429|500|502|503|504)
+                    if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+                      if [ "$HTTP_STATUS" = "000" ]; then
+                        echo "Transient curl transport failure (exit $CURL_EXIT_CODE) from annotatedtags; retrying ($attempt/$MAX_ATTEMPTS) after ${RETRY_DELAY}s..."
+                      else
+                        echo "Transient HTTP $HTTP_STATUS from annotatedtags; retrying ($attempt/$MAX_ATTEMPTS) after ${RETRY_DELAY}s..."
+                      fi
+                      sleep "$RETRY_DELAY"
+                      continue
+                    fi
+                    ;;
+                esac
+                break
+              done
+
               case "$HTTP_STATUS" in
                 200|201)
                   echo "Tag '$TAG_NAME' created."
@@ -144,8 +131,12 @@ jobs:
                 409)
                   echo "Tag '$TAG_NAME' already exists (HTTP 409). Skipping — AutoBump or a prior run already created it."
                   ;;
+                000)
+                  echo "Tag creation failed: curl transport error (exit $CURL_EXIT_CODE) after $MAX_ATTEMPTS attempt(s)."
+                  exit 1
+                  ;;
                 *)
-                  echo "Tag creation failed with HTTP $HTTP_STATUS. Response body:"
+                  echo "Tag creation failed with HTTP $HTTP_STATUS after $MAX_ATTEMPTS attempt(s). Response body:"
                   cat "$RESPONSE_FILE"
                   exit 1
                   ;;

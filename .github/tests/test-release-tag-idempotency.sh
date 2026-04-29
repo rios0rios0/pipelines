@@ -16,12 +16,17 @@ TESTS_PASSED=0
 TESTS_FAILED=0
 
 # Mirror of the case statement in release.yaml. Keep these in sync — if the
-# behaviour changes, this test must change with it.
+# behaviour changes, this test must change with it. HTTP "000" is the
+# synthetic status the runtime emits when curl exits non-zero (transport
+# failure: DNS / TLS / timeout / connection reset) so the retry loop treats
+# transport failures the same way as 5xx — and falls through to a hard fail
+# once retries are exhausted.
 map_status_to_exit() {
   local http_status="$1"
   case "$http_status" in
     200|201) echo "created"; return 0 ;;
     409)     echo "already-exists"; return 0 ;;
+    000)     echo "fail(transport)"; return 1 ;;
     *)       echo "fail($http_status)"; return 1 ;;
   esac
 }
@@ -60,6 +65,7 @@ assert_fail "HTTP 403 aborts the stage (permissions)"             "403"
 assert_fail "HTTP 404 aborts the stage (wrong repo id)"           "404"
 assert_fail "HTTP 422 aborts the stage (unknown validation)"      "422"
 assert_fail "HTTP 500 aborts the stage (curl retries exhausted)"  "500"
+assert_fail "HTTP 000 aborts the stage (curl transport failure)"  "000"
 
 echo ""
 echo "Passed: $TESTS_PASSED"

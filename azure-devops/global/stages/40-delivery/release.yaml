@@ -71,11 +71,20 @@ jobs:
                --retry 5 --retry-delay 5 \
                -o "$CURL_DIR/$CURL_TARBALL" "$CURL_URL"
           # Upstream publishes the SHA256 of the extracted `curl` binary (not the
-          # `.tar.xz` wrapper) in its release body, so we extract first and verify
-          # the binary that we will actually execute. Tarball-level checksums are
-          # not maintained by stunnel/static-curl.
-          tar -xJf "$CURL_DIR/$CURL_TARBALL" -C "$CURL_DIR"
+          # `.tar.xz` wrapper) in its release body, so we have to extract before
+          # we can verify. Tarball-level checksums are not maintained by
+          # stunnel/static-curl. Stream-extract only the `curl` entry via
+          # `tar -O` (`--to-stdout`) instead of writing tar entries to disk
+          # first: this bypasses any tar-metadata path-traversal or symlink
+          # tricks (`../escape`, absolute paths, symlinks pointing outside
+          # `$CURL_DIR`) that a malicious/corrupted tarball could carry, since
+          # we never honor the entry's claimed destination — we just take its
+          # byte stream and write it to a path we control. The SHA check then
+          # guarantees those bytes are the upstream-published curl binary
+          # before we mark it executable.
+          tar -xJf "$CURL_DIR/$CURL_TARBALL" -O curl > "$CURL_DIR/curl"
           echo "${CURL_SHA256}  $CURL_DIR/curl" | sha256sum -c -
+          chmod +x "$CURL_DIR/curl"
           # Hand the absolute path to subsequent steps. The temp dir is reaped with
           # the agent workspace at end-of-job, so no explicit cleanup is needed.
           echo "##vso[task.setvariable variable=STATIC_CURL]$CURL_DIR/curl"

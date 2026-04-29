@@ -12,7 +12,7 @@ runs:
       run: $SCRIPTS_DIR/global/scripts/tools/trivy/run-sca.sh
 
     - name: 'Upload Report'
-      uses: 'actions/upload-artifact@v6'
+      uses: 'actions/upload-artifact@v7'
       with:
         name: 'trivy-sca'
         path: 'build/reports/trivy-sca/'

@@ -35,7 +35,7 @@ jobs:
         run: 'corepack enable'
 
       - name: 'Setup Node.js'
-        uses: 'actions/setup-node@v4'
+        uses: 'actions/setup-node@v6'
         with:
           node-version: '20'
           cache: 'yarn'
@@ -126,7 +126,7 @@ jobs:
         run: 'corepack enable'
 
       - name: 'Setup Node.js'
-        uses: 'actions/setup-node@v4'
+        uses: 'actions/setup-node@v6'
         with:
           node-version: '20'
           cache: 'yarn'
@@ -150,7 +150,7 @@ jobs:
         run: 'corepack enable'
 
       - name: 'Setup Node.js'
-        uses: 'actions/setup-node@v4'
+        uses: 'actions/setup-node@v6'
         with:
           node-version: '20'
           cache: 'yarn'
@@ -170,7 +170,7 @@ jobs:
 
       - name: 'Test Results'
         if: "always() && hashFiles('junit-report.xml') != ''"
-        uses: 'dorny/test-reporter@v1'
+        uses: 'dorny/test-reporter@v3'
         with:
           name: 'Test Results'
           path: 'junit-report.xml'
@@ -178,7 +178,7 @@ jobs:
 
       - name: 'Upload Coverage Report'
         if: "always() && hashFiles('coverage/index.html') != ''"
-        uses: 'actions/upload-artifact@v4'
+        uses: 'actions/upload-artifact@v7'
         with:
           name: 'coverage-report'
           path: 'coverage/'
@@ -197,7 +197,7 @@ jobs:
         run: 'corepack enable'
 
       - name: 'Setup Node.js'
-        uses: 'actions/setup-node@v4'
+        uses: 'actions/setup-node@v6'
         with:
           node-version: '20'
           cache: 'yarn'
@@ -227,7 +227,7 @@ jobs:
           fetch-tags: true
 
       - name: 'Download coverage artifact'
-        uses: 'actions/download-artifact@v4'
+        uses: 'actions/download-artifact@v8'
         with:
           name: 'coverage-report'
           path: 'coverage/'

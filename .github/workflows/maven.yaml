@@ -171,7 +171,7 @@ jobs:
 
       - name: 'Test Results'
         if: "always() && hashFiles('target/surefire-reports/*.xml') != ''"
-        uses: 'dorny/test-reporter@v1'
+        uses: 'dorny/test-reporter@v3'
         with:
           name: 'Test Results'
           path: 'target/surefire-reports/*.xml'
@@ -179,7 +179,7 @@ jobs:
 
       - name: 'Upload Coverage Report'
         if: "always() && hashFiles('target/site/jacoco/jacoco.xml') != ''"
-        uses: 'actions/upload-artifact@v4'
+        uses: 'actions/upload-artifact@v7'
         with:
           name: 'coverage-report'
           path: 'target/site/jacoco/'
@@ -205,7 +205,7 @@ jobs:
           fetch-tags: true
 
       - name: 'Download coverage artifact'
-        uses: 'actions/download-artifact@v4'
+        uses: 'actions/download-artifact@v8'
         with:
           name: 'coverage-report'
           path: 'target/site/jacoco/'

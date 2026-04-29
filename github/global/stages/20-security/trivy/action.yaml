@@ -25,7 +25,7 @@ runs:
       run: $SCRIPTS_DIR/global/scripts/tools/trivy/run.sh
 
     - name: 'Upload Report'
-      uses: 'actions/upload-artifact@v6'
+      uses: 'actions/upload-artifact@v7'
       with:
         name: 'trivy'
         path: 'build/reports/trivy/'

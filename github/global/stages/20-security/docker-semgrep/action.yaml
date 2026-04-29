@@ -28,7 +28,7 @@ runs:
       run: $SCRIPTS_DIR/global/scripts/tools/semgrep/run.sh "${{ inputs.semgrep_lang }}"
 
     - name: 'Upload Report'
-      uses: 'actions/upload-artifact@v6'
+      uses: 'actions/upload-artifact@v7'
       with:
         name: 'semgrep'
         path: 'build/reports/semgrep/'

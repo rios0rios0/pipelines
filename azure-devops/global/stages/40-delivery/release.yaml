@@ -70,8 +70,12 @@ jobs:
           curl --silent --show-error --fail --location \
                --retry 5 --retry-delay 5 \
                -o "$CURL_DIR/$CURL_TARBALL" "$CURL_URL"
-          echo "${CURL_SHA256}  $CURL_DIR/$CURL_TARBALL" | sha256sum -c -
+          # Upstream publishes the SHA256 of the extracted `curl` binary (not the
+          # `.tar.xz` wrapper) in its release body, so we extract first and verify
+          # the binary that we will actually execute. Tarball-level checksums are
+          # not maintained by stunnel/static-curl.
           tar -xJf "$CURL_DIR/$CURL_TARBALL" -C "$CURL_DIR"
+          echo "${CURL_SHA256}  $CURL_DIR/curl" | sha256sum -c -
           # Hand the absolute path to subsequent steps. The temp dir is reaped with
           # the agent workspace at end-of-job, so no explicit cleanup is needed.
           echo "##vso[task.setvariable variable=STATIC_CURL]$CURL_DIR/curl"

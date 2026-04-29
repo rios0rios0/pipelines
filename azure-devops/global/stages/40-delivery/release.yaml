@@ -82,21 +82,40 @@ jobs:
               # script before we can recognize it as success. So we drive the retry loop
               # in bash on the captured HTTP_STATUS — same behaviour, no curl-version
               # dependency, no extra binaries to install.
+              #
+              # Transport-level failures (DNS/TLS/timeout/connection reset) make curl exit
+              # non-zero before any HTTP_STATUS is captured. Under `set -e` that would abort
+              # the step instantly and skip the retry loop, so the curl invocation runs with
+              # `set +e` around it: we capture the exit code, synthesize HTTP_STATUS="000"
+              # on transport failure, and let the same retry case-statement handle it.
               TAG_NAME="${VERSION_PREFIX}${RELEASE_VERSION}"
               MAX_ATTEMPTS=5
               RETRY_DELAY=5
               HTTP_STATUS=""
+              CURL_EXIT_CODE=0
               for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+                set +e
                 HTTP_STATUS=$(curl --silent --show-error \
                                    -o "$RESPONSE_FILE" -w "%{http_code}" \
                                    -X POST "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_apis/git/repositories/$(Build.Repository.ID)/annotatedtags?api-version=7.1-preview.1" \
                                    --header "Authorization: Bearer $(System.AccessToken)" \
                                    --header "Content-Type: application/json" \
                                    --data "$DATA")
+                CURL_EXIT_CODE=$?
+                set -e
+
+                if [ "$CURL_EXIT_CODE" -ne 0 ]; then
+                  HTTP_STATUS="000"
+                fi
+
                 case "$HTTP_STATUS" in
-                  429|500|502|503|504)
+                  000|429|500|502|503|504)
                     if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
-                      echo "Transient HTTP $HTTP_STATUS from annotatedtags; retrying ($attempt/$MAX_ATTEMPTS) after ${RETRY_DELAY}s..."
+                      if [ "$HTTP_STATUS" = "000" ]; then
+                        echo "Transient curl transport failure (exit $CURL_EXIT_CODE) from annotatedtags; retrying ($attempt/$MAX_ATTEMPTS) after ${RETRY_DELAY}s..."
+                      else
+                        echo "Transient HTTP $HTTP_STATUS from annotatedtags; retrying ($attempt/$MAX_ATTEMPTS) after ${RETRY_DELAY}s..."
+                      fi
                       sleep "$RETRY_DELAY"
                       continue
                     fi
@@ -111,6 +130,10 @@ jobs:
                   ;;
                 409)
                   echo "Tag '$TAG_NAME' already exists (HTTP 409). Skipping — AutoBump or a prior run already created it."
+                  ;;
+                000)
+                  echo "Tag creation failed: curl transport error (exit $CURL_EXIT_CODE) after $MAX_ATTEMPTS attempt(s)."
+                  exit 1
                   ;;
                 *)
                   echo "Tag creation failed with HTTP $HTTP_STATUS after $MAX_ATTEMPTS attempt(s). Response body:"

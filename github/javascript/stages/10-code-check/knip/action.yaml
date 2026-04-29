@@ -16,7 +16,7 @@ runs:
       shell: 'bash'
 
     - name: 'Setup Node.js'
-      uses: 'actions/setup-node@v4'
+      uses: 'actions/setup-node@v6'
       with:
         node-version: '20'
         cache: '${{ inputs.package_manager }}'
@@ -37,7 +37,7 @@ runs:
       shell: 'bash'
 
     - name: 'Upload Report'
-      uses: 'actions/upload-artifact@v6'
+      uses: 'actions/upload-artifact@v7'
       with:
         name: 'knip'
         path: 'build/reports/knip/'

@@ -30,7 +30,7 @@ jobs:
       !github.event.release.prerelease &&
       contains(github.event.release.tag_name, '.'))
     steps:
-      - uses: 'actions/checkout@v4'
+      - uses: 'actions/checkout@v6'
         with:
           # Need full history + tags so the SemVer tag (e.g., `4.6.0`) is
           # resolvable when anchoring the major-version tag to its commit.

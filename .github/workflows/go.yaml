@@ -140,7 +140,7 @@ jobs:
 
       - name: 'Test Results'
         if: "always() && hashFiles('junit.xml') != ''"
-        uses: 'dorny/test-reporter@v1'
+        uses: 'dorny/test-reporter@v3'
         with:
           name: 'Test Results'
           path: 'junit.xml'
@@ -148,7 +148,7 @@ jobs:
 
       - name: 'Upload Coverage Report'
         if: "always() && hashFiles('coverage.txt') != ''"
-        uses: 'actions/upload-artifact@v4'
+        uses: 'actions/upload-artifact@v7'
         with:
           name: 'coverage-report'
           path: |
@@ -177,7 +177,7 @@ jobs:
           fetch-tags: true
 
       - name: 'Download coverage artifact'
-        uses: 'actions/download-artifact@v4'
+        uses: 'actions/download-artifact@v8'
         with:
           name: 'coverage-report'
           path: '.'

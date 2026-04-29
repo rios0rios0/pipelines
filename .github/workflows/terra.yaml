@@ -233,7 +233,7 @@ jobs:
 
       - name: 'Publish test results'
         if: 'always()'
-        uses: 'actions/upload-artifact@v4'
+        uses: 'actions/upload-artifact@v7'
         with:
           name: 'terra-coverage'
           path: "${{ env.REPORT_PATH }}"
@@ -294,7 +294,7 @@ jobs:
 
       - name: 'Publish structural JUnit'
         if: 'always()'
-        uses: 'actions/upload-artifact@v4'
+        uses: 'actions/upload-artifact@v7'
         with:
           name: 'structural-results'
           path: "${{ env.REPORT_PATH }}/junit-structural.xml"

@@ -39,9 +39,16 @@ echo "Running Trivy IaC misconfiguration scan..."
 # lists. The flag does NOT silence findings against module references
 # inside the consumer's own configuration (resource attributes, variable
 # wiring, etc.), only the bodies of the downloaded modules themselves.
+trivy_tf_exclude_flag=""
+if trivy filesystem --help 2>/dev/null | grep -q -- '--tf-exclude-downloaded-modules'; then
+  trivy_tf_exclude_flag="--tf-exclude-downloaded-modules"
+else
+  echo "Installed Trivy does not support --tf-exclude-downloaded-modules; continuing without it."
+fi
+
 trivy filesystem \
   --scanners misconfig \
-  --tf-exclude-downloaded-modules \
+  ${trivy_tf_exclude_flag:+$trivy_tf_exclude_flag} \
   --format json \
   --output "$jsonFile" \
   --exit-code 1 \

@@ -27,8 +27,21 @@ fi
 echo "Running Trivy IaC misconfiguration scan..."
 # Primary output is JSON — always works and aligns with the other tool
 # scripts (`trivy-sca.json`, `govulncheck.json`, `semgrep.json`, etc.).
+#
+# `--tf-exclude-downloaded-modules` keeps Trivy from re-flagging vendored
+# Terraform modules that the parser resolves through `module "x" { source = "git@..." }`
+# blocks. Each upstream module owns its security posture (runs its own
+# `make sast`, ships its own `.trivyignore`); without this flag the
+# consumer scan re-flags every unresolvable `var.*` default in the
+# vendored `main.tf` and consumers have to mirror every upstream
+# `.trivyignore` (Trivy reads `.trivyignore` only at the scan root, not
+# from vendored subdirs) — producing duplicate, drift-prone suppression
+# lists. The flag does NOT silence findings against module references
+# inside the consumer's own configuration (resource attributes, variable
+# wiring, etc.), only the bodies of the downloaded modules themselves.
 trivy filesystem \
   --scanners misconfig \
+  --tf-exclude-downloaded-modules \
   --format json \
   --output "$jsonFile" \
   --exit-code 1 \

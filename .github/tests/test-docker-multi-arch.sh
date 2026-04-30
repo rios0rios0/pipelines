@@ -103,7 +103,7 @@ assert_yq \
 # so a future bump that drops multi-arch support has to surface here.
 assert_true \
   "'docker/build-push-action' must be at least v6 (multi-arch via buildx is stable from v6 onwards)" \
-  "yq -e '.runs.steps[] | select(.uses | test(\"^docker/build-push-action@v[6-9]\"))' '$ACTION_FILE' >/dev/null"
+  "yq -e '.runs.steps[] | select(.uses | test(\"^docker/build-push-action@v([6-9]|[1-9][0-9]+)$\"))' '$ACTION_FILE' >/dev/null"
 
 echo ""
 echo "=== Results ==="

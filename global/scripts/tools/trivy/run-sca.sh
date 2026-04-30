@@ -23,22 +23,34 @@ if ! command -v trivy > /dev/null 2>&1; then
   echo "Downloading Trivy..."
   attempt=1
   maxAttempts=3
+  installerLog="/tmp/trivy-install.log"
+  installerStatus=0
   while [ $attempt -le $maxAttempts ]; do
-    curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /tmp || true
+    : > "$installerLog"
+    installerStatus=0
+    {
+      curl -fsSL --show-error https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh 2>>"$installerLog" \
+        | sh -s -- -b /tmp >>"$installerLog" 2>&1
+    } || installerStatus=$?
     if [ -x /tmp/trivy ]; then
       break
     fi
     if [ $attempt -lt $maxAttempts ]; then
       sleepSeconds=$((attempt * 5))
-      echo "Trivy install attempt $attempt failed (binary not at /tmp/trivy); retrying in ${sleepSeconds}s..."
+      echo "Trivy install attempt $attempt failed (exit=$installerStatus, binary not at /tmp/trivy); retrying in ${sleepSeconds}s..." >&2
+      [ -s "$installerLog" ] && sed 's/^/  | /' "$installerLog" >&2
       sleep $sleepSeconds
     fi
     attempt=$((attempt + 1))
   done
   if [ ! -x /tmp/trivy ]; then
-    echo "ERROR: Trivy install failed after $maxAttempts attempts. The upstream installer at https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh likely hit a GitHub API rate limit on the 'latest' tag lookup. Re-run the pipeline or pin a Trivy version explicitly." >&2
+    echo "ERROR: Trivy install failed after $maxAttempts attempts (last exit=$installerStatus). Common causes include a GitHub API rate limit on the 'latest' tag lookup, transient network failures, raw.githubusercontent.com being blocked, or upstream GitHub downtime. Last installer/curl output:" >&2
+    [ -s "$installerLog" ] && sed 's/^/  | /' "$installerLog" >&2
+    echo "Re-run the pipeline or pin a Trivy version explicitly." >&2
+    rm -f "$installerLog"
     exit 1
   fi
+  rm -f "$installerLog"
   export PATH="/tmp:$PATH"
 fi
 

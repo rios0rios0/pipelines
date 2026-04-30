@@ -16,6 +16,14 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added `platforms` input to `github/global/stages/40-delivery/docker/action.yaml` (default `linux/amd64,linux/arm64`) so the published manifest is a multi-arch list. The action now runs `docker/setup-qemu-action@v3` + `docker/setup-buildx-action@v3` before `docker/build-push-action@v7` so the build can cross-compile and emit a manifest list. Surfaced as `docker_platforms` on the `go-binary.yaml` reusable workflow for consumer override (defaults to the same multi-arch pair). Motivated by `code-guru` rolling out to an AKS cluster with `aks-workersarm-*` ARM workers and crashlooping with `exec /usr/local/bin/code-guru: exec format error` because the previous single-arch `linux/amd64` manifest could not execute on those nodes; every other Docker-publishing consumer (`go-docker.yaml`, `npm-docker.yaml`, `pdm-docker.yaml`, `bundler-docker.yaml`, `maven-docker.yaml`, `dotnet-docker.yaml`) inherits the new default automatically through the action and can override at the action call-site if a single platform is preferred
+
+### Changed
+
+- changed the `docker/build-push-action` invocation in `40-delivery/docker` to require buildx (`setup-buildx-action`) — the default Docker builder silently ignores `platforms:` and emits a single-arch manifest, which was the exact failure mode that crashlooped `code-guru` pods. With buildx the action correctly produces a manifest list
+
 ## [4.8.0] - 2026-04-29
 
 ### Added

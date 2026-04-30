@@ -14,6 +14,20 @@ inputs:
     type: 'string'
     required: false
     default: ''
+  platforms:
+    description: |
+      Target platforms for the build, as a comma-separated list. Defaults
+      to `linux/amd64,linux/arm64` so the published manifest is a
+      multi-arch list and the image runs on both AMD and ARM Kubernetes
+      worker pools — `code-guru` rolling out to an AKS cluster with
+      `aks-workersarm-*` workers crashlooped with `exec format error`
+      because the previous single-arch `linux/amd64` image could not
+      execute on those nodes. Override with a single platform (e.g.
+      `linux/amd64`) when a consumer explicitly does not need ARM and
+      wants to skip the QEMU emulation cost on the build.
+    type: 'string'
+    required: false
+    default: 'linux/amd64,linux/arm64'
 
 runs:
   using: 'composite'
@@ -56,10 +70,30 @@ runs:
         username: '${{ github.actor }}'
         password: '${{ inputs.github_token || github.token }}'
 
+    # `setup-qemu-action` registers `binfmt_misc` handlers so the GitHub
+    # `ubuntu-latest` runner (amd64) can execute ARM binaries during the
+    # `RUN` steps of an `arm64` build. Without it, multi-arch builds
+    # that invoke an architecture-specific binary inside a `RUN` step
+    # (e.g. `apk add`, `apt-get install`, a `curl`-then-bash installer
+    # like `claude.ai/install.sh`) fail at the foreign-arch interpreter
+    # exec rather than producing a working image.
+    - name: 'Set up QEMU'
+      uses: 'docker/setup-qemu-action@v3'
+
+    # `setup-buildx-action` swaps the default Docker builder for the
+    # buildx driver, which is what `docker/build-push-action` requires
+    # to produce a multi-platform manifest list. The default builder
+    # silently ignores `platforms:` and emits a single-arch manifest —
+    # the exact failure mode that bit `code-guru` and motivated this
+    # change.
+    - name: 'Set up Docker Buildx'
+      uses: 'docker/setup-buildx-action@v3'
+
     - name: 'Build and Push'
       uses: 'docker/build-push-action@v7'
       with:
         file: '.ci/stages/40-delivery/app.Dockerfile'
         context: '.'
         push: true
+        platforms: '${{ inputs.platforms }}'
         tags: '${{ inputs.tags || steps.release-tags.outputs.tags || steps.meta.outputs.tags }}'

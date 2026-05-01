@@ -11,24 +11,42 @@ runs:
         go-version-file: 'go.mod'
         cache-dependency-path: 'go.sum'
 
+    # Resolve the directory `go install` actually targets. `go install`
+    # honours `$GOBIN` if set, otherwise falls back to `$(go env GOPATH)/bin`.
+    # Hardcoding `~/go/bin` would silently miss the binaries on any runner
+    # (or future `setup-go` change) where either of those is overridden.
+    - name: 'Resolve Go test tool binary directory'
+      shell: 'bash'
+      run: |
+        gobin="$(go env GOBIN)"
+        if [ -n "$gobin" ]; then
+          go_bin_dir="$gobin"
+        else
+          go_bin_dir="$(go env GOPATH)/bin"
+        fi
+        mkdir -p "$go_bin_dir"
+        echo "GO_BIN_DIR=$go_bin_dir" >> "$GITHUB_ENV"
+
     # `actions/setup-go@v6` caches `$GOMODCACHE` (module downloads) and
     # `$GOCACHE` (build/test cache) by default, but it does NOT cache
-    # `$(go env GOPATH)/bin` where `go install` drops compiled tool
-    # binaries. Without this step, `test/run.sh` reinstalls
-    # `gotestsum`, `gocovmerge`, and `gocover-cobertura` on every run —
-    # each `@latest` resolution hits the module proxy and each binary
-    # is rebuilt from scratch, which dominates the wall time of a
-    # cache-warm test job. Caching `~/go/bin` lets the runner skip the
-    # `go install` chain entirely when the binaries are already on disk
-    # (the script's `[ -x ... ] ||` guards short-circuit).
+    # the effective Go binary install directory. Without this step,
+    # `test/run.sh` reinstalls `gotestsum`, `gocovmerge`, and
+    # `gocover-cobertura` on every run — each `@latest` resolution
+    # hits the module proxy and each binary is rebuilt from scratch,
+    # which dominates the wall time of a cache-warm test job.
+    # Caching the resolved Go bin dir lets the runner skip the
+    # `go install` chain entirely when the binaries are already on
+    # disk (the script's `[ -x ... ] ||` guards short-circuit).
+    # The cache key includes `runner.arch` so amd64 / arm64 runners
+    # in the same repo do not restore each other's binaries.
     - name: 'Cache Go test tool binaries'
       uses: 'actions/cache@v4'
       with:
-        path: '~/go/bin'
-        key: '${{ runner.os }}-go-${{ steps.setup-go.outputs.go-version }}-test-tools-v1'
+        path: '${{ env.GO_BIN_DIR }}'
+        key: '${{ runner.os }}-${{ runner.arch }}-go-${{ steps.setup-go.outputs.go-version }}-test-tools-v1'
         restore-keys: |
-          ${{ runner.os }}-go-${{ steps.setup-go.outputs.go-version }}-test-tools-
-          ${{ runner.os }}-go-test-tools-
+          ${{ runner.os }}-${{ runner.arch }}-go-${{ steps.setup-go.outputs.go-version }}-test-tools-
+          ${{ runner.os }}-${{ runner.arch }}-go-test-tools-
 
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 

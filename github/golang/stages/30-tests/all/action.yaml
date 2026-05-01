@@ -5,10 +5,30 @@ runs:
       uses: 'actions/checkout@v6'
 
     - name: 'Setup Go'
+      id: 'setup-go'
       uses: 'actions/setup-go@v6'
       with:
         go-version-file: 'go.mod'
         cache-dependency-path: 'go.sum'
+
+    # `actions/setup-go@v6` caches `$GOMODCACHE` (module downloads) and
+    # `$GOCACHE` (build/test cache) by default, but it does NOT cache
+    # `$(go env GOPATH)/bin` where `go install` drops compiled tool
+    # binaries. Without this step, `test/run.sh` reinstalls
+    # `gotestsum`, `gocovmerge`, and `gocover-cobertura` on every run —
+    # each `@latest` resolution hits the module proxy and each binary
+    # is rebuilt from scratch, which dominates the wall time of a
+    # cache-warm test job. Caching `~/go/bin` lets the runner skip the
+    # `go install` chain entirely when the binaries are already on disk
+    # (the script's `[ -x ... ] ||` guards short-circuit).
+    - name: 'Cache Go test tool binaries'
+      uses: 'actions/cache@v4'
+      with:
+        path: '~/go/bin'
+        key: '${{ runner.os }}-go-${{ steps.setup-go.outputs.go-version }}-test-tools-v1'
+        restore-keys: |
+          ${{ runner.os }}-go-${{ steps.setup-go.outputs.go-version }}-test-tools-
+          ${{ runner.os }}-go-test-tools-
 
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 

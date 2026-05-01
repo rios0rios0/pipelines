@@ -24,6 +24,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - changed the `docker/build-push-action` invocation in `40-delivery/docker` to require buildx (`setup-buildx-action`) — the default Docker builder silently ignores `platforms:` and emits a single-arch manifest, which was the exact failure mode that crashlooped `code-guru` pods. With buildx the action correctly produces a manifest list
 
+### Fixed
+
+- fixed `tests > test:all` job in the GitHub Actions Go pipeline reinstalling `gotestsum`, `gocovmerge`, and `gocover-cobertura` on every run. `actions/setup-go@v6` caches `$GOMODCACHE` (module downloads) and `$GOCACHE` (build / test cache) by default, but it does NOT cache the effective Go binary install directory where `go install` drops compiled tool binaries — so even on a cache-warm run the script paid for three `@latest` proxy resolutions plus three rebuilds, which dominated the wall time of the test job. Added a `Resolve Go test tool binary directory` step in `github/golang/stages/30-tests/all/action.yaml` that derives the path from `go env GOBIN` (with fallback to `$(go env GOPATH)/bin`) and exports it as `GO_BIN_DIR` to `$GITHUB_ENV`, then an `actions/cache@v4` step that caches `${{ env.GO_BIN_DIR }}` keyed off `${runner.os}-${runner.arch}-go-${go-version}-test-tools-v1` (with `restore-keys` falling back to less specific prefixes) so the binaries persist across runs without colliding across architectures. Updated `global/scripts/languages/golang/test/run.sh` to short-circuit `go install` with `[ -x "$GOBIN_DIR/<tool>" ] ||` guards using the same `go env GOBIN` → `$(go env GOPATH)/bin` resolution (mirroring the same pattern already used by `govulncheck/run.sh`). The script change also benefits GitLab CI and Azure DevOps consumers that run their own caching outside of `setup-go` — bump the `v1` cache-key suffix to force a tool refresh
+
 ## [4.8.0] - 2026-04-29
 
 ### Added

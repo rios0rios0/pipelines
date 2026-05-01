@@ -41,9 +41,15 @@ directories=$(echo $directories | sed 's/^ *//;s/ *$//')
 echo "Testing code in the following directories: $directories"
 
 echo "Installing dependencies..."
-go install gotest.tools/gotestsum@latest
-go install github.com/wadey/gocovmerge@latest
-go install github.com/boumenot/gocover-cobertura@latest
+# Skip `go install` when the binary is already on disk so CI runs that
+# restored a cached `$(go env GOPATH)/bin` (e.g. via `actions/cache@v4`
+# in the GitHub Actions test job) avoid a network round-trip and a
+# rebuild on every run. Matches the same pattern already used by
+# `govulncheck/run.sh`.
+GOBIN_DIR="$(go env GOPATH)/bin"
+[ -x "$GOBIN_DIR/gotestsum" ] || go install gotest.tools/gotestsum@latest
+[ -x "$GOBIN_DIR/gocovmerge" ] || go install github.com/wadey/gocovmerge@latest
+[ -x "$GOBIN_DIR/gocover-cobertura" ] || go install github.com/boumenot/gocover-cobertura@latest
 
 echo ""
 echo "=========================================="

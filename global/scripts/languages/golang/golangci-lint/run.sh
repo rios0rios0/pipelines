@@ -88,7 +88,7 @@ if command -v golangci-lint > /dev/null 2>&1; then
   fi
 fi
 if [ -z "$GOLANGCI_LINT" ]; then
-  wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh
+  wget -O- -nv https://golangci-lint.run/install.sh | sh
   GOLANGCI_LINT="./bin/golangci-lint"
 fi
 "$GOLANGCI_LINT" run \

@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [4.9.1] - 2026-05-04
+
 ### Fixed
 
 - fixed `golangci-lint` install script URL pointing to the deprecated `master` branch instead of `main`. The golangci-lint project announced in v2.12.1 that `master` is no longer used, causing the stale install script to produce SHA256 checksum mismatches when downloading new releases and failing the pipeline with exit code 127. Switched to the official stable URL `https://golangci-lint.run/install.sh` recommended by the project

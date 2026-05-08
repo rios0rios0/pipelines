@@ -25,6 +25,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Fixed
 
 - fixed `golangci-lint` install script URL pointing to the deprecated `master` branch instead of `main`. The golangci-lint project announced in v2.12.1 that `master` is no longer used, causing the stale install script to produce SHA256 checksum mismatches when downloading new releases and failing the pipeline with exit code 127. Switched to the official stable URL `https://golangci-lint.run/install.sh` recommended by the project
+- fixed `quality:proguard` GitHub Actions step failing on Maven projects. The `actions/setup-java@v5` step was hardcoded with `cache: 'gradle'`, which errors out when no Gradle build files are present and prevented the proguard analysis from running on Maven repos. The setup now detects `pom.xml` vs `build.gradle*` / `gradlew` and selects the matching cache backend
 
 ## [4.9.0] - 2026-05-03
 

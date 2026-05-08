@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- changed the golang pipeline version from `1.26.2` to `1.26.3`
+
 ### Fixed
 
 - fixed `golangci-lint` install script URL pointing to the deprecated `master` branch instead of `main`. The golangci-lint project announced in v2.12.1 that `master` is no longer used, causing the stale install script to produce SHA256 checksum mismatches when downloading new releases and failing the pipeline with exit code 127. Switched to the official stable URL `https://golangci-lint.run/install.sh` recommended by the project

@@ -4,12 +4,24 @@ runs:
     - name: 'Checkout code'
       uses: 'actions/checkout@v6'
 
+    - name: 'Detect build tool'
+      id: 'build_tool'
+      shell: 'bash'
+      run: |
+        if [ -f 'gradlew' ]; then
+          echo 'cache=gradle' >> "$GITHUB_OUTPUT"
+        elif [ -f 'pom.xml' ]; then
+          echo 'cache=maven' >> "$GITHUB_OUTPUT"
+        else
+          echo 'cache=' >> "$GITHUB_OUTPUT"
+        fi
+
     - name: 'Setup Java'
       uses: 'actions/setup-java@v5'
       with:
         distribution: 'temurin'
         java-version: '21'
-        cache: 'gradle'
+        cache: ${{ steps.build_tool.outputs.cache }}
 
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 

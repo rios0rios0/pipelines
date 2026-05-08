@@ -8,10 +8,10 @@ runs:
       id: 'build_tool'
       shell: 'bash'
       run: |
-        if [ -f 'pom.xml' ]; then
-          echo 'cache=maven' >> "$GITHUB_OUTPUT"
-        elif [ -f 'build.gradle' ] || [ -f 'build.gradle.kts' ] || [ -f 'gradlew' ]; then
+        if [ -f 'gradlew' ]; then
           echo 'cache=gradle' >> "$GITHUB_OUTPUT"
+        elif [ -f 'pom.xml' ]; then
+          echo 'cache=maven' >> "$GITHUB_OUTPUT"
         else
           echo 'cache=' >> "$GITHUB_OUTPUT"
         fi

@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- changed the terraform pipeline version from `1.14.9` to `1.15.2`
+
 ### Fixed
 
 - fixed `quality:proguard` GitHub Actions cache backend mismatch. The build tool detection in `action.yaml` checked `pom.xml` before `gradlew`, so repos containing both files received the Maven cache even though `run.sh` compiles them with Gradle. Flipped the detection order to mirror `run.sh` (`gradlew` first, then `pom.xml`) so the `actions/setup-java@v5` cache always matches the build tool that actually runs

@@ -80,15 +80,17 @@ else
   cp "$defaultYamlFile" "$mergedYamlFile"
 fi
 
+GOLANGCI_LINT_VERSION="v2.12.2"
+
 GOLANGCI_LINT=""
 if command -v golangci-lint > /dev/null 2>&1; then
-  DETECTED_MAJOR=$(golangci-lint version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 | cut -d. -f1)
-  if [ "$DETECTED_MAJOR" -ge 2 ] 2>/dev/null; then
+  DETECTED_VERSION=$(golangci-lint version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  if [ "$DETECTED_VERSION" = "${GOLANGCI_LINT_VERSION#v}" ]; then
     GOLANGCI_LINT="golangci-lint"
   fi
 fi
 if [ -z "$GOLANGCI_LINT" ]; then
-  wget -O- -nv https://golangci-lint.run/install.sh | sh
+  wget -O- -nv https://golangci-lint.run/install.sh | sh -s -- -b ./bin "${GOLANGCI_LINT_VERSION}"
   GOLANGCI_LINT="./bin/golangci-lint"
 fi
 "$GOLANGCI_LINT" run \

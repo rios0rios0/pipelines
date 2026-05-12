@@ -22,6 +22,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
+- fixed golangci-lint version skew between local and CI by pinning the install script to `v2.12.2` and rejecting any locally installed binary that doesn't match the pinned version
 - fixed `quality:proguard` GitHub Actions cache backend mismatch. The build tool detection in `action.yaml` checked `pom.xml` before `gradlew`, so repos containing both files received the Maven cache even though `run.sh` compiles them with Gradle. Flipped the detection order to mirror `run.sh` (`gradlew` first, then `pom.xml`) so the `actions/setup-java@v5` cache always matches the build tool that actually runs
 
 ## [4.9.1] - 2026-05-08

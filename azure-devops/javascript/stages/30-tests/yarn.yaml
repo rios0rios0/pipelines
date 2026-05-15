@@ -14,11 +14,16 @@ parameters:
   - name: 'LCOV_RELATIVE_PATH'
     type: 'string'
     default: ''
+  - name: 'DEPENDS_ON'
+    type: object
+    default: ''
 
 stages:
   - stage: 'tests'
     displayName: 'tests'
     condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    ${{ if ne(parameters.DEPENDS_ON, '') }}:
+      dependsOn: ${{ parameters.DEPENDS_ON }}
     jobs:
       - job: 'test_all'
         displayName: 'test:all'

@@ -8,11 +8,16 @@ parameters:
   - name: 'RUN_AFTER_MANAGEMENT'
     type: 'string'
     default: 'echo "No after script"'
+  - name: 'DEPENDS_ON'
+    type: object
+    default: ''
 
 stages:
   - stage: 'management'
     displayName: 'management'
     condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    ${{ if ne(parameters.DEPENDS_ON, '') }}:
+      dependsOn: ${{ parameters.DEPENDS_ON }}
     jobs:
       - job: 'report_sonarqube'
         displayName: 'report:sonarqube'

@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added `DEPENDS_ON` parameter (`type: object`, default `''`) to JavaScript stage templates (`10-code-check`, `20-security`, `30-tests`, `35-management`) allowing consumers to override stage dependencies for parallel execution
+
 ### Changed
 
 - changed the terraform pipeline version from `1.14.9` to `1.15.2`

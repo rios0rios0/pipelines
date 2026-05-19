@@ -9,13 +9,14 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen)
+make test              # Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen, docker-multi-arch)
 make test-go-script    # Test Go validation script only
 make test-lambda       # Test Lambda template validation only
 make test-yaml-merge   # Test YAML merge validation only
 make test-sonarqube    # Test SonarQube auto-derivation only
 make test-release-tag-idempotency  # Test release tag idempotency only
 make test-tftest-gen   # Test tftest-gen generator only
+make test-docker-multi-arch  # Test 40-delivery/docker multi-arch contract only
 make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
 ```
 

@@ -24,6 +24,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - changed the terraform pipeline version from `1.14.9` to `1.15.2`
 - changed the terraform pipeline version from `1.15.2` to `1.15.3`
+- refreshed `CLAUDE.md` and `.github/copilot-instructions.md` to document the `make test-docker-multi-arch` target
 
 ### Fixed
 

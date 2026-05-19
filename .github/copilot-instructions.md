@@ -7,13 +7,14 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen)
+- `make test` - Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen, docker-multi-arch)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-lambda` - Test Lambda template validation specifically
 - `make test-yaml-merge` - Test YAML merge validation specifically
 - `make test-sonarqube` - Test SonarQube auto-derivation specifically
 - `make test-release-tag-idempotency` - Test release tag idempotency specifically
 - `make test-tftest-gen` - Test tftest-gen generator specifically
+- `make test-docker-multi-arch` - Test 40-delivery/docker multi-arch contract specifically
 - `bash global/scripts/shared/cleanup.sh` - Clean up build reports
 - `docker --version && make --version && go version` - Check dependencies
 

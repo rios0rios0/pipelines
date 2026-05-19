@@ -23,6 +23,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Changed
 
 - changed the terraform pipeline version from `1.14.9` to `1.15.2`
+- changed the terraform pipeline version from `1.15.2` to `1.15.3`
 
 ### Fixed
 

@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- changed the terraform pipeline version from `1.15.3` to `1.15.4`
+
 ## [4.10.0] - 2026-05-19
 
 ### Added

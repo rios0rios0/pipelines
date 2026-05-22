@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [4.10.2] - 2026-05-22
+
 ### Changed
 
 - changed `global/scripts/tools/gitleaks/run.sh` to download the Gitleaks static binary from its GitHub release instead of running the `zricethezav/gitleaks` Docker image. Docker Hub now enforces an anonymous pull rate limit, so every CI run with cold image layers risked a `toomanyrequests` failure in the `sast:gitleaks` job. Gitleaks ships a self-contained static Go binary per release, so the script resolves the latest release via the GitHub API, downloads the architecture-matched tarball (`x64`, `arm64`, `armv7`), and runs both detection passes (defaults + the GitLab-customized rule set) natively — removing the Docker-in-Docker entrypoint script and the `chmod -R 777` workaround. Mirrors the existing `shellcheck` and `hadolint` installation pattern
@@ -26,8 +28,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Fixed
 
-- fixed the GitLab CI `sast:semgrep` and `sast:gitleaks` `artifacts:reports` paths in `gitlab/global/stages/20-security/docker.yaml`, which pointed at `build/reports/semgrep.json` and `build/reports/gitleaks.json`. The tool scripts source `cleanup.sh` with `TOOL_NAME` set, which nests every tool's output under a per-tool subdirectory, so the reports are actually written to `build/reports/semgrep/semgrep.json` and `build/reports/gitleaks/gitleaks.json` and GitLab silently ingested nothing. The `reports:sast` and `reports:secret_detection` paths now include the per-tool subdirectory, matching where the scripts write and the directory paths the Azure DevOps and GitHub Actions artifact steps already use
 - fixed `global/scripts/tools/semgrep/run.sh` never removing the temporary default `.semgrepignore` it copies in when the project has none. The cleanup guard `[ ! "$ignoreFileExists" ]` tested a non-empty string (`true` or `false`), which always evaluates as false, so the copied file was left behind in the consumer's working tree after every run. Corrected to `[ "$ignoreFileExists" = false ]`, matching the equivalent guard in `hadolint/run.sh`
+- fixed the GitLab CI `sast:semgrep` and `sast:gitleaks` `artifacts:reports` paths in `gitlab/global/stages/20-security/docker.yaml`, which pointed at `build/reports/semgrep.json` and `build/reports/gitleaks.json`. The tool scripts source `cleanup.sh` with `TOOL_NAME` set, which nests every tool's output under a per-tool subdirectory, so the reports are actually written to `build/reports/semgrep/semgrep.json` and `build/reports/gitleaks/gitleaks.json` and GitLab silently ingested nothing. The `reports:sast` and `reports:secret_detection` paths now include the per-tool subdirectory, matching where the scripts write and the directory paths the Azure DevOps and GitHub Actions artifact steps already use
 
 ## [4.10.1] - 2026-05-21
 

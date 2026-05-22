@@ -25,7 +25,9 @@ sast:semgrep:
   artifacts:
     when: 'always'
     reports:
-      sast: "$REPORT_PATH/semgrep.json"
+      # `run.sh` sources `cleanup.sh` with `TOOL_NAME=semgrep`, which nests
+      # the report under a per-tool subdirectory: `build/reports/semgrep/`.
+      sast: "$REPORT_PATH/semgrep/semgrep.json"
   dependencies: [] # prevent from fetching artifacts
 
 sast:gitleaks:
@@ -40,5 +42,7 @@ sast:gitleaks:
   artifacts:
     when: 'always'
     reports:
-      secret_detection: "$REPORT_PATH/gitleaks.json"
+      # `run.sh` sources `cleanup.sh` with `TOOL_NAME=gitleaks`, which nests
+      # the report under a per-tool subdirectory: `build/reports/gitleaks/`.
+      secret_detection: "$REPORT_PATH/gitleaks/gitleaks.json"
   dependencies: [] # prevent from fetching artifacts

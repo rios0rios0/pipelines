@@ -10,9 +10,11 @@ stages:
     ${{ if ne(parameters.DEPENDS_ON, '') }}:
       dependsOn: ${{ parameters.DEPENDS_ON }}
     jobs:
-      - template: '../../../global/stages/20-security/docker.yaml'
+      - template: '../../../global/stages/20-security/semgrep.yaml'
         parameters:
           SEMGREP_LANGUAGE: 'javascript'
+
+      - template: '../../../global/stages/20-security/gitleaks.yaml'
 
       - template: '../../../global/stages/20-security/codeql.yaml'
         parameters:

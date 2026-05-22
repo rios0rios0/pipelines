@@ -1,0 +1,16 @@
+jobs:
+  - job: 'sast_gitleaks'
+    displayName: 'sast:gitleaks'
+    steps:
+      - checkout: 'self'
+        fetchDepth: 0
+        fetchTags: true
+
+      - template: '../../abstracts/scripts-repo.yaml'
+      - script: $(Scripts.Directory)/global/scripts/tools/gitleaks/run.sh
+        continueOnError: true
+
+      - task: 'PublishPipelineArtifact@1'
+        inputs:
+          artifactName: 'gitleaks'
+          targetPath: 'build/reports/gitleaks'

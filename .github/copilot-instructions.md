@@ -69,7 +69,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
   bash global/scripts/languages/golang/golangci-lint/run.sh  # Works - 1.8s, exits with code 7 (no Go modules)
 
   # Run security scanning with Gitleaks
-  bash global/scripts/tools/gitleaks/run.sh  # Works - 2.0s (downloads Docker image)
+  bash global/scripts/tools/gitleaks/run.sh  # Works (downloads the Gitleaks static binary)
   ```
 
 - **Container building:**
@@ -95,7 +95,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - **trivy/run.sh** - Scans IaC misconfigurations (Terraform, Kubernetes, Dockerfiles)
 - **dependency-track/run.sh** - Requires `DEPENDENCY_TRACK_TOKEN` and `DEPENDENCY_TRACK_HOST_URL`
 - **sonarqube/run.sh** - Requires `sonar-scanner` installed and SonarQube environment
-- **semgrep/run.sh** - May run for 10+ minutes, downloads large Docker image
+- **semgrep/run.sh** - May run for 10+ minutes, installs Semgrep from PyPI into a virtualenv
 - **golang/test/run.sh** - Requires Go project with cmd/, pkg/, or internal/ directories
 
 ## Available Tools & Scripts

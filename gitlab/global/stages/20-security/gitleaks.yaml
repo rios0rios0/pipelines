@@ -1,0 +1,24 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
+
+# Gitleaks installs as a static binary from its GitHub release instead of
+# pulling a Docker image, so this job no longer needs the `docker:dind`
+# service. It runs on the `python:3.13-slim` image, shared with the sibling
+# `sast:semgrep` job — the static binary runs there without issue.
+sast:gitleaks:
+  extends: '.scripts-repo'
+  image: 'python:3.13-slim'
+  stage: 'security (sca/sast)'
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends git jq curl
+    - !reference [ .scripts-repo, before_script ]
+  script:
+    - $SCRIPTS_DIR/global/scripts/tools/gitleaks/run.sh
+  artifacts:
+    when: 'always'
+    reports:
+      # `run.sh` sources `cleanup.sh` with `TOOL_NAME=gitleaks`, which nests
+      # the report under a per-tool subdirectory: `build/reports/gitleaks/`.
+      secret_detection: "$REPORT_PATH/gitleaks/gitleaks.json"
+  dependencies: [] # prevent from fetching artifacts

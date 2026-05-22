@@ -16,6 +16,16 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- changed `global/scripts/tools/gitleaks/run.sh` to download the Gitleaks static binary from its GitHub release instead of running the `zricethezav/gitleaks` Docker image. Docker Hub now enforces an anonymous pull rate limit, so every CI run with cold image layers risked a `toomanyrequests` failure in the `sast:gitleaks` job. Gitleaks ships a self-contained static Go binary per release, so the script resolves the latest release via the GitHub API, downloads the architecture-matched tarball (`x64`, `arm64`, `armv7`), and runs both detection passes (defaults + the GitLab-customized rule set) natively — removing the Docker-in-Docker entrypoint script and the `chmod -R 777` workaround. Mirrors the existing `shellcheck` and `hadolint` installation pattern
+- changed `global/scripts/tools/semgrep/run.sh` to install Semgrep from PyPI into an isolated virtualenv instead of running the `returntocorp/semgrep` Docker image, for the same Docker Hub rate-limit reason. Semgrep has no standalone binary release, so the script creates a `python3 -m venv` and `pip install`s Semgrep into it — a venv sidesteps the PEP 668 `externally-managed-environment` restriction on modern distributions without polluting the runner's system Python. Because the scan now runs directly on the host, the `~/.ssh` and `SSH_AUTH_SOCK` bind-mounts that previously forwarded `PRE_STEPS`-based SSH setup into the container are no longer needed, and the command is assembled with POSIX positional parameters instead of `eval`
+- changed the GitLab CI `sast:semgrep` and `sast:gitleaks` jobs (`gitlab/global/stages/20-security/docker.yaml`) to stop extending `.scripts-repo-alpine-docker` (which provided the `docker:dind` service) now that neither tool runs in Docker. Both jobs run on the `python:3.13-slim` image — required for the Semgrep PyPI install and sufficient for the static Gitleaks binary — and install `git`, `jq`, and `curl` via `apt-get` in `before_script`. Azure DevOps and GitHub Actions need no wiring change because their runners already provide Python
+
+### Fixed
+
+- fixed `global/scripts/tools/semgrep/run.sh` never removing the temporary default `.semgrepignore` it copies in when the project has none. The cleanup guard `[ ! "$ignoreFileExists" ]` tested a non-empty string (`true` or `false`), which always evaluates as false, so the copied file was left behind in the consumer's working tree after every run. Corrected to `[ "$ignoreFileExists" = false ]`, matching the equivalent guard in `hadolint/run.sh`
+
 ## [4.10.1] - 2026-05-21
 
 ### Changed

@@ -1,11 +1,21 @@
 include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo-alpine-docker.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
 
 # TODO: a good feature is commenting on the PR the findings for each tool
+
+# Semgrep and Gitleaks install their own tooling directly -- Semgrep from
+# PyPI, Gitleaks as a static binary from its GitHub release -- instead of
+# pulling a Docker image, so these jobs no longer need the `docker:dind`
+# service. They run on the `python:3.13-slim` image: Semgrep is a Python
+# package and requires it, and the static Gitleaks binary runs there too.
 sast:semgrep:
-  extends: '.scripts-repo-alpine-docker'
+  extends: '.scripts-repo'
+  image: 'python:3.13-slim'
   stage: 'security (sca/sast)'
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends git jq curl
+    - !reference [ .scripts-repo, before_script ]
   # Consumers can configure SSH (or other prerequisites) so the Semgrep
   # Terraform parser can clone private modules referenced via
   # `source = "git@..."` by setting the `SAST_PRE_SCRIPT` variable.
@@ -15,16 +25,24 @@ sast:semgrep:
   artifacts:
     when: 'always'
     reports:
-      sast: "$REPORT_PATH/semgrep.json"
+      # `run.sh` sources `cleanup.sh` with `TOOL_NAME=semgrep`, which nests
+      # the report under a per-tool subdirectory: `build/reports/semgrep/`.
+      sast: "$REPORT_PATH/semgrep/semgrep.json"
   dependencies: [] # prevent from fetching artifacts
 
 sast:gitleaks:
-  extends: '.scripts-repo-alpine-docker'
+  extends: '.scripts-repo'
+  image: 'python:3.13-slim'
   stage: 'security (sca/sast)'
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends git jq curl
+    - !reference [ .scripts-repo, before_script ]
   script:
     - $SCRIPTS_DIR/global/scripts/tools/gitleaks/run.sh
   artifacts:
     when: 'always'
     reports:
-      secret_detection: "$REPORT_PATH/gitleaks.json"
+      # `run.sh` sources `cleanup.sh` with `TOOL_NAME=gitleaks`, which nests
+      # the report under a per-tool subdirectory: `build/reports/gitleaks/`.
+      secret_detection: "$REPORT_PATH/gitleaks/gitleaks.json"
   dependencies: [] # prevent from fetching artifacts

@@ -834,7 +834,7 @@ include:
 **Issue: Gitleaks takes too long or fails**
 
 - **Cause:** Large repository or network issues
-- **Solution:** Increase timeout values, ensure Docker daemon is accessible
+- **Solution:** Increase timeout values, ensure network access to GitHub releases for the Gitleaks binary download
 
 **Issue: Semgrep timeout or hangs**
 

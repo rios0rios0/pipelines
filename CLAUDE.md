@@ -40,7 +40,7 @@ All platforms follow consistent numbered stages:
 - `gitlab/<language>/` — GitLab CI templates with `stages/`, `scripts/`, `abstracts/` subdirs
 - `azure-devops/<language>/` — Azure DevOps templates, same structure as GitLab
 - `global/scripts/tools/` — Platform-agnostic security tools (codeql, gitleaks, semgrep, hadolint, shellcheck, trivy, sonarqube, dependency-track)
-- `global/scripts/languages/` — Language-specific scripts (golang, java, javascript, php, python, ruby, terraform). Most `run.sh` scripts follow shared conventions, but the Terraform helpers below are documented exceptions: they write reports directly under `build/reports/` and do not rely on the common `cleanup.sh` / Docker-in-Docker pattern.
+- `global/scripts/languages/` — Language-specific scripts (golang, java, javascript, php, python, ruby, terraform). Most `run.sh` scripts follow shared conventions, but the Terraform helpers below are documented exceptions: they write reports directly under `build/reports/` and do not rely on the common `cleanup.sh` report-directory pattern.
   - `terraform/terra-test/` — `terraform test` runner over `modules/*/tests/*.tftest.hcl` (emits JUnit + Markdown/JSON/Cobertura coverage under `build/reports/`)
   - `terraform/terratest/` — Go Terratest runner over `tests/terratest/*.go` (emits JUnit under `build/reports/`)
   - `terraform/test-all/` — unified orchestrator for the first two tiers; runs both when present, merges JUnits into `build/reports/junit-terra-all.xml`, exits `0` when neither tier has tests (stack-only repos)
@@ -85,7 +85,19 @@ All `run.sh` scripts follow this pattern:
 - Auto-detect `SCRIPTS_DIR` if not set, using `dirname/realpath` with sed to find the pipelines root
 - Source `cleanup.sh` to set up report directory cleanup
 - Generate reports to `build/reports/<tool-name>/`
-- Use Docker-in-Docker for tool isolation
+- Install the tool's native binary on demand instead of running a Docker image: check `command -v <tool>`, and when the binary is absent download it from upstream and prepend its location to `PATH`
+
+**Why native installs instead of `docker run`:** Docker Hub enforces a pull rate limit on anonymous (and free-tier authenticated) requests. A `docker run <tool>:latest` on a cache-cold CI runner can therefore fail the whole job with a `toomanyrequests` error — a failure mode outside the team's control and unrelated to the code under scan. Every tool is consequently fetched directly from its own upstream rather than pulled as a Docker image:
+
+| Tool(s) | Install method |
+|------------------------------------------------|------------------------------------------------------------------------------------|
+| `codeql`, `gitleaks`, `hadolint`, `shellcheck` | self-contained release binary downloaded from the project's GitHub releases         |
+| `trivy`                                        | upstream `install.sh`, wrapped in a retry-with-backoff loop                         |
+| `semgrep`                                      | installed from PyPI into an isolated `python3 -m venv` — Semgrep ships no binary    |
+| `sonarqube`                                    | expects `sonar-scanner` to already be on the runner                                 |
+| `dependency-track`                             | no tool binary — uploads the CycloneDX BOM with `curl`                              |
+
+Because the tools run directly on the host, the consuming CI job only needs the tool's own runtime dependencies (e.g. `python3` for `semgrep`, `git`/`jq`/`curl` for `gitleaks`) — not a Docker-in-Docker service.
 
 ### Terra Test Tiers
 

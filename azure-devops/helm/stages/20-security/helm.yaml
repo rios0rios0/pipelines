@@ -3,9 +3,11 @@ stages:
     displayName: 'security (sca/sast)'
     condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
     jobs:
-      - template: '../../../global/stages/20-security/docker.yaml'
+      - template: '../../../global/stages/20-security/semgrep.yaml'
         parameters:
           SEMGREP_LANGUAGE: 'kubernetes'
+
+      - template: '../../../global/stages/20-security/gitleaks.yaml'
 
       - template: '../../../global/stages/20-security/hadolint.yaml'
 

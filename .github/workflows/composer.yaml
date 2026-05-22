@@ -61,7 +61,7 @@ jobs:
     name: 'security > sast:semgrep'
     runs-on: 'ubuntu-latest'
     steps:
-      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-semgrep@main'
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/semgrep@main'
         with:
           semgrep_lang: 'php'
     needs: [ 'code_check-style_php_lint', 'code_check-quality_phpmd' ]
@@ -71,7 +71,7 @@ jobs:
     name: 'security > sast:gitleaks'
     runs-on: 'ubuntu-latest'
     steps:
-      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/docker-gitleaks@main'
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/gitleaks@main'
     needs: [ 'code_check-style_php_lint', 'code_check-quality_phpmd' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 

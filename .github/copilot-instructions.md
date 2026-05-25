@@ -23,7 +23,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - **GitLab CI:** Include `gitlab/golang/go-docker.yaml`, `gitlab/terraform/terra.yaml` from this repo
 - **Azure DevOps:** Template `azure-devops/golang/go-docker.yaml@pipelines`
 
-**SAST Tools:** Gitleaks, CodeQL, Semgrep, Hadolint, Trivy IaC
+**SAST Tools:** Gitleaks, CodeQL, Semgrep, Hadolint, ShellCheck, Trivy IaC
 **SCA Tools:** Trivy SCA (all languages), govulncheck (Go), Safety (Python), OWASP Dependency-Check (Java), yarn npm audit (JavaScript/Yarn), npm audit (JavaScript/npm), Composer Audit (PHP), bundler-audit (Ruby)
 **Quality Tools:** SonarQube, Dependency Track
 **Performance:** Security scans 2-10min, Container builds 5-30min
@@ -110,6 +110,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 | **CodeQL**    | SAST security scanning        | `global/scripts/tools/codeql/`      | Auto-configured  |
 | **Semgrep**   | Static analysis               | `global/scripts/tools/semgrep/`     | Auto-configured  |
 | **Hadolint**  | Dockerfile linting            | `global/scripts/tools/hadolint/`    | `.hadolint.yaml` |
+| **ShellCheck** | Shell script linting          | `global/scripts/tools/shellcheck/`  | Auto-configured  |
 | **Trivy IaC** | IaC misconfiguration scanning | `global/scripts/tools/trivy/run.sh` | `.trivyignore`   |
 
 #### SCA Tools
@@ -307,7 +308,7 @@ Each platform follows a consistent **5-stage pipeline architecture**:
 | **Terra CLI**          | ✅              | ✅         | ✅            | Terraform/Terragrunt wrapper              |
 
 **Pipeline Templates Available:**
-- **GitHub Actions:** `go.yaml`, `go-docker.yaml`, `go-binary.yaml`, `go-library.yaml`, `pdm.yaml`, `pdm-docker.yaml`, `gradle.yaml`, `gradle-docker.yaml`, `maven.yaml`, `maven-docker.yaml`, `yarn.yaml`, `yarn-docker.yaml`, `npm.yaml`, `npm-docker.yaml`, `composer.yaml`, `composer-docker.yaml`, `bundler.yaml`, `bundler-docker.yaml`, `dotnet.yaml`, `dotnet-docker.yaml`, `terra.yaml`
+- **GitHub Actions:** `go.yaml`, `go-docker.yaml`, `go-binary.yaml`, `go-library.yaml`, `pdm.yaml`, `pdm-docker.yaml`, `pdm-library.yaml`, `gradle.yaml`, `gradle-docker.yaml`, `gradle-library.yaml`, `maven.yaml`, `maven-docker.yaml`, `maven-library.yaml`, `yarn.yaml`, `yarn-docker.yaml`, `yarn-library.yaml`, `npm.yaml`, `npm-docker.yaml`, `npm-library.yaml`, `composer.yaml`, `composer-docker.yaml`, `composer-library.yaml`, `bundler.yaml`, `bundler-docker.yaml`, `bundler-library.yaml`, `dotnet.yaml`, `dotnet-docker.yaml`, `dotnet-library.yaml`, `terra.yaml`
 - **GitLab CI:** `go-docker.yaml`, `go-binary.yaml`, `go-docker-k8s-deployment.yaml`, `go-sam.yaml`, `gradle-docker.yaml`, `gradle-docker-k8s-deployment.yaml`, `gradle-library.yaml`, `maven-docker.yaml`, `pdm-docker.yaml`, `pdm-docker-k8s-deployment.yaml`, `pdm-library.yaml`, `yarn-docker.yaml`, `yarn-docker-k8s-deployment.yaml`, `framework.yaml`, `powershell.yaml`, `logstash-docker.yaml`, `terraform/terra.yaml`, `terra/terra.yaml`
 - **Azure DevOps:** `go-docker.yaml`, `go-arm.yaml`, `go-docker-arm.yaml`, `go-docker-k8s.yaml`, `go-docker-with-registry.yaml`, `go-function-arm.yaml`, `go-lambda-sam.yaml`, `go-lambda.yaml`, `go-library.yaml`, `kotlin-gradle.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `core.yaml`, `terraform/terra.yaml`, `terra/terra.yaml`
 
@@ -634,7 +635,7 @@ docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/
 
 ### Test Suite Usage
 ```bash
-# Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen)
+# Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen, docker-multi-arch)
 make test
 
 # Run individual test suites
@@ -644,6 +645,7 @@ make test-yaml-merge
 make test-sonarqube
 make test-release-tag-idempotency
 make test-tftest-gen
+make test-docker-multi-arch
 ```
 
 Test scripts are located in `.github/tests/`.

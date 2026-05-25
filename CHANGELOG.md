@@ -20,6 +20,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - refreshed `CLAUDE.md` and `.github/copilot-instructions.md` to add ShellCheck to the stage 20 SAST tools list, add the 8 `*-library.yaml` workflows to the copilot-instructions template list, and include `make test-docker-multi-arch` in the test suite usage section
 
+### Fixed
+
+- fixed `global/scripts/tools/hadolint/run.sh` to detect the host architecture via `uname -m` when downloading the Hadolint binary. The script previously hard-coded `hadolint-Linux-x86_64`, which fails with `Exec format error` on `aarch64` / `arm64` runners. The new `case` switch maps `x86_64` and `aarch64`/`arm64` to the matching upstream binary (`hadolint-Linux-x86_64` / `hadolint-Linux-arm64`) and exits with a clear message on unsupported architectures, mirroring the `case`-based switch already used by `global/scripts/tools/gitleaks/run.sh` and `global/scripts/tools/shellcheck/run.sh`
+
 ## [4.10.2] - 2026-05-22
 
 ### Changed

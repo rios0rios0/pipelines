@@ -20,8 +20,33 @@ if [ "$CODEQL_LANGUAGE" = "go" ]; then
   fi
 fi
 
-# Install CodeQL CLI if not already available
+# Install CodeQL CLI if not already available.
+#
+# GitHub only publishes Linux x86_64 CodeQL bundles (`codeql-bundle-linux64.tar.gz`).
+# There is no native Linux ARM64 build of CodeQL — see
+# https://github.com/github/codeql-action/issues/2839. Running the x86_64
+# bundle directly on aarch64 fails with `Exec format error` on the bundled
+# JRE (`tools/linux64/java/bin/java`) and a chain of confusing downstream
+# errors (missing SARIF file, `jq` "No such file" warnings, `[: Illegal
+# number`). Fail fast with an actionable message instead so the operator
+# knows to switch the runner.
 if ! command -v codeql > /dev/null 2>&1; then
+  ARCH=$(uname -m)
+  case "$ARCH" in
+    x86_64|amd64)
+      ;;
+    aarch64|arm64)
+      echo "ERROR: CodeQL has no native Linux ARM64 build — only x86_64 is published upstream." >&2
+      echo "Detected architecture: $ARCH" >&2
+      echo "Run this stage on an x86_64 runner, or set up qemu-user-static binfmt emulation before invoking the SAST stage." >&2
+      exit 1
+      ;;
+    *)
+      echo "ERROR: Unsupported architecture for CodeQL: $ARCH (only x86_64 is supported)." >&2
+      exit 1
+      ;;
+  esac
+
   echo "Downloading CodeQL CLI bundle..."
   CODEQL_BUNDLE_URL="https://github.com/github/codeql-action/releases/latest/download/codeql-bundle-linux64.tar.gz"
   curl -fsSL "$CODEQL_BUNDLE_URL" -o /tmp/codeql-bundle.tar.gz
@@ -31,22 +56,38 @@ if ! command -v codeql > /dev/null 2>&1; then
 fi
 
 echo "Creating CodeQL database for language: $CODEQL_LANGUAGE"
-codeql database create \
+if ! codeql database create \
   --language="$CODEQL_LANGUAGE" \
   --source-root="$(pwd)" \
-  "$(pwd)/.codeql-db"
+  "$(pwd)/.codeql-db"; then
+  echo "ERROR: 'codeql database create' failed for language '$CODEQL_LANGUAGE'." >&2
+  rm -rf "$(pwd)/.codeql-db"
+  exit 1
+fi
 
 echo "Running CodeQL analysis..."
-codeql database analyze \
+if ! codeql database analyze \
   --format=sarifv2.1.0 \
   --output="$fileName" \
   "$(pwd)/.codeql-db" \
-  "$CODEQL_LANGUAGE-security-and-quality.qls"
+  "$CODEQL_LANGUAGE-security-and-quality.qls"; then
+  echo "ERROR: 'codeql database analyze' failed for language '$CODEQL_LANGUAGE'." >&2
+  rm -rf "$(pwd)/.codeql-db"
+  exit 1
+fi
 
 echo "CodeQL analysis complete. Results written to: $fileName"
 
 # Clean up database
 rm -rf "$(pwd)/.codeql-db"
+
+# Refuse to proceed if the SARIF was not produced — without this guard the
+# downstream `jq`/arithmetic pipeline emitted confusing cascading errors
+# ("Could not open file", "[: Illegal number") that masked the real cause.
+if [ ! -f "$fileName" ]; then
+  echo "ERROR: CodeQL completed but SARIF report was not produced at $fileName." >&2
+  exit 1
+fi
 
 # Use default false positives file if the project doesn't provide one
 fpFileExists=true

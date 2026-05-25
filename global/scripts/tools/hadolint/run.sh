@@ -43,7 +43,18 @@ fi
 if ! command -v hadolint > /dev/null 2>&1; then
   echo "Downloading Hadolint..."
   HADOLINT_VERSION=$(curl -fsSL https://api.github.com/repos/hadolint/hadolint/releases/latest | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
-  curl -fsSL "https://github.com/hadolint/hadolint/releases/download/$HADOLINT_VERSION/hadolint-Linux-x86_64" -o /tmp/hadolint
+
+  ARCH=$(uname -m)
+  case "$ARCH" in
+    x86_64)        HADOLINT_ARCH="x86_64" ;;
+    aarch64|arm64) HADOLINT_ARCH="arm64" ;;
+    *)
+      echo "Unsupported architecture: $ARCH" >&2
+      exit 1
+      ;;
+  esac
+
+  curl -fsSL "https://github.com/hadolint/hadolint/releases/download/$HADOLINT_VERSION/hadolint-Linux-$HADOLINT_ARCH" -o /tmp/hadolint
   chmod +x /tmp/hadolint
   export PATH="/tmp:$PATH"
 fi

@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [4.10.3] - 2026-05-25
+
 ### Changed
 
 - refreshed `CLAUDE.md` and `.github/copilot-instructions.md` to add ShellCheck to the stage 20 SAST tools list, add the 8 `*-library.yaml` workflows to the copilot-instructions template list, and include `make test-docker-multi-arch` in the test suite usage section

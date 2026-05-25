@@ -3,6 +3,12 @@ runs:
   steps:
     - name: 'Checkout code'
       uses: 'actions/checkout@v6'
+      with:
+        # Full history is required so `gitleaks detect` can walk every commit
+        # of the current branch, and so `origin/<base>` resolves on pull
+        # request builds (the run script scopes the scan to `<base>..HEAD`
+        # when a PR context is detected).
+        fetch-depth: 0
 
     - name: 'Get Scripts'
       uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'

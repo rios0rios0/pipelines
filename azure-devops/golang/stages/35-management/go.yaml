@@ -1,7 +1,14 @@
+parameters:
+  - name: 'DEPENDS_ON'
+    type: object
+    default: ''
+
 stages:
   - stage: 'management'
     displayName: 'management'
     condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    ${{ if ne(parameters.DEPENDS_ON, '') }}:
+      dependsOn: ${{ parameters.DEPENDS_ON }}
     jobs:
       - template: '../../../global/stages/35-management/sonarqube.yaml'
 

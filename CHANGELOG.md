@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added `DEPENDS_ON` parameter to Golang Azure DevOps stage templates (`10-code-check`, `20-security`, `30-tests`, `35-management`), allowing consumers to override stage dependencies for parallel execution
+
 ### Changed
 
 - refreshed `CLAUDE.md` and `.github/copilot-instructions.md` to add ShellCheck to the stage 20 SAST tools list, add the 8 `*-library.yaml` workflows to the copilot-instructions template list, and include `make test-docker-multi-arch` in the test suite usage section

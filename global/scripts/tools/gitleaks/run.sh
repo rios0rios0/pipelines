@@ -48,16 +48,26 @@ git config --global --add safe.directory "$(pwd)" > /dev/null 2>&1 || true
 
 # Determine the scan scope.
 #
-# In a pull / merge request build the CI checks out the PR merge commit
-# (HEAD = base + PR), and `gitleaks detect` defaults to `git log -p HEAD`
-# — which walks every commit reachable from HEAD, i.e. the entire base
-# branch history plus the PR commits. That base history was already
-# scanned by the base branch's own pipeline runs, so re-scanning it on
-# every PR is wasted work and inflates findings with hits the team has
-# already triaged on `main`. Restrict the scope to commits unique to the
-# PR (`origin/<target>..HEAD`). On branch / tag builds (including `main`),
-# leave the scope at the default so the branch's own commits are scanned
-# end-to-end.
+# Default `gitleaks detect` (no `--log-opts`) runs
+# `git log -p -U0 --full-history --all --diff-filter=tuxdb` — the `--all`
+# walks every ref present in the local clone (every branch, every tag),
+# not just commits reachable from HEAD. In CI, the checkout step typically
+# fetches the full remote (e.g. Azure DevOps `fetchDepth: 0` + `fetchTags:
+# true`, GitLab CI's default full clone), so unmerged feature branches
+# carrying their own secrets end up in the local `.git/` and are walked
+# on every build — including builds for unrelated branches and `main`.
+# The result: a secret committed to `feat/leaky-thing` fails the `main`
+# pipeline, the `release/x.y` pipeline, and every other branch build,
+# instead of failing only on the branch that owns it.
+#
+# Scope the scan to commits this build is actually responsible for:
+#   - Pull / merge request build: commits unique to the PR
+#     (`origin/<target>..HEAD`). The base branch history was already
+#     scanned by its own pipeline runs and triaging the same findings
+#     on every downstream PR is wasted work.
+#   - Branch / tag build: commits reachable from HEAD only (`HEAD`).
+#     The branch / tag's actual ancestry, ignoring whatever other refs
+#     happen to be fetched into the local clone.
 TARGET_BRANCH=""
 if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then
   TARGET_BRANCH="$GITHUB_BASE_REF"
@@ -71,8 +81,8 @@ LOG_OPTS=""
 if [ -n "$TARGET_BRANCH" ]; then
   # Some CI checkouts are shallow or only fetch the PR ref, so the target
   # branch may not exist as `origin/<target>` locally. Try to fetch it; if it
-  # still cannot be resolved, fall back to a full-history scan with a warning
-  # instead of silently scanning nothing.
+  # still cannot be resolved, fall back to a HEAD-only scan with a warning
+  # instead of silently scanning nothing or walking every ref.
   if ! git rev-parse --verify --quiet "origin/$TARGET_BRANCH" > /dev/null 2>&1; then
     git fetch --no-tags --quiet origin "+refs/heads/$TARGET_BRANCH:refs/remotes/origin/$TARGET_BRANCH" 2>/dev/null || true
   fi
@@ -80,8 +90,12 @@ if [ -n "$TARGET_BRANCH" ]; then
     LOG_OPTS="origin/$TARGET_BRANCH..HEAD"
     echo "Pull / merge request context detected; scoping Gitleaks to: $LOG_OPTS"
   else
-    echo "WARN: pull / merge request context detected (target=$TARGET_BRANCH) but the target ref is unreachable; falling back to full-history scan." >&2
+    LOG_OPTS="HEAD"
+    echo "WARN: pull / merge request context detected (target=$TARGET_BRANCH) but the target ref is unreachable; falling back to HEAD-only scan ($LOG_OPTS)." >&2
   fi
+else
+  LOG_OPTS="HEAD"
+  echo "Branch / tag build detected; scoping Gitleaks to: $LOG_OPTS"
 fi
 
 # Pass 1: gitleaks defaults + the project's `.gitleaks.toml` / `.gitleaksignore`

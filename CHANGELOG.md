@@ -19,6 +19,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Added
 
 - added `DEPENDS_ON` parameter to Golang Azure DevOps stage templates (`10-code-check`, `20-security`, `30-tests`, `35-management`), allowing consumers to override stage dependencies for parallel execution
+- added `CODEQL_RAM`, `CODEQL_THREADS` environment variable support and project-level `codeql-config.yml` auto-detection to `global/scripts/tools/codeql/run.sh`. Projects can now tune CodeQL resource usage via pipeline variables (`CODEQL_RAM` sets `--ram`, `CODEQL_THREADS` sets `--threads`, default `1`) and exclude irrelevant queries or paths by placing a `codeql-config.yml` in the project root (passed as `--codescanning-config`). Without any of these, behavior is identical to before
 
 ### Changed
 

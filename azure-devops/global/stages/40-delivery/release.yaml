@@ -46,6 +46,10 @@ jobs:
                 echo "Skipping tag creation for prefix '${VERSION_PREFIX:-}' because no bump commit was detected."
                 exit 0
               fi
+              if [ -z "${RELEASE_VERSION:-}" ]; then
+                echo "##[warning]RELEASE_VERSION is empty — nothing to tag for prefix '${VERSION_PREFIX:-}'."
+                exit 0
+              fi
 
               RESPONSE_FILE=$(mktemp)
               # Cleanup the response body file on every exit path: normal completion,

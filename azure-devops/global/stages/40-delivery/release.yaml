@@ -39,11 +39,15 @@ jobs:
 
       - ${{ each prefix in parameters.TAG_PREFIXES }}:
           - script: |
-              set -eux
+              set -ex
 
               # only run if extraction found a version
               if [ "${SKIP_RELEASE:-}" = "true" ]; then
                 echo "Skipping tag creation for prefix '${VERSION_PREFIX:-}' because no bump commit was detected."
+                exit 0
+              fi
+              if [ -z "${RELEASE_VERSION:-}" ]; then
+                echo "##[warning]RELEASE_VERSION is empty — nothing to tag for prefix '${VERSION_PREFIX:-}'."
                 exit 0
               fi
 
@@ -60,7 +64,7 @@ jobs:
               fi
 
               DATA="{
-                \"name\": \"${VERSION_PREFIX}${RELEASE_VERSION}\",
+                \"name\": \"${VERSION_PREFIX}${RELEASE_VERSION:-}\",
                 \"taggedObject\": {
                   \"objectId\": \"$(Build.SourceVersion)\"
                 },
@@ -88,7 +92,7 @@ jobs:
               # the step instantly and skip the retry loop, so the curl invocation runs with
               # `set +e` around it: we capture the exit code, synthesize HTTP_STATUS="000"
               # on transport failure, and let the same retry case-statement handle it.
-              TAG_NAME="${VERSION_PREFIX}${RELEASE_VERSION}"
+              TAG_NAME="${VERSION_PREFIX}${RELEASE_VERSION:-}"
               MAX_ATTEMPTS=5
               RETRY_DELAY=5
               HTTP_STATUS=""

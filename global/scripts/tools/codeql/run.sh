@@ -9,6 +9,23 @@ TOOL_NAME="codeql" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
 CODEQL_LANGUAGE="${1:?Usage: run.sh <language> (e.g., go, python, java, javascript, csharp)}"
 fileName="$(pwd)/$REPORT_PATH/codeql.sarif"
 
+CODEQL_RAM="${CODEQL_RAM:-}"
+CODEQL_THREADS="${CODEQL_THREADS:-1}"
+
+RAM_FLAG=""
+if [ -n "$CODEQL_RAM" ]; then
+  RAM_FLAG="--ram=$CODEQL_RAM"
+  echo "CodeQL RAM limit set to ${CODEQL_RAM} MB"
+fi
+THREADS_FLAG="--threads=$CODEQL_THREADS"
+echo "CodeQL threads set to $CODEQL_THREADS"
+
+CONFIG_FLAG=""
+if [ -f "$(pwd)/codeql-config.yml" ]; then
+  CONFIG_FLAG="--codescanning-config=$(pwd)/codeql-config.yml"
+  echo "Using project CodeQL config: codeql-config.yml"
+fi
+
 # Load project-level configuration if available (e.g. for Go build environment)
 if [ "$CODEQL_LANGUAGE" = "go" ]; then
   INIT_SCRIPT="config.sh"
@@ -56,9 +73,12 @@ if ! command -v codeql > /dev/null 2>&1; then
 fi
 
 echo "Creating CodeQL database for language: $CODEQL_LANGUAGE"
+# shellcheck disable=SC2086
 if ! codeql database create \
   --language="$CODEQL_LANGUAGE" \
   --source-root="$(pwd)" \
+  $THREADS_FLAG \
+  $CONFIG_FLAG \
   "$(pwd)/.codeql-db"; then
   echo "ERROR: 'codeql database create' failed for language '$CODEQL_LANGUAGE'." >&2
   rm -rf "$(pwd)/.codeql-db"
@@ -66,9 +86,12 @@ if ! codeql database create \
 fi
 
 echo "Running CodeQL analysis..."
+# shellcheck disable=SC2086
 if ! codeql database analyze \
   --format=sarifv2.1.0 \
   --output="$fileName" \
+  $RAM_FLAG \
+  $THREADS_FLAG \
   "$(pwd)/.codeql-db" \
   "$CODEQL_LANGUAGE-security-and-quality.qls"; then
   echo "ERROR: 'codeql database analyze' failed for language '$CODEQL_LANGUAGE'." >&2

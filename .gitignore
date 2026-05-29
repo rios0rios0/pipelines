@@ -1,0 +1,7 @@
+# Python bytecode caches produced by the stdlib helper scripts
+# (global/scripts/languages/terraform/{order-check,tftest-gen}/*.py)
+__pycache__/
+*.py[cod]
+
+# Local report output emitted by the scripts when run at a repo root
+build/reports/

@@ -651,6 +651,44 @@ Every pipeline includes **basic checks** that run in parallel with linting durin
 | **Go Test Runner** | Comprehensive testing | `global/scripts/languages/golang/test/`          |
 | **CycloneDX**      | SBOM generation       | `global/scripts/languages/golang/cyclonedx/`     |
 
+#### Terraform / Terra Tools
+
+| Tool             | Purpose                                              | Script Location                                       |
+|------------------|------------------------------------------------------|-------------------------------------------------------|
+| **order-check**  | File-ordering checker/auto-fixer (see below)         | `global/scripts/languages/terraform/order-check/`     |
+| **tftest-gen**   | Smoke-test generator for single-module repos         | `global/scripts/languages/terraform/tftest-gen/`      |
+| **terra-test**   | `terraform test` runner over module test suites      | `global/scripts/languages/terraform/terra-test/`      |
+| **CycloneDX**    | SBOM generation for Terraform projects               | `global/scripts/languages/terraform/cyclonedx/`       |
+
+##### File-Ordering Standard (`order-check`)
+
+Dense Terragrunt monorepos keep their `*.hcl` / `*.tf` files in a consistent order. The `order-check` job runs in the **Code Check** stage of the `terra` and `terraform` pipelines (all three platforms) and enforces:
+
+- **`environments/**/root.hcl`** — `dependency` blocks and the `inputs` block ordered ascending by dependency number (the `environments/NN_` prefix).
+- **`stacks/*/variables.tf`** — a `// SET ON .HCL` section before a `// SET ON .ENV` section; dependency-derived variables ordered by dependency number inside `.HCL`.
+- **`**/providers.tf`** (stacks + modules) — `required_providers` and `provider` blocks ordered heaviest → lightest (cloud → data → orchestration → network → utility → trivial like `random`/`null`/`local`).
+- **`stacks/*/outputs.tf`** — outputs ordered to follow the declaration order of the modules/resources they reference in `main*.tf`.
+
+```bash
+# check (CI gate; writes build/reports/junit-order-check.xml)
+"$SCRIPTS_DIR/global/scripts/languages/terraform/order-check/run.sh"
+
+# auto-sort, then re-align with your formatter
+"$SCRIPTS_DIR/global/scripts/languages/terraform/order-check/run.sh" --fix
+terra format   # or: terraform fmt -recursive && terragrunt hcl format
+```
+
+The provider ranking and path exclusions can be overridden per-repo with an optional `.terraform-order.json` in the repo root:
+
+```json
+{
+  "provider_order": ["azurerm", "helm", "kubernetes", "random"],
+  "ignore": ["modules/legacy/**"]
+}
+```
+
+Only `python3` is required (no Terraform binary). The `--fix` rewriter is round-trip-safe: it only reorders existing blocks and leaves any file it cannot parse cleanly untouched.
+
 ### Usage Examples
 
 #### Run Security Scanning Locally (via Makefile)

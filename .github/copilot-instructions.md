@@ -7,13 +7,14 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen, docker-multi-arch)
+- `make test` - Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, docker-multi-arch)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-lambda` - Test Lambda template validation specifically
 - `make test-yaml-merge` - Test YAML merge validation specifically
 - `make test-sonarqube` - Test SonarQube auto-derivation specifically
 - `make test-release-tag-idempotency` - Test release tag idempotency specifically
 - `make test-tftest-gen` - Test tftest-gen generator specifically
+- `make test-order-check` - Test the Terragrunt file-ordering checker/fixer specifically
 - `make test-docker-multi-arch` - Test 40-delivery/docker multi-arch contract specifically
 - `bash global/scripts/shared/cleanup.sh` - Clean up build reports
 - `docker --version && make --version && go version` - Check dependencies
@@ -162,6 +163,7 @@ The Terra CLI pipeline test stage runs through a single unified `test:all` job o
 | **Terratest**            | Go test suite under `tests/terratest/*.go`         | `global/scripts/languages/terraform/terratest/run.sh`   |
 | **Structural**           | Third-tier runner for `tests/structural.sh`        | `global/scripts/languages/terraform/structural/run.sh`  |
 | **tftest-gen**           | Generates `tests/smoke.tftest.hcl` for modules     | `global/scripts/languages/terraform/tftest-gen/run.sh`  |
+| **order-check**          | Checks/auto-fixes file ordering (deps, variables, providers, outputs); runs in `10-code-check` | `global/scripts/languages/terraform/order-check/run.sh` |
 | **Terraform CycloneDX**  | SBOM generation for Terraform projects             | `global/scripts/languages/terraform/cyclonedx/run.sh`   |
 
 ### Container Images
@@ -251,7 +253,7 @@ pipelines/
 │   │   │   ├── php/           # PHP scripts (unused-code detection)
 │   │   │   ├── python/        # Python scripts (cyclonedx, unused-code detection)
 │   │   │   ├── ruby/          # Ruby scripts (unused-code detection)
-│   │   │   └── terraform/     # Terraform scripts (terra-test, terratest, test-all, structural, cyclonedx, tftest-gen)
+│   │   │   └── terraform/     # Terraform scripts (terra-test, terratest, test-all, structural, cyclonedx, tftest-gen, order-check)
 │   │   └── shared/            # Common utilities
 │   ├── containers/            # Custom Docker images
 │   │   ├── golang.*/          # Go development images
@@ -635,7 +637,7 @@ docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/
 
 ### Test Suite Usage
 ```bash
-# Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen, docker-multi-arch)
+# Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, docker-multi-arch)
 make test
 
 # Run individual test suites
@@ -645,6 +647,7 @@ make test-yaml-merge
 make test-sonarqube
 make test-release-tag-idempotency
 make test-tftest-gen
+make test-order-check
 make test-docker-multi-arch
 ```
 

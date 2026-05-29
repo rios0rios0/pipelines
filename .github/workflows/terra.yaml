@@ -72,6 +72,60 @@ jobs:
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
+  # Enforces the team's file-ordering standard: dependency/inputs ordering in
+  # root.hcl, the // SET ON .HCL / .ENV grouping in variables.tf, the
+  # heaviest->lightest provider order in providers.tf, and main.tf-ordered
+  # outputs.tf. Deps-free (only needs python3, preinstalled on the runner),
+  # so it does not install the terra CLI. Run `order-check/run.sh --fix`
+  # locally to auto-sort before pushing.
+  code_check-style_order_check:
+    name: 'code-check > style:order-check'
+    runs-on: 'ubuntu-latest'
+    env:
+      REPORT_PATH: 'build/reports'
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+
+      # Pass `inputs.pipelines_ref` via `env:` (not `${{ }}` in `run:`) to
+      # avoid script injection, then resolve the ref this reusable workflow
+      # was invoked with so the shared scripts stay version-locked. Mirrors
+      # the tests jobs below.
+      - name: 'Resolve pipelines ref'
+        id: 'pipelines-ref'
+        shell: 'bash'
+        env:
+          PIPELINES_REF: ${{ inputs.pipelines_ref }}
+        run: |
+          if [ -n "${PIPELINES_REF}" ]; then
+            ref="${PIPELINES_REF}"
+          else
+            ref="${GITHUB_WORKFLOW_REF##*@}"
+          fi
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+
+      - name: 'Checkout pipelines repo for shared scripts'
+        uses: 'actions/checkout@v6'
+        with:
+          repository: 'rios0rios0/pipelines'
+          ref: ${{ steps.pipelines-ref.outputs.ref }}
+          path: '.pipelines'
+
+      - name: 'Check file ordering (deps/variables/providers/outputs)'
+        run: |
+          export SCRIPTS_DIR="$GITHUB_WORKSPACE/.pipelines"
+          "$SCRIPTS_DIR/global/scripts/languages/terraform/order-check/run.sh"
+        shell: 'bash'
+
+      - name: 'Publish order-check results'
+        if: 'always()'
+        uses: 'actions/upload-artifact@v7'
+        with:
+          name: 'order-check'
+          path: "${{ env.REPORT_PATH }}/junit-order-check.xml"
+          if-no-files-found: 'ignore'
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
 
   # second stage
   security-sast_codeql:

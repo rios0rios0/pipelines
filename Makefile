@@ -2,7 +2,7 @@ TAG := latest
 ROOT := global/containers
 CONTAINER_REGISTRY = ghcr.io/rios0rios0/pipelines
 
-.PHONY: login setup-buildx build-and-push test-go-script test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-docker-multi-arch test
+.PHONY: login setup-buildx build-and-push test-go-script test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-docker-multi-arch test
 
 login:
 	docker login $(CONTAINER_REGISTRY)
@@ -42,9 +42,13 @@ test-tftest-gen:
 	@echo "Running tftest-gen generator validation..."
 	@./.github/tests/test-tftest-gen.sh
 
+test-order-check:
+	@echo "Running terraform order-check validation..."
+	@./.github/tests/test-order-check.sh
+
 test-docker-multi-arch:
 	@echo "Running 40-delivery/docker multi-arch contract validation..."
 	@./.github/tests/test-docker-multi-arch.sh
 
-test: test-go-script test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-docker-multi-arch
+test: test-go-script test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-docker-multi-arch
 	@echo "All tests completed successfully!"

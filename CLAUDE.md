@@ -9,13 +9,14 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen, docker-multi-arch)
+make test              # Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, docker-multi-arch)
 make test-go-script    # Test Go validation script only
 make test-lambda       # Test Lambda template validation only
 make test-yaml-merge   # Test YAML merge validation only
 make test-sonarqube    # Test SonarQube auto-derivation only
 make test-release-tag-idempotency  # Test release tag idempotency only
 make test-tftest-gen   # Test tftest-gen generator only
+make test-order-check  # Test the Terragrunt file-ordering checker/fixer only
 make test-docker-multi-arch  # Test 40-delivery/docker multi-arch contract only
 make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
 ```
@@ -27,7 +28,7 @@ Test scripts live in `.github/tests/`. The CI workflow (`.github/workflows/ci.ya
 ### 5-Stage Pipeline Model
 
 All platforms follow consistent numbered stages:
-1. **10 - Code Check** — Linting, formatting, basic checks (rebase verification, changelog validation)
+1. **10 - Code Check** — Linting, formatting, basic checks (rebase verification, changelog validation). The `terra`/`terraform` templates add an **order-check** job here that enforces the file-ordering standard (dependency/inputs ordering in `root.hcl`, `// SET ON .HCL` / `// SET ON .ENV` grouping in `variables.tf`, heaviest→lightest `providers.tf`, `main*.tf`-ordered `outputs.tf`); see Terraform Ordering Standard below
 2. **20 - Security** — SAST (CodeQL, Semgrep, Gitleaks, Hadolint, ShellCheck, Trivy) and SCA
 3. **30 - Tests** — Unit/integration tests, coverage. For the Azure DevOps `terraform` template, this stage runs three opt-in test tiers as parallel jobs: a plan-time smoke job (`tests/*.tftest.hcl` via `terraform test` with `mock_provider`) and an apply-time e2e job that provisions a disposable [kind](https://kind.sigs.k8s.io/) cluster and runs both `tests/e2e/*.tftest.hcl` (via `terraform test`) and `tests/terratest/*.go` (via the shared `terratest/run.sh`). All tiers are blocking so a red apply-time regression prevents `35-management` and `40-delivery` from running. The earlier `45-e2e` design was merged into `30-test` so smoke and apply-time feedback land in the same stage.
 4. **35 - Management** — SBOM generation, dependency tracking
@@ -47,6 +48,7 @@ All platforms follow consistent numbered stages:
   - `terraform/structural/` — third tier runner for `tests/structural.sh` (repo-convention assertions the consumer owns); emits `build/reports/junit-structural.xml` (empty-but-valid on skip). Runs on its own parallel job (`test:structural`) instead of through `test-all` because the shell tier is offline and deps-free and shouldn't block on the heavier tiers
   - `terraform/cyclonedx/` — CycloneDX BOM generator for Terraform projects (delegates to `trivy filesystem --format cyclonedx`)
   - `terraform/tftest-gen/` — generator that emits `tests/smoke.tftest.hcl` for single-module repos; parses `variables.tf` + `main.tf` / `providers.tf` and emits `mock_provider` blocks plus validation-rejection runs
+  - `terraform/order-check/` — checks (and with `--fix` rewrites) the file-ordering standard across `environments/**/root.hcl`, `stacks/*/{variables,providers,outputs}.tf`, and `**/providers.tf`; emits `build/reports/junit-order-check.xml`. Runs as the `order-check` / `style:order-check` job in the `10-code-check` stage. Stdlib-only `python3`; the `--fix` rewriter is round-trip-safe (parses to exact substrings, then only permutes). See Terraform Ordering Standard below
 - `global/scripts/shared/` — Shared utilities (cleanup.sh, rebase-check.sh, changelog-check.sh)
 - `global/containers/` — Docker image definitions for CI environments
 - `makefiles/` — Includable `.mk` fragments for downstream projects (`common.mk`, `golang.mk`, `python.mk`, etc.)
@@ -117,6 +119,19 @@ The Terra CLI pipeline test stage exposes two parallel jobs on every platform (A
    | `structural`  | `tests/structural.sh` (consumer-owned) | executes the script directly | `junit-structural.xml`          |
 
 The merged JUnit (`junit-terra-all.xml`) is the portable contract for `test:all` — GitLab CI's `artifacts:reports:junit` and GitHub Actions' `upload-artifact` both only take one file. `test:structural` publishes its own `junit-structural.xml` on a separate pipeline surface because it runs on its own job. When a tier has no tests (e.g., a stack-only repo without `modules/`, `tests/terratest/`, or `tests/structural.sh`), the corresponding runner emits an empty-but-valid JUnit and exits `0` so the job passes without a bespoke opt-out. `test:structural` runs on a parallel job rather than through `test-all` because the shell tier is offline and deps-free — queuing it behind the heavier Go / Terraform tiers would waste feedback time.
+
+### Terraform Ordering Standard
+
+The `order-check` job (`global/scripts/languages/terraform/order-check/`, in the `10-code-check` stage of the `terra` and `terraform` templates on all three platforms) enforces the team's file-ordering convention for dense Terragrunt monorepos (numbered dependency layers under `environments/`, root modules under `stacks/`, leaf modules under `modules/`). The rules:
+
+| File | Rule |
+|------|------|
+| `environments/**/root.hcl` | `dependency` blocks ordered ascending by the `environments/NN_` number in `config_path`; the `inputs` block groups `dependency.<name>.outputs.*` assignments by ascending dependency number (locals/`tags` first, static literals last) |
+| `stacks/*/variables.tf` | a `// SET ON .HCL` section before a `// SET ON .ENV` section; inside `.HCL`, **dependency-derived** variables ordered by the dependency number they are fed from (looked up from the paired `root.hcl` inputs). `tags`/literals/feature-flags are unconstrained |
+| `**/providers.tf` (stacks + modules) | `required_providers` entries and top-level `provider` blocks ordered heaviest→lightest by a built-in ranking (cloud → data → orchestration → network/PKI → app/utility → trivial like `null`/`random`/`local`) |
+| `stacks/*/outputs.tf` | outputs ordered to follow the declaration position of the first `module`/`resource` their value references in `main*.tf` |
+
+Check mode is a CI gate (emits `build/reports/junit-order-check.xml`); `run.sh --fix` rewrites files into order. Missing `SET ON` markers and providers absent from the ranking are **warnings** (non-fatal). The provider ranking and path ignores are overridable per-repo via an optional `.terraform-order.json` (`{"provider_order": [...], "ignore": ["glob", ...]}`). The `--fix` rewriter parses each region into exact substrings, verifies a byte-for-byte round-trip, then only permutes those substrings — so it can never drop or corrupt content (it leaves any file it cannot parse cleanly untouched and reports it). Reordering `root.hcl` inputs changes `=` alignment, so run `terra format` / `terragrunt hcl format` after `--fix`; the `.tf` reordering is already `fmt`-clean.
 
 ### Makefile Include Pattern
 

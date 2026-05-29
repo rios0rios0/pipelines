@@ -573,6 +573,127 @@ set +e; oc --repo-dir "$R13" >/dev/null 2>&1; RC13=$?; set -e
 assert_true "exit 0 on repo with nothing to check" "[ $RC13 -eq 0 ]"
 
 # =============================================================================
+# Test 14: --fix never corrupts heredocs or block comments containing braces.
+#   (regression guard: a bare `}` inside a heredoc body or a `/* { } */` block
+#    comment must not be counted as a structural brace, or find_matching_brace
+#    would end a block early and the reorder would scramble the file)
+# =============================================================================
+echo "TEST 14: --fix preserves heredoc + block-comment braces while reordering"
+# given
+R14="$TEST_DIR/heredoc"
+make_clean_repo "$R14"
+cat > "$R14/stacks/04_app/variables.tf" << 'HCL'
+// SET ON .HCL
+
+variable "kube" {
+  /* config note: this resource uses { and } tokens */
+  type = string
+}
+
+variable "registry" {
+  type    = string
+  default = <<-EOT
+    a dangling close brace } sits in this prose
+  EOT
+}
+
+// SET ON .ENV
+
+variable "environment" {
+  type = string
+}
+HCL
+# when (fix)
+oc --repo-dir "$R14" --fix >/dev/null 2>&1
+set +e; oc --repo-dir "$R14" >/dev/null 2>&1; RC14=$?; set -e
+# then
+assert_true "re-check passes after --fix (no corruption)" "[ $RC14 -eq 0 ]"
+assert_true "registry(01) reordered before kube(03)" \
+  "awk '/variable \"registry\"/{r=NR} /variable \"kube\"/{k=NR} END{exit !(r<k)}' '$R14/stacks/04_app/variables.tf'"
+assert_true "heredoc body line preserved intact" \
+  "grep -qF 'a dangling close brace } sits in this prose' '$R14/stacks/04_app/variables.tf'"
+assert_true "heredoc terminator preserved" \
+  "grep -qE '^  EOT$' '$R14/stacks/04_app/variables.tf'"
+assert_true "block comment with braces preserved" \
+  "grep -qF '/* config note: this resource uses { and } tokens */' '$R14/stacks/04_app/variables.tf'"
+
+# =============================================================================
+# Test 15: stacks are discovered independently of root.hcl, so an orphan stack
+#   (not referenced by any root.hcl) is still checked for markers + outputs.
+# =============================================================================
+echo "TEST 15: orphan stack (no root.hcl) is still checked"
+# given -- a repo with no environments/, just a stack
+R15="$TEST_DIR/orphan"
+mkdir -p "$R15/stacks/orphan"
+cat > "$R15/stacks/orphan/variables.tf" << 'HCL'
+variable "anything" {
+  type = string
+}
+HCL
+cat > "$R15/stacks/orphan/main.tf" << 'HCL'
+module "alpha" {
+  source = "./a"
+}
+
+module "beta" {
+  source = "./b"
+}
+HCL
+cat > "$R15/stacks/orphan/outputs.tf" << 'HCL'
+output "b" {
+  value = module.beta.id
+}
+
+output "a" {
+  value = module.alpha.id
+}
+HCL
+# when
+set +e; OUT15="$(oc --repo-dir "$R15" 2>&1)"; RC15=$?; set -e
+# then
+assert_true "orphan stack variables.tf marker warning emitted" \
+  "echo \"\$OUT15\" | grep -q 'stacks/orphan/variables.tf'"
+assert_true "orphan stack outputs.tf ordering flagged (no root.hcl needed)" \
+  "echo \"\$OUT15\" | grep -q 'stacks/orphan/outputs.tf'"
+assert_true "outputs ordering is the failing error" "[ $RC15 -eq 1 ]"
+
+# =============================================================================
+# Test 16: check mode catches a dependency reference on a later line of a
+#   multi-line input value (not just the assignment's first line).
+# =============================================================================
+echo "TEST 16: multi-line input value dependency reference is detected"
+# given
+R16="$TEST_DIR/multiline"
+make_clean_repo "$R16"
+cat > "$R16/environments/04_app/root.hcl" << 'HCL'
+dependency "shared_common" {
+  config_path = "${get_path_to_repo_root()}//environments/01_shared/02_common"
+}
+
+dependency "kubernetes" {
+  config_path = "${get_path_to_repo_root()}//environments/03_kubernetes/x"
+}
+
+terraform {
+  source = "${get_path_to_repo_root()}//stacks/04_app"
+}
+
+inputs = {
+  kube_cfg = {
+    host = dependency.kubernetes.outputs.host
+  }
+
+  registry = dependency.shared_common.outputs.registry
+}
+HCL
+# when -- kubernetes(03) ref is on line 2 of kube_cfg's value, then
+#         shared_common(01) follows: out of order, must be detected
+set +e; OUT16="$(oc --repo-dir "$R16" 2>&1)"; set -e
+# then
+assert_true "multi-line input dependency ref is parsed and flagged" \
+  "echo \"\$OUT16\" | grep -q 'root-hcl-inputs'"
+
+# =============================================================================
 # Summary
 # =============================================================================
 echo ""

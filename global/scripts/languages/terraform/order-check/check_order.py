@@ -124,40 +124,65 @@ def write_text(path: Path, content: str) -> None:
 # --------------------------------------------------------------------------- #
 # Brace/quote-aware scanning helpers (same approach as tftest-gen)
 # --------------------------------------------------------------------------- #
+def skip_noncode(text: str, i: int) -> int:
+    """If a string, comment, or heredoc starts at ``i``, return the index just
+    past it; otherwise return ``i`` unchanged.
+
+    Lets the brace/value scanners ignore `{`, `}`, and newlines that live inside
+    HCL string literals, `#`/`//` line comments, `/* ... */` block comments, and
+    `<<TAG` / `<<-TAG` heredoc bodies -- so a brace inside any of those is never
+    mistaken for a structural one (which would otherwise let `find_top_level_blocks`
+    cut a block short and corrupt a `--fix` reorder).
+    """
+    n = len(text)
+    ch = text[i]
+    if ch in ('"', "'"):
+        quote, j = ch, i + 1
+        while j < n:
+            if text[j] == "\\":
+                j += 2
+                continue
+            if text[j] == quote:
+                return j + 1
+            j += 1
+        return n
+    if ch == "#" or (ch == "/" and i + 1 < n and text[i + 1] == "/"):
+        nl = text.find("\n", i)
+        return n if nl == -1 else nl  # stop at the newline; caller handles it
+    if ch == "/" and i + 1 < n and text[i + 1] == "*":
+        end = text.find("*/", i + 2)
+        return n if end == -1 else end + 2
+    if ch == "<" and i + 1 < n and text[i + 1] == "<":
+        m = re.match(r'<<-?(["A-Za-z0-9_]+)', text[i:])
+        if m:
+            tag = m.group(1).strip('"')
+            nl = text.find("\n", i)
+            if nl == -1:
+                return n
+            term = re.compile(r"(?m)^[ \t]*" + re.escape(tag) + r"[ \t]*$")
+            tm = term.search(text, nl + 1)
+            if not tm:
+                return n
+            end_nl = text.find("\n", tm.end())
+            return n if end_nl == -1 else end_nl
+    return i
+
+
 def find_matching_brace(text: str, open_index: int) -> int:
     """Return the index of the `}` matching the `{` at ``open_index``.
 
-    Respects double/single-quoted strings and ``#`` / ``//`` line comments so
-    braces inside them are ignored. Raises ``ValueError`` when unbalanced.
+    Braces inside strings, line/block comments, and heredocs are ignored via
+    ``skip_noncode``. Raises ``ValueError`` when unbalanced.
     """
     depth = 0
     i, n = open_index, len(text)
-    in_str, quote = False, ""
-    in_line_comment = False
     while i < n:
+        j = skip_noncode(text, i)
+        if j != i:
+            i = j
+            continue
         ch = text[i]
-        if in_line_comment:
-            if ch == "\n":
-                in_line_comment = False
-            i += 1
-            continue
-        if in_str:
-            if ch == "\\":
-                i += 2
-                continue
-            if ch == quote:
-                in_str = False
-            i += 1
-            continue
-        if ch in ('"', "'"):
-            in_str, quote = True, ch
-        elif ch == "#":
-            in_line_comment = True
-        elif ch == "/" and i + 1 < n and text[i + 1] == "/":
-            in_line_comment = True
-            i += 2
-            continue
-        elif ch == "{":
+        if ch == "{":
             depth += 1
         elif ch == "}":
             depth -= 1
@@ -331,14 +356,14 @@ def parse_root_hcl(path: Path) -> RootHcl:
     if inputs_m:
         open_brace = text.index("{", inputs_m.start())
         body = text[open_brace + 1:find_matching_brace(text, open_brace)]
-        for line in body.splitlines():
-            am = re.match(r"\s*([A-Za-z0-9_]+)\s*=\s*(.+)", line)
-            if not am:
-                continue
-            ref = RE_DEP_REF.search(am.group(2))
+        # Same balanced parser the fixer uses, so a dependency reference on a
+        # later line of a multi-line value is captured by the check too.
+        entries, _ = split_inputs_entries(body)
+        for entry in entries:
+            ref = RE_DEP_REF.search(entry["value"])
             if ref:
                 num = dep_to_num.get(ref.group(1), NO_NUMBER)
-                var_to_num[am.group(1)] = num
+                var_to_num[entry["key"]] = num
                 inputs_ref_order.append((ref.group(1), num))
     return RootHcl(path, text, dep_to_num, dep_block_order, stack_name,
                    var_to_num, inputs_ref_order)
@@ -405,30 +430,13 @@ def fix_inputs_block(text: str, dep_to_num: dict[str, int]) -> tuple[str, bool, 
     close = find_matching_brace(text, open_brace)
     body = text[open_brace + 1:close]
 
-    # Split body into entries: each entry owns the trivia before it + a
-    # `key = <balanced value>`. Round-trip verified before any reordering.
-    entries: list[dict] = []
-    i, n = 0, len(body)
-    cursor = 0
-    line_start = True
-    while i < n:
-        m = re.compile(r"(?m)^([ \t]*)([A-Za-z0-9_]+)\s*=\s*").match(body, i) if line_start else None
-        if m:
-            value_start = m.end()
-            j = find_value_end(body, value_start)
-            entry_text = body[cursor:j]
-            ref = RE_DEP_REF.search(body[value_start:j])
-            num = dep_to_num.get(ref.group(1), NO_NUMBER) if ref else None
-            entries.append({"text": entry_text, "num": num})
-            cursor = j
-            i = j
-            line_start = j > 0 and body[j - 1] == "\n"
-            continue
-        line_start = body[i] == "\n"
-        i += 1
-    suffix = body[cursor:]
+    # Same balanced parser the check uses; round-trip verified before reordering.
+    entries, suffix = split_inputs_entries(body)
     if "".join(e["text"] for e in entries) + suffix != body:
         return text, False, False  # could not parse safely
+    for e in entries:
+        ref = RE_DEP_REF.search(e["value"])
+        e["num"] = dep_to_num.get(ref.group(1), NO_NUMBER) if ref else None
 
     dep_positions = [idx for idx, e in enumerate(entries) if e["num"] is not None]
     dep_entries = [entries[idx] for idx in dep_positions]
@@ -446,26 +454,20 @@ def fix_inputs_block(text: str, dep_to_num: dict[str, int]) -> tuple[str, bool, 
 def find_value_end(body: str, start: int) -> int:
     """Return the offset just past a HCL value beginning at ``start``.
 
-    Handles single-line scalars and multi-line bracketed values
-    (objects/lists). Consumes the trailing newline so each entry is a clean
-    line-aligned slice.
+    Handles single-line scalars, multi-line bracketed values (objects/lists),
+    and heredocs; strings/comments are skipped via ``skip_noncode`` so a `)`,
+    `]`, `}`, or newline inside them does not end the value early. Consumes the
+    trailing newline so each entry is a clean line-aligned slice.
     """
     depth = 0
     i, n = start, len(body)
-    in_str, quote = False, ""
     while i < n:
-        ch = body[i]
-        if in_str:
-            if ch == "\\":
-                i += 2
-                continue
-            if ch == quote:
-                in_str = False
-            i += 1
+        j = skip_noncode(body, i)
+        if j != i:
+            i = j
             continue
-        if ch in ('"', "'"):
-            in_str, quote = True, ch
-        elif ch in "([{":
+        ch = body[i]
+        if ch in "([{":
             depth += 1
         elif ch in ")]}":
             depth -= 1
@@ -473,6 +475,35 @@ def find_value_end(body: str, start: int) -> int:
             return i + 1
         i += 1
     return n
+
+
+def split_inputs_entries(body: str) -> tuple[list[dict], str]:
+    """Split a ``{ ... }`` map body (e.g. terragrunt `inputs`) into entries.
+
+    Each entry is ``{'text': <exact slice incl. leading trivia>, 'key': str,
+    'value': str}``, parsed with balanced (multi-line aware) value scanning so a
+    `dependency.<name>.outputs` reference anywhere in a multi-line object/list
+    value is captured -- not just on the assignment's first line. Returns
+    ``(entries, trailing_suffix)``; concatenating every ``entry['text']`` plus
+    the suffix reproduces ``body`` exactly (used as a round-trip guard).
+    """
+    entries: list[dict] = []
+    i, n, cursor = 0, len(body), 0
+    line_start = True
+    key_re = re.compile(r"(?m)^[ \t]*([A-Za-z0-9_]+)\s*=\s*")
+    while i < n:
+        m = key_re.match(body, i) if line_start else None
+        if m:
+            ve = find_value_end(body, m.end())
+            entries.append({"text": body[cursor:ve], "key": m.group(1),
+                            "value": body[m.end():ve]})
+            cursor = ve
+            i = ve
+            line_start = ve > 0 and body[ve - 1] == "\n"
+            continue
+        line_start = body[i] == "\n"
+        i += 1
+    return entries, body[cursor:]
 
 
 # --------------------------------------------------------------------------- #
@@ -766,11 +797,18 @@ def discover_providers(repo: Path) -> list[Path]:
     return sorted(p for p in repo.rglob("providers.tf") if not _excluded(p))
 
 
+def discover_stack_dirs(repo: Path) -> list[Path]:
+    stacks = repo / "stacks"
+    if not stacks.is_dir():
+        return []
+    return sorted(d for d in stacks.iterdir() if d.is_dir() and not _excluded(d))
+
+
 def run(repo: Path, cfg: Config, fix: bool) -> list[FileResult]:
     results: list[FileResult] = []
     var_to_num_by_stack: dict[str, dict[str, int]] = {}
 
-    # Rules A & B: root.hcl files (also builds var->dep-number maps for rule C).
+    # Rules A & B: root.hcl files (also build var->dep-number maps for rule C).
     for rh_path in discover_root_hcls(repo):
         if cfg.is_ignored(rel(repo, rh_path)):
             continue
@@ -779,15 +817,20 @@ def run(repo: Path, cfg: Config, fix: bool) -> list[FileResult]:
             var_to_num_by_stack[rh.stack_name] = rh.var_to_num
         results.append(check_root_hcl(rh, repo, fix))
 
-        # Rule C: the paired stack's variables.tf.
-        if rh.stack_name:
-            vf = repo / "stacks" / rh.stack_name / "variables.tf"
-            if vf.is_file() and not cfg.is_ignored(rel(repo, vf)):
-                results.append(check_variables_tf(vf, repo, rh.var_to_num, fix))
-            # Rule E: the paired stack's outputs.tf.
-            of = repo / "stacks" / rh.stack_name / "outputs.tf"
-            if of.is_file() and not cfg.is_ignored(rel(repo, of)):
-                results.append(check_outputs_tf(of, repo, of.parent, fix))
+    # Rules C & E: discover stack dirs directly so a stack that is newly added,
+    # currently unreferenced, or wired via a `source` syntax the regex misses is
+    # still checked. The `.HCL`/`.ENV` marker check and the outputs ordering
+    # apply to every stack; the dependency-number variable ordering only kicks
+    # in when a root.hcl mapping was found for that stack (empty map -> no
+    # ordering constraint, just the marker check).
+    for stack_dir in discover_stack_dirs(repo):
+        var_to_num = var_to_num_by_stack.get(stack_dir.name, {})
+        vf = stack_dir / "variables.tf"
+        if vf.is_file() and not cfg.is_ignored(rel(repo, vf)):
+            results.append(check_variables_tf(vf, repo, var_to_num, fix))
+        of = stack_dir / "outputs.tf"
+        if of.is_file() and not cfg.is_ignored(rel(repo, of)):
+            results.append(check_outputs_tf(of, repo, stack_dir, fix))
 
     # Rule D: every providers.tf in the repo (stacks + modules + single-module).
     for pf in discover_providers(repo):

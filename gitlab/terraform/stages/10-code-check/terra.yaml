@@ -1,5 +1,6 @@
 include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/terraform/abstracts/terra.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
 
 style:terraform-fmt:
   extends: '.terra'
@@ -13,3 +14,26 @@ style:tflint:
   script:
     - wget -qO- https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | sh
     - tflint --chdir . --recursive
+
+# Enforces the team's file-ordering standard (dependency/inputs in root.hcl,
+# .HCL/.ENV grouping in variables.tf, heaviest->lightest providers.tf,
+# main.tf-ordered outputs.tf). Deps-free: a small python image + git is all
+# it needs (no Terraform), so it extends '.scripts-repo' rather than '.terra'.
+# Run 'order-check/run.sh --fix' locally to auto-sort.
+order:check:
+  extends: '.scripts-repo'
+  image: 'python:3-alpine'
+  stage: 'code check (style/quality)'
+  variables:
+    REPORT_PATH: 'build/reports'
+  before_script:
+    - apk add --no-cache git
+    - !reference [.scripts-repo, before_script]
+  script:
+    - "$SCRIPTS_DIR/global/scripts/languages/terraform/order-check/run.sh"
+  artifacts:
+    when: 'always'
+    paths:
+      - "${REPORT_PATH}/"
+    reports:
+      junit: "${REPORT_PATH}/junit-order-check.xml"

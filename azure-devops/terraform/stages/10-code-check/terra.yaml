@@ -2,6 +2,8 @@ stages:
   - stage: 'code_check'
     displayName: 'code check (style/quality)'
     condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    variables:
+      REPORT_PATH: 'build/reports'
     jobs:
       - template: '../../../global/stages/10-code-check/basic-checks.yaml'
 
@@ -21,3 +23,27 @@ stages:
 
           - script: tflint --chdir . --recursive
             displayName: 'Run TFLint'
+
+      # Enforces the team's file-ordering standard (dependency/inputs in
+      # root.hcl, .HCL/.ENV grouping in variables.tf, heaviest->lightest
+      # providers.tf, main.tf-ordered outputs.tf). Deps-free: only needs
+      # python3 from the agent. Run `order-check/run.sh --fix` locally to
+      # auto-sort.
+      - job: 'style_order_check'
+        displayName: 'style:order-check'
+        steps:
+          - template: '../../../global/abstracts/scripts-repo.yaml'
+
+          - script: $(Scripts.Directory)/global/scripts/languages/terraform/order-check/run.sh
+            displayName: 'Check file ordering (deps/variables/providers/outputs)'
+            env:
+              REPORT_PATH: $(REPORT_PATH)
+
+          - task: 'PublishTestResults@2'
+            displayName: 'Publish order-check results'
+            condition: always()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(REPORT_PATH)/junit-order-check.xml'
+              testRunTitle: 'order-check'
+              failTaskOnFailedTests: true

@@ -60,9 +60,22 @@ if ! command -v gitleaks > /dev/null 2>&1; then
     echo "ERROR: failed to download Gitleaks $GITLEAKS_VERSION (linux/$GITLEAKS_ARCH)." >&2
     exit 1
   fi
-  tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
-  chmod +x /tmp/gitleaks
+  # Guard extraction and permission-setting explicitly. Without `set -e` a
+  # failed `tar` (corrupt archive, no space in /tmp) or `chmod` would otherwise
+  # fall through to the `command -v` check below and surface only as the opaque
+  # "installation did not produce a runnable binary" error, hiding the real
+  # cause -- and the downloaded tarball would be left behind.
+  if ! tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks; then
+    echo "ERROR: failed to extract Gitleaks $GITLEAKS_VERSION from /tmp/gitleaks.tar.gz (corrupt download or no space in /tmp)." >&2
+    rm -f /tmp/gitleaks.tar.gz
+    exit 1
+  fi
   rm -f /tmp/gitleaks.tar.gz
+  if ! chmod +x /tmp/gitleaks; then
+    echo "ERROR: failed to make the Gitleaks binary at /tmp/gitleaks executable." >&2
+    rm -f /tmp/gitleaks
+    exit 1
+  fi
   export PATH="/tmp:$PATH"
 fi
 

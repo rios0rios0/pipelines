@@ -21,7 +21,29 @@ GITLAB_CONFIG_PATH="$SCRIPTS_DIR/global/scripts/tools/gitleaks/.gitleaks.toml"
 # failure. This mirrors the shellcheck/hadolint installation pattern.
 if ! command -v gitleaks > /dev/null 2>&1; then
   echo "Downloading Gitleaks..."
-  GITLEAKS_VERSION=$(curl -fsSL https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+
+  # Resolve the latest version robustly. An unauthenticated `api.github.com`
+  # call is rate limited to 60 requests/hour per IP, and on shared
+  # GitHub-hosted runner IPs it intermittently returns HTTP 403 -- which left
+  # GITLEAKS_VERSION empty. Because this script runs under POSIX `sh` (no
+  # `set -e`), that empty value used to sail through a malformed download URL
+  # and a failed extraction, surfacing only as a cryptic `gitleaks: not found`
+  # at the first `gitleaks detect` below. Prefer the authenticated API when a
+  # token is present (5000 requests/hour), then fall back to the github.com
+  # `releases/latest` redirect, which is not API-rate-limited and needs no
+  # token (works the same on GitHub Actions, GitLab CI, and Azure DevOps).
+  GITHUB_API_TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+  GITLEAKS_VERSION=""
+  if [ -n "$GITHUB_API_TOKEN" ]; then
+    GITLEAKS_VERSION=$(curl -fsSL -H "Authorization: Bearer $GITHUB_API_TOKEN" https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+  fi
+  if [ -z "$GITLEAKS_VERSION" ]; then
+    GITLEAKS_VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/gitleaks/gitleaks/releases/latest | sed 's#.*/tag/##')
+  fi
+  if [ -z "$GITLEAKS_VERSION" ]; then
+    echo "ERROR: could not resolve the latest Gitleaks version (GitHub rate limit, outage, or network failure)." >&2
+    exit 1
+  fi
 
   ARCH=$(uname -m)
   case "$ARCH" in
@@ -34,11 +56,34 @@ if ! command -v gitleaks > /dev/null 2>&1; then
       ;;
   esac
 
-  curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/$GITLEAKS_VERSION/gitleaks_${GITLEAKS_VERSION#v}_linux_${GITLEAKS_ARCH}.tar.gz" -o /tmp/gitleaks.tar.gz
-  tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
-  chmod +x /tmp/gitleaks
+  if ! curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/$GITLEAKS_VERSION/gitleaks_${GITLEAKS_VERSION#v}_linux_${GITLEAKS_ARCH}.tar.gz" -o /tmp/gitleaks.tar.gz; then
+    echo "ERROR: failed to download Gitleaks $GITLEAKS_VERSION (linux/$GITLEAKS_ARCH)." >&2
+    exit 1
+  fi
+  # Guard extraction and permission-setting explicitly. Without `set -e` a
+  # failed `tar` (corrupt archive, no space in /tmp) or `chmod` would otherwise
+  # fall through to the `command -v` check below and surface only as the opaque
+  # "installation did not produce a runnable binary" error, hiding the real
+  # cause -- and the downloaded tarball would be left behind.
+  if ! tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks; then
+    echo "ERROR: failed to extract Gitleaks $GITLEAKS_VERSION from /tmp/gitleaks.tar.gz (corrupt download or no space in /tmp)." >&2
+    rm -f /tmp/gitleaks.tar.gz
+    exit 1
+  fi
   rm -f /tmp/gitleaks.tar.gz
+  if ! chmod +x /tmp/gitleaks; then
+    echo "ERROR: failed to make the Gitleaks binary at /tmp/gitleaks executable." >&2
+    rm -f /tmp/gitleaks
+    exit 1
+  fi
   export PATH="/tmp:$PATH"
+fi
+
+# Fail loudly if the binary is still not runnable rather than falling through
+# to an opaque `gitleaks: not found` at the first `gitleaks detect` call below.
+if ! command -v gitleaks > /dev/null 2>&1; then
+  echo "ERROR: Gitleaks installation did not produce a runnable 'gitleaks' binary." >&2
+  exit 1
 fi
 
 # Gitleaks scans the project's full Git history. In CI the working tree is

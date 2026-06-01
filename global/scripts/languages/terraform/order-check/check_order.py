@@ -69,7 +69,7 @@ DEFAULT_PROVIDER_ORDER: list[str] = [
     "tls", "cloudflare", "dns", "acme",
     # application / utility services
     "http-request", "vault", "onepassword", "keycloak", "external", "github",
-    "gitlab", "datadog", "pagerduty", "grafana",
+    "gitlab", "azuredevops", "datadog", "pagerduty", "opsgenie", "grafana",
     # trivial / local-only helpers (lightest)
     "time", "tfe", "null", "http", "random", "local", "archive", "template",
 ]

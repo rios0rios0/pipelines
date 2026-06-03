@@ -38,85 +38,112 @@ quality:basic-checks:
 
       echo ""
       echo "=== Changelog Check ==="
-      echo "Checking CHANGELOG.md modifications against '$TARGET_BRANCH'..."
 
-      CHANGED_FILES=$(git diff --name-only "origin/$TARGET_BRANCH"...HEAD -- 'CHANGELOG.md' 2>/dev/null || true)
-      if [ -z "$CHANGED_FILES" ]; then
-        echo ""
-        echo "============================================================"
-        echo "  ERROR: CHANGELOG.md was NOT modified."
-        echo ""
-        echo "  Every change must include an entry in CHANGELOG.md"
-        echo "  under the [Unreleased] section."
-        echo ""
-        echo "  See: https://keepachangelog.com/en/1.1.0/"
-        echo "============================================================"
-        echo ""
-        exit 1
-      fi
+      if [ -f ".chlog.yaml" ]; then
+        echo "Detected chlog-based changelog (found .chlog.yaml)."
+        echo "Checking for new fragments in '.changes/unreleased/'..."
 
-      echo "CHANGELOG.md was modified. Validating entry placement..."
+        NEW_FRAGMENTS=$(git diff --name-only --diff-filter=A "origin/$TARGET_BRANCH"...HEAD -- '.changes/unreleased/' 2>/dev/null || true)
+        if [ -z "$NEW_FRAGMENTS" ]; then
+          echo ""
+          echo "============================================================"
+          echo "  ERROR: No changelog fragment was added."
+          echo ""
+          echo "  This project uses chlog for changelog management."
+          echo "  Every change must include a changelog fragment."
+          echo ""
+          echo "  Run: chlog new -k <Kind> -b \"<description>\""
+          echo "  Kinds: Added, Changed, Deprecated, Removed, Fixed, Security"
+          echo ""
+          echo "  See: https://github.com/luizjhonata/chlog"
+          echo "============================================================"
+          echo ""
+          exit 1
+        fi
 
-      CHANGELOG_CONTENT=$(git show HEAD:CHANGELOG.md 2>/dev/null || true)
-      if [ -z "$CHANGELOG_CONTENT" ]; then
-        echo "WARNING: could not read CHANGELOG.md from HEAD, skipping placement check."
-        exit 0
-      fi
+        echo "Found changelog fragment(s):"
+        echo "$NEW_FRAGMENTS"
+      else
+        echo "Checking CHANGELOG.md modifications against '$TARGET_BRANCH'..."
 
-      UNRELEASED_LINE=$(echo "$CHANGELOG_CONTENT" | grep -n '^##[[:space:]]*\[Unreleased\]' | head -1 | cut -d: -f1)
+        CHANGED_FILES=$(git diff --name-only "origin/$TARGET_BRANCH"...HEAD -- 'CHANGELOG.md' 2>/dev/null || true)
+        if [ -z "$CHANGED_FILES" ]; then
+          echo ""
+          echo "============================================================"
+          echo "  ERROR: CHANGELOG.md was NOT modified."
+          echo ""
+          echo "  Every change must include an entry in CHANGELOG.md"
+          echo "  under the [Unreleased] section."
+          echo ""
+          echo "  See: https://keepachangelog.com/en/1.1.0/"
+          echo "============================================================"
+          echo ""
+          exit 1
+        fi
 
-      if [ -z "$UNRELEASED_LINE" ]; then
-        echo ""
-        echo "============================================================"
-        echo "  ERROR: CHANGELOG.md does not contain an [Unreleased] section."
-        echo ""
-        echo "  The changelog must have a '## [Unreleased]' header."
-        echo "  All new entries must be added under this section."
-        echo ""
-        echo "  See: https://keepachangelog.com/en/1.1.0/"
-        echo "============================================================"
-        echo ""
-        exit 1
-      fi
+        echo "CHANGELOG.md was modified. Validating entry placement..."
 
-      NEXT_VERSION_LINE=$(echo "$CHANGELOG_CONTENT" | grep -n '^##[[:space:]]*\[' | grep -v '\[Unreleased\]' | head -1 | cut -d: -f1)
+        CHANGELOG_CONTENT=$(git show HEAD:CHANGELOG.md 2>/dev/null || true)
+        if [ -z "$CHANGELOG_CONTENT" ]; then
+          echo "WARNING: could not read CHANGELOG.md from HEAD, skipping placement check."
+          exit 0
+        fi
 
-      DIFF_LINES=$(git diff "origin/$TARGET_BRANCH"...HEAD -- 'CHANGELOG.md' 2>/dev/null || true)
-      HUNK_POSITIONS=$(echo "$DIFF_LINES" | grep '^@@' | sed 's/.*+\([0-9]*\).*/\1/' || true)
+        UNRELEASED_LINE=$(echo "$CHANGELOG_CONTENT" | grep -n '^##[[:space:]]*\[Unreleased\]' | head -1 | cut -d: -f1)
 
-      HAS_VALID_ENTRIES=false
-      HAS_INVALID_ENTRIES=false
+        if [ -z "$UNRELEASED_LINE" ]; then
+          echo ""
+          echo "============================================================"
+          echo "  ERROR: CHANGELOG.md does not contain an [Unreleased] section."
+          echo ""
+          echo "  The changelog must have a '## [Unreleased]' header."
+          echo "  All new entries must be added under this section."
+          echo ""
+          echo "  See: https://keepachangelog.com/en/1.1.0/"
+          echo "============================================================"
+          echo ""
+          exit 1
+        fi
 
-      for HUNK_START in $HUNK_POSITIONS; do
-        if [ "$HUNK_START" -ge "$UNRELEASED_LINE" ]; then
-          if [ -n "$NEXT_VERSION_LINE" ] && [ "$HUNK_START" -ge "$NEXT_VERSION_LINE" ]; then
-            HAS_INVALID_ENTRIES=true
+        NEXT_VERSION_LINE=$(echo "$CHANGELOG_CONTENT" | grep -n '^##[[:space:]]*\[' | grep -v '\[Unreleased\]' | head -1 | cut -d: -f1)
+
+        DIFF_LINES=$(git diff "origin/$TARGET_BRANCH"...HEAD -- 'CHANGELOG.md' 2>/dev/null || true)
+        HUNK_POSITIONS=$(echo "$DIFF_LINES" | grep '^@@' | sed 's/.*+\([0-9]*\).*/\1/' || true)
+
+        HAS_VALID_ENTRIES=false
+        HAS_INVALID_ENTRIES=false
+
+        for HUNK_START in $HUNK_POSITIONS; do
+          if [ "$HUNK_START" -ge "$UNRELEASED_LINE" ]; then
+            if [ -n "$NEXT_VERSION_LINE" ] && [ "$HUNK_START" -ge "$NEXT_VERSION_LINE" ]; then
+              HAS_INVALID_ENTRIES=true
+            else
+              HAS_VALID_ENTRIES=true
+            fi
           else
             HAS_VALID_ENTRIES=true
           fi
-        else
-          HAS_VALID_ENTRIES=true
+        done
+
+        if [ "$HAS_INVALID_ENTRIES" = true ] && [ "$HAS_VALID_ENTRIES" = false ]; then
+          echo ""
+          echo "============================================================"
+          echo "  ERROR: CHANGELOG.md entries are NOT under [Unreleased]."
+          echo ""
+          echo "  New entries were found below an existing version section."
+          echo "  This usually happens after an erroneous rebase."
+          echo ""
+          echo "  Please move your changelog entries under the"
+          echo "  '## [Unreleased]' section."
+          echo ""
+          echo "  See: https://keepachangelog.com/en/1.1.0/"
+          echo "============================================================"
+          echo ""
+          exit 1
         fi
-      done
 
-      if [ "$HAS_INVALID_ENTRIES" = true ] && [ "$HAS_VALID_ENTRIES" = false ]; then
-        echo ""
-        echo "============================================================"
-        echo "  ERROR: CHANGELOG.md entries are NOT under [Unreleased]."
-        echo ""
-        echo "  New entries were found below an existing version section."
-        echo "  This usually happens after an erroneous rebase."
-        echo ""
-        echo "  Please move your changelog entries under the"
-        echo "  '## [Unreleased]' section."
-        echo ""
-        echo "  See: https://keepachangelog.com/en/1.1.0/"
-        echo "============================================================"
-        echo ""
-        exit 1
+        echo "CHANGELOG.md entries are correctly placed under [Unreleased]."
       fi
-
-      echo "CHANGELOG.md entries are correctly placed under [Unreleased]."
   rules:
     - if: "$CI_MERGE_REQUEST_IID"
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"

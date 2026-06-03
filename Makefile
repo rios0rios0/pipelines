@@ -2,7 +2,7 @@ TAG := latest
 ROOT := global/containers
 CONTAINER_REGISTRY = ghcr.io/rios0rios0/pipelines
 
-.PHONY: login setup-buildx build-and-push test-go-script test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-docker-multi-arch test
+.PHONY: login setup-buildx build-and-push test-go-script test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-docker-multi-arch test-basic-checks test
 
 login:
 	docker login $(CONTAINER_REGISTRY)
@@ -50,5 +50,9 @@ test-docker-multi-arch:
 	@echo "Running 40-delivery/docker multi-arch contract validation..."
 	@./.github/tests/test-docker-multi-arch.sh
 
-test: test-go-script test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-docker-multi-arch
+test-basic-checks:
+	@echo "Running basic-checks changelog validation..."
+	@./.github/tests/test-basic-checks.sh
+
+test: test-go-script test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-docker-multi-arch test-basic-checks
 	@echo "All tests completed successfully!"

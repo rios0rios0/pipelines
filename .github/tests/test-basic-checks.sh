@@ -16,9 +16,9 @@ TESTS_FAILED=0
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Extract the changelog check block from basic-checks.yaml into a standalone
-# script that can be sourced inside each test repo. The block expects
-# TARGET_BRANCH to be set and runs from the repo root.
+# Create a standalone script that mirrors the changelog validation logic from
+# azure-devops/global/stages/10-code-check/basic-checks.yaml. The script expects
+# TARGET_BRANCH to be set and is executed from the repo root.
 CHANGELOG_SCRIPT="$(mktemp)"
 trap 'rm -f "$CHANGELOG_SCRIPT"; rm -rf /tmp/basic-checks-test-*' EXIT
 

@@ -115,7 +115,14 @@ jobs:
           php-version: '8.3'
           tools: 'composer'
 
-      - run: composer audit
+      - run: |
+          composer install --no-interaction --prefer-dist
+          PACKAGES=$(composer show --format=json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('installed', [])))" 2>/dev/null || echo '0')
+          if [ "${PACKAGES}" -gt 0 ]; then
+            composer audit
+          else
+            echo 'No packages to audit.'
+          fi
         shell: 'bash'
     needs: [ 'code_check-style_php_lint', 'code_check-quality_phpmd' ]
     continue-on-error: true

@@ -85,13 +85,37 @@ else
   echo "Installed Trivy does not support --tf-exclude-downloaded-modules; continuing without it."
 fi
 
+# As with the SCA scan, Trivy's filesystem walk parses `pom.xml` for the
+# package inventory and can abort with a FATAL error when Maven Central
+# rate-limits the runner (HTTP 429), leaving no `trivy.json` for the SARIF
+# conversion below. If the online scan produces no report because a remote
+# repository was unreachable, retry once with `--offline-scan` (misconfig
+# detection itself needs no remote dependency resolution).
+trivyLog="/tmp/trivy-misconfig-run.log"
+EXIT_CODE=0
 trivy filesystem \
   --scanners misconfig \
   ${trivy_tf_exclude_flag:+$trivy_tf_exclude_flag} \
   --format json \
   --output "$jsonFile" \
   --exit-code 1 \
-  "$(pwd)" || EXIT_CODE=$?
+  "$(pwd)" > "$trivyLog" 2>&1 || EXIT_CODE=$?
+cat "$trivyLog"
+
+if [ ! -f "$jsonFile" ] && grep -qiE "remote Maven repository returned|Too Many Requests|429" "$trivyLog"; then
+  echo "Trivy could not reach the remote Maven repository (rate-limited); retrying with --offline-scan..."
+  EXIT_CODE=0
+  trivy filesystem \
+    --scanners misconfig \
+    ${trivy_tf_exclude_flag:+$trivy_tf_exclude_flag} \
+    --offline-scan \
+    --format json \
+    --output "$jsonFile" \
+    --exit-code 1 \
+    "$(pwd)" > "$trivyLog" 2>&1 || EXIT_CODE=$?
+  cat "$trivyLog"
+fi
+rm -f "$trivyLog"
 
 # SARIF is produced via `trivy convert`. Trivy's SARIF writer panics with
 # a nil-URL `SIGSEGV` in `pkg/report/sarif.go:103` when a Terraform

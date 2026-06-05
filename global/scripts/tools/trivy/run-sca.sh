@@ -65,12 +65,40 @@ if [ ! -f ".trivyignore" ]; then
 fi
 
 echo "Running Trivy SCA dependency vulnerability scan..."
+
+# Trivy's language analyzers (notably Maven/`pom.xml`) resolve parent POMs and
+# BOM-managed versions from the remote registry to build the full dependency
+# tree. On shared CI runners Maven Central frequently rate-limits anonymous
+# requests with HTTP 429 (`Retry-After: 1800`), which makes Trivy abort with a
+# FATAL error and write no report -- failing the job for an infrastructure
+# reason rather than a real finding. When the online scan produces no report
+# because a remote repository was unreachable, retry once with `--offline-scan`
+# so the scan still completes against locally resolvable dependencies. Full
+# (online) coverage is preserved whenever the registry is reachable, and the
+# dedicated OWASP dependency-check job provides authoritative deep SCA anyway.
+trivyLog="/tmp/trivy-sca-run.log"
+EXIT_CODE=0
 trivy filesystem \
   --scanners vuln \
   --format json \
   --output "$fileName" \
   --exit-code 1 \
-  "$(pwd)" || EXIT_CODE=$?
+  "$(pwd)" > "$trivyLog" 2>&1 || EXIT_CODE=$?
+cat "$trivyLog"
+
+if [ ! -f "$fileName" ] && grep -qiE "remote Maven repository returned|Too Many Requests|429" "$trivyLog"; then
+  echo "Trivy could not reach the remote Maven repository (rate-limited); retrying with --offline-scan..."
+  EXIT_CODE=0
+  trivy filesystem \
+    --scanners vuln \
+    --offline-scan \
+    --format json \
+    --output "$fileName" \
+    --exit-code 1 \
+    "$(pwd)" > "$trivyLog" 2>&1 || EXIT_CODE=$?
+  cat "$trivyLog"
+fi
+rm -f "$trivyLog"
 
 if [ "$ignoreFileExists" = false ]; then
   rm -f .trivyignore

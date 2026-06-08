@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- refreshed `CLAUDE.md` and `.github/copilot-instructions.md` to document the `make test-basic-checks` target and include `basic-checks` in the aggregate `make test` description, matching the `Makefile` after the chlog-based changelog validation work landed
+
 ### Fixed
 
 - fixed the Azure DevOps `release` job (`azure-devops/global/stages/40-delivery/release.yaml`) failing on every merge to `main` whose commit body contains a literal `##vso[...]` or `##[...]` token. The `Extract Release Version` step ran `set -eux`, and xtrace echoed the user-controlled `$COMMIT_MESSAGE` (the merged PR description) to the log; the Azure DevOps agent then re-parsed the embedded token as a malformed logging command and aborted the job with `Required field 'variable' is missing in ##vso[task.setvariable] command`. The step now runs `set -eu`, so the message stays inside the grep/sed pipes and never reaches the log. The `Create Tag` step was hardened against the same class of leak: its request body (which embeds user-controlled `CHANGELOG.md` release notes) is now built with xtrace disabled and POSTed from a temp file via `curl --data-binary @`, so a token in the notes is never traced on the `DATA=...` assignment nor on the curl arguments

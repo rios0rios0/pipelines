@@ -19,7 +19,16 @@ jobs:
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
     steps:
       - script: |
-          set -eux
+          # Deliberately NOT `set -x` here. COMMIT_MESSAGE is user-controlled
+          # (it is the merged commit body / PR description) and may contain a
+          # literal `##vso[...]` or `##[...]` token. Under xtrace, bash echoes
+          # the expanded command lines — including the raw message — to the log,
+          # where the Azure DevOps agent re-parses the token as a (malformed)
+          # logging command and fails the step. A PR whose description merely
+          # mentioned `##vso[task.setvariable]` took the release job down this
+          # way. With xtrace off, the message stays inside the grep/sed pipes
+          # and never reaches the log.
+          set -eu
 
           COMMIT_MESSAGE="$(git log -1 --pretty=%B)"
           # Canonical bump commit formats. Anything else → SKIP_RELEASE=true.
@@ -52,10 +61,11 @@ jobs:
               fi
 
               RESPONSE_FILE=$(mktemp)
-              # Cleanup the response body file on every exit path: normal completion,
+              DATA_FILE=$(mktemp)
+              # Cleanup the temp files on every exit path: normal completion,
               # `exit 1` in the default case, or `set -e` aborting on a curl failure
               # (network/TLS/etc).
-              trap 'rm -f "$RESPONSE_FILE"' EXIT
+              trap 'rm -f "$RESPONSE_FILE" "$DATA_FILE"' EXIT
 
               RELEASE_NOTES=""
               if [ -f CHANGELOG.md ]; then
@@ -63,6 +73,14 @@ jobs:
                   RELEASE_NOTES=$(echo "$RELEASE_NOTES" | jq --raw-input --slurp .)
               fi
 
+              # RELEASE_NOTES comes from CHANGELOG.md (user-controlled) and may
+              # contain a literal `##vso[...]`/`##[...]` token. Build the request
+              # body with xtrace OFF and POST it from a file (`--data-binary @`)
+              # so the notes are never echoed to the log — neither by a traced
+              # `DATA=...` assignment nor by traced curl arguments — where the
+              # Azure DevOps agent would re-parse the token as a logging command.
+              # The traced curl line shows only `--data-binary @<tmpfile>`.
+              { set +x; } 2>/dev/null
               DATA="{
                 \"name\": \"${VERSION_PREFIX}${RELEASE_VERSION:-}\",
                 \"taggedObject\": {
@@ -70,6 +88,8 @@ jobs:
                 },
                 \"message\": $RELEASE_NOTES
               }"
+              printf '%s' "$DATA" > "$DATA_FILE"
+              { set -x; } 2>/dev/null
 
               # Tag creation is idempotent:
               #   * If the tag already exists (AutoBump pre-created it when opening the bump PR,
@@ -104,7 +124,7 @@ jobs:
                                    -X POST "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_apis/git/repositories/$(Build.Repository.ID)/annotatedtags?api-version=7.1-preview.1" \
                                    --header "Authorization: Bearer $(System.AccessToken)" \
                                    --header "Content-Type: application/json" \
-                                   --data "$DATA")
+                                   --data-binary "@$DATA_FILE")
                 CURL_EXIT_CODE=$?
                 set -e
 

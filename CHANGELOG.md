@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- refreshed `CLAUDE.md` and `.github/copilot-instructions.md` to document the `make test-basic-checks` target and include `basic-checks` in the aggregate `make test` description, matching the `Makefile` after the chlog-based changelog validation work landed
+
 ### Fixed
 
 - fixed `sca:composer-audit` GitHub Actions job in `composer.yaml` always exiting with code `1` for PHP projects that have no `require` packages (only platform constraints like `php: >=7.2`). The step previously ran bare `composer audit` without a prior `composer install`, which fails with `No installed packages found` even after install when the lock file has zero packages. The step now installs first and skips the audit when zero packages are present, printing `No packages to audit.` to make the intent explicit; projects with real package dependencies continue to run the full `composer audit` and will still fail on any advisory

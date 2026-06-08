@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, docker-multi-arch)
+- `make test` - Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, docker-multi-arch, basic-checks)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-lambda` - Test Lambda template validation specifically
 - `make test-yaml-merge` - Test YAML merge validation specifically
@@ -16,6 +16,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-tftest-gen` - Test tftest-gen generator specifically
 - `make test-order-check` - Test the Terragrunt file-ordering checker/fixer specifically
 - `make test-docker-multi-arch` - Test 40-delivery/docker multi-arch contract specifically
+- `make test-basic-checks` - Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) specifically
 - `bash global/scripts/shared/cleanup.sh` - Clean up build reports
 - `docker --version && make --version && go version` - Check dependencies
 
@@ -637,7 +638,7 @@ docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/
 
 ### Test Suite Usage
 ```bash
-# Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, docker-multi-arch)
+# Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, docker-multi-arch, basic-checks)
 make test
 
 # Run individual test suites
@@ -649,6 +650,7 @@ make test-release-tag-idempotency
 make test-tftest-gen
 make test-order-check
 make test-docker-multi-arch
+make test-basic-checks
 ```
 
 Test scripts are located in `.github/tests/`.

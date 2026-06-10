@@ -85,7 +85,7 @@ stages:
                 set -e
 
                 echo "Building with AWS SAM..."
-export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
+                export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
                 sam build
 
                 echo "Packaging with AWS SAM..."
@@ -116,7 +116,7 @@ export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
               fi
 
               echo "Building with AWS SAM..."
-export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
+              export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
               sam build
 
               echo "Packaging with AWS SAM..."

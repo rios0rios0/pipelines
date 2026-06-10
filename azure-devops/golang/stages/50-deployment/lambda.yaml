@@ -37,6 +37,9 @@ stages:
         container: 'ghcr.io/rios0rios0/pipelines/golang:1.26-awscli'
         variables:
           DEPLOY_STRATEGY: ${{ parameters.DEPLOY_STRATEGY }}
+          # Keep toolchain resolution consistent with the delivery stage so any
+          # Go invocation during deploy honors the consumer's go.mod version.
+          GOTOOLCHAIN: 'auto'
         steps:
           - task: 'DownloadPipelineArtifact@2'
             inputs:

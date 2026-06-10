@@ -16,6 +16,14 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- bumped the `golang.1.26-awscli` container floor and the GitLab `golang` abstract image from `1.26.3` to `1.26.4`, aligning them with the `GoTool@0` version already used by the Go code-check/test stages. With `GOTOOLCHAIN=auto` now in place this floor is no longer load-bearing for build correctness; it only provides a current launcher and a sane baseline for offline cold-starts
+
+### Fixed
+
+- fixed the Go Lambda SAM delivery/deployment stages breaking whenever a consumer bumps its `go.mod` `go` directive for a security patch (e.g. `go 1.26.4` against the `golang:1.26-awscli` container's baked-in `1.26.3`), failing with `go.mod requires go >= 1.26.4 (running go 1.26.3; GOTOOLCHAIN=local)`. The `40-delivery/lambda.yaml` and `50-deployment/lambda.yaml` jobs (and the GitLab `golang` abstract) now set `GOTOOLCHAIN=auto`, so `aws-lambda-builders` (which inherits the job env and only overrides `GOOS`/`GOARCH`) lets `go build` transparently fetch the exact toolchain each consumer's `go.mod` declares. The pipeline no longer has to chase Go patch bumps in lockstep with consuming repositories
+
 ## [4.12.1] - 2026-06-09
 
 ### Changed

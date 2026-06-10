@@ -36,6 +36,11 @@ stages:
           DEPLOY_STRATEGY: ${{ parameters.DEPLOY_STRATEGY }}
           GOPATH: "$(Pipeline.Workspace)/.go"
           LAMBDA_ARTIFACT_DIR: "$(Build.SourcesDirectory)/lambda-artifact"
+          # Let Go download the toolchain required by the consumer's go.mod.
+          # SAM's GoModulesBuilder inherits this env and passes it to `go build`,
+          # so a go.mod version bump (e.g. a security patch) never breaks the
+          # build against the container's baked-in Go.
+          GOTOOLCHAIN: 'auto'
         steps:
           - template: '../../../global/abstracts/scripts-repo.yaml'
 
@@ -80,6 +85,7 @@ stages:
                 set -e
 
                 echo "Building with AWS SAM..."
+                export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
                 sam build
 
                 echo "Packaging with AWS SAM..."
@@ -110,6 +116,7 @@ stages:
               fi
 
               echo "Building with AWS SAM..."
+              export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
               sam build
 
               echo "Packaging with AWS SAM..."

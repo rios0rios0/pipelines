@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [4.12.2] - 2026-06-11
+
 ### Changed
 
 - bumped the `golang.1.26-awscli` container floor and the GitLab `golang` abstract image from `1.26.3` to `1.26.4`, aligning them with the `GoTool@0` version already used by the Go code-check/test stages. With `GOTOOLCHAIN=auto` now in place this floor is no longer load-bearing for build correctness; it only provides a current launcher and a sane baseline for offline cold-starts

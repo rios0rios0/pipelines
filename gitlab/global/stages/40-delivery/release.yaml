@@ -11,10 +11,18 @@ release:
       [ -f artifacts.env ] && source artifacts.env
   script:
     - |
-      REGEX="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)'.*$"
+      # Match the three canonical bump-commit subjects, kept in parity with the
+      # Azure DevOps release job:
+      #   - git-native merge:      "Merge branch 'chore/bump-X.Y.Z'..."
+      #   - conventional commit:   "chore(bump): bumped version to X.Y.Z"
+      #   - GitHub-style PR merge: "Merge pull request N from chore/bump-X.Y.Z into main"
+      #     (leading `#` and trailing ` into <target>` both optional)
+      # `\3` captures the branch-style version, `\4` the conventional one, `\6`
+      # the GitHub-style PR-merge one; only one matches, the rest expand to empty.
+      REGEX="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)'.*$|.*chore\(bump\):.*version to ([0-9]+\.[0-9]+\.[0-9]+).*|^Merge pull request #?[0-9]+ from (origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)( into .+)?$"
 
       if echo "$CI_COMMIT_MESSAGE" | grep -Eq "$REGEX"; then
-          VERSION=$(echo "$CI_COMMIT_MESSAGE" | sed -En "s/$REGEX/\3/p" | head -n 1)
+          VERSION=$(echo "$CI_COMMIT_MESSAGE" | sed -En "s/$REGEX/\3\4\6/p" | head -n 1)
 
           RELEASE_NOTES=""
           if [ -f CHANGELOG.md ]; then
@@ -51,6 +59,9 @@ release:
           echo 'Commit is not a bump, not creating a release'
       fi
   rules:
-    - if: '$CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_COMMIT_MESSAGE =~ /chore\/bump-[0-9]+\.[0-9]+\.[0-9]+/'
+    # Coarse pre-filter; the script REGEX is the source of truth. Allow both the
+    # branch-name form (`chore/bump-X.Y.Z`, covers git-native and GitHub PR-merge
+    # subjects) and the conventional-commit form (`chore(bump): ... version to X.Y.Z`).
+    - if: '$CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && ($CI_COMMIT_MESSAGE =~ /chore\/bump-[0-9]+\.[0-9]+\.[0-9]+/ || $CI_COMMIT_MESSAGE =~ /chore\(bump\):.*version to [0-9]+\.[0-9]+\.[0-9]+/)'
       when: 'always'
     - when: 'never'

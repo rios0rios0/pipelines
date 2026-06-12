@@ -32,13 +32,21 @@ jobs:
 
           COMMIT_MESSAGE="$(git log -1 --pretty=%B)"
           # Canonical bump commit formats. Anything else → SKIP_RELEASE=true.
-          #   - Azure DevOps auto-merge: "Merge branch 'chore/bump-X.Y.Z'..."
-          #   - Conventional commit:     "chore(bump): bumped version to X.Y.Z"
-          # `\3` captures the branch-style version, `\4` the conventional one.
-          REGEX="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)'.*$|.*chore\(bump\):.*version to ([0-9]+\.[0-9]+\.[0-9]+).*"
+          #   - Git/Azure native merge: "Merge branch 'chore/bump-X.Y.Z'..."
+          #   - Conventional commit:    "chore(bump): bumped version to X.Y.Z"
+          #   - GitHub-style PR merge:  "Merge pull request N from chore/bump-X.Y.Z into main"
+          #     Produced by auto-complete / bots (e.g. code-guru) merging the bump
+          #     PR without squashing. The version lives only in the branch name, so
+          #     the conventional-commit branch above never matches it. The leading
+          #     `#` and the trailing ` into <target>` are both optional. The GitHub
+          #     Actions counterpart already handles this format; this keeps the
+          #     Azure DevOps job in parity.
+          # `\3` captures the branch-style version, `\4` the conventional one,
+          # `\6` the GitHub-style PR-merge one.
+          REGEX="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)'.*$|.*chore\(bump\):.*version to ([0-9]+\.[0-9]+\.[0-9]+).*|^Merge pull request #?[0-9]+ from (origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)( into .+)?$"
 
           if echo -n "$COMMIT_MESSAGE" | grep -Eq "$REGEX"; then
-            VERSION=$(echo "$COMMIT_MESSAGE" | sed -En "s/$REGEX/\3\4/p" | head -n 1)
+            VERSION=$(echo "$COMMIT_MESSAGE" | sed -En "s/$REGEX/\3\4\6/p" | head -n 1)
             echo "##vso[task.setvariable variable=RELEASE_VERSION]$VERSION"
           else
             echo "$(date "+%Y-%m-%d %H:%M:%S") - Commit is not a bump, not creating a release..."

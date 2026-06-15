@@ -81,8 +81,23 @@ fi
 #
 # `terraform test` is deliberately NOT retried: a test failure must surface
 # immediately and deterministically, never be masked by a re-run.
-TF_INIT_MAX_ATTEMPTS="${TF_INIT_MAX_ATTEMPTS:-4}"
-TF_INIT_RETRY_DELAY="${TF_INIT_RETRY_DELAY:-5}"
+# Guard the two public overrides: a non-integer (or, for the attempt count,
+# `0`) would otherwise blow up the `[ ... -le ... ]` test and the `$(( ))`
+# arithmetic below with a cryptic "not a valid number" — which, under `set -e`,
+# can abort the whole run confusingly. Coerce a bad value back to the default
+# and warn rather than hard-failing: the loop's whole purpose is resilience, so
+# a typo'd knob must not be able to sink the suite.
+validate_positive_int() {
+  # $1=value  $2=min allowed  $3=default  $4=var name (for the warning)
+  case "$1" in
+    '' | *[!0-9]*) ;;                                  # empty / non-digit → warn
+    *) if [ "$1" -ge "$2" ]; then printf '%s' "$1"; return 0; fi ;;
+  esac
+  echo "  warning: $4='$1' is not an integer >= $2; falling back to default ($3)." >&2
+  printf '%s' "$3"
+}
+TF_INIT_MAX_ATTEMPTS="$(validate_positive_int "${TF_INIT_MAX_ATTEMPTS:-4}" 1 4 TF_INIT_MAX_ATTEMPTS)"
+TF_INIT_RETRY_DELAY="$(validate_positive_int "${TF_INIT_RETRY_DELAY:-5}" 0 5 TF_INIT_RETRY_DELAY)"
 
 terraform_init_with_retry() {
   # Runs `terraform init -upgrade` in the current directory, retrying with

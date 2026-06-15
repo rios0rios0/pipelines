@@ -64,6 +64,62 @@ if [ ! -d modules ]; then
   exit 0
 fi
 
+# ---------- Transient-registry resilience ----------
+# `terraform init -upgrade` is the only step in the per-module loop that
+# reaches the network: it re-resolves and re-verifies every provider against
+# `registry.terraform.io`. `-upgrade` re-queries the registry for version
+# metadata on *every* module (the shared plugin cache holds the binaries, but
+# `-upgrade` still calls the registry), so a tree of N modules makes N
+# independent registry round-trips. The public registry intermittently
+# returns `502`/`503` for minutes at a time; a single such blip on any module
+# would otherwise fail `init` before any `terraform test` run block executes —
+# surfacing as a non-zero exit with zero recorded test cases (the confusing
+# "all cases passed, but exit 1" contradiction). Terraform's own retry is just
+# 2 attempts, too short to ride out a flapping registry, so wrap `init` in a
+# bounded linear backoff. Mirrors the install-retry idiom in
+# `global/scripts/tools/trivy/run.sh`.
+#
+# `terraform test` is deliberately NOT retried: a test failure must surface
+# immediately and deterministically, never be masked by a re-run.
+# Guard the two public overrides: a non-integer (or, for the attempt count,
+# `0`) would otherwise blow up the `[ ... -le ... ]` test and the `$(( ))`
+# arithmetic below with a cryptic "not a valid number" — which, under `set -e`,
+# can abort the whole run confusingly. Coerce a bad value back to the default
+# and warn rather than hard-failing: the loop's whole purpose is resilience, so
+# a typo'd knob must not be able to sink the suite.
+validate_positive_int() {
+  # $1=value  $2=min allowed  $3=default  $4=var name (for the warning)
+  case "$1" in
+    '' | *[!0-9]*) ;;                                  # empty / non-digit → warn
+    *) if [ "$1" -ge "$2" ]; then printf '%s' "$1"; return 0; fi ;;
+  esac
+  echo "  warning: $4='$1' is not an integer >= $2; falling back to default ($3)." >&2
+  printf '%s' "$3"
+}
+TF_INIT_MAX_ATTEMPTS="$(validate_positive_int "${TF_INIT_MAX_ATTEMPTS:-4}" 1 4 TF_INIT_MAX_ATTEMPTS)"
+TF_INIT_RETRY_DELAY="$(validate_positive_int "${TF_INIT_RETRY_DELAY:-5}" 0 5 TF_INIT_RETRY_DELAY)"
+
+terraform_init_with_retry() {
+  # Runs `terraform init -upgrade` in the current directory, retrying with
+  # linear backoff (delay = attempt * TF_INIT_RETRY_DELAY). Returns 0 on the
+  # first success, non-zero once every attempt is exhausted. Stdout stays
+  # suppressed (matches the original call); stderr is preserved so registry
+  # errors remain visible in the CI log.
+  init_attempt=1
+  while [ "${init_attempt}" -le "${TF_INIT_MAX_ATTEMPTS}" ]; do
+    if terraform init -upgrade > /dev/null; then
+      return 0
+    fi
+    if [ "${init_attempt}" -lt "${TF_INIT_MAX_ATTEMPTS}" ]; then
+      init_sleep=$((init_attempt * TF_INIT_RETRY_DELAY))
+      echo "  terraform init failed (attempt ${init_attempt}/${TF_INIT_MAX_ATTEMPTS}); retrying in ${init_sleep}s — transient registry.terraform.io 5xx / network blips are the common cause..." >&2
+      sleep "${init_sleep}"
+    fi
+    init_attempt=$((init_attempt + 1))
+  done
+  return 1
+}
+
 # ---------- Per-module run ----------
 total=0
 tested=0
@@ -98,10 +154,12 @@ for mod in modules/*/; do
 
   echo "Testing ${mod}..."
   # `-junit-xml` was added in Terraform 1.11. `terraform init -upgrade` makes
-  # the module self-contained so parallel module builds don't share state.
+  # the module self-contained so parallel module builds don't share state;
+  # `terraform_init_with_retry` rides out transient public-registry 5xx so a
+  # single blip doesn't fail the whole suite (see the function above).
   # Absolute path is required because `terraform test` runs from ${mod}.
   junit_abs="$(cd "$(dirname "${junit_file}")" && pwd)/$(basename "${junit_file}")"
-  if ! (cd "${mod}" && terraform init -upgrade > /dev/null && terraform test -junit-xml="${junit_abs}"); then
+  if ! (cd "${mod}" && terraform_init_with_retry && terraform test -junit-xml="${junit_abs}"); then
     exit_code=1
     # Keep going so we still emit JUnit + coverage for the rest of the tree —
     # `exit_code` is honored at the end so CI correctly fails.

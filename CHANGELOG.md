@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed `global/scripts/tools/hadolint/run.sh` failing the `sast:hadolint` job with a cryptic `hadolint: not found` (exit `127`) whenever GitHub's `releases/latest` API was rate-limited or returned a transient `5xx` (e.g. `504`). The script resolves the version to download by parsing `tag_name` from that API, but the `curl | grep | sed` pipeline reports only `sed`'s exit status, so a failed `curl` silently produced an empty `HADOLINT_VERSION`; the empty value then flowed into a malformed download URL (`.../download//hadolint-Linux-x86_64`) that `404`s, the binary was never written, and the failure only surfaced at the subsequent lint call. The install path is now hardened, mirroring the Trivy install-retry idiom in `global/scripts/tools/trivy/run.sh`: the latest-version lookup and the binary download are each wrapped in a bounded linear backoff (3 attempts, `attempt × 5s`); the resolved version is validated non-empty and falls back to a pinned `HADOLINT_PINNED_VERSION` (default `v2.14.0`, env-overridable) otherwise; the downloaded binary is verified to actually run (`hadolint --version`) before linting, with the pinned version tried as a last resort if the resolved one will not execute; and an unrecoverable install now fails fast with an actionable error instead of falling through to exit `127`. The script stays POSIX-`sh` compatible and ShellCheck-clean
+
 ## [4.12.2] - 2026-06-18
 
 ### Changed

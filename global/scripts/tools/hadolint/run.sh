@@ -76,20 +76,22 @@ if ! command -v hadolint > /dev/null 2>&1; then
   # Run a command up to 3 times with linear backoff (5s, then 10s) so a
   # transient 5xx/network blip is ridden out rather than being fatal. Progress
   # goes to stderr to keep stdout clean for command substitution.
+  # POSIX `sh` has no `local`, so these temporaries are function-name-prefixed
+  # to keep them from leaking into / colliding with the script scope.
   hadolint_retry() {
-    _attempt=1
-    _max=3
+    _hadolint_retry_attempt=1
+    _hadolint_retry_max=3
     while :; do
       if "$@"; then
         return 0
       fi
-      if [ "$_attempt" -ge "$_max" ]; then
+      if [ "$_hadolint_retry_attempt" -ge "$_hadolint_retry_max" ]; then
         return 1
       fi
-      _wait=$((_attempt * 5))
-      echo "  attempt $_attempt/$_max failed; retrying in ${_wait}s..." >&2
-      sleep "$_wait"
-      _attempt=$((_attempt + 1))
+      _hadolint_retry_wait=$((_hadolint_retry_attempt * 5))
+      echo "  attempt $_hadolint_retry_attempt/$_hadolint_retry_max failed; retrying in ${_hadolint_retry_wait}s..." >&2
+      sleep "$_hadolint_retry_wait"
+      _hadolint_retry_attempt=$((_hadolint_retry_attempt + 1))
     done
   }
 
@@ -99,10 +101,10 @@ if ! command -v hadolint > /dev/null 2>&1; then
   # empty output. Returns non-zero -- engaging the retry, then the pinned
   # fallback -- when curl fails or no tag can be parsed.
   hadolint_latest_version() {
-    _body=$(curl -fsSL https://api.github.com/repos/hadolint/hadolint/releases/latest) || return 1
-    _tag=$(printf '%s\n' "$_body" | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
-    [ -n "$_tag" ] || return 1
-    printf '%s\n' "$_tag"
+    _hadolint_latest_version_body=$(curl -fsSL https://api.github.com/repos/hadolint/hadolint/releases/latest) || return 1
+    _hadolint_latest_version_tag=$(printf '%s\n' "$_hadolint_latest_version_body" | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+    [ -n "$_hadolint_latest_version_tag" ] || return 1
+    printf '%s\n' "$_hadolint_latest_version_tag"
   }
 
   if HADOLINT_VERSION=$(hadolint_retry hadolint_latest_version) && [ -n "$HADOLINT_VERSION" ]; then

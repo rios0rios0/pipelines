@@ -9,16 +9,18 @@ fi
 
 # TODO: this should not be needed since it's covered by the parent YAML file that calls this shell script
 BOM_PATH="$PREFIX$REPORT_PATH" && mkdir -p "$BOM_PATH"
-pdm run cyclonedx-py environment "$(pdm info --python)" --of JSON -o "$BOM_PATH/bom.json"
-name=$(pdm show --name 2>/dev/null)
+# Build the SBOM and let cyclonedx-py populate the root `metadata.component`
+# (name, type, bom-ref) from the project's pyproject.toml (PEP 621) rather than
+# hand-patching it afterwards. CycloneDX requires `component.type`; without a
+# valid root component, Dependency-Track (>= 4.11, BOM validation on by default)
+# rejects the upload with HTTP 400.
+pdm run cyclonedx-py environment "$(pdm info --python)" \
+  --pyproject pyproject.toml --mc-type application \
+  --of JSON -o "$BOM_PATH/bom.json"
+# `version` is the one field PEP 621 may leave dynamic (resolved by the build
+# backend, e.g. pdm-backend), so resolve it via pdm and inject only that.
 version=$(pdm show --version 2>/dev/null)
-# `cyclonedx-py environment` emits no root `metadata.component`, so this jq
-# creates it from scratch. CycloneDX requires `component.type`, and
-# Dependency-Track (>= 4.11, BOM validation enabled by default) rejects an
-# upload whose component is missing it with HTTP 400. Set it to "application"
-# alongside the name/version so the generated BOM is schema-valid.
-jq --arg name "$name" \
-   --arg version "$version" \
-   '.metadata.component.type = "application" | .metadata.component.name = $name | .metadata.component.version = $version' \
+jq --arg version "$version" \
+   '.metadata.component.version = $version' \
    "$BOM_PATH/bom.json" > "$BOM_PATH/temp.json"
 mv "$BOM_PATH/temp.json" "$BOM_PATH/bom.json"

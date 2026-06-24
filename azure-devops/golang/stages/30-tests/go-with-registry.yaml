@@ -2,6 +2,11 @@ parameters:
   - name: 'DEPENDS_ON'
     type: object
     default: ''
+  # Extra environment variables forwarded to the test run (e.g. secret-backed
+  # settings that Azure Pipelines does not auto-inject into script steps).
+  - name: 'TEST_ENV'
+    type: object
+    default: {}
 
 stages:
   - stage: 'tests'
@@ -22,5 +27,7 @@ stages:
               command: 'login'
 
           - template: '../../abstracts/test.yaml'
+            parameters:
+              TEST_ENV: ${{ parameters.TEST_ENV }}
 
         continueOnError: false

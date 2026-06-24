@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [4.13.0] - 2026-06-24
+
 ### Added
 
 - added a `VERSION` variable to `makefiles/golang.mk`, derived from the latest versioned heading in the consuming project's `CHANGELOG.md` (then the most recent Git tag, then `dev`). Go projects that bake `-X main.version=$(VERSION)` now report the current `CHANGELOG.md` version from `make build`/`make install` even when Git tags lag behind a release, fixing stale `version` and `self-update` output. A project's own `VERSION ?=` line (included after this file) is transparently overridden; an explicit `VERSION` from the environment or command line still wins

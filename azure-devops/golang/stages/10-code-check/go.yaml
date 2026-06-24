@@ -16,6 +16,9 @@ stages:
         displayName: 'style:golangci-lint'
         variables:
           GOPATH: "$(Pipeline.Workspace)/.go"
+          # Keep the Go build cache inside GOPATH so the Cache@2 task (which caches
+          # $(GOPATH)) persists it too, avoiding a full cold recompile every run.
+          GOCACHE: "$(Pipeline.Workspace)/.go/build-cache"
         steps:
           # $(Scripts.Directory) was already defined in the line below
           - template: '../../abstracts/go.yaml'

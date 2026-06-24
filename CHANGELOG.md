@@ -20,6 +20,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - added a `VERSION` variable to `makefiles/golang.mk`, derived from the latest versioned heading in the consuming project's `CHANGELOG.md` (then the most recent Git tag, then `dev`). Go projects that bake `-X main.version=$(VERSION)` now report the current `CHANGELOG.md` version from `make build`/`make install` even when Git tags lag behind a release, fixing stale `version` and `self-update` output. A project's own `VERSION ?=` line (included after this file) is transparently overridden; an explicit `VERSION` from the environment or command line still wins
 
+### Fixed
+
+- fixed Go pipelines hanging on private module download (e.g. the CodeQL autobuild stuck on `dev.azure.com/<org>/.../core.git/v4`) whenever the consumer stores `GIT_HTTPS_TOKEN` as a *secret* pipeline variable. Azure DevOps does not auto-inject secret variables into a step's environment, so the `config.sh` sourced by `global/scripts/languages/golang/init/run.sh` (and the standalone CodeQL `global/scripts/tools/codeql/run.sh`) read an empty `GIT_HTTPS_TOKEN`, producing a `https://pat:@.../core` URL that fails authentication (`401`); git then blocks on an interactive credential prompt with no TTY, so the job hangs to timeout instead of failing fast. The token is now mapped explicitly via `env: GIT_HTTPS_TOKEN: $(GIT_HTTPS_TOKEN)` on every step that runs `config.sh`: `azure-devops/golang/abstracts/go.yaml` (covering code-check, the `govulncheck` security job, tests, management, and ARM delivery via `arm.yaml`), `azure-devops/global/stages/20-security/codeql.yaml` (which runs as its own job and sources `config.sh` itself), and `azure-devops/golang/stages/40-delivery/lambda.yaml` (which inlines the init step). Tool scripts (`golangci-lint`, `test`, `cyclonedx`) are unaffected: they do not source `config.sh` and inherit the `git config --global` set by the init step within the same job
+
 ## [4.12.3] - 2026-06-22
 
 ### Fixed

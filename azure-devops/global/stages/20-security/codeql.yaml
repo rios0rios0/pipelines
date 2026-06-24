@@ -9,6 +9,11 @@ jobs:
       - template: '../../abstracts/scripts-repo.yaml'
       - script: $(Scripts.Directory)/global/scripts/tools/codeql/run.sh "${{ parameters.CODEQL_LANGUAGE }}"
         continueOnError: true
+        env:
+          # CodeQL runs as its own job and sources config.sh itself; a secret
+          # GIT_HTTPS_TOKEN must be mapped explicitly for the Go autobuild to
+          # authenticate git when downloading private modules.
+          GIT_HTTPS_TOKEN: $(GIT_HTTPS_TOKEN)
 
       - task: 'PublishPipelineArtifact@1'
         inputs:

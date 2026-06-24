@@ -47,6 +47,11 @@ stages:
           - script: $(Scripts.Directory)/global/scripts/languages/golang/init/run.sh
             displayName: 'Load Custom Configuration'
             continueOnError: true
+            env:
+              # Secret variables are not auto-injected as env vars; map it
+              # explicitly so config.sh can authenticate git for private Go
+              # module downloads during the SAM/go build.
+              GIT_HTTPS_TOKEN: $(GIT_HTTPS_TOKEN)
 
           - task: 'Cache@2'
             inputs:

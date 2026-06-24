@@ -22,6 +22,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - added a `TEST_ENV` object parameter to the Azure DevOps Go test stage (`azure-devops/golang/stages/30-tests/go.yaml`, `go-with-registry.yaml`) and its abstract (`azure-devops/golang/abstracts/test.yaml`). It maps the supplied key/value pairs onto the `Run Tests` step's `env:`, so secret-backed settings (which Azure Pipelines withholds from script-step environments) reach the test process. Defaults to empty, leaving existing consumers unchanged
 - added `SYSTEM_ACCESSTOKEN: $(System.AccessToken)` to the `env:` of the Azure DevOps CodeQL step (`azure-devops/global/stages/20-security/codeql.yaml`) and the Go `Load Custom Configuration` step (`azure-devops/golang/abstracts/go.yaml`). Both source the project `config.sh`, which can authenticate private module fetches with the built-in pipeline identity instead of a hand-managed PAT; Azure Pipelines withholds `System.AccessToken` from the script environment unless mapped explicitly
 
+### Fixed
+
+- fixed the Go code-check (`style:golangci-lint`) job intermittently exceeding golangci-lint's load timeout on larger projects, surfacing as `context loading failed: ... context deadline exceeded` after a full stall. The `Cache@2` task in `azure-devops/golang/abstracts/go.yaml` persisted only `$(GOPATH)` (the Go module cache) while Go's build cache stayed at its default `~/.cache/go-build`, outside the cached path — so every run recompiled the entire dependency graph from scratch. Compounding this, the cache key was pinned to `go.sum` with no `restoreKeys`, so any branch that changed its dependencies produced a total cache miss with no fallback and re-downloaded every module. `GOCACHE` is now set inside `$(GOPATH)` (`azure-devops/golang/stages/10-code-check/go.yaml`) so the build cache is persisted and restored between runs, and a `restoreKeys` fallback lets a branch whose `go.sum` changed restore the most recent cache (e.g. `main`'s) instead of starting cold
+
 ## [4.12.3] - 2026-06-22
 
 ### Fixed

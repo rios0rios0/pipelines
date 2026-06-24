@@ -19,6 +19,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Added
 
 - added a `VERSION` variable to `makefiles/golang.mk`, derived from the latest versioned heading in the consuming project's `CHANGELOG.md` (then the most recent Git tag, then `dev`). Go projects that bake `-X main.version=$(VERSION)` now report the current `CHANGELOG.md` version from `make build`/`make install` even when Git tags lag behind a release, fixing stale `version` and `self-update` output. A project's own `VERSION ?=` line (included after this file) is transparently overridden; an explicit `VERSION` from the environment or command line still wins
+- added a `TEST_ENV` object parameter to the Azure DevOps Go test stage (`azure-devops/golang/stages/30-tests/go.yaml`, `go-with-registry.yaml`) and its abstract (`azure-devops/golang/abstracts/test.yaml`). It maps the supplied key/value pairs onto the `Run Tests` step's `env:`, so secret-backed settings (which Azure Pipelines withholds from script-step environments) reach the test process. Defaults to empty, leaving existing consumers unchanged
 
 ## [4.12.3] - 2026-06-22
 

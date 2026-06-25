@@ -2,8 +2,10 @@ steps:
   - task: 'Cache@2'
     inputs:
       key: "$(Agent.JobName)|$(Agent.OS)|go.sum"
+      restoreKeys: |
+        $(Agent.JobName)|$(Agent.OS)
       path: "$(GOPATH)"
-    displayName: 'Cache for Go modules'
+    displayName: 'Cache for Go modules and build cache'
     continueOnError: true
 
   - template: '../../global/abstracts/scripts-repo.yaml'

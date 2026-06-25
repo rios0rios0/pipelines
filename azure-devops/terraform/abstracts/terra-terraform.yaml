@@ -1,7 +1,7 @@
 steps:
   - task: 'TerraformInstaller@1'
     inputs:
-      terraformVersion: '1.15.6'
+      terraformVersion: '1.15.7'
     displayName: 'Install Terraform'
 
   - script: |

@@ -8,6 +8,12 @@ jobs:
     steps:
       - template: '../../abstracts/scripts-repo.yaml'
       - script: $(Scripts.Directory)/global/scripts/tools/codeql/run.sh "${{ parameters.CODEQL_LANGUAGE }}"
+        # CodeQL's Go build sources the project `config.sh`, which may
+        # authenticate private module fetches with the built-in pipeline
+        # identity. Azure Pipelines withholds secret-like values (including
+        # System.AccessToken) from the script environment unless mapped here.
+        env:
+          SYSTEM_ACCESSTOKEN: $(System.AccessToken)
         continueOnError: true
 
       - task: 'PublishPipelineArtifact@1'

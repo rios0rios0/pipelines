@@ -16,15 +16,17 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
-### Changed
-
-- changed the terraform pipeline version from `1.15.6` to `1.15.7`
+## [4.13.0] - 2026-06-26
 
 ### Added
 
-- added a `VERSION` variable to `makefiles/golang.mk`, derived from the latest versioned heading in the consuming project's `CHANGELOG.md` (then the most recent Git tag, then `dev`). Go projects that bake `-X main.version=$(VERSION)` now report the current `CHANGELOG.md` version from `make build`/`make install` even when Git tags lag behind a release, fixing stale `version` and `self-update` output. A project's own `VERSION ?=` line (included after this file) is transparently overridden; an explicit `VERSION` from the environment or command line still wins
-- added a `TEST_ENV` object parameter to the Azure DevOps Go test stage (`azure-devops/golang/stages/30-tests/go.yaml`, `go-with-registry.yaml`) and its abstract (`azure-devops/golang/abstracts/test.yaml`). It maps the supplied key/value pairs onto the `Run Tests` step's `env:`, so secret-backed settings (which Azure Pipelines withholds from script-step environments) reach the test process. Defaults to empty, leaving existing consumers unchanged
 - added `SYSTEM_ACCESSTOKEN: $(System.AccessToken)` to the `env:` of the Azure DevOps CodeQL step (`azure-devops/global/stages/20-security/codeql.yaml`) and the Go `Load Custom Configuration` step (`azure-devops/golang/abstracts/go.yaml`). Both source the project `config.sh`, which can authenticate private module fetches with the built-in pipeline identity instead of a hand-managed PAT; Azure Pipelines withholds `System.AccessToken` from the script environment unless mapped explicitly
+- added a `TEST_ENV` object parameter to the Azure DevOps Go test stage (`azure-devops/golang/stages/30-tests/go.yaml`, `go-with-registry.yaml`) and its abstract (`azure-devops/golang/abstracts/test.yaml`). It maps the supplied key/value pairs onto the `Run Tests` step's `env:`, so secret-backed settings (which Azure Pipelines withholds from script-step environments) reach the test process. Defaults to empty, leaving existing consumers unchanged
+- added a `VERSION` variable to `makefiles/golang.mk`, derived from the latest versioned heading in the consuming project's `CHANGELOG.md` (then the most recent Git tag, then `dev`). Go projects that bake `-X main.version=$(VERSION)` now report the current `CHANGELOG.md` version from `make build`/`make install` even when Git tags lag behind a release, fixing stale `version` and `self-update` output. A project's own `VERSION ?=` line (included after this file) is transparently overridden; an explicit `VERSION` from the environment or command line still wins
+
+### Changed
+
+- changed the terraform pipeline version from `1.15.6` to `1.15.7`
 
 ### Fixed
 

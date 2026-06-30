@@ -12,7 +12,7 @@ style:tflint:
   extends: '.terra'
   stage: 'code check (style/quality)'
   script:
-    - wget -qO- https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | sh
+    - command -v tflint > /dev/null 2>&1 || wget -qO- https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | sh
     - tflint --chdir . --recursive
 
 # Enforces the team's file-ordering standard (dependency/inputs in root.hcl,

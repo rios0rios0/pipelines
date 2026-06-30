@@ -62,8 +62,8 @@ jobs:
       - name: 'Checkout code'
         uses: 'actions/checkout@v6'
 
-      - name: 'Install TFLint'
-        run: curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+      - name: 'Install TFLint (if not already present)'
+        run: command -v tflint > /dev/null 2>&1 || curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
         shell: 'bash'
 
       - name: 'Run TFLint'

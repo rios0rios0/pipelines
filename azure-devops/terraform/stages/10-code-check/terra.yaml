@@ -18,8 +18,8 @@ stages:
           - script: ./terragrunt hcl format --check
             displayName: 'Run Terragrunt HCL format check'
 
-          - script: curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
-            displayName: 'Install TFLint'
+          - script: command -v tflint > /dev/null 2>&1 || curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+            displayName: 'Install TFLint (if not already present)'
 
           - script: tflint --chdir . --recursive
             displayName: 'Run TFLint'

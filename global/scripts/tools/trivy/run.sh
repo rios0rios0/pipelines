@@ -60,7 +60,6 @@ if ! command -v trivy > /dev/null 2>&1; then
       curl -fsSL --show-error https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh 2>>"$installerLog" \
         | sh -s -- -b /tmp "$TRIVY_PINNED_VERSION" >>"$installerLog" 2>&1
     } || installerStatus=$?
-    [ -s "$installerLog" ] && sed 's/^/  | /' "$installerLog" >&2
   fi
   if [ ! -x /tmp/trivy ]; then
     echo "ERROR: Trivy install failed after $maxAttempts 'latest' attempts and a pinned ${TRIVY_PINNED_VERSION:-v0.72.0} fallback (last exit=$installerStatus). Common causes include a GitHub API rate limit on the 'latest' tag lookup, transient network failures, raw.githubusercontent.com being blocked, or upstream GitHub downtime. Last installer/curl output:" >&2

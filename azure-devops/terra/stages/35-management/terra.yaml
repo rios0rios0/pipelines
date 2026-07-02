@@ -22,10 +22,10 @@ stages:
           # `.terraform.lock.hcl` and module source references. Writes to
           # `$(REPORT_PATH)/bom.json` so the upload script below finds it.
           - script: $(Scripts.Directory)/global/scripts/languages/terraform/cyclonedx/run.sh
-            displayName: 'generate CycloneDX BOM'
+            displayName: 'Generate CycloneDX BOM'
 
           - script: $(Scripts.Directory)/global/scripts/tools/dependency-track/run.sh
-            displayName: 'upload BOM to Dependency-Track'
+            displayName: 'Upload BOM to Dependency-Track'
             # Azure Pipelines does NOT auto-expose secret variables to the
             # script's environment — the value of `$(DEPENDENCY_TRACK_TOKEN)`
             # is substituted at task-parse time, but the shell's

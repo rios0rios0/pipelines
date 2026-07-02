@@ -43,8 +43,26 @@ if ! command -v trivy > /dev/null 2>&1; then
     fi
     attempt=$((attempt + 1))
   done
+  # Last-resort fallback: the retry loop above installs the `latest`
+  # Trivy, whose tag lookup can transiently fail (a rate-limited or empty
+  # GitHub response makes upstream `install.sh` log `unable to find ''`
+  # and drop no binary). Before failing the whole stage, try once more
+  # against an explicit, known-good version so a flaky `latest` lookup
+  # alone cannot red the pipeline. Override the pin via TRIVY_PINNED_VERSION
+  # (any tag from https://github.com/aquasecurity/trivy/releases, e.g. v0.72.0).
   if [ ! -x /tmp/trivy ]; then
-    echo "ERROR: Trivy install failed after $maxAttempts attempts (last exit=$installerStatus). Common causes include a GitHub API rate limit on the 'latest' tag lookup, transient network failures, raw.githubusercontent.com being blocked, or upstream GitHub downtime. Last installer/curl output:" >&2
+    : "${TRIVY_PINNED_VERSION:=v0.72.0}"
+    echo "Trivy 'latest' install failed after $maxAttempts attempts; falling back to pinned $TRIVY_PINNED_VERSION..." >&2
+    : > "$installerLog"
+    installerStatus=0
+    {
+      curl -fsSL --show-error https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh 2>>"$installerLog" \
+        | sh -s -- -b /tmp "$TRIVY_PINNED_VERSION" >>"$installerLog" 2>&1
+    } || installerStatus=$?
+    [ -s "$installerLog" ] && sed 's/^/  | /' "$installerLog" >&2
+  fi
+  if [ ! -x /tmp/trivy ]; then
+    echo "ERROR: Trivy install failed after $maxAttempts 'latest' attempts and a pinned ${TRIVY_PINNED_VERSION:-v0.72.0} fallback (last exit=$installerStatus). Common causes include a GitHub API rate limit on the 'latest' tag lookup, transient network failures, raw.githubusercontent.com being blocked, or upstream GitHub downtime. Last installer/curl output:" >&2
     [ -s "$installerLog" ] && sed 's/^/  | /' "$installerLog" >&2
     echo "Re-run the pipeline or pin a Trivy version explicitly." >&2
     rm -f "$installerLog"

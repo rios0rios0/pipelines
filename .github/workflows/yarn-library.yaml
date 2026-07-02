@@ -41,7 +41,7 @@ jobs:
         with:
           tag_prefix: '${{ matrix.prefix }}'
     needs: [ 'yarn' ]
-    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore/bump-')"
+    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore/bump-') || contains(github.event.head_commit.message, 'chore(bump)'))"
 
 
 # 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations
@@ -63,5 +63,5 @@ jobs:
 #     contents: 'write' # delivery-release
 #
 # This workflow validates a Yarn (JavaScript/TypeScript) library and creates a release tag
-# when a commit with "chore/bump-" message is pushed to main. Pass tag_prefixes='["", "v"]'
+# when a version-bump commit is pushed to main. Pass tag_prefixes='["", "v"]'
 # to publish both a plain tag (e.g., "1.0.0") and a v-prefixed tag (e.g., "v1.0.0").

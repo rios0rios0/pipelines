@@ -76,6 +76,13 @@ trivy filesystem \
 # fires only when the emitted spec is newer than the target (it never raises
 # the version); drop it once DT ingests 1.7 or Trivy gains a spec selector.
 maxSpec="${DT_CYCLONEDX_MAX_SPEC_VERSION:-1.6}"
+# Guard the override: the jq numeric compare below does `split(".") | map(tonumber)`,
+# which fails with a cryptic error (or silently mislabels the BOM) on anything
+# that is not a `MAJOR.MINOR` version. Fail fast with an actionable message.
+if ! printf '%s' "$maxSpec" | grep -qE '^[0-9]+\.[0-9]+$'; then
+  echo "ERROR: DT_CYCLONEDX_MAX_SPEC_VERSION='$maxSpec' is not a MAJOR.MINOR CycloneDX spec version (e.g. '1.6')." >&2
+  exit 1
+fi
 
 tmpFile="$BOM_PATH/bom.tmp.json"
 jq --arg name "$PROJECT_NAME" \

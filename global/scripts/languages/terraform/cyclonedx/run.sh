@@ -64,11 +64,39 @@ trivy filesystem \
 # Trivy's CycloneDX writer defaults `metadata.component.name` to the scan
 # target basename (the CI agent working directory, e.g. `s`). Override it
 # so Dependency-Track associates the BOM with the right project.
+#
+# Trivy also always emits its latest supported CycloneDX spec (1.7 as of
+# 0.71+) and exposes no flag to pick an older one. Dependency-Track ingests
+# only up to 1.6 — it rejects anything newer with HTTP 400
+# `{"detail":"Unrecognized specVersion 1.7"}` (tracked upstream as
+# DependencyTrack/dependency-track#5818, blocked on cyclonedx-core-java).
+# Trivy's output carries no 1.7-specific fields, so the BOM is down-encoded to
+# `DT_CYCLONEDX_MAX_SPEC_VERSION` (default 1.6) by rewriting `specVersion` and
+# `$schema` — yielding a valid lower-spec BOM that DT accepts. The rewrite
+# fires only when the emitted spec is newer than the target (it never raises
+# the version); drop it once DT ingests 1.7 or Trivy gains a spec selector.
+maxSpec="${DT_CYCLONEDX_MAX_SPEC_VERSION:-1.6}"
+# Guard the override: the jq numeric compare below does `split(".") | map(tonumber)`,
+# which fails with a cryptic error (or silently mislabels the BOM) on anything
+# that is not a `MAJOR.MINOR` version. Fail fast with an actionable message.
+if ! printf '%s' "$maxSpec" | grep -qE '^[0-9]+\.[0-9]+$'; then
+  echo "ERROR: DT_CYCLONEDX_MAX_SPEC_VERSION='$maxSpec' is not a MAJOR.MINOR CycloneDX spec version (e.g. '1.6')." >&2
+  exit 1
+fi
+
 tmpFile="$BOM_PATH/bom.tmp.json"
 jq --arg name "$PROJECT_NAME" \
    --arg version "$PROJECT_VERSION" \
-   '.metadata.component.name = $name | .metadata.component.version = $version' \
+   --arg maxSpec "$maxSpec" \
+   '
+     .metadata.component.name = $name
+     | .metadata.component.version = $version
+     | if ((.specVersion // "0") | split(".") | map(tonumber)) > ($maxSpec | split(".") | map(tonumber))
+       then .specVersion = $maxSpec
+            | (if has("$schema") then ."$schema" = "http://cyclonedx.org/schema/bom-\($maxSpec).schema.json" else . end)
+       else . end
+   ' \
    "$bomFile" > "$tmpFile"
 mv "$tmpFile" "$bomFile"
 
-echo "CycloneDX BOM written to $bomFile (name=$PROJECT_NAME version=$PROJECT_VERSION)."
+echo "CycloneDX BOM written to $bomFile (name=$PROJECT_NAME version=$PROJECT_VERSION, spec $(jq -r '.specVersion' "$bomFile"))."

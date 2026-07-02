@@ -36,8 +36,19 @@ bomUploadUrl="$baseUrl/api/v1/bom"
 # hides Dependency-Track's error message and leaves only a bare
 # `curl: (22) ... 400` in the log. On failure the body is echoed so the
 # actual rejection reason is visible in the pipeline output.
+# TLS certificate verification is ON by default so the API key (sent in the
+# `X-Api-Key` header) cannot be captured via a MITM. Set
+# DEPENDENCY_TRACK_INSECURE=1 to skip verification for a DT endpoint with a
+# self-signed / private-CA certificate (prefer trusting the CA on the agent).
+# `set --` builds the optional flag as a quoted positional (no word-splitting).
+if [ -n "${DEPENDENCY_TRACK_INSECURE:-}" ]; then
+  set -- --insecure
+else
+  set --
+fi
+
 responseFile="${TMPDIR:-/tmp}/dependency-track-response.$$"
-httpStatus=$(curl --insecure --silent --show-error \
+httpStatus=$(curl "$@" --silent --show-error \
   --output "$responseFile" --write-out '%{http_code}' \
   --request POST "$bomUploadUrl" \
   -H "X-Api-Key: $DEPENDENCY_TRACK_TOKEN" \

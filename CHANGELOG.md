@@ -18,7 +18,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added an env-overridable `TRIVY_PINNED_VERSION` (default `v0.72.0`, the most recent release) last-resort fallback to the Trivy install path in `global/scripts/tools/trivy/run.sh`, `run-sca.sh`, and `global/scripts/languages/terraform/cyclonedx/run.sh`. The normal path still installs the `latest` Trivy, but when the upstream `install.sh` `latest` tag lookup transiently fails — a rate-limited or empty GitHub response makes it log `unable to find ''` and drop no binary, historically reding `sast:trivy` / `sca:trivy` mid-run — the scripts now retry once against the explicit pinned release before failing the stage. Set `TRIVY_PINNED_VERSION` to any tag from https://github.com/aquasecurity/trivy/releases to override. Mirrors the existing `HADOLINT_PINNED_VERSION` hardening
+- added an env-overridable `TRIVY_PINNED_VERSION` (default `v0.72.0`) last-resort fallback to the Trivy install path in `global/scripts/tools/trivy/run.sh`, `run-sca.sh`, and `global/scripts/languages/terraform/cyclonedx/run.sh`. The normal path still installs the `latest` Trivy, but when the upstream `install.sh` `latest` tag lookup transiently fails — a rate-limited or empty GitHub response makes it log `unable to find ''` and drop no binary, historically failing `sast:trivy` / `sca:trivy` mid-run — the scripts now retry once against the explicit pinned release before failing the stage. Set `TRIVY_PINNED_VERSION` to any tag from https://github.com/aquasecurity/trivy/releases to override. Mirrors the existing `HADOLINT_PINNED_VERSION` hardening
 
 ### Fixed
 

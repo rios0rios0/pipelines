@@ -31,14 +31,14 @@ if ! command -v trivy > /dev/null 2>&1; then
   # `|| true` keeps `set -e` from aborting so the pinned fallback below can
   # run when the `latest` tag lookup transiently fails (a rate-limited or
   # empty GitHub response drops no binary).
-  curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /tmp || true
+  curl -fsSL --show-error https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /tmp || true
   # Last-resort fallback to an explicit, known-good version. Override the
   # pin via TRIVY_PINNED_VERSION (any tag from
   # https://github.com/aquasecurity/trivy/releases, e.g. v0.72.0).
   if [ ! -x /tmp/trivy ]; then
     : "${TRIVY_PINNED_VERSION:=v0.72.0}"
     echo "Trivy 'latest' install failed; falling back to pinned $TRIVY_PINNED_VERSION..." >&2
-    curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /tmp "$TRIVY_PINNED_VERSION" || true
+    curl -fsSL --show-error https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /tmp "$TRIVY_PINNED_VERSION" || true
   fi
   if [ ! -x /tmp/trivy ]; then
     echo "ERROR: Trivy install failed (latest and pinned ${TRIVY_PINNED_VERSION:-v0.72.0}). See install output above." >&2

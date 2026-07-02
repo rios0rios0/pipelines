@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed the `report:dependency-track` job failing with `curl: (22) ... HTTP 400` for every Python integrator: `global/scripts/languages/python/cyclonedx/run.sh` generated the BOM with `cyclonedx-py environment` (which emits no root `metadata.component`) and then hand-built the component via `jq` with only `name` and `version`, omitting the schema-required `component.type`, so Dependency-Track (>= 4.11, BOM validation on by default) rejected every upload — and because the job runs with `continueOnError`/`allow_failure`, builds finished `partiallySucceeded` while no SBOM was ever ingested. The root component is now populated by `cyclonedx-py` itself from the project's `pyproject.toml` (`--pyproject`), and since not every PDM project is an application, the component type is derived from PDM's own library marker under `[tool.pdm]` (`distribution = true`, or the older `package-type = "library"`, yields `library`; anything else defaults to `application`), with a `CYCLONEDX_MC_TYPE` environment variable available to force any valid CycloneDX type per project. Only `version` is still injected via `jq`, since PEP 621 allows it to stay dynamic and be resolved by the build backend
+
 ## [4.13.0] - 2026-06-30
 
 ### Added

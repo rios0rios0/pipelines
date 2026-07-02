@@ -95,7 +95,7 @@ All `run.sh` scripts follow this pattern:
 | Tool(s) | Install method |
 |------------------------------------------------|------------------------------------------------------------------------------------|
 | `codeql`, `gitleaks`, `hadolint`, `shellcheck` | self-contained release binary downloaded from the project's GitHub releases         |
-| `trivy`                                        | upstream `install.sh`, wrapped in a retry-with-backoff loop                         |
+| `trivy`                                        | upstream `install.sh` (retry-with-backoff loop, then a pinned-version fallback)     |
 | `semgrep`                                      | installed from PyPI into an isolated `python3 -m venv` — Semgrep ships no binary    |
 | `sonarqube`                                    | expects `sonar-scanner` to already be on the runner                                 |
 | `dependency-track`                             | no tool binary — uploads the CycloneDX BOM with `curl`                              |

@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added an env-overridable `TRIVY_PINNED_VERSION` (default `v0.72.0`) last-resort fallback to the Trivy install path in `global/scripts/tools/trivy/run.sh`, `run-sca.sh`, and `global/scripts/languages/terraform/cyclonedx/run.sh`. The normal path still installs the `latest` Trivy, but when the upstream `install.sh` `latest` tag lookup transiently fails — a rate-limited or empty GitHub response makes it log `unable to find ''` and drop no binary, historically failing `sast:trivy` / `sca:trivy` mid-run — the scripts now retry once against the explicit pinned release before failing the stage. Set `TRIVY_PINNED_VERSION` to any tag from https://github.com/aquasecurity/trivy/releases to override. Mirrors the existing `HADOLINT_PINNED_VERSION` hardening
+
 ### Fixed
 
 - fixed the `report:dependency-track` job failing with `curl: (22) ... HTTP 400` for every Python integrator: `global/scripts/languages/python/cyclonedx/run.sh` generated the BOM with `cyclonedx-py environment` (which emits no root `metadata.component`) and then hand-built the component via `jq` with only `name` and `version`, omitting the schema-required `component.type`, so Dependency-Track (>= 4.11, BOM validation on by default) rejected every upload — and because the job runs with `continueOnError`/`allow_failure`, builds finished `partiallySucceeded` while no SBOM was ever ingested. The root component is now populated by `cyclonedx-py` itself from the project's `pyproject.toml` (`--pyproject`), and since not every PDM project is an application, the component type is derived from PDM's own library marker under `[tool.pdm]` (`distribution = true`, or the older `package-type = "library"`, yields `library`; anything else defaults to `application`), with a `CYCLONEDX_MC_TYPE` environment variable available to force any valid CycloneDX type per project. Only `version` is still injected via `jq`, since PEP 621 allows it to stay dynamic and be resolved by the build backend

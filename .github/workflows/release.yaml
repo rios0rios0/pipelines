@@ -18,7 +18,7 @@ jobs:
   delivery-release:
     name: 'delivery > release'
     runs-on: 'ubuntu-latest'
-    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'chore/bump-')"
+    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore/bump-') || contains(github.event.head_commit.message, 'chore(bump)'))"
     outputs:
       tag_name: '${{ steps.release.outputs.tag_name }}'
     strategy:

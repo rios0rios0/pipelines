@@ -23,7 +23,20 @@ if [ -z "$SCRIPT_LIST" ]; then
 fi
 
 # Install ShellCheck if not already available
-if ! command -v shellcheck > /dev/null 2>&1; then
+# Self-update an already-installed ShellCheck on persistent agents so long-lived
+# hosts stay current for CVE fixes. Resolves the latest tag via the
+# `releases/latest` redirect (not API-rate-limited). Fail-safe: any uncertainty
+# (lookup blip or unparseable version) returns "no update", so it never forces a
+# needless re-download or breaks the run.
+shellcheck_update_available() {
+  _sc_latest=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/koalaman/shellcheck/releases/latest 2>/dev/null | sed 's#.*/tag/v\{0,1\}##')
+  _sc_current=$(shellcheck --version 2>/dev/null | awk '/^version:/{print $2}')
+  case "$_sc_latest" in [0-9]*.[0-9]*) ;; *) return 1 ;; esac
+  case "$_sc_current" in [0-9]*.[0-9]*) ;; *) return 1 ;; esac
+  [ "$_sc_latest" != "$_sc_current" ]
+}
+
+if ! command -v shellcheck > /dev/null 2>&1 || shellcheck_update_available; then
   echo "Downloading ShellCheck..."
   SHELLCHECK_VERSION=$(curl -fsSL https://api.github.com/repos/koalaman/shellcheck/releases/latest | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
 

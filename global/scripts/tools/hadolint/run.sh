@@ -55,7 +55,20 @@ fi
 # non-empty (falling back to a pinned version otherwise), and the binary is
 # verified to actually run before linting. Mirrors the Trivy install-retry
 # idiom in `global/scripts/tools/trivy/run.sh`.
-if ! command -v hadolint > /dev/null 2>&1; then
+# Self-update an already-installed Hadolint on persistent agents so long-lived
+# hosts stay current for CVE fixes. Resolves the latest tag via the
+# `releases/latest` redirect (not API-rate-limited). Fail-safe: any uncertainty
+# (lookup blip or unparseable version) returns "no update", so it never forces a
+# needless re-download or breaks the run.
+hadolint_update_available() {
+  _hl_latest=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/hadolint/hadolint/releases/latest 2>/dev/null | sed 's#.*/tag/v\{0,1\}##')
+  _hl_current=$(hadolint --version 2>/dev/null | awk '{print $NF}' | sed 's/^v//')
+  case "$_hl_latest" in [0-9]*.[0-9]*) ;; *) return 1 ;; esac
+  case "$_hl_current" in [0-9]*.[0-9]*) ;; *) return 1 ;; esac
+  [ "$_hl_latest" != "$_hl_current" ]
+}
+
+if ! command -v hadolint > /dev/null 2>&1 || hadolint_update_available; then
   echo "Downloading Hadolint..."
 
   # Known-good fallback used whenever the latest-version lookup cannot be

@@ -38,7 +38,14 @@ shellcheck_update_available() {
 
 if ! command -v shellcheck > /dev/null 2>&1 || shellcheck_update_available; then
   echo "Downloading ShellCheck..."
-  SHELLCHECK_VERSION=$(curl -fsSL https://api.github.com/repos/koalaman/shellcheck/releases/latest | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+  # Resolve the latest tag via the releases/latest redirect (not API-rate-limited),
+  # matching shellcheck_update_available above. Keep the leading `v` — the release
+  # asset and extract dir are named `shellcheck-vX.Y.Z...`.
+  SHELLCHECK_VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/koalaman/shellcheck/releases/latest | sed 's#.*/tag/##')
+  if [ -z "$SHELLCHECK_VERSION" ]; then
+    echo "ERROR: could not resolve the latest ShellCheck version (GitHub outage or network failure)." >&2
+    exit 1
+  fi
 
   ARCH=$(uname -m)
   case "$ARCH" in

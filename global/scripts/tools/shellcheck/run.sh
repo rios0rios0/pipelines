@@ -56,7 +56,9 @@ if ! command -v shellcheck > /dev/null 2>&1 || shellcheck_update_available; then
   mv "/tmp/shellcheck-$SHELLCHECK_VERSION/shellcheck" /tmp/shellcheck
   chmod +x /tmp/shellcheck
   rm -rf /tmp/shellcheck.tar.xz "/tmp/shellcheck-$SHELLCHECK_VERSION"
-  export PATH="/tmp:$PATH"
+  # Move the downloaded binary into the user's ~/.local/bin (on PATH via the
+  # shared preamble) so nothing is installed to a root-owned location.
+  mv /tmp/shellcheck "$HOME/.local/bin/shellcheck"
 fi
 
 echo "Running ShellCheck analysis..."

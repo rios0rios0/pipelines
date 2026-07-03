@@ -91,7 +91,9 @@ if ! command -v gitleaks > /dev/null 2>&1 || gitleaks_update_available; then
     rm -f /tmp/gitleaks
     exit 1
   fi
-  export PATH="/tmp:$PATH"
+  # Move the downloaded binary into the user's ~/.local/bin (on PATH via the
+  # shared preamble) so nothing is installed to a root-owned location.
+  mv /tmp/gitleaks "$HOME/.local/bin/gitleaks"
 fi
 
 # Fail loudly if the binary is still not runnable rather than falling through

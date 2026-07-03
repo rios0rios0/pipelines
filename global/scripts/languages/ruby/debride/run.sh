@@ -10,13 +10,13 @@ fileName="$(pwd)/$REPORT_PATH/debride.txt"
 
 if ! command -v debride > /dev/null 2>&1; then
   echo "Installing debride..."
-  gem install debride --no-document --quiet
+  gem install --user-install -n "$HOME/.local/bin" debride --no-document --quiet
 else
   # Already present (persistent agent): self-update so long-lived hosts stay
   # current for CVE fixes. `gem update` only fetches a newer release when one
   # exists, so this is a no-op otherwise.
   echo "Updating debride..."
-  gem update debride --no-document --quiet
+  gem update --user-install debride --no-document --quiet
 fi
 
 echo "Running debride unused code analysis..."

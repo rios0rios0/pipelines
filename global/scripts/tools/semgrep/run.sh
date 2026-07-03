@@ -35,6 +35,19 @@ if ! command -v semgrep > /dev/null 2>&1; then
   python3 -m venv "$SEMGREP_VENV"
   "$SEMGREP_VENV/bin/pip" install --quiet --disable-pip-version-check semgrep
   export PATH="$SEMGREP_VENV/bin:$PATH"
+else
+  # Already present (persistent agent): self-update so long-lived hosts stay
+  # current for CVE fixes. Prefer our own venv if it survived; otherwise upgrade
+  # the on-PATH install in place -- best effort, since a system-managed Python
+  # may refuse under PEP 668, in which case the installed version is kept. pip
+  # only downloads a newer release when one exists.
+  echo "Updating Semgrep..."
+  if [ -x "/tmp/semgrep-venv/bin/pip" ]; then
+    "/tmp/semgrep-venv/bin/pip" install --quiet --disable-pip-version-check --upgrade semgrep
+  elif command -v python3 > /dev/null 2>&1; then
+    python3 -m pip install --quiet --disable-pip-version-check --upgrade semgrep 2>/dev/null \
+      || echo "WARN: could not auto-update Semgrep (externally-managed Python?); using the installed version." >&2
+  fi
 fi
 
 # Collect optional arguments (project-provided rule exclusions and custom

@@ -60,6 +60,12 @@ export PATH="${GOBIN}:${PATH}"
 if ! command -v go-junit-report > /dev/null 2>&1; then
   echo "Installing go-junit-report..."
   go install github.com/jstemmer/go-junit-report/v2@latest
+else
+  # Already present (persistent agent): re-resolve @latest so long-lived hosts
+  # stay current. `go install` reuses the module cache and only rebuilds when
+  # @latest advances, so this is cheap when already up to date.
+  echo "Updating go-junit-report..."
+  go install github.com/jstemmer/go-junit-report/v2@latest
 fi
 
 echo "Running terratest suite in ${TESTS_DIR}/..."

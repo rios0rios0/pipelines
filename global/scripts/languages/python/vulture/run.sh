@@ -12,6 +12,12 @@ fileName="$(pwd)/$REPORT_PATH/vulture.txt"
 if ! command -v vulture > /dev/null 2>&1; then
   echo "Installing vulture..."
   python -m pip install vulture --quiet
+else
+  # Already present (persistent agent): self-update so long-lived hosts stay
+  # current for CVE fixes instead of pinning whatever was first installed. pip
+  # only downloads when a newer release exists, so this is a no-op otherwise.
+  echo "Updating vulture..."
+  python -m pip install --upgrade vulture --quiet
 fi
 
 # Include a project-level whitelist if present to suppress known false positives

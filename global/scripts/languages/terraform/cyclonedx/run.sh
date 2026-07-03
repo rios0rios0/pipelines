@@ -26,7 +26,20 @@ bomFile="$BOM_PATH/bom.json"
 
 # Install Trivy if not already available on the agent (same pattern as
 # `global/scripts/tools/trivy/run.sh`).
-if ! command -v trivy > /dev/null 2>&1; then
+# Self-update an already-installed Trivy on persistent agents so long-lived
+# hosts stay current for CVE fixes. Resolves the latest tag via the
+# `releases/latest` redirect (not API-rate-limited). Fail-safe: any uncertainty
+# (lookup blip or unparseable version) returns "no update", so it never forces a
+# needless re-download or breaks the run.
+trivy_update_available() {
+  _tv_latest=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/aquasecurity/trivy/releases/latest 2>/dev/null | sed 's#.*/tag/v\{0,1\}##')
+  _tv_current=$(trivy --version 2>/dev/null | awk '/^Version:/{print $2}')
+  case "$_tv_latest" in [0-9]*.[0-9]*) ;; *) return 1 ;; esac
+  case "$_tv_current" in [0-9]*.[0-9]*) ;; *) return 1 ;; esac
+  [ "$_tv_latest" != "$_tv_current" ]
+}
+
+if ! command -v trivy > /dev/null 2>&1 || trivy_update_available; then
   echo "Downloading Trivy..."
   # `|| true` keeps `set -e` from aborting so the pinned fallback below can
   # run when the `latest` tag lookup transiently fails (a rate-limited or

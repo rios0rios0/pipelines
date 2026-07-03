@@ -18,7 +18,14 @@ else
   # current for CVE fixes. `composer global update` only fetches a newer
   # release when one exists, so this is a no-op otherwise.
   echo "Updating PHPMD..."
-  composer global update phpmd/phpmd --quiet
+  # Best-effort: PHPMD may have been installed by another mechanism on this
+  # host, so only self-update when composer is actually available rather than
+  # failing the step with `composer: not found`.
+  if command -v composer > /dev/null 2>&1; then
+    composer global update phpmd/phpmd --quiet
+  else
+    echo "WARN: composer not available; keeping the installed PHPMD." >&2
+  fi
 fi
 
 echo "Running PHPMD unused code analysis..."

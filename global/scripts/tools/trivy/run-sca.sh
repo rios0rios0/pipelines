@@ -81,7 +81,9 @@ if ! command -v trivy > /dev/null 2>&1 || trivy_update_available; then
     exit 1
   fi
   rm -f "$installerLog"
-  export PATH="/tmp:$PATH"
+  # Move the downloaded binary into the user's ~/.local/bin (on PATH via the
+  # shared preamble) so nothing is installed to a root-owned location.
+  mv /tmp/trivy "$HOME/.local/bin/trivy"
 fi
 
 # Use default ignore file if the project doesn't provide one

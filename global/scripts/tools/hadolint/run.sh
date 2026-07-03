@@ -158,7 +158,9 @@ if ! command -v hadolint > /dev/null 2>&1 || hadolint_update_available; then
     exit 1
   fi
 
-  export PATH="/tmp:$PATH"
+  # Move the downloaded binary into the user's ~/.local/bin (on PATH via the
+  # shared preamble) so nothing is installed to a root-owned location.
+  mv /tmp/hadolint "$HOME/.local/bin/hadolint"
 fi
 
 # Defense in depth: refuse to proceed unless `hadolint` is genuinely runnable

@@ -71,8 +71,11 @@ if ! command -v codeql > /dev/null 2>&1; then
   echo "Downloading CodeQL CLI bundle..."
   CODEQL_BUNDLE_URL="https://github.com/github/codeql-action/releases/latest/download/codeql-bundle-linux64.tar.gz"
   curl -fsSL "$CODEQL_BUNDLE_URL" -o /tmp/codeql-bundle.tar.gz
-  tar -xzf /tmp/codeql-bundle.tar.gz -C /tmp
-  export PATH="/tmp/codeql:$PATH"
+  mkdir -p "$HOME/.local/share"
+  tar -xzf /tmp/codeql-bundle.tar.gz -C "$HOME/.local/share"
+  # Symlink the CodeQL launcher into the user's ~/.local/bin (on PATH via the
+  # shared preamble); the bundle itself lives under ~/.local/share — no root.
+  ln -sf "$HOME/.local/share/codeql/codeql" "$HOME/.local/bin/codeql"
   rm /tmp/codeql-bundle.tar.gz
 fi
 

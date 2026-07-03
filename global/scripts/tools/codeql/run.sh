@@ -47,6 +47,10 @@ fi
 # errors (missing SARIF file, `jq` "No such file" warnings, `[: Illegal
 # number`). Fail fast with an actionable message instead so the operator
 # knows to switch the runner.
+# Unlike the other tool scripts, CodeQL is intentionally NOT self-updated when
+# already present: the CLI ships as a ~1 GB bundle with no lightweight version
+# handle, so re-downloading it on every run of a persistent agent would cost far
+# more than the staleness it avoids. Refresh it out-of-band instead.
 if ! command -v codeql > /dev/null 2>&1; then
   ARCH=$(uname -m)
   case "$ARCH" in

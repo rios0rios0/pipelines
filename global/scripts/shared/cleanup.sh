@@ -13,3 +13,13 @@ else
   # If not given, clean entire report dir (legacy behaviour)
   rm -rf "$REPORT_PATH" && mkdir -p "$REPORT_PATH"
 fi
+
+# Ensure the current user's ~/.local/bin exists and is on PATH so tool scripts
+# install binaries there without root. Pipeline/CI shells are frequently
+# non-login and do not pick ~/.local/bin up from the user's profile, so add it
+# here (idempotently) for every tool that sources this shared preamble.
+mkdir -p "$HOME/.local/bin"
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *) PATH="$HOME/.local/bin:$PATH" && export PATH ;;
+esac

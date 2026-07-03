@@ -25,25 +25,29 @@ fi
 # `toomanyrequests` failure. Semgrep is installed into an isolated virtualenv:
 # a venv sidesteps the PEP 668 "externally-managed-environment" restriction on
 # modern distributions without polluting the runner's system Python.
+# The venv lives under ~/.local/share and its launcher is symlinked into
+# ~/.local/bin (on PATH via the shared preamble) -- no root, and it persists so
+# an already-present install is upgraded rather than reinstalled each run.
+SEMGREP_VENV="$HOME/.local/share/semgrep-venv"
 if ! command -v semgrep > /dev/null 2>&1; then
   if ! command -v python3 > /dev/null 2>&1; then
     echo "ERROR: Semgrep requires Python 3 (it has no standalone binary release). Install python3 and re-run." >&2
     exit 1
   fi
   echo "Downloading Semgrep..."
-  SEMGREP_VENV="/tmp/semgrep-venv"
   python3 -m venv "$SEMGREP_VENV"
   "$SEMGREP_VENV/bin/pip" install --quiet --disable-pip-version-check semgrep
-  export PATH="$SEMGREP_VENV/bin:$PATH"
+  ln -sf "$SEMGREP_VENV/bin/semgrep" "$HOME/.local/bin/semgrep"
 else
   # Already present (persistent agent): self-update so long-lived hosts stay
-  # current for CVE fixes. Prefer our own venv if it survived; otherwise upgrade
-  # the on-PATH install in place -- best effort, since a system-managed Python
-  # may refuse under PEP 668, in which case the installed version is kept. pip
-  # only downloads a newer release when one exists.
+  # current for CVE fixes. Upgrade our own venv if it survived; otherwise fall
+  # back to upgrading the on-PATH install in place -- best effort, since a
+  # system-managed Python may refuse under PEP 668, keeping the installed
+  # version. pip only downloads a newer release when one exists.
   echo "Updating Semgrep..."
-  if [ -x "/tmp/semgrep-venv/bin/pip" ]; then
-    "/tmp/semgrep-venv/bin/pip" install --quiet --disable-pip-version-check --upgrade semgrep
+  if [ -x "$SEMGREP_VENV/bin/pip" ]; then
+    "$SEMGREP_VENV/bin/pip" install --quiet --disable-pip-version-check --upgrade semgrep
+    ln -sf "$SEMGREP_VENV/bin/semgrep" "$HOME/.local/bin/semgrep"
   elif command -v python3 > /dev/null 2>&1; then
     python3 -m pip install --quiet --disable-pip-version-check --upgrade semgrep 2>/dev/null \
       || echo "WARN: could not auto-update Semgrep (externally-managed Python?); using the installed version." >&2

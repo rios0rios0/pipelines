@@ -57,7 +57,9 @@ if ! command -v trivy > /dev/null 2>&1 || trivy_update_available; then
     echo "ERROR: Trivy install failed (latest and pinned ${TRIVY_PINNED_VERSION:-v0.72.0}). See install output above." >&2
     exit 1
   fi
-  export PATH="/tmp:$PATH"
+  # Move the downloaded binary into the user's ~/.local/bin (on PATH via the
+  # shared preamble) so nothing is installed to a root-owned location.
+  mv /tmp/trivy "$HOME/.local/bin/trivy"
 fi
 
 # `basename -s` is a GNU extension and breaks on BusyBox/Alpine, so strip

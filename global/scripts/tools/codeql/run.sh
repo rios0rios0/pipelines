@@ -47,6 +47,10 @@ fi
 # errors (missing SARIF file, `jq` "No such file" warnings, `[: Illegal
 # number`). Fail fast with an actionable message instead so the operator
 # knows to switch the runner.
+# Unlike the other tool scripts, CodeQL is intentionally NOT self-updated when
+# already present: the CLI ships as a ~1 GB bundle with no lightweight version
+# handle, so re-downloading it on every run of a persistent agent would cost far
+# more than the staleness it avoids. Refresh it out-of-band instead.
 if ! command -v codeql > /dev/null 2>&1; then
   ARCH=$(uname -m)
   case "$ARCH" in
@@ -67,8 +71,11 @@ if ! command -v codeql > /dev/null 2>&1; then
   echo "Downloading CodeQL CLI bundle..."
   CODEQL_BUNDLE_URL="https://github.com/github/codeql-action/releases/latest/download/codeql-bundle-linux64.tar.gz"
   curl -fsSL "$CODEQL_BUNDLE_URL" -o /tmp/codeql-bundle.tar.gz
-  tar -xzf /tmp/codeql-bundle.tar.gz -C /tmp
-  export PATH="/tmp/codeql:$PATH"
+  mkdir -p "$HOME/.local/share"
+  tar -xzf /tmp/codeql-bundle.tar.gz -C "$HOME/.local/share"
+  # Symlink the CodeQL launcher into the user's ~/.local/bin (on PATH via the
+  # shared preamble); the bundle itself lives under ~/.local/share — no root.
+  ln -sf "$HOME/.local/share/codeql/codeql" "$HOME/.local/bin/codeql"
   rm /tmp/codeql-bundle.tar.gz
 fi
 

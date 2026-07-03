@@ -19,7 +19,22 @@ GITLAB_CONFIG_PATH="$SCRIPTS_DIR/global/scripts/tools/gitleaks/.gitleaks.toml"
 # being pulled as a Docker image -- Docker Hub now enforces an anonymous pull
 # rate limit, which made every uncached CI run risk a `toomanyrequests`
 # failure. This mirrors the shellcheck/hadolint installation pattern.
-if ! command -v gitleaks > /dev/null 2>&1; then
+# Self-update an already-installed Gitleaks on persistent agents so long-lived
+# hosts stay current for CVE fixes instead of pinning whatever was first
+# installed. Resolves the latest tag via the `releases/latest` redirect (not
+# API-rate-limited), matching the resolver below. Fail-safe: any uncertainty --
+# a lookup blip, or an unparseable installed version such as a source build
+# whose `gitleaks version` prints no number -- returns "no update", so it never
+# forces a needless re-download or breaks the run.
+gitleaks_update_available() {
+  _gl_latest=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/gitleaks/gitleaks/releases/latest 2>/dev/null | sed 's#.*/tag/v\{0,1\}##')
+  _gl_current=$(gitleaks version 2>/dev/null | sed 's/^v//')
+  case "$_gl_latest" in [0-9]*.[0-9]*) ;; *) return 1 ;; esac
+  case "$_gl_current" in [0-9]*.[0-9]*) ;; *) return 1 ;; esac
+  [ "$_gl_latest" != "$_gl_current" ]
+}
+
+if ! command -v gitleaks > /dev/null 2>&1 || gitleaks_update_available; then
   echo "Downloading Gitleaks..."
 
   # Resolve the latest version robustly. An unauthenticated `api.github.com`
@@ -76,7 +91,9 @@ if ! command -v gitleaks > /dev/null 2>&1; then
     rm -f /tmp/gitleaks
     exit 1
   fi
-  export PATH="/tmp:$PATH"
+  # Move the downloaded binary into the user's ~/.local/bin (on PATH via the
+  # shared preamble) so nothing is installed to a root-owned location.
+  mv /tmp/gitleaks "$HOME/.local/bin/gitleaks"
 fi
 
 # Fail loudly if the binary is still not runnable rather than falling through

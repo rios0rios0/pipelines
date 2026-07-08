@@ -20,7 +20,7 @@ steps:
 
   - task: 'GoTool@0'
     inputs:
-      version: '1.26.4'
+      version: '1.26.5'
       architecture: 'amd64'
       goArguments: 'mod tidy'
     displayName: 'Setup Go'

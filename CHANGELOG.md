@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [4.14.1] - 2026-07-08
+
 ### Changed
 
 - changed the golang pipeline version from `1.26.4` to `1.26.5`

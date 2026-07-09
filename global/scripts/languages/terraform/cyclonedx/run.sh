@@ -24,6 +24,19 @@ fi
 BOM_PATH="$PREFIX$REPORT_PATH" && mkdir -p "$BOM_PATH"
 bomFile="$BOM_PATH/bom.json"
 
+# This script intentionally does not source the shared `cleanup.sh` preamble
+# (without TOOL_NAME it wipes the whole reports directory), so replicate the
+# preamble's install-target setup here: create ~/.local/bin — a fresh CI agent
+# does not have it and the `mv` below fails with "No such file or directory" —
+# and put it on PATH, which non-login CI shells do not pick up from the user's
+# profile. The PATH entry also lets a Trivy installed by an earlier job on the
+# same agent be found and reused instead of re-downloaded.
+mkdir -p "$HOME/.local/bin"
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *) PATH="$HOME/.local/bin:$PATH" && export PATH ;;
+esac
+
 # Install Trivy if not already available on the agent (same pattern as
 # `global/scripts/tools/trivy/run.sh`).
 # Self-update an already-installed Trivy on persistent agents so long-lived
@@ -57,8 +70,8 @@ if ! command -v trivy > /dev/null 2>&1 || trivy_update_available; then
     echo "ERROR: Trivy install failed (latest and pinned ${TRIVY_PINNED_VERSION:-v0.72.0}). See install output above." >&2
     exit 1
   fi
-  # Move the downloaded binary into the user's ~/.local/bin (on PATH via the
-  # shared preamble) so nothing is installed to a root-owned location.
+  # Move the downloaded binary into the user's ~/.local/bin (created and put
+  # on PATH above) so nothing is installed to a root-owned location.
   mv /tmp/trivy "$HOME/.local/bin/trivy"
 fi
 

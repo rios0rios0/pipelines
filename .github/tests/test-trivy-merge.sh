@@ -58,8 +58,10 @@ assert_true "global .trivyignore exists" "[ -f '$GLOBAL_IGNORE' ]"
 assert_true "global suppresses GO-2026-5932 (x/crypto/openpgp false positive)" \
   "grep -qx 'GO-2026-5932' '$GLOBAL_IGNORE'"
 # Guard against unjustified drift: exactly one active (non-comment, non-blank) entry.
+# Match content lines directly — first non-space character is neither whitespace nor
+# '#' — which avoids the fragile end-of-line anchor inside the nested shell quoting.
 assert_true "exactly one active ignore id in the global file" \
-  "[ \"\$(grep -vE '^[[:space:]]*(#|\$)' '$GLOBAL_IGNORE' | wc -l | tr -d ' ')\" = '1' ]"
+  "[ \"\$(grep -cE '^[[:space:]]*[^[:space:]#]' '$GLOBAL_IGNORE')\" = '1' ]"
 
 # =============================================================================
 # Test 2: project entries are appended, global entries preserved

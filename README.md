@@ -611,7 +611,7 @@ Create these variable groups in Azure DevOps Library:
 | **CodeQL**           | SAST security scanning        | `global/scripts/tools/codeql/`           | Auto-configured       |
 | **Semgrep**          | Static analysis               | `global/scripts/tools/semgrep/`          | Auto-configured       |
 | **Hadolint**         | Dockerfile linting            | `global/scripts/tools/hadolint/`         | `.hadolint.yaml`      |
-| **Trivy IaC**        | IaC misconfiguration scanning | `global/scripts/tools/trivy/run.sh`      | `.trivyignore`        |
+| **Trivy IaC**        | IaC misconfiguration scanning | `global/scripts/tools/trivy/run.sh`      | `.trivyignore` (global + project, merged) |
 
 #### SCA (Software Composition Analysis)
 
@@ -887,7 +887,7 @@ include:
 **Issue: Trivy IaC scan finds false positives**
 
 - **Cause:** Trivy flags misconfigurations in Terraform, Kubernetes, or Dockerfiles
-- **Solution:** Add entries to `.trivyignore` in the project root to suppress known false positives
+- **Solution:** Add entries to `.trivyignore` in the project root to suppress known false positives. The project file is **merged with** (appended to) the always-applied global ignore in `global/scripts/tools/trivy/.trivyignore` — put fleet-wide, well-understood false positives there so every project inherits them
 
 #### Platform-Specific Issues
 

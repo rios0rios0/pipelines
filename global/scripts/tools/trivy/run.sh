@@ -93,10 +93,11 @@ fi
 # fleet-wide false positives are curated centrally while projects keep their own
 # entries. Passed explicitly with --ignorefile so Trivy uses exactly this set and
 # does not also auto-discover the project's .trivyignore (which would double-load
-# it). The merged file lives outside the working tree, so the project checkout is
-# never mutated.
+# it). The merged file is created under /tmp (TMPDIR forced — some CI runners point
+# $TMPDIR inside the workspace), so it is always outside the scanned tree and the
+# project checkout is never mutated.
 globalIgnore="$SCRIPTS_DIR/global/scripts/tools/trivy/.trivyignore"
-mergedIgnore="$(mktemp)"
+mergedIgnore="$(TMPDIR=/tmp mktemp)"
 if [ -f "$globalIgnore" ]; then
   cat "$globalIgnore" >> "$mergedIgnore"
 fi

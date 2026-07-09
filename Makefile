@@ -2,7 +2,7 @@ TAG := latest
 ROOT := global/containers
 CONTAINER_REGISTRY = ghcr.io/rios0rios0/pipelines
 
-.PHONY: login setup-buildx build-and-push test-go-script test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-docker-multi-arch test-basic-checks test
+.PHONY: login setup-buildx build-and-push test-go-script test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-docker-multi-arch test-basic-checks test
 
 login:
 	docker login $(CONTAINER_REGISTRY)
@@ -30,6 +30,10 @@ test-yaml-merge:
 	@echo "Running YAML merge validation..."
 	@./.github/tests/test-yaml-merge.sh
 
+test-trivy-merge:
+	@echo "Running Trivy ignore merge validation..."
+	@./.github/tests/test-trivy-merge.sh
+
 test-sonarqube:
 	@echo "Running SonarQube auto-derivation validation..."
 	@./.github/tests/test-sonarqube-auto-derive.sh
@@ -54,5 +58,5 @@ test-basic-checks:
 	@echo "Running basic-checks changelog validation..."
 	@./.github/tests/test-basic-checks.sh
 
-test: test-go-script test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-docker-multi-arch test-basic-checks
+test: test-go-script test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-docker-multi-arch test-basic-checks
 	@echo "All tests completed successfully!"

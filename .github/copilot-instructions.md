@@ -113,7 +113,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 | **Semgrep**   | Static analysis               | `global/scripts/tools/semgrep/`     | Auto-configured  |
 | **Hadolint**  | Dockerfile linting            | `global/scripts/tools/hadolint/`    | `.hadolint.yaml` |
 | **ShellCheck** | Shell script linting          | `global/scripts/tools/shellcheck/`  | Auto-configured  |
-| **Trivy IaC** | IaC misconfiguration scanning | `global/scripts/tools/trivy/run.sh` | `.trivyignore`   |
+| **Trivy IaC** | IaC misconfiguration scanning | `global/scripts/tools/trivy/run.sh` | `.trivyignore` (global in `global/scripts/tools/trivy/.trivyignore`, always applied; project's own appended) |
 
 #### SCA Tools
 

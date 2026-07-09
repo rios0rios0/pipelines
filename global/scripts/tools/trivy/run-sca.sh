@@ -86,14 +86,23 @@ if ! command -v trivy > /dev/null 2>&1 || trivy_update_available; then
   mv /tmp/trivy "$HOME/.local/bin/trivy"
 fi
 
-# Use default ignore file if the project doesn't provide one
-ignoreFileExists=true
-if [ ! -f ".trivyignore" ]; then
-  ignoreFileExists=false
-  defaultFile="$SCRIPTS_DIR/global/scripts/tools/trivy/.trivyignore"
-  if [ -f "$defaultFile" ]; then
-    cp "$defaultFile" .
-  fi
+# Build the effective ignore file. The global ignore shipped in pipelines is
+# ALWAYS applied and the project's own root .trivyignore (if any) is APPENDED to
+# it, mirroring the global+repo merge used for .golangci.yml and .gitleaks.toml:
+# fleet-wide false positives are curated centrally while projects keep their own
+# entries. Passed explicitly with --ignorefile so Trivy uses exactly this set and
+# does not also auto-discover the project's .trivyignore (which would double-load
+# it). The merged file is created under /tmp (TMPDIR forced — some CI runners point
+# $TMPDIR inside the workspace), so it is always outside the scanned tree and the
+# project checkout is never mutated.
+globalIgnore="$SCRIPTS_DIR/global/scripts/tools/trivy/.trivyignore"
+mergedIgnore="$(TMPDIR=/tmp mktemp)"
+if [ -f "$globalIgnore" ]; then
+  cat "$globalIgnore" >> "$mergedIgnore"
+fi
+if [ -f ".trivyignore" ]; then
+  printf '\n# --- project .trivyignore (appended) ---\n' >> "$mergedIgnore"
+  cat ".trivyignore" >> "$mergedIgnore"
 fi
 
 echo "Running Trivy SCA dependency vulnerability scan..."
@@ -112,6 +121,7 @@ trivyLog="/tmp/trivy-sca-run.log"
 EXIT_CODE=0
 trivy filesystem \
   --scanners vuln \
+  --ignorefile "$mergedIgnore" \
   --format json \
   --output "$fileName" \
   --exit-code 1 \
@@ -123,6 +133,7 @@ if [ ! -f "$fileName" ] && grep -qiE "remote Maven repository returned|Too Many 
   EXIT_CODE=0
   trivy filesystem \
     --scanners vuln \
+    --ignorefile "$mergedIgnore" \
     --offline-scan \
     --format json \
     --output "$fileName" \
@@ -131,10 +142,7 @@ if [ ! -f "$fileName" ] && grep -qiE "remote Maven repository returned|Too Many 
   cat "$trivyLog"
 fi
 rm -f "$trivyLog"
-
-if [ "$ignoreFileExists" = false ]; then
-  rm -f .trivyignore
-fi
+rm -f "$mergedIgnore"
 
 echo "Trivy SCA analysis complete. Results written to: $fileName"
 exit ${EXIT_CODE:-0}

@@ -19,6 +19,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Changed
 
 - changed the golang pipeline version from `1.26.4` to `1.26.5`
+- changed the terraform pipeline version from `1.15.7` to `1.15.8`
 
 ## [4.14.0] - 2026-07-03
 

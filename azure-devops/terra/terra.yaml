@@ -1,7 +1,11 @@
 # Terra CLI pipeline — uses the terra CLI (https://github.com/rios0rios0/terra)
 # which wraps Terraform and Terragrunt. Provides code check, security, tests,
-# and management stages. Delivery is intentionally excluded because it is
-# project-specific (plan/apply targets, environment handling, stack ordering).
+# management, and release stages. Delivery is intentionally excluded because it
+# is project-specific (plan/apply targets, environment handling, stack ordering).
+#
+# The `release` stage only cuts a tag for a version-bump commit merged to
+# `main`; every other commit is a no-op. Consumers keep the `delivery` stage id
+# free for their own apply stage.
 #
 # Usage in your azure-pipelines.yml:
 #   resources:
@@ -34,3 +38,4 @@ stages:
     parameters:
       PRE_STEPS: ${{ parameters.PRE_STEPS }}
   - template: 'stages/35-management/terra.yaml'
+  - template: 'stages/40-delivery/release.yaml'

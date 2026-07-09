@@ -1,0 +1,35 @@
+# Cuts the Git tag for a merged version-bump commit on `main`.
+#
+# Named `release` and not `delivery` on purpose. Every other family
+# (`golang`, `java`, `javascript`, `python`, `terraform`, `helm`) hosts the
+# shared release job inside a stage called `delivery`, but `terra` consumers
+# supply their own `delivery` stage (plan/apply targets, environment handling,
+# stack ordering — see the header of `azure-devops/terra/terra.yaml`). Reusing
+# that stage id here would make Azure DevOps reject the compiled pipeline as a
+# duplicate, which is why the release job was historically left out of this
+# family altogether.
+#
+# The gate names the two acceptable `management` results explicitly instead of
+# using a helper, because both helpers are wrong here:
+#
+#   * `not(failed())` — used by the `terraform` family — is also true when
+#     `management` was SKIPPED, which is what an earlier failing stage produces.
+#     A commit that never passed code-check, security, or tests would be tagged.
+#   * `succeeded()` reads as the safe choice, but `management` legitimately ends
+#     as `SucceededWithIssues` whenever a best-effort reporting job (SonarQube,
+#     Dependency-Track) fails under `continueOnError`. Relying on the helper's
+#     treatment of that result to cut a production tag is not worth the doubt.
+#
+# `SucceededWithIssues` must release; `Skipped`, `Failed`, and `Canceled` must
+# not. This is the same gate the delivery stages of `terra` consumers use.
+stages:
+  - stage: 'release'
+    displayName: 'release'
+    dependsOn: 'management'
+    condition: |
+      and(
+        in(dependencies.management.result, 'Succeeded', 'SucceededWithIssues'),
+        eq(variables['Build.SourceBranch'], 'refs/heads/main')
+      )
+    jobs:
+      - template: '../../../global/stages/40-delivery/release.yaml'

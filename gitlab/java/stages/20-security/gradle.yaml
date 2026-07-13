@@ -6,6 +6,7 @@ variables:
 
 include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/semgrep.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/gitleaks.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/codeql.yaml'
@@ -16,18 +17,25 @@ include:
 sca:dependency-check:
   extends: '.dependency-check'
   stage: 'security (sca/sast)'
+  before_script:
+    # `.scripts-repo` clones this repository, so the job needs git. The gradle image is Alpine-based;
+    # install it only when it is genuinely missing, so an image that already ships it is left alone.
+    - command -v git > /dev/null 2>&1 || apk add --no-cache git
+    - !reference [ .gradle, before_script ]
+    - !reference [ .scripts-repo, before_script ]
   script:
-    - mkdir -p '.owasp'
-    - export OWASP_PATH="$(pwd)/.owasp" # the Dependency Check data path must be absolute
-    # NVD_API_KEY is optional — set it as a CI/CD variable to avoid NVD rate limits
-    - gradle dependencyCheckAnalyze
+    # NVD_API_KEY is optional but strongly recommended: set it as a CI/CD variable to get the
+    # authenticated NVD rate limit. Without it the scan falls back to the NVD datafeed — the script's
+    # header explains why the unauthenticated API is not a usable option on shared runners.
+    - $SCRIPTS_DIR/global/scripts/languages/java/dependency-check/run.sh
   artifacts:
     when: 'always'
     paths:
-      - "$PREFIX$REPORT_PATH/dependency-check-report.html"
+      - "$PREFIX$REPORT_PATH/dependency-check/"
     reports:
       dependency_scanning:
-        - "$PREFIX$REPORT_PATH/dependency-check-report.xml"
+        - "$PREFIX$REPORT_PATH/dependency-check/dependency-check-report.xml"
+  timeout: '30 minutes'
   allow_failure: true
 
 # TODO: check this https://gitlab.com/gitlab-org/gitlab/-/issues/299363

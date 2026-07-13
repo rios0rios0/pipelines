@@ -115,39 +115,16 @@ jobs:
     name: 'security > sca:dependency-check'
     runs-on: 'ubuntu-latest'
     steps:
-      - name: 'Checkout code'
-        uses: 'actions/checkout@v6'
-
-      - name: 'Setup Java'
-        uses: 'actions/setup-java@v5'
+      - uses: 'rios0rios0/pipelines/github/java/stages/20-security/dependency-check@main'
         with:
-          distribution: 'temurin'
-          java-version: '21'
-          cache: 'gradle'
-
-      - name: 'Get current week number'
-        id: 'week'
-        run: echo "week=$(date +%Y-%W)" >> "$GITHUB_OUTPUT"
-        shell: 'bash'
-
-      - name: 'Cache NVD database'
-        uses: 'actions/cache@v4'
-        with:
-          path: '.owasp'
-          key: owasp-nvd-${{ runner.os }}-${{ steps.week.outputs.week }}
-          restore-keys: |
-            owasp-nvd-${{ runner.os }}-
-
-      - name: 'Run OWASP Dependency-Check'
-        run: |
-          mkdir -p '.owasp'
-          export OWASP_PATH="$(pwd)/.owasp"
-          ./gradlew dependencyCheckAnalyze
-        shell: 'bash'
-        env:
-          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+          nvd_api_key: ${{ secrets.NVD_API_KEY }}
+          build_tool: 'gradle'
     needs: [ 'code_check-style_checkstyle', 'code_check-quality_proguard' ]
     continue-on-error: true
+    # Building the CVE database is the only slow path left, and it is bounded rather than trusted: the
+    # job is killed at 30 minutes so a pathological NVD download can never again run for hours against
+    # the account's Actions minutes.
+    timeout-minutes: 30
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 

@@ -620,7 +620,7 @@ Create these variable groups in Azure DevOps Library:
 | **Trivy SCA**              | Dependency vulnerability scanning | All        | `global/scripts/tools/trivy/run-sca.sh`        |
 | **govulncheck**            | Go vulnerability scanning         | Go         | `global/scripts/languages/golang/govulncheck/` |
 | **Safety**                 | Python dependency scanning        | Python     | `pdm run safety-scan`                          |
-| **OWASP Dependency-Check** | Java dependency scanning          | Java       | `./gradlew dependencyCheckAnalyze`             |
+| **OWASP Dependency-Check** | Java dependency scanning          | Java       | `global/scripts/languages/java/dependency-check/` |
 | **yarn npm audit**         | JS/Node.js dependency scanning    | JavaScript | `yarn npm audit --recursive`                   |
 | **npm audit**              | JS/Node.js dependency scanning    | JavaScript | `npm audit --audit-level=high`                 |
 | **Composer Audit**         | PHP dependency scanning           | PHP        | `composer audit`                               |
@@ -640,6 +640,31 @@ Every pipeline includes **basic checks** that run in parallel with linting durin
 
 1. **Rebase verification** — the PR/MR branch is rebased on top of the target branch (usually `main`). If the branch is behind, the pipeline fails with clear instructions to rebase. This enforces a linear commit history and prevents merge conflicts from reaching the test and delivery stages.
 2. **Changelog validation** — the `CHANGELOG.md` file was modified and new entries are placed under the `[Unreleased]` section. If entries appear below an existing version section (e.g., due to an erroneous rebase), the pipeline fails with instructions to fix the placement.
+
+### OWASP Dependency-Check and the NVD Database
+
+The Java `sca:dependency-check` job scans dependencies against a local copy of the [NVD](https://nvd.nist.gov/) (~350,000 CVE records). Building that copy is the only slow part of the job, and the NVD API rate limits it **per source IP**: 5 requests per rolling 30 seconds anonymously, 50 with an API key. Hosted CI runners share their egress IPs with every other project on the platform, so an unauthenticated first run spends most of its time in `429` backoff.
+
+**Set `NVD_API_KEY`.** Request a free key at [nvd.nist.gov/developers/request-an-api-key](https://nvd.nist.gov/developers/request-an-api-key), then expose it to the pipeline:
+
+| Platform       | How to provide it                                                                  |
+|----------------|------------------------------------------------------------------------------------|
+| GitHub Actions | Repository secret `NVD_API_KEY`; the wrapper workflows already forward it           |
+| GitLab CI      | Masked CI/CD variable `NVD_API_KEY`                                                 |
+| Azure DevOps   | Pipeline variable (or variable group) `NVD_API_KEY`                                 |
+
+Without a key the scan still works: it falls back to NIST's gzipped [JSON data feeds](https://nvd.nist.gov/vuln/data-feeds), which are not rate limited, and logs a warning. A key is still recommended — it is faster and keeps findings fresher.
+
+The database is cached at `.owasp/` on every platform and reused for 24 hours before Dependency-Check refreshes it, so the usual run is an incremental update rather than a rebuild. On GitHub Actions the cache key rotates daily and falls back to the most recent snapshot; note that a cache written on a PR branch is visible only to that branch, so the snapshot every PR restores from is the one written by the default branch. The job is capped at 30 minutes on all three platforms.
+
+Optional environment variables:
+
+| Variable                    | Default                                             | Purpose                                                              |
+|-----------------------------|-----------------------------------------------------|----------------------------------------------------------------------|
+| `NVD_API_KEY`               | *(unset)*                                           | Authenticates against the NVD API, raising the rate limit tenfold     |
+| `NVD_DATAFEED_URL`          | NIST's public feeds when no key is set              | Points at a self-hosted [`vulnz`](https://github.com/jeremylong/open-vulnerability-cli) mirror; `{0}` expands to each year |
+| `NVD_VALID_FOR_HOURS`       | `24`                                                | How long a cached database is reused before refreshing               |
+| `DEPENDENCY_CHECK_DATA_DIR` | `./.owasp`                                          | Where the CVE database lives — this is the directory to cache        |
 
 ### Language-Specific Tools
 

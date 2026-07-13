@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, docker-multi-arch, basic-checks)
+- `make test` - Run all validation tests (Go, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, docker-multi-arch, basic-checks, dependency-check)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-lambda` - Test Lambda template validation specifically
 - `make test-yaml-merge` - Test YAML merge validation specifically
@@ -18,6 +18,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-order-check` - Test the Terragrunt file-ordering checker/fixer specifically
 - `make test-docker-multi-arch` - Test 40-delivery/docker multi-arch contract specifically
 - `make test-basic-checks` - Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) specifically
+- `make test-dependency-check` - Test the OWASP Dependency-Check NVD cache / API-key contract specifically
 - `bash global/scripts/shared/cleanup.sh` - Clean up build reports
 - `docker --version && make --version && go version` - Check dependencies
 
@@ -123,7 +124,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 | **Trivy SCA**              | Dependency vulnerability scanning | All        | `global/scripts/tools/trivy/run-sca.sh`        |
 | **govulncheck**            | Go vulnerability scanning         | Go         | `global/scripts/languages/golang/govulncheck/` |
 | **Safety**                 | Python dependency scanning        | Python     | `pdm run safety-scan`                          |
-| **OWASP Dependency-Check** | Java dependency scanning          | Java       | `./gradlew dependencyCheckAnalyze`             |
+| **OWASP Dependency-Check** | Java dependency scanning          | Java       | `global/scripts/languages/java/dependency-check/` |
 | **yarn npm audit**         | JS/Node.js dependency scanning    | JavaScript | `yarn npm audit --recursive`                   |
 | **npm audit**              | JS/Node.js dependency scanning    | JavaScript | `npm audit --audit-level=high`                 |
 | **Composer Audit**         | PHP dependency scanning           | PHP        | `composer audit`                               |
@@ -639,7 +640,7 @@ docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/
 
 ### Test Suite Usage
 ```bash
-# Run all validation tests (Go, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, docker-multi-arch, basic-checks)
+# Run all validation tests (Go, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, docker-multi-arch, basic-checks, dependency-check)
 make test
 
 # Run individual test suites
@@ -653,6 +654,7 @@ make test-tftest-gen
 make test-order-check
 make test-docker-multi-arch
 make test-basic-checks
+make test-dependency-check
 ```
 
 Test scripts are located in `.github/tests/`.

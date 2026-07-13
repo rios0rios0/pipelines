@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- refreshed `.github/copilot-instructions.md` to list the `make test-trivy-merge` target and include Trivy merge in the `make test` aggregate description, matching the Makefile and `CLAUDE.md`
+
 ## [4.14.1] - 2026-07-10
 
 ### Changed

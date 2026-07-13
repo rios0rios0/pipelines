@@ -1,0 +1,89 @@
+inputs:
+  nvd_api_key:
+    description: 'NVD API key (https://nvd.nist.gov/developers/request-an-api-key). Without one the scan falls back to the NVD datafeed'
+    required: false
+    default: ''
+  nvd_datafeed_url:
+    description: "NVD datafeed to use instead of the API, e.g. a self-hosted 'vulnz' mirror ('{0}' expands to each year)"
+    required: false
+    default: ''
+  nvd_valid_for_hours:
+    description: 'How long a cached CVE database is reused before Dependency-Check refreshes it'
+    required: false
+    default: '24'
+  java_version:
+    description: 'Java version used to run the build tool'
+    required: false
+    default: '21'
+  build_tool:
+    description: "Dependency cache to prime through actions/setup-java: 'maven' or 'gradle'"
+    required: false
+    default: 'maven'
+
+runs:
+  using: 'composite'
+  steps:
+    # Checkout has to precede the cache restore: it cleans the workspace, which would take the
+    # restored CVE database with it.
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - name: 'Setup Java'
+      uses: 'actions/setup-java@v5'
+      with:
+        distribution: 'temurin'
+        java-version: ${{ inputs.java_version }}
+        cache: ${{ inputs.build_tool }}
+
+    - name: 'Get Scripts'
+      uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - name: 'Get current date'
+      id: 'date'
+      shell: 'bash'
+      run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+    # Restore and save are split deliberately. The all-in-one `actions/cache` only writes its cache in
+    # a post-job step that is skipped when the job is cancelled or fails -- so a Dependency-Check job
+    # that gets killed mid-download (the failure mode this job was stuck in) never persisted a single
+    # byte, and every subsequent run started from an empty database again. Saving explicitly with
+    # `always()` breaks that loop: whatever the run managed to download is kept and the next run
+    # resumes from it.
+    #
+    # The key rotates daily so the stored snapshot cannot go stale forever, while `restore-keys` falls
+    # back to the most recent snapshot on any other day, making the usual run an incremental update.
+    # Note that a cache written on a PR branch is only visible to that branch -- the snapshot every PR
+    # restores from is the one written by the default branch.
+    - name: 'Restore NVD database'
+      id: 'restore_nvd'
+      uses: 'actions/cache/restore@v4'
+      with:
+        path: '.owasp'
+        key: "owasp-nvd-${{ runner.os }}-${{ steps.date.outputs.date }}"
+        restore-keys: |
+          owasp-nvd-${{ runner.os }}-
+
+    - name: 'Run OWASP Dependency-Check'
+      shell: 'bash'
+      run: $SCRIPTS_DIR/global/scripts/languages/java/dependency-check/run.sh
+      env:
+        NVD_API_KEY: ${{ inputs.nvd_api_key }}
+        NVD_DATAFEED_URL: ${{ inputs.nvd_datafeed_url }}
+        NVD_VALID_FOR_HOURS: ${{ inputs.nvd_valid_for_hours }}
+
+    - name: 'Save NVD database'
+      uses: 'actions/cache/save@v4'
+      with:
+        path: '.owasp'
+        key: "owasp-nvd-${{ runner.os }}-${{ steps.date.outputs.date }}"
+      if: "always() && steps.restore_nvd.outputs.cache-hit != 'true'"
+
+    - name: 'Upload Report'
+      uses: 'actions/upload-artifact@v7'
+      with:
+        name: 'dependency-check'
+        path: 'build/reports/dependency-check/'
+        if-no-files-found: 'warn'
+        overwrite: 'true'
+        retention-days: 10
+      if: always()

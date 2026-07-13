@@ -16,9 +16,23 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added `global/scripts/languages/java/dependency-check/`, a single Dependency-Check runner shared by GitHub Actions, GitLab CI and Azure DevOps. It resolves the CVE database into one absolute, cacheable directory (`.owasp/`), passes the API key by variable name, and reuses a cached database for 24h (`nvdValidForHours`) instead of Dependency-Check's 4h default. Gradle is configured through a shipped `init.gradle` applied with `--init-script`, because the Gradle plugin reads its settings *only* from the `dependencyCheck` extension — consuming projects need no `build.gradle` change
+- added an NVD datafeed fallback for projects with no API key: rather than paginating ~174 API pages against the anonymous rate limit, the scan downloads NIST's gzipped JSON feeds, which are not rate limited. Set `NVD_DATAFEED_URL` to point at a self-hosted [`vulnz`](https://github.com/jeremylong/open-vulnerability-cli) mirror instead. An API key remains strongly recommended, and the job says so in its log
+- added a 30-minute cap to the Dependency-Check job on all three platforms (`timeout-minutes`, `timeout`, `timeoutInMinutes`), so a pathological NVD download is bounded rather than trusted and can never again run for hours against the account's CI minutes
+- added Dependency-Check report publishing to GitHub Actions and Azure DevOps, which previously ran the scan and discarded the report. Reports are now written to `build/reports/dependency-check/` on every platform, in line with the other tools
+- added `.github/tests/test-dependency-check.sh` (wired into `make test`, and listed in `CLAUDE.md` and `.github/copilot-instructions.md` alongside the other targets), which runs the runner against a stub build tool and asserts on the arguments it actually passes — that the key reaches the plugin and never lands on the command line, that the database is pinned to the cached directory, that a keyless run falls back to the datafeed, and that the GitHub cache is saved under `always()`
+
 ### Changed
 
 - refreshed `.github/copilot-instructions.md` to list the `make test-trivy-merge` target and include Trivy merge in the `make test` aggregate description, matching the Makefile and `CLAUDE.md`
+
+### Fixed
+
+- fixed the OWASP Dependency-Check job downloading the whole NVD (~350k CVE records) on every run, which took upwards of 5h45m and had to be cancelled before it exhausted the account's CI minutes. Three defects stacked up: (1) the `NVD_API_KEY` secret was plumbed all the way to the job as an **environment variable**, which neither plugin reads — the Maven plugin wants a `nvdApiKey*` user property and the Gradle plugin wants the `dependencyCheck.nvd.apiKey` extension — so every run was silently unauthenticated and throttled to the NVD's 5-requests-per-30s anonymous limit, which is shared across every job leaving a hosted runner's IP; (2) the CVE database was never written where the pipelines cached it (Gradle's `OWASP_PATH` export was read by nothing, so the database went to `$GRADLE_USER_HOME/dependency-check-data/` while an empty `.owasp/` was cached), and Maven's data directory was smuggled in through `MAVEN_OPTS`; (3) GitHub Actions used the all-in-one `actions/cache`, whose save runs in a post-job step that is **skipped on cancellation** — so the cancelled run cached nothing and the next run started cold again, a loop the cache could never escape
+- fixed the NVD API key being passable in a way that leaks it: `-DnvdApiKey=<value>` puts the secret in the process arguments and in `mvn -X` output ([GHSA-qqhq-8r2c-c3f5](https://github.com/advisories/GHSA-qqhq-8r2c-c3f5)). The runner now passes `-DnvdApiKeyEnvironmentVariable=NVD_API_KEY`, handing the plugin the *name* of the variable so it reads the value itself
+- fixed an unexpanded Azure DevOps `$(NVD_API_KEY)` macro (what an undefined pipeline variable expands to) being forwarded to the NVD as a literal API key, which earns a 403 on every request
 
 ## [4.14.1] - 2026-07-10
 

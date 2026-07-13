@@ -1,0 +1,51 @@
+// Injected by global/scripts/languages/java/dependency-check/run.sh through `gradle --init-script`.
+//
+// The dependency-check Gradle plugin reads its NVD settings only from the `dependencyCheck` extension:
+// unlike the Maven plugin it has no user properties and consults neither the environment nor system
+// properties. Configuring it from CI therefore means either editing every consuming project's
+// build.gradle or writing the settings into the extension from the outside -- this is the latter.
+//
+// `projectsEvaluated` fires once every build script has run, so these values win over any
+// `dependencyCheck { }` block a project declares for local use.
+
+gradle.projectsEvaluated { instance ->
+    instance.rootProject.allprojects { project ->
+        def extension = project.extensions.findByName('dependencyCheck')
+        if (extension == null) {
+            return
+        }
+
+        def dataDirectory = System.getenv('DEPENDENCY_CHECK_DATA_DIR')
+        if (dataDirectory) {
+            extension.data.directory = dataDirectory
+        }
+
+        def reportDirectory = System.getenv('DEPENDENCY_CHECK_REPORT_DIR')
+        if (reportDirectory) {
+            extension.outputDirectory = reportDirectory
+            extension.format = 'ALL'
+        }
+
+        def apiKey = System.getenv('NVD_API_KEY')
+        if (apiKey) {
+            extension.nvd.apiKey = apiKey
+        }
+
+        // Set by run.sh to NIST's public feeds whenever no API key is available, so that a keyless
+        // project downloads a handful of gzipped files instead of walking into the rate-limited API.
+        def datafeedUrl = System.getenv('NVD_DATAFEED_URL')
+        if (datafeedUrl) {
+            extension.nvd.datafeedUrl = datafeedUrl
+        }
+
+        def validForHours = System.getenv('NVD_VALID_FOR_HOURS')
+        if (validForHours) {
+            extension.nvd.validForHours = validForHours.toInteger()
+        }
+
+        project.logger.lifecycle(
+                "dependency-check: data=${dataDirectory}, " +
+                "nvdApiKey=${apiKey ? 'present' : 'absent'}, " +
+                "nvdDatafeedUrl=${datafeedUrl ?: 'none (using the NVD API)'}")
+    }
+}

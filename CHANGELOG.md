@@ -18,7 +18,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
-- added `.github/tests/test-goreleaser-prepare.sh` (wired into `make test`, and listed in `CLAUDE.md` and `.github/copilot-instructions.md` alongside the other targets), which runs `prepare.sh` against fixture project trees and asserts on the `main:` it writes: that an entry point embedded in a test fixture is never selected (with and without the Go toolchain available), that a root-level `main` package resolves to `.`, that the binary's own `cmd/<name>` wins when a repository ships several, that an explicit `binary_path` is honoured and normalized, and that a project's own `.goreleaser.yaml` is left untouched
+- added `.github/tests/test-goreleaser-prepare.sh` (wired into `make test`, and listed in `CLAUDE.md` and `.github/copilot-instructions.md` alongside the other targets), which runs `prepare.sh` against fixture project trees and asserts on the `main:` it writes: that an entry point embedded in a test fixture is never selected (with and without the Go toolchain available), that a root-level `main` package resolves to `.`, that the binary's own `cmd/<name>` wins when a repository ships several, that an explicit `binary_path` is honoured and normalized, that the fallback reads every package clause the compiler accepts — a trailing comment, a CRLF line ending — without mistaking `package maintenance` for one, and that a project's own `.goreleaser.yaml` is left untouched
 
 ### Fixed
 

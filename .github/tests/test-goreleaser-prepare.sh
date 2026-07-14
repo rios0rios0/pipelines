@@ -46,6 +46,21 @@ func main() {}
 EOF
 }
 
+# Same, but with the package clause written verbatim, so the fallback's reading
+# of it can be exercised against every shape the compiler accepts.
+write_main_package_with_clause() {
+  local dir="$1"
+  local clause="$2"
+  mkdir -p "$dir"
+  printf '%s\n\nfunc main() {}\n' "$clause" > "$dir/main.go"
+}
+
+write_main_package_with_crlf() {
+  local dir="$1"
+  mkdir -p "$dir"
+  printf 'package main\r\n\r\nfunc main() {}\r\n' > "$dir/main.go"
+}
+
 # A package whose *test* embeds a whole sample program as a fixture. This is the
 # shape that broke autobump: both `package main` and `func main()` appear in the
 # file, but only inside a raw string literal.
@@ -155,6 +170,32 @@ PROJECT="$(new_project 'fixture-only')"
 write_package_with_embedded_program "$PROJECT/internal/domain/commands"
 assert_main "never treats a fixture's embedded program as the entry point" \
   '.' "$(generated_main "$PROJECT" 'fixture-only')"
+
+# The next three drop go.mod so the toolchain cannot be used and the fallback's
+# reading of the package clause is what is under test. A clause the compiler
+# accepts must be recognized — otherwise detection silently reports "no main
+# package" and releases the repository root, which is the failure this whole
+# script exists to prevent.
+PROJECT="$(new_project 'clause-comment')"
+rm "$PROJECT/go.mod"
+write_main_package_with_clause "$PROJECT/cmd/clause-comment" 'package main // entry point'
+assert_main "accepts a package clause carrying a trailing comment" \
+  './cmd/clause-comment' "$(generated_main "$PROJECT" 'clause-comment')"
+
+PROJECT="$(new_project 'clause-crlf')"
+rm "$PROJECT/go.mod"
+write_main_package_with_crlf "$PROJECT/cmd/clause-crlf"
+assert_main "accepts a package clause with CRLF line endings" \
+  './cmd/clause-crlf' "$(generated_main "$PROJECT" 'clause-crlf')"
+
+# ...but the clause still has to be `main` and not merely start with it: without
+# a boundary after the package name, `package maintenance` reads as an entry
+# point, and the tree below has no real one to fall back to.
+PROJECT="$(new_project 'boundary')"
+rm "$PROJECT/go.mod"
+write_main_package_with_clause "$PROJECT/internal/maintenance" 'package maintenance'
+assert_main "does not read package maintenance as package main" \
+  '.' "$(generated_main "$PROJECT" 'boundary')"
 
 # A project shipping its own config must be left exactly as it is.
 PROJECT="$(new_project 'owned')"

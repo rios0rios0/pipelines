@@ -16,6 +16,16 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added `.github/tests/test-goreleaser-prepare.sh` (wired into `make test`, and listed in `CLAUDE.md` and `.github/copilot-instructions.md` alongside the other targets), which runs `prepare.sh` against fixture project trees and asserts on the `main:` it writes: that an entry point embedded in a test fixture is never selected (with and without the Go toolchain available), that a root-level `main` package resolves to `.`, that the binary's own `cmd/<name>` wins when a repository ships several, that an explicit `binary_path` is honoured and normalized, and that a project's own `.goreleaser.yaml` is left untouched
+
+### Fixed
+
+- fixed the `delivery:binary` job selecting the wrong package to build, which fails GoReleaser with `build for <name> does not contain a main function` — and does so *after* the release job has already published the tag and the GitHub Release, so the version stays up with no binaries attached to it and nothing to download or self-update from. When a consumer does not pin `binary_path`, `global/scripts/languages/golang/goreleaser/prepare.sh` located the entry point with `grep -rl "^func main()" --include="*.go" . | head -1`. That search is textual: it does not skip `_test.go`, does not read the package clause, and cannot tell that a match sits inside a raw string literal — so in a repository whose tests build sample Go programs as fixtures it matched the fixture, and since `grep -r` walks `internal/` before `cmd/`, `head -1` returned it and the real entry point was never even considered ([autobump#271](https://github.com/rios0rios0/autobump/pull/271) shows the failure: `Auto-detected main package at: ././internal/domain/commands`). Detection now asks the Go toolchain which packages are actually `main` (`go list -e -f '{{if eq .Name "main"}}{{.Dir}}{{end}}' ./...`), which reads the package clause and ignores tests and `testdata/`; when several exist, the one named after the binary is released, so a repository shipping `./cmd/api` and `./cmd/worker` no longer gets whichever sorted first. The text search is kept only as a fallback for when the toolchain is unavailable, and is now strict: `_test.go`, `testdata/` and `vendor/` are skipped and the file must actually declare `package main`
+- fixed the generated `main:` being malformed even when detection happened to pick the right directory: it was built as `"./$(dirname "$DETECTED")"` over a path that already began with `./`, emitting `././cmd/app`, and a root-level entry point came out as `./.`. Paths are now normalized to the `./path` form GoReleaser expects, with the project root collapsing to `.`, and an explicitly passed `binary_path` is normalized the same way so that `cmd/app` and `./cmd/app` behave identically
+- fixed `prepare.sh` aborting with `SCRIPTS_DIR: unbound variable` when run outside the pipeline: the script runs under `set -u`, so the `[ -z "$SCRIPTS_DIR" ]` guard that was meant to derive the directory when the caller had not exported it could only ever crash, leaving its fallback unreachable
+
 ## [4.15.0] - 2026-07-13
 
 ### Added

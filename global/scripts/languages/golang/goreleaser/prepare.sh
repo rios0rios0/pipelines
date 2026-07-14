@@ -4,11 +4,75 @@ set -euo pipefail
 BINARY_NAME="${1:?Binary name is required as the first argument}"
 BINARY_PATH="${2:-.}" # Optional, defaults to "."
 
-if [ -z "$SCRIPTS_DIR" ]; then
+if [ -z "${SCRIPTS_DIR:-}" ]; then
   SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
 fi
 
 TEMPLATE="$SCRIPTS_DIR/global/scripts/languages/golang/goreleaser/.goreleaser.yaml"
+PROJECT_ROOT="$(realpath "$PWD")"
+
+# Renders a package directory the way GoReleaser wants it: relative to the
+# project root, prefixed with "./". Absolute directories (what `go list` prints)
+# are made relative, and the project root itself collapses to "." — so neither
+# "././cmd/app" nor "./." can be emitted.
+to_package_path() {
+  local path="${1%/}"
+  path="${path#./}"
+
+  if [ "$path" != "${path#/}" ]; then
+    path="$(realpath --relative-to="$PROJECT_ROOT" "$path" 2>/dev/null || printf '%s' "$path")"
+  fi
+
+  if [ -z "$path" ] || [ "$path" = "." ]; then
+    printf '.'
+  else
+    printf './%s' "$path"
+  fi
+}
+
+# Lists the directory of every `main` package by asking the Go toolchain, which
+# is the only trustworthy source. It reads the package clause and skips test
+# files and `testdata/`, so — unlike a text search — it cannot be fooled by a
+# `func main()` that lives inside a raw string literal. Repositories whose tests
+# build sample programs as fixtures do contain exactly that.
+list_main_dirs_with_go() {
+  go list -e -f '{{if eq .Name "main"}}{{.Dir}}{{end}}' ./... 2>/dev/null | grep -v '^$' || true
+}
+
+# Fallback for when the Go toolchain is unavailable. Still far stricter than a
+# bare `func main()` search: test files, `testdata/` and `vendor/` are skipped,
+# and the file must actually declare `package main`.
+list_main_dirs_with_grep() {
+  local file
+  while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    case "$file" in
+      *_test.go) continue ;;
+    esac
+    if grep -q '^package main$' "$file"; then
+      dirname "$file"
+    fi
+  done <<< "$(grep -rl '^func main()' --include='*.go' --exclude-dir='testdata' --exclude-dir='vendor' . 2>/dev/null || true)"
+}
+
+# A repository may ship several binaries (./cmd/api, ./cmd/worker, ...). Release
+# the one named after the binary being built, and fall back to the first found.
+pick_main_dir() {
+  local candidates="$1"
+  local preferred=""
+  local dir=""
+
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    if [ "$(basename "$dir")" = "$BINARY_NAME" ]; then
+      printf '%s' "$dir"
+      return 0
+    fi
+    [ -n "$preferred" ] || preferred="$dir"
+  done <<< "$candidates"
+
+  printf '%s' "$preferred"
+}
 
 # Step 1: Check if project already has a goreleaser config
 if [ -f ".goreleaser.yaml" ] || [ -f ".goreleaser.yml" ]; then
@@ -16,16 +80,26 @@ if [ -f ".goreleaser.yaml" ] || [ -f ".goreleaser.yml" ]; then
   exit 0
 fi
 
-# Step 2: Auto-detect binary path if not provided or set to default
+# Step 2: Auto-detect the main package unless the caller pinned one
 if [ "$BINARY_PATH" = "." ]; then
-  DETECTED=$(grep -rl "^func main()" --include="*.go" . 2>/dev/null | head -1 || true)
-  if [ -n "$DETECTED" ]; then
-    BINARY_PATH="./$(dirname "$DETECTED")"
+  CANDIDATES=""
+  if command -v go > /dev/null 2>&1 && [ -f "go.mod" ]; then
+    CANDIDATES="$(list_main_dirs_with_go)"
+  fi
+  if [ -z "$CANDIDATES" ]; then
+    CANDIDATES="$(list_main_dirs_with_grep)"
+  fi
+
+  MAIN_DIR="$(pick_main_dir "$CANDIDATES")"
+  if [ -n "$MAIN_DIR" ]; then
+    BINARY_PATH="$(to_package_path "$MAIN_DIR")"
     echo "Auto-detected main package at: $BINARY_PATH"
   else
     echo "Warning: Could not detect main package, using root (.)"
     BINARY_PATH="."
   fi
+else
+  BINARY_PATH="$(to_package_path "$BINARY_PATH")"
 fi
 
 # Step 3: Copy template and replace placeholders

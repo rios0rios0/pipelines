@@ -41,7 +41,11 @@ list_main_dirs_with_go() {
 
 # Fallback for when the Go toolchain is unavailable. Still far stricter than a
 # bare `func main()` search: test files, `testdata/` and `vendor/` are skipped,
-# and the file must actually declare `package main`.
+# and the file must actually declare `package main` — in any shape the compiler
+# accepts, so padding, a CRLF line ending and a trailing comment all count, while
+# `package maintenance` does not. The clause has to start at column 0 though:
+# gofmt guarantees that for real code, and withholding it is what keeps an
+# indented sample program inside a raw string literal from passing for one.
 list_main_dirs_with_grep() {
   local file
   while IFS= read -r file; do
@@ -49,7 +53,7 @@ list_main_dirs_with_grep() {
     case "$file" in
       *_test.go) continue ;;
     esac
-    if grep -q '^package main$' "$file"; then
+    if grep -qE '^package[[:space:]]+main([[:space:]]|//|/\*|$)' "$file"; then
       dirname "$file"
     fi
   done <<< "$(grep -rl '^func main()' --include='*.go' --exclude-dir='testdata' --exclude-dir='vendor' . 2>/dev/null || true)"

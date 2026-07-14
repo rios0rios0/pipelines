@@ -19,6 +19,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-docker-multi-arch` - Test 40-delivery/docker multi-arch contract specifically
 - `make test-basic-checks` - Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) specifically
 - `make test-dependency-check` - Test the OWASP Dependency-Check NVD cache / API-key contract specifically
+- `make test-goreleaser-prepare` - Test the GoReleaser main package detection specifically
 - `bash global/scripts/shared/cleanup.sh` - Clean up build reports
 - `docker --version && make --version && go version` - Check dependencies
 
@@ -655,6 +656,7 @@ make test-order-check
 make test-docker-multi-arch
 make test-basic-checks
 make test-dependency-check
+make test-goreleaser-prepare
 ```
 
 Test scripts are located in `.github/tests/`.

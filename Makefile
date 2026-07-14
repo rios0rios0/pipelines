@@ -62,5 +62,9 @@ test-dependency-check:
 	@echo "Running OWASP Dependency-Check NVD cache/API-key validation..."
 	@./.github/tests/test-dependency-check.sh
 
-test: test-go-script test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-docker-multi-arch test-basic-checks test-dependency-check
+test-goreleaser-prepare:
+	@echo "Running GoReleaser main package detection validation..."
+	@./.github/tests/test-goreleaser-prepare.sh
+
+test: test-go-script test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare
 	@echo "All tests completed successfully!"

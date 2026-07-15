@@ -50,12 +50,14 @@ jobs:
 
           VERSION=""
           # Tag-push recovery: derive the version straight from the tag ref when
-          # triggered by a version tag (the Build.SourceBranch macro is
-          # substituted by the agent before this script runs). Ref names are not
-          # user-controlled, so this stays clear of the xtrace concern above.
-          case "$(Build.SourceBranch)" in
+          # triggered by a version tag. Read the ref from the auto-exported
+          # BUILD_SOURCEBRANCH* environment variables, NOT the $(...) macro form
+          # the agent substitutes textually into the script before it runs (a
+          # script-injection vector). Git constrains ref names, but the env-var
+          # form keeps the value out of the script text entirely.
+          case "${BUILD_SOURCEBRANCH:-}" in
             refs/tags/*)
-              VERSION=$(printf '%s' "$(Build.SourceBranchName)" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?' | head -n 1)
+              VERSION=$(printf '%s' "${BUILD_SOURCEBRANCHNAME:-}" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?' | head -n 1)
               ;;
           esac
           if [ -z "$VERSION" ] && echo -n "$COMMIT_MESSAGE" | grep -Eq "$REGEX"; then

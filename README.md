@@ -693,6 +693,7 @@ Dense Terragrunt monorepos keep their `*.hcl` / `*.tf` files in a consistent ord
 - **`stacks/*/variables.tf`** — a `// SET ON .HCL` section before a `// SET ON .ENV` section; dependency-derived variables ordered by dependency number inside `.HCL`.
 - **`**/providers.tf`** (stacks + modules) — `required_providers` and `provider` blocks ordered heaviest → lightest (cloud → data → orchestration → network → utility → trivial like `random`/`null`/`local`).
 - **`stacks/*/outputs.tf`** — outputs ordered to follow the declaration order of the modules/resources they reference in `main*.tf`.
+- **dead inputs** — every `inputs = {}` key (in a `root.hcl` or a leaf `terragrunt.hcl`) must be declared as a `variable` in the target stack. An undeclared input is dead code: Terraform silently drops the `TF_VAR_` Terragrunt exports for it, so the value is passed and never read. These are **reported only, never auto-removed** — the finding names the exact keys so you can delete them before pushing.
 
 ```bash
 # check (CI gate; writes build/reports/junit-order-check.xml)
@@ -712,7 +713,7 @@ The provider ranking and path exclusions can be overridden per-repo with an opti
 }
 ```
 
-Only `python3` is required (no Terraform binary). The `--fix` rewriter is round-trip-safe: it only reorders existing blocks and leaves any file it cannot parse cleanly untouched.
+Only `python3` is required (no Terraform binary). The `--fix` rewriter is round-trip-safe: it only reorders existing blocks and leaves any file it cannot parse cleanly untouched. Dead inputs are the one exception to `--fix` — they are reported but never deleted, since removing content would break that invariant.
 
 ### Usage Examples
 

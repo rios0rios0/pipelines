@@ -21,6 +21,7 @@ make test-order-check  # Test the Terragrunt file-ordering checker/fixer only
 make test-docker-multi-arch  # Test 40-delivery/docker multi-arch contract only
 make test-basic-checks # Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) only
 make test-dependency-check  # Test the OWASP Dependency-Check NVD cache / API-key contract only
+make test-goreleaser-prepare  # Test the GoReleaser main package detection only
 make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
 ```
 

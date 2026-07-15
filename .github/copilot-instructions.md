@@ -167,7 +167,7 @@ The Terra CLI pipeline test stage runs through a single unified `test:all` job o
 | **Terratest**            | Go test suite under `tests/terratest/*.go`         | `global/scripts/languages/terraform/terratest/run.sh`   |
 | **Structural**           | Third-tier runner for `tests/structural.sh`        | `global/scripts/languages/terraform/structural/run.sh`  |
 | **tftest-gen**           | Generates `tests/smoke.tftest.hcl` for modules     | `global/scripts/languages/terraform/tftest-gen/run.sh`  |
-| **order-check**          | Checks/auto-fixes file ordering (deps, variables, providers, outputs); runs in `10-code-check` | `global/scripts/languages/terraform/order-check/run.sh` |
+| **order-check**          | Checks/auto-fixes file ordering (deps, variables, providers, outputs) and reports dead terragrunt inputs (`inputs = {}` keys not declared as a stack `variable`; reported only, never auto-deleted); runs in `10-code-check` | `global/scripts/languages/terraform/order-check/run.sh` |
 | **Terraform CycloneDX**  | SBOM generation for Terraform projects             | `global/scripts/languages/terraform/cyclonedx/run.sh`   |
 
 ### Container Images

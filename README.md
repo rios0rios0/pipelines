@@ -878,25 +878,13 @@ Two mechanisms guard against this:
    git tag 1.2.3 <bump-commit-sha> && git push origin 1.2.3
    ```
 
-2. **Scheduled reconciliation.** The reusable workflow `.github/workflows/release-reconcile.yaml` diffs the released `CHANGELOG.md` versions against the git tags on a schedule, (re-)pushes any missing tag at its bump commit (triggering the recovery path above), and opens/updates a tracking issue. Opt in by adding a scheduled consumer (see `.docs/examples/github-go-docker/.github/workflows/reconcile.yaml`):
+2. **Scheduled reconciliation.** `global/scripts/shared/reconcile-releases.sh` diffs the released `CHANGELOG.md` versions against the git tags and resolves each gap to its bump commit. It is run org-wide on a schedule by [`config-automation`](https://github.com/rios0rios0/config-automation) — the same place the compliance audit and config/docs refresh already run — which enumerates every `rios0rios0` repo, (re-)pushes any missing tag at its bump commit (triggering the recovery path above), and reports the result. Run it against any repo locally with:
 
-   ```yaml
-   name: 'Release Reconcile'
-   on:
-     schedule:
-       - cron: '0 6 * * 1' # weekly
-     workflow_dispatch:
-   permissions:
-     contents: 'write'
-     issues: 'write'
-   jobs:
-     reconcile:
-       uses: 'rios0rios0/pipelines/.github/workflows/release-reconcile.yaml@main'
-       secrets:
-         recover_token: "${{ secrets.PERSONAL_ACCESS_TOKEN }}"
+   ```bash
+   global/scripts/shared/reconcile-releases.sh /path/to/repo
    ```
 
-   A tag pushed with the default `GITHUB_TOKEN` does not start workflows, so pass a PAT as `recover_token` for the pushed tag to re-trigger delivery; without it the tags are still created (enough for tag-driven ecosystems such as Go modules and Packagist) and the gap is reported in the tracking issue.
+   It prints one `version<TAB>commit<TAB>status` row per gap (empty output means the changelog and tags agree). A tag re-pushed to recover a release must be pushed with a PAT, not the default `GITHUB_TOKEN`, for it to re-trigger delivery; a `GITHUB_TOKEN`-pushed tag is still created (enough for tag-driven ecosystems such as Go modules and Packagist) but starts no workflow.
 
 ## Troubleshooting
 

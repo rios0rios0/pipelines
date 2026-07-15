@@ -21,9 +21,17 @@ release:
       # the GitHub-style PR-merge one; only one matches, the rest expand to empty.
       REGEX="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)'.*$|.*chore\(bump\):.*version to ([0-9]+\.[0-9]+\.[0-9]+).*|^Merge pull request #?[0-9]+ from (origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)( into .+)?$"
 
-      if echo "$CI_COMMIT_MESSAGE" | grep -Eq "$REGEX"; then
+      # Tag-push recovery: a version tag (re-)pushed to recover a bump whose
+      # default-branch run failed the quality gate derives its version straight
+      # from the tag ref; otherwise fall back to the bump commit subject.
+      VERSION=""
+      if [ -n "${CI_COMMIT_TAG:-}" ]; then
+          VERSION=$(echo "$CI_COMMIT_TAG" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?' | head -n 1)
+      elif echo "$CI_COMMIT_MESSAGE" | grep -Eq "$REGEX"; then
           VERSION=$(echo "$CI_COMMIT_MESSAGE" | sed -En "s/$REGEX/\3\4\6/p" | head -n 1)
+      fi
 
+      if [ -n "$VERSION" ]; then
           RELEASE_NOTES=""
           if [ -f CHANGELOG.md ]; then
               RELEASE_NOTES=$(awk '/## \[Unreleased\]/ {skip=1; next} skip && /## \[.*\]/ {found=1; skip=0; next} found && /## \[.*\]/ {exit} found {print}' CHANGELOG.md)
@@ -56,12 +64,17 @@ release:
                --header "Content-Type: application/json" \
                --data "$DATA"
       else
-          echo 'Commit is not a bump, not creating a release'
+          echo 'Commit is not a bump and ref is not a version tag, not creating a release'
       fi
   rules:
     # Coarse pre-filter; the script REGEX is the source of truth. Allow both the
     # branch-name form (`chore/bump-X.Y.Z`, covers git-native and GitHub PR-merge
     # subjects) and the conventional-commit form (`chore(bump): ... version to X.Y.Z`).
     - if: '$CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && ($CI_COMMIT_MESSAGE =~ /chore\/bump-[0-9]+\.[0-9]+\.[0-9]+/ || $CI_COMMIT_MESSAGE =~ /chore\(bump\):.*version to [0-9]+\.[0-9]+\.[0-9]+/)'
+      when: 'always'
+    # Tag-push recovery: a version tag (re-)pushed to recover a bump whose
+    # default-branch run failed the gate still cuts the release (the version is
+    # taken from the tag ref in the script above).
+    - if: '$CI_COMMIT_TAG =~ /^v?[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?$/'
       when: 'always'
     - when: 'never'

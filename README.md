@@ -872,7 +872,7 @@ Releases are cut by the `delivery-release` job, which runs only on a push to `ma
 
 Two mechanisms guard against this:
 
-1. **Tag-push recovery.** The gate jobs skip on tag pushes (`if: "!startsWith(github.ref, 'refs/tags/')"`), so pushing a version tag runs only the delivery step. `40-delivery/release` derives the version from the tag ref, and the `go-library`, `composer-library`, and `maven-library` workflows now cut on tag pushes too (`go-binary` already did, via GoReleaser). So a failed bump is recovered by simply re-pushing its tag:
+1. **Tag-push recovery.** Pushing a version tag runs only the delivery step (the quality-gate jobs skip on tags), and the release stage derives the version from the tag ref — so a failed bump is recovered by re-pushing its tag. This is wired across all three platforms: GitHub Actions (`github/global/stages/40-delivery/release` + the `go-library`/`composer-library`/`maven-library` workflows; `go-binary` already delivered on tags via GoReleaser), GitLab CI (`gitlab/global/stages/40-delivery/release.yaml`, which now fires on a `$CI_COMMIT_TAG`), and Azure DevOps (`azure-devops/global/stages/40-delivery/release.yaml`, whose `condition` now also matches `refs/tags/*`). Recover a failed bump with:
 
    ```bash
    git tag 1.2.3 <bump-commit-sha> && git push origin 1.2.3

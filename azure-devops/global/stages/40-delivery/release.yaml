@@ -16,7 +16,10 @@ jobs:
     # for anything else, so the subsequent tag-creation steps no-op cleanly.
     # Cost of dropping the substring filter is one ~30s job spin-up per merged
     # commit on main — acceptable for correctness.
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    # Gate on the default branch, OR on a version-tag push so a bump whose main
+    # run failed the gate can be recovered by (re-)pushing its tag (the version
+    # is then taken from the tag ref in the Extract Release Version step).
+    condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
     steps:
       - script: |
           # Deliberately NOT `set -x` here. COMMIT_MESSAGE is user-controlled
@@ -45,11 +48,26 @@ jobs:
           # `\6` the GitHub-style PR-merge one.
           REGEX="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)'.*$|.*chore\(bump\):.*version to ([0-9]+\.[0-9]+\.[0-9]+).*|^Merge pull request #?[0-9]+ from (origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)( into .+)?$"
 
-          if echo -n "$COMMIT_MESSAGE" | grep -Eq "$REGEX"; then
+          VERSION=""
+          # Tag-push recovery: derive the version straight from the tag ref when
+          # triggered by a version tag. Read the ref from the auto-exported
+          # BUILD_SOURCEBRANCH* environment variables, NOT the $(...) macro form
+          # the agent substitutes textually into the script before it runs (a
+          # script-injection vector). Git constrains ref names, but the env-var
+          # form keeps the value out of the script text entirely.
+          case "${BUILD_SOURCEBRANCH:-}" in
+            refs/tags/*)
+              VERSION=$(printf '%s' "${BUILD_SOURCEBRANCHNAME:-}" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?' | head -n 1)
+              ;;
+          esac
+          if [ -z "$VERSION" ] && echo -n "$COMMIT_MESSAGE" | grep -Eq "$REGEX"; then
             VERSION=$(echo "$COMMIT_MESSAGE" | sed -En "s/$REGEX/\3\4\6/p" | head -n 1)
+          fi
+
+          if [ -n "$VERSION" ]; then
             echo "##vso[task.setvariable variable=RELEASE_VERSION]$VERSION"
           else
-            echo "$(date "+%Y-%m-%d %H:%M:%S") - Commit is not a bump, not creating a release..."
+            echo "$(date "+%Y-%m-%d %H:%M:%S") - Commit is not a bump and ref is not a version tag, not creating a release..."
             echo "##vso[task.setvariable variable=SKIP_RELEASE]true"
           fi
         displayName: 'Extract Release Version'

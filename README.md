@@ -866,6 +866,38 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/your-feature-branch/gitlab/golang/go-docker.yaml'
 ```
 
+## Release Reconciliation
+
+Releases are cut by the `delivery-release` job, which runs only on a push to `main` whose commit message is a bump (`chore(bump)` / `chore/bump-`) **and** depends on the quality gate (`go` / `composer` / `maven`). When a bump PR merges but that `main` run fails the gate, the tag and GitHub Release are never created — yet the PR already committed `[X.Y.Z]` to `CHANGELOG.md`. The changelog then runs ahead of the tags: **bumped, but never released.**
+
+Two mechanisms guard against this:
+
+1. **Tag-push recovery.** The gate jobs skip on tag pushes (`if: "!startsWith(github.ref, 'refs/tags/')"`), so pushing a version tag runs only the delivery step. `40-delivery/release` derives the version from the tag ref, and the `go-library`, `composer-library`, and `maven-library` workflows now cut on tag pushes too (`go-binary` already did, via GoReleaser). So a failed bump is recovered by simply re-pushing its tag:
+
+   ```bash
+   git tag 1.2.3 <bump-commit-sha> && git push origin 1.2.3
+   ```
+
+2. **Scheduled reconciliation.** The reusable workflow `.github/workflows/release-reconcile.yaml` diffs the released `CHANGELOG.md` versions against the git tags on a schedule, (re-)pushes any missing tag at its bump commit (triggering the recovery path above), and opens/updates a tracking issue. Opt in by adding a scheduled consumer (see `.docs/examples/github-go-docker/.github/workflows/reconcile.yaml`):
+
+   ```yaml
+   name: 'Release Reconcile'
+   on:
+     schedule:
+       - cron: '0 6 * * 1' # weekly
+     workflow_dispatch:
+   permissions:
+     contents: 'write'
+     issues: 'write'
+   jobs:
+     reconcile:
+       uses: 'rios0rios0/pipelines/.github/workflows/release-reconcile.yaml@main'
+       secrets:
+         recover_token: "${{ secrets.PERSONAL_ACCESS_TOKEN }}"
+   ```
+
+   A tag pushed with the default `GITHUB_TOKEN` does not start workflows, so pass a PAT as `recover_token` for the pushed tag to re-trigger delivery; without it the tags are still created (enough for tag-driven ecosystems such as Go modules and Packagist) and the gap is reported in the tracking issue.
+
 ## Troubleshooting
 
 ### Common Issues & Solutions

@@ -45,10 +45,14 @@ jobs:
           tag_prefix: '${{ matrix.prefix }}'
     needs: [ 'maven' ]
     # Cut on a main-branch bump merge, OR on a version-tag push so a bump whose
-    # main run failed the quality gate can be recovered by (re-)pushing its tag
-    # (the gate jobs skip on tags; 40-delivery/release derives the version from
-    # the tag ref).
-    if: "(github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore/bump-') || contains(github.event.head_commit.message, 'chore(bump)'))) || startsWith(github.ref, 'refs/tags/')"
+    # main run failed the quality gate can be recovered by (re-)pushing its tag.
+    # The two triggers are gated separately with explicit status functions: the
+    # main path keeps success() (never release when the gate failed), while the
+    # tag path uses !cancelled() so it still runs when the gate SKIPS on tags —
+    # every job in maven.yaml skips on refs/tags/*, which makes the `maven` need
+    # conclude "skipped", and an implicit success() would then skip delivery too.
+    # 40-delivery/release derives the version from the tag ref on the tag path.
+    if: "(success() && github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore/bump-') || contains(github.event.head_commit.message, 'chore(bump)'))) || (!cancelled() && startsWith(github.ref, 'refs/tags/'))"
 
 
 # 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations

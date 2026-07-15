@@ -44,7 +44,11 @@ jobs:
         with:
           tag_prefix: '${{ matrix.prefix }}'
     needs: [ 'maven' ]
-    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore/bump-') || contains(github.event.head_commit.message, 'chore(bump)'))"
+    # Cut on a main-branch bump merge, OR on a version-tag push so a bump whose
+    # main run failed the quality gate can be recovered by (re-)pushing its tag
+    # (the gate jobs skip on tags; 40-delivery/release derives the version from
+    # the tag ref).
+    if: "(github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore/bump-') || contains(github.event.head_commit.message, 'chore(bump)'))) || startsWith(github.ref, 'refs/tags/')"
 
 
 # 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations

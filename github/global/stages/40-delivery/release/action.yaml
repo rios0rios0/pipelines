@@ -21,24 +21,36 @@ runs:
       run: |
         set -eu
 
-        COMMIT_MESSAGE="$(git log -1 --pretty=%B)"
-        # GitHub PR merge format: "Merge pull request #XX from repository/chore/bump-X.X.X"
-        # Conventional commit format: "chore(bump): bumped version to X.X.X"
-
         VERSION=""
 
-        # Try GitHub PR merge format: chore/bump-X.X.X
-        if echo "$COMMIT_MESSAGE" | grep -Eq "chore/bump-[0-9]+\.[0-9]+\.[0-9]+"; then
-          VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE "chore/bump-[0-9]+\.[0-9]+\.[0-9]+" | head -n 1 | sed 's/chore\/bump-//')
-        # Try conventional commit format: version to X.X.X
-        elif echo "$COMMIT_MESSAGE" | grep -Eq "chore\(bump\):.*version to [0-9]+\.[0-9]+\.[0-9]+"; then
-          VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE "version to [0-9]+\.[0-9]+\.[0-9]+" | head -n 1 | sed 's/version to //')
+        # Recovery / reconciliation path: when the workflow is triggered by a
+        # version tag push, derive the version straight from the tag ref. This
+        # lets a bump whose main-branch run failed the quality gate be re-cut by
+        # simply (re-)pushing its version tag — the gate jobs skip on tags, so
+        # only this delivery step runs. Handles "v"-prefixed tags and the
+        # four-segment fork variant (X.Y.Z.N / X.Y.Z-N).
+        case "${GITHUB_REF:-}" in
+          refs/tags/*)
+            VERSION="$(printf '%s' "${GITHUB_REF_NAME:-}" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?' | head -n 1)"
+            ;;
+        esac
+
+        # Delivery path: extract the version from the bump commit merged to main.
+        # GitHub PR merge format: "Merge pull request #XX from repository/chore/bump-X.X.X"
+        # Conventional commit format: "chore(bump): bumped version to X.X.X"
+        if [ -z "$VERSION" ]; then
+          COMMIT_MESSAGE="$(git log -1 --pretty=%B)"
+          if echo "$COMMIT_MESSAGE" | grep -Eq "chore/bump-[0-9]+\.[0-9]+\.[0-9]+"; then
+            VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE "chore/bump-[0-9]+\.[0-9]+\.[0-9]+" | head -n 1 | sed 's/chore\/bump-//')
+          elif echo "$COMMIT_MESSAGE" | grep -Eq "chore\(bump\):.*version to [0-9]+\.[0-9]+\.[0-9]+"; then
+            VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE "version to [0-9]+\.[0-9]+\.[0-9]+" | head -n 1 | sed 's/version to //')
+          fi
         fi
 
         if [ -n "$VERSION" ]; then
           echo "tag_name=$VERSION" >> $GITHUB_OUTPUT
         else
-          echo "$(date "+%Y-%m-%d %H:%M:%S") - Commit is not a bump, not creating a release..."
+          echo "$(date "+%Y-%m-%d %H:%M:%S") - Commit is not a bump and ref is not a version tag, not creating a release..."
           echo "skip_release=true" >> $GITHUB_OUTPUT
         fi
 

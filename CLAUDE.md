@@ -22,6 +22,8 @@ make test-docker-multi-arch  # Test 40-delivery/docker multi-arch contract only
 make test-basic-checks # Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) only
 make test-dependency-check  # Test the OWASP Dependency-Check NVD cache / API-key contract only
 make test-goreleaser-prepare  # Test the GoReleaser main package detection only
+make test-release-version-extraction  # Test release version extraction (tag ref + bump commit) only
+make test-release-reconcile  # Test release reconciliation gap detection only
 make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
 ```
 
@@ -53,7 +55,7 @@ All platforms follow consistent numbered stages:
   - `terraform/cyclonedx/` — CycloneDX BOM generator for Terraform projects (delegates to `trivy filesystem --format cyclonedx`)
   - `terraform/tftest-gen/` — generator that emits `tests/smoke.tftest.hcl` for single-module repos; parses `variables.tf` + `main.tf` / `providers.tf` and emits `mock_provider` blocks plus validation-rejection runs
   - `terraform/order-check/` — checks (and with `--fix` rewrites) the file-ordering standard across `environments/**/root.hcl`, `stacks/*/{variables,providers,outputs}.tf`, and `**/providers.tf`, and additionally reports **dead terragrunt inputs** (an `inputs = {}` key with no matching `variable` in the target stack — reported only, never auto-deleted); emits `build/reports/junit-order-check.xml`. Runs as the `order-check` / `style:order-check` job in the `10-code-check` stage. Stdlib-only `python3`; the `--fix` rewriter is round-trip-safe (parses to exact substrings, then only permutes). See Terraform Ordering Standard below
-- `global/scripts/shared/` — Shared utilities (cleanup.sh, rebase-check.sh, changelog-check.sh)
+- `global/scripts/shared/` — Shared utilities (cleanup.sh, rebase-check.sh, changelog-check.sh, reconcile-releases.sh)
 - `global/containers/` — Docker image definitions for CI environments
 - `makefiles/` — Includable `.mk` fragments for downstream projects (`common.mk`, `golang.mk`, `python.mk`, etc.)
 - `.docs/examples/` — Complete per-platform usage examples

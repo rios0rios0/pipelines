@@ -2,7 +2,7 @@ TAG := latest
 ROOT := global/containers
 CONTAINER_REGISTRY = ghcr.io/rios0rios0/pipelines
 
-.PHONY: login setup-buildx build-and-push test-go-script test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-docker-multi-arch test-basic-checks test-dependency-check test
+.PHONY: login setup-buildx build-and-push test-go-script test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-docker-multi-arch test-basic-checks test-dependency-check test-release-version-extraction test-release-reconcile test
 
 login:
 	docker login $(CONTAINER_REGISTRY)
@@ -66,5 +66,13 @@ test-goreleaser-prepare:
 	@echo "Running GoReleaser main package detection validation..."
 	@./.github/tests/test-goreleaser-prepare.sh
 
-test: test-go-script test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare
+test-release-version-extraction:
+	@echo "Running release version extraction validation..."
+	@./.github/tests/test-release-version-extraction.sh
+
+test-release-reconcile:
+	@echo "Running release reconciliation validation..."
+	@./.github/tests/test-release-reconcile.sh
+
+test: test-go-script test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile
 	@echo "All tests completed successfully!"

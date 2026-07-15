@@ -21,6 +21,12 @@ plus an idempotent formatter:
     E. stacks/*/outputs.tf       -- outputs ordered to follow the
        declaration position of the first module/resource their value
        references in `main*.tf`.
+    F. terragrunt inputs         -- every key of an `inputs = {}` block (in a
+       `root.hcl` or a leaf `terragrunt.hcl`) must be declared as a `variable`
+       in the target stack. An input with no matching variable is dead code:
+       Terraform silently drops the `TF_VAR_` Terragrunt exports for it, so the
+       value is passed and never read. Reported so it can be removed before
+       pushing; never auto-deleted (see below).
 
 Usage:
     check_order.py [--fix] [--repo-dir DIR] [--config FILE] [--report DIR]
@@ -34,6 +40,12 @@ of *exact* substrings and verifies the concatenation reproduces the original
 byte-for-byte (a round-trip). Only then are those substrings *permuted*. A
 region that does not round-trip is left untouched and reported, so the
 formatter can never drop, duplicate, or corrupt content.
+
+Rule F (dead inputs) is intentionally *check-only*: `--fix` never removes a
+dead input. Deleting content would break the "only ever permute" invariant
+above, and the stack a terragrunt file targets is resolved heuristically -- a
+wrong resolution must at worst produce a report to eyeball, never delete live
+config. The finding names the exact keys so a human deletes them by hand.
 """
 
 from __future__ import annotations
@@ -322,6 +334,18 @@ class Config:
 RE_ENV_NUM = re.compile(r"environments/(\d+)_")
 RE_SOURCE_STACK = re.compile(r'source\s*=\s*"[^"]*stacks/([^"/]+)"')
 RE_DEP_REF = re.compile(r"dependency\.([A-Za-z0-9_]+)\.outputs")
+RE_INPUTS_BLOCK = re.compile(r"(?m)^inputs\s*=\s*\{")
+
+
+def find_inputs_body(text: str) -> str | None:
+    """Return the raw text between the braces of a top-level ``inputs = {}``
+    block, or None when the file has none. Shared by the rule-B ordering check
+    and the rule-F dead-input check so both see identical block boundaries."""
+    m = RE_INPUTS_BLOCK.search(text)
+    if not m:
+        return None
+    open_brace = text.index("{", m.start())
+    return text[open_brace + 1:find_matching_brace(text, open_brace)]
 
 
 @dataclass
@@ -352,10 +376,8 @@ def parse_root_hcl(path: Path) -> RootHcl:
 
     var_to_num: dict[str, int] = {}
     inputs_ref_order: list[tuple[str, int]] = []
-    inputs_m = re.search(r"(?m)^inputs\s*=\s*\{", text)
-    if inputs_m:
-        open_brace = text.index("{", inputs_m.start())
-        body = text[open_brace + 1:find_matching_brace(text, open_brace)]
+    body = find_inputs_body(text)
+    if body is not None:
         # Same balanced parser the fixer uses, so a dependency reference on a
         # later line of a multi-line value is captured by the check too.
         entries, _ = split_inputs_entries(body)
@@ -423,7 +445,7 @@ def fix_inputs_block(text: str, dep_to_num: dict[str, int]) -> tuple[str, bool, 
     positions they occupied, so leading locals/tags and trailing literals stay
     pinned. Returns (new_text, changed, parsed_ok).
     """
-    inputs_m = re.search(r"(?m)^inputs\s*=\s*\{", text)
+    inputs_m = RE_INPUTS_BLOCK.search(text)
     if not inputs_m:
         return text, False, True
     open_brace = text.index("{", inputs_m.start())
@@ -774,6 +796,124 @@ def check_outputs_tf(path: Path, repo: Path, stack_dir: Path, fix: bool) -> File
 
 
 # --------------------------------------------------------------------------- #
+# Dead terragrunt inputs (rule F)
+# --------------------------------------------------------------------------- #
+# A terragrunt `inputs = {}` entry becomes a Terraform `TF_VAR_<key>`. Terraform
+# silently ignores a `TF_VAR_` for a variable it does not declare (unlike `-var`,
+# which warns), so an input whose key has no matching `variable` block in the
+# target stack is dead code: passed, then dropped. This rule finds those so they
+# can be deleted (or the missing variable added) before pushing.
+RE_SOURCE_PATH = re.compile(r'source\s*=\s*"([^"]*)"')
+
+
+def _literal_stack_path(text: str) -> str | None:
+    """Return the literal ``stacks/<path>`` tail of a ``source = "..."``, or None
+    when there is no source or the stack portion is interpolated (``${...}``).
+
+    Only the segment after ``stacks/`` matters; the ``${get_path_to_repo_root()}``
+    prefix every source carries is irrelevant, so it is not what disqualifies a
+    match -- an interpolation *inside the stack path itself* (the dynamic
+    ``stacks/${basename(...)}/...`` form) is, because then the concrete directory
+    is only known at terragrunt parse time and we fall back to path convention."""
+    for m in RE_SOURCE_PATH.finditer(text):
+        val = m.group(1)
+        idx = val.find("stacks/")
+        if idx == -1:
+            continue
+        tail = val[idx + len("stacks/"):]
+        return None if "${" in tail else tail.strip("/")
+    return None
+
+
+def find_parent_root_hcl(repo: Path, tf_path: Path) -> Path | None:
+    """Nearest ancestor ``root.hcl`` (terragrunt's ``find_in_parent_folders``).
+
+    A leaf ``terragrunt.hcl`` inherits its ``source`` from the ``root.hcl`` it
+    includes, so resolving the leaf's stack means finding that root first."""
+    d = tf_path.parent
+    while True:
+        cand = d / "root.hcl"
+        if cand.is_file() and cand != tf_path:
+            return cand
+        if d == repo or d.parent == d:
+            return None
+        d = d.parent
+
+
+def resolve_stack_dir(repo: Path, tf_path: Path) -> Path | None:
+    """Resolve the ``stacks/<...>`` directory a terragrunt file feeds.
+
+    Two strategies, in order:
+      1. a *literal* ``stacks/<path>`` in the file's own ``source`` or, for a
+         leaf that includes one, its parent ``root.hcl``'s ``source``;
+      2. path convention -- the longest ancestor-prefix of the file's directory
+         (relative to ``environments/``) that exists under ``stacks/``. This
+         covers dynamic ``stacks/${basename(...)}/...`` sources and nested
+         sub-stacks (``environments/A/B`` -> ``stacks/A/B``).
+    Returns None when neither yields an existing directory, so an unrecognized
+    layout is skipped rather than mis-reported (rule F never false-positives on
+    a file whose stack it cannot pin down)."""
+    lit = _literal_stack_path(read_text(tf_path))
+    if lit is None:
+        root = find_parent_root_hcl(repo, tf_path)
+        if root is not None:
+            lit = _literal_stack_path(read_text(root))
+    if lit:
+        cand = repo / "stacks" / lit
+        if cand.is_dir():
+            return cand
+    try:
+        env_rel = tf_path.parent.relative_to(repo / "environments")
+    except ValueError:
+        return None
+    parts = env_rel.parts
+    for k in range(len(parts), 0, -1):
+        cand = repo / "stacks" / Path(*parts[:k])
+        if cand.is_dir():
+            return cand
+    return None
+
+
+def collect_declared_vars(stack_dir: Path) -> set[str] | None:
+    """Names of every ``variable`` declared in the stack's ``*.tf`` files.
+
+    Scans all ``*.tf`` (not just ``variables.tf``) so a variable declared
+    elsewhere is still counted -- Terraform allows declarations in any file, and
+    counting only ``variables.tf`` would flag a live input as dead. Returns None
+    when the directory holds no ``*.tf`` at all: that is a container like
+    ``stacks/01_shared`` whose inputs belong to its sub-stacks, not to it, so
+    the caller skips it."""
+    tf_files = sorted(stack_dir.glob("*.tf"))
+    if not tf_files:
+        return None
+    names: set[str] = set()
+    for tf in tf_files:
+        names.update(b.name for b in find_top_level_blocks(read_text(tf), "variable"))
+    return names
+
+
+def dead_input_findings(tf_path: Path, repo: Path, stack_dir: Path,
+                        declared: set[str]) -> list[Finding]:
+    """Findings for ``inputs`` keys not declared as a variable in ``stack_dir``.
+
+    Only top-level keys are considered; nested map keys (e.g. inside a structured
+    input value) ride along inside their entry's value and are never treated as
+    inputs, because ``split_inputs_entries`` scans values brace-balanced."""
+    text = read_text(tf_path)
+    body = find_inputs_body(text)
+    if body is None:
+        return []
+    entries, _ = split_inputs_entries(body)
+    dead = [e["key"] for e in entries if e["key"] not in declared]
+    if not dead:
+        return []
+    return [Finding("dead-inputs", rel(repo, tf_path),
+                    f"input(s) not declared as a variable in {rel(repo, stack_dir)} "
+                    f"(dead code -- remove them, or declare the variable): "
+                    f"{', '.join(dead)}")]
+
+
+# --------------------------------------------------------------------------- #
 # Orchestration
 # --------------------------------------------------------------------------- #
 # Never descend into these: provider plugin caches, the repo's own VCS dir,
@@ -793,6 +933,14 @@ def discover_root_hcls(repo: Path) -> list[Path]:
     return sorted(p for p in base.rglob("root.hcl") if not _excluded(p))
 
 
+def discover_terragrunt_hcls(repo: Path) -> list[Path]:
+    """Leaf ``terragrunt.hcl`` files (the per-instance configs that `include` a
+    root). Their own `inputs` overrides are checked for dead keys too (rule F)."""
+    env_dir = repo / "environments"
+    base = env_dir if env_dir.is_dir() else repo
+    return sorted(p for p in base.rglob("terragrunt.hcl") if not _excluded(p))
+
+
 def discover_providers(repo: Path) -> list[Path]:
     return sorted(p for p in repo.rglob("providers.tf") if not _excluded(p))
 
@@ -807,15 +955,32 @@ def discover_stack_dirs(repo: Path) -> list[Path]:
 def run(repo: Path, cfg: Config, fix: bool) -> list[FileResult]:
     results: list[FileResult] = []
     var_to_num_by_stack: dict[str, dict[str, int]] = {}
+    declared_cache: dict[Path, set[str] | None] = {}
+
+    def declared_for(tf_path: Path) -> tuple[Path | None, set[str] | None]:
+        """Resolve a terragrunt file's stack and its declared variables (cached
+        per stack, since ~hundreds of leaves collapse onto a couple dozen
+        stacks). (None, None) means "skip" -- unresolved stack or container dir."""
+        stack_dir = resolve_stack_dir(repo, tf_path)
+        if stack_dir is None:
+            return None, None
+        if stack_dir not in declared_cache:
+            declared_cache[stack_dir] = collect_declared_vars(stack_dir)
+        return stack_dir, declared_cache[stack_dir]
 
     # Rules A & B: root.hcl files (also build var->dep-number maps for rule C).
+    # Rule F rides along: a root.hcl's own inputs are checked for dead keys.
     for rh_path in discover_root_hcls(repo):
         if cfg.is_ignored(rel(repo, rh_path)):
             continue
         rh = parse_root_hcl(rh_path)
         if rh.stack_name:
             var_to_num_by_stack[rh.stack_name] = rh.var_to_num
-        results.append(check_root_hcl(rh, repo, fix))
+        res = check_root_hcl(rh, repo, fix)
+        stack_dir, declared = declared_for(rh_path)
+        if declared is not None:
+            res.findings.extend(dead_input_findings(rh_path, repo, stack_dir, declared))
+        results.append(res)
 
     # Rules C & E: discover stack dirs directly so a stack that is newly added,
     # currently unreferenced, or wired via a `source` syntax the regex misses is
@@ -837,6 +1002,17 @@ def run(repo: Path, cfg: Config, fix: bool) -> list[FileResult]:
         if cfg.is_ignored(rel(repo, pf)):
             continue
         results.append(check_providers_tf(pf, repo, cfg, fix))
+
+    # Rule F: leaf terragrunt.hcl inputs (root.hcl inputs were handled above).
+    for tg_path in discover_terragrunt_hcls(repo):
+        if cfg.is_ignored(rel(repo, tg_path)):
+            continue
+        stack_dir, declared = declared_for(tg_path)
+        if declared is None:
+            continue
+        findings = dead_input_findings(tg_path, repo, stack_dir, declared)
+        if findings:
+            results.append(FileResult(path=rel(repo, tg_path), findings=findings))
 
     return [r for r in results if r.findings or r.fixed]
 

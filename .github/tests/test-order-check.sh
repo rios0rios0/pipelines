@@ -307,6 +307,8 @@ echo "TEST 5: variables.tf with .ENV before .HCL"
 # given
 R5="$TEST_DIR/sections"
 make_clean_repo "$R5"
+# variables.tf declares every clean-repo input (tags/registry/kube/image) so the
+# only fault here is the section order -- rule F (dead inputs) stays silent.
 cat > "$R5/stacks/04_app/variables.tf" << 'HCL'
 // SET ON .ENV
 
@@ -316,7 +318,19 @@ variable "environment" {
 
 // SET ON .HCL
 
+variable "tags" {
+  type = map(string)
+}
+
 variable "registry" {
+  type = string
+}
+
+variable "kube" {
+  type = string
+}
+
+variable "image" {
   type = string
 }
 HCL
@@ -333,12 +347,22 @@ echo "TEST 6: variables.tf without section markers -> warning"
 # given
 R6="$TEST_DIR/nomarkers"
 make_clean_repo "$R6"
+# declares every clean-repo input so rule F stays silent; the only fault is the
+# missing section markers.
 cat > "$R6/stacks/04_app/variables.tf" << 'HCL'
+variable "tags" {
+  type = map(string)
+}
+
 variable "registry" {
   type = string
 }
 
 variable "kube" {
+  type = string
+}
+
+variable "image" {
   type = string
 }
 HCL
@@ -582,6 +606,8 @@ echo "TEST 14: --fix preserves heredoc + block-comment braces while reordering"
 # given
 R14="$TEST_DIR/heredoc"
 make_clean_repo "$R14"
+# tags/image (unconstrained clean-repo inputs) are declared too so rule F stays
+# silent; they are pinned by the fixer, leaving the registry/kube reorder intact.
 cat > "$R14/stacks/04_app/variables.tf" << 'HCL'
 // SET ON .HCL
 
@@ -595,6 +621,14 @@ variable "registry" {
   default = <<-EOT
     a dangling close brace } sits in this prose
   EOT
+}
+
+variable "tags" {
+  type = map(string)
+}
+
+variable "image" {
+  type = string
 }
 
 // SET ON .ENV
@@ -679,19 +713,221 @@ terraform {
 }
 
 inputs = {
-  kube_cfg = {
+  kube = {
     host = dependency.kubernetes.outputs.host
   }
 
   registry = dependency.shared_common.outputs.registry
 }
 HCL
-# when -- kubernetes(03) ref is on line 2 of kube_cfg's value, then
+# when -- kubernetes(03) ref is on line 2 of kube's value, then
 #         shared_common(01) follows: out of order, must be detected
 set +e; OUT16="$(oc --repo-dir "$R16" 2>&1)"; set -e
 # then
 assert_true "multi-line input dependency ref is parsed and flagged" \
   "echo \"\$OUT16\" | grep -q 'root-hcl-inputs'"
+
+# =============================================================================
+# Test 17: an input in root.hcl not declared as a variable -> dead-code error.
+# =============================================================================
+echo "TEST 17: root.hcl input with no matching variable is flagged as dead"
+# given -- a clean repo whose root.hcl passes one extra, undeclared input
+R17="$TEST_DIR/dead-root"
+make_clean_repo "$R17"
+cat > "$R17/environments/04_app/root.hcl" << 'HCL'
+dependency "shared_common" {
+  config_path = "${get_path_to_repo_root()}//environments/01_shared/02_common"
+}
+
+dependency "kubernetes" {
+  config_path = "${get_path_to_repo_root()}//environments/03_kubernetes/x"
+}
+
+terraform {
+  source = "${get_path_to_repo_root()}//stacks/04_app"
+}
+
+inputs = {
+  tags = local.tags
+
+  registry = dependency.shared_common.outputs.registry
+
+  kube = dependency.kubernetes.outputs.kube
+
+  image = "app:1.0.0"
+
+  orphan_input = "nothing in variables.tf declares me"
+}
+HCL
+# when
+set +e; OUT17="$(oc --repo-dir "$R17" 2>&1)"; RC17=$?; set -e
+# then
+assert_true "flags dead-inputs" "echo \"\$OUT17\" | grep -q 'dead-inputs'"
+assert_true "names the undeclared key 'orphan_input'" \
+  "echo \"\$OUT17\" | grep -q 'orphan_input'"
+assert_true "points at the target stack in the message" \
+  "echo \"\$OUT17\" | grep -q 'stacks/04_app'"
+assert_true "does NOT blame a declared input ('registry')" \
+  "! echo \"\$OUT17\" | grep -q 'registry'"
+assert_true "dead input fails CI (exit 1)" "[ $RC17 -eq 1 ]"
+
+# =============================================================================
+# Test 18: an input in a leaf terragrunt.hcl not declared -> flagged on the leaf.
+# =============================================================================
+echo "TEST 18: leaf terragrunt.hcl input with no matching variable is flagged"
+# given -- a per-instance leaf that includes root and adds an undeclared input
+R18="$TEST_DIR/dead-leaf"
+make_clean_repo "$R18"
+mkdir -p "$R18/environments/04_app/prod/inst"
+cat > "$R18/environments/04_app/prod/inst/terragrunt.hcl" << 'HCL'
+include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+
+inputs = {
+  environment = "prod"
+  ghost       = "declared nowhere in stacks/04_app"
+}
+HCL
+# when -- the leaf inherits its stack (04_app) from the root it includes
+set +e; OUT18="$(oc --repo-dir "$R18" 2>&1)"; RC18=$?; set -e
+# then
+assert_true "flags dead-inputs on the leaf file path" \
+  "echo \"\$OUT18\" | grep -q 'environments/04_app/prod/inst/terragrunt.hcl'"
+assert_true "names the undeclared leaf key 'ghost'" \
+  "echo \"\$OUT18\" | grep -q 'ghost'"
+assert_true "does NOT blame the declared leaf input 'environment'" \
+  "! echo \"\$OUT18\" | grep -qE 'variable\\): .*environment'"
+assert_true "leaf dead input fails CI (exit 1)" "[ $RC18 -eq 1 ]"
+
+# =============================================================================
+# Test 19: a leaf whose inputs are all declared is NOT flagged (no false pos).
+# =============================================================================
+echo "TEST 19: leaf with only declared inputs stays clean"
+# given
+R19="$TEST_DIR/live-leaf"
+make_clean_repo "$R19"
+mkdir -p "$R19/environments/04_app/prod/inst"
+cat > "$R19/environments/04_app/prod/inst/terragrunt.hcl" << 'HCL'
+include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+
+inputs = {
+  environment = "prod"
+  image       = "app:2.0.0"
+}
+HCL
+# when
+set +e; OUT19="$(oc --repo-dir "$R19" 2>&1)"; RC19=$?; set -e
+# then
+assert_true "no dead-inputs finding for a fully-declared leaf" \
+  "! echo \"\$OUT19\" | grep -q 'dead-inputs'"
+assert_true "repo still passes (exit 0)" "[ $RC19 -eq 0 ]"
+
+# =============================================================================
+# Test 20: nested sub-stack resolution works; a container root.hcl is skipped.
+#   environments/01_shared/02_common -> stacks/01_shared/02_common (path
+#   convention, because the shared root.hcl's source is interpolated). The
+#   container stacks/01_shared has no *.tf, so the shared root.hcl's own inputs
+#   are conservatively skipped rather than mis-blamed on one sub-stack.
+# =============================================================================
+echo "TEST 20: nested sub-stack dead input flagged; container root skipped"
+# given
+R20="$TEST_DIR/nested"
+mkdir -p "$R20/environments/01_shared/02_common" "$R20/stacks/01_shared/02_common"
+cat > "$R20/environments/01_shared/root.hcl" << 'HCL'
+terraform {
+  source = "${get_path_to_repo_root()}//stacks/${basename(dirname(get_terragrunt_dir()))}/${basename(get_terragrunt_dir())}"
+}
+
+inputs = {
+  tags = local.tags
+}
+HCL
+cat > "$R20/environments/01_shared/02_common/terragrunt.hcl" << 'HCL'
+include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+
+inputs = {
+  known        = "x"
+  nested_ghost = "declared nowhere in stacks/01_shared/02_common"
+}
+HCL
+cat > "$R20/stacks/01_shared/02_common/variables.tf" << 'HCL'
+variable "known" {
+  type = string
+}
+HCL
+# when
+set +e; OUT20="$(oc --repo-dir "$R20" 2>&1)"; RC20=$?; set -e
+# then
+assert_true "nested leaf resolves to stacks/01_shared/02_common and is flagged" \
+  "echo \"\$OUT20\" | grep -q 'environments/01_shared/02_common/terragrunt.hcl'"
+assert_true "names the undeclared nested key 'nested_ghost'" \
+  "echo \"\$OUT20\" | grep -q 'nested_ghost'"
+assert_true "container-level 01_shared/root.hcl is NOT reported (conservative)" \
+  "! echo \"\$OUT20\" | grep -q '01_shared/root.hcl'"
+assert_true "nested dead input fails CI (exit 1)" "[ $RC20 -eq 1 ]"
+
+# =============================================================================
+# Test 21: --fix never deletes a dead input (rule F is check-only).
+# =============================================================================
+echo "TEST 21: --fix reports but does not remove dead inputs"
+# given -- same undeclared input as Test 17
+R21="$TEST_DIR/dead-nofix"
+make_clean_repo "$R21"
+cat > "$R21/environments/04_app/root.hcl" << 'HCL'
+terraform {
+  source = "${get_path_to_repo_root()}//stacks/04_app"
+}
+
+inputs = {
+  tags         = local.tags
+  image        = "app:1.0.0"
+  orphan_input = "still here after --fix"
+}
+HCL
+# when
+set +e; oc --repo-dir "$R21" --fix >/dev/null 2>&1; set -e
+set +e; OUT21="$(oc --repo-dir "$R21" 2>&1)"; RC21=$?; set -e
+# then
+assert_true "dead input still present in the file after --fix" \
+  "grep -q 'orphan_input' '$R21/environments/04_app/root.hcl'"
+assert_true "still reported as dead after --fix" \
+  "echo \"\$OUT21\" | grep -q 'dead-inputs'"
+assert_true "still fails CI after --fix (exit 1)" "[ $RC21 -eq 1 ]"
+
+# =============================================================================
+# Test 22: a variable declared outside variables.tf still counts as declared.
+# =============================================================================
+echo "TEST 22: variable declared in another *.tf is not a false positive"
+# given -- 'extra_var' is passed as an input and declared only in extra.tf
+R22="$TEST_DIR/crossfile"
+make_clean_repo "$R22"
+cat > "$R22/environments/04_app/root.hcl" << 'HCL'
+terraform {
+  source = "${get_path_to_repo_root()}//stacks/04_app"
+}
+
+inputs = {
+  tags      = local.tags
+  image     = "app:1.0.0"
+  extra_var = "declared in extra.tf, not variables.tf"
+}
+HCL
+cat > "$R22/stacks/04_app/extra.tf" << 'HCL'
+variable "extra_var" {
+  type = string
+}
+HCL
+# when
+set +e; OUT22="$(oc --repo-dir "$R22" 2>&1)"; RC22=$?; set -e
+# then
+assert_true "cross-file variable is not flagged dead" \
+  "! echo \"\$OUT22\" | grep -q 'dead-inputs'"
+assert_true "repo passes (exit 0)" "[ $RC22 -eq 0 ]"
 
 # =============================================================================
 # Summary

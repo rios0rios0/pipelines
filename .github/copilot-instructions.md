@@ -20,6 +20,8 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-basic-checks` - Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) specifically
 - `make test-dependency-check` - Test the OWASP Dependency-Check NVD cache / API-key contract specifically
 - `make test-goreleaser-prepare` - Test the GoReleaser main package detection specifically
+- `make test-release-version-extraction` - Test release version extraction (tag ref + bump commit) specifically
+- `make test-release-reconcile` - Test release reconciliation gap detection specifically
 - `bash global/scripts/shared/cleanup.sh` - Clean up build reports
 - `docker --version && make --version && go version` - Check dependencies
 

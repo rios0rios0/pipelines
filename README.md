@@ -866,6 +866,26 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/your-feature-branch/gitlab/golang/go-docker.yaml'
 ```
 
+## Release Reconciliation
+
+Releases are cut by the `delivery-release` job, which runs only on a push to `main` whose commit message is a bump (`chore(bump)` / `chore/bump-`) **and** depends on the quality gate (`go` / `composer` / `maven`). When a bump PR merges but that `main` run fails the gate, the tag and GitHub Release are never created — yet the PR already committed `[X.Y.Z]` to `CHANGELOG.md`. The changelog then runs ahead of the tags: **bumped, but never released.**
+
+Two mechanisms guard against this:
+
+1. **Tag-push recovery.** Pushing a version tag runs only the delivery step (the quality-gate jobs skip on tags), and the release stage derives the version from the tag ref — so a failed bump is recovered by re-pushing its tag. This is wired across all three platforms: GitHub Actions (`github/global/stages/40-delivery/release` + the `go-library`/`composer-library`/`maven-library` workflows; `go-binary` already delivered on tags via GoReleaser), GitLab CI (`gitlab/global/stages/40-delivery/release.yaml`, which now fires on a `$CI_COMMIT_TAG`), and Azure DevOps (`azure-devops/global/stages/40-delivery/release.yaml`, whose `condition` now also matches `refs/tags/*`). Recover a failed bump with:
+
+   ```bash
+   git tag 1.2.3 <bump-commit-sha> && git push origin 1.2.3
+   ```
+
+2. **Scheduled reconciliation.** `global/scripts/shared/reconcile-releases.sh` diffs the released `CHANGELOG.md` versions against the git tags and resolves each gap to its bump commit. It is run org-wide on a schedule by [`config-automation`](https://github.com/rios0rios0/config-automation) — the same place the compliance audit and config/docs refresh already run — which enumerates every `rios0rios0` repo, (re-)pushes any missing tag at its bump commit (triggering the recovery path above), and reports the result. Run it against any repo locally with:
+
+   ```bash
+   global/scripts/shared/reconcile-releases.sh /path/to/repo
+   ```
+
+   It prints one `version<TAB>commit<TAB>status` row per gap (empty output means the changelog and tags agree). A tag re-pushed to recover a release must be pushed with a PAT, not the default `GITHUB_TOKEN`, for it to re-trigger delivery; a `GITHUB_TOKEN`-pushed tag is still created (enough for tag-driven ecosystems such as Go modules and Packagist) but starts no workflow.
+
 ## Troubleshooting
 
 ### Common Issues & Solutions

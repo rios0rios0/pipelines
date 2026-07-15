@@ -1,9 +1,15 @@
 # Installs the terra CLI (https://github.com/rios0rios0/terra) which wraps
-# Terraform and Terragrunt. After installation, `terra install` pulls the
-# correct versions of both tools automatically.
+# Terraform and Terragrunt. `install.sh` only installs terra when the binary is
+# absent — with no `--force` it prints "already installed" and exits 0 without
+# comparing versions, so on a persistent self-hosted runner (where the binary
+# survives between jobs) the pipeline keeps whatever version was first installed
+# and never picks up new releases. `terra self-update --force` then refreshes the
+# CLI to the latest release non-interactively, before `terra install` pulls the
+# matching Terraform and Terragrunt versions.
 steps:
   - script: |
       curl -fsSL https://raw.githubusercontent.com/rios0rios0/terra/main/install.sh | sh
+      terra self-update --force
       terra install
       terra version
     displayName: 'Install terra CLI + dependencies'

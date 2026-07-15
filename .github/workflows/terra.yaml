@@ -45,6 +45,7 @@ jobs:
       - name: 'Install terra CLI'
         run: |
           curl -fsSL https://raw.githubusercontent.com/rios0rios0/terra/main/install.sh | sh
+          terra self-update --force
           terra install
         shell: 'bash'
 
@@ -240,6 +241,7 @@ jobs:
       - name: 'Install terra CLI'
         run: |
           curl -fsSL https://raw.githubusercontent.com/rios0rios0/terra/main/install.sh | sh
+          terra self-update --force
           terra install
         shell: 'bash'
 

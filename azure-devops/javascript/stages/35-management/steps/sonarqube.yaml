@@ -43,6 +43,13 @@ steps:
   - script: yarn sonar
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
     displayName: 'Run SonarQube'
+    # Explicit mapping so the secret `$(SONAR_TOKEN)` reaches the shell as
+    # `$SONAR_TOKEN`. Azure Pipelines withholds secret variables from the
+    # process environment; without this block the scanner sends no
+    # credentials and the server returns `HTTP 401`.
+    env:
+      SONAR_TOKEN: $(SONAR_TOKEN)
+      SONAR_HOST_URL: $(SONAR_HOST_URL)
 
   - script: ${{ parameters.RUN_AFTER_MANAGEMENT }}
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"

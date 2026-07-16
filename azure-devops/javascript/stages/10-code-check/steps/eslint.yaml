@@ -18,6 +18,22 @@ steps:
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
     displayName: 'Run ESLint'
 
+  # ESLint, knip, and test runners all transpile without type checking, so
+  # `tsc` is the only tool that fails on type errors before a merge. Prefer
+  # the project's own `typecheck` script; fall back to a plain `tsc --noEmit`
+  # when only a tsconfig.json exists; plain-JavaScript repos skip with a log
+  # line so the gate's absence stays visible in CI.
+  - script: |
+      if node -e "process.exit((require('./package.json').scripts || {}).typecheck ? 0 : 1)" 2>/dev/null; then
+        yarn typecheck
+      elif [ -f tsconfig.json ]; then
+        yarn tsc --noEmit
+      else
+        echo 'No "typecheck" script or tsconfig.json found; skipping the type check.'
+      fi
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+    displayName: 'Run TypeScript type check'
+
   - script: ${{ parameters.RUN_AFTER_CODE_CHECK }}
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
     displayName: 'Run After'

@@ -8,6 +8,16 @@ style:eslint:
   script:
     - !reference [ .style:eslint, before_script ]
     - yarn lint:ci
+    # ESLint, knip, and test runners all transpile without type checking, so
+    # `tsc` is the only tool that fails on type errors before a merge.
+    - |
+      if node -e "process.exit((require('./package.json').scripts || {}).typecheck ? 0 : 1)" 2>/dev/null; then
+        yarn typecheck
+      elif [ -f tsconfig.json ]; then
+        yarn tsc --noEmit
+      else
+        echo 'No "typecheck" script or tsconfig.json found; skipping the type check.'
+      fi
     - !reference [ .style:eslint, after_script ]
   cache:
     paths: !reference [ .style:eslint, cache, paths ]

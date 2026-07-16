@@ -51,4 +51,11 @@ jobs:
 
       - template: '../../abstracts/scripts-repo.yaml'
       - script: $(Scripts.Directory)/global/scripts/tools/sonarqube/run.sh
+        # Explicit mapping so the secret `$(SONAR_TOKEN)` reaches the shell
+        # as `$SONAR_TOKEN`. Azure Pipelines withholds secret variables from
+        # the process environment; without this block sonar-scanner sends no
+        # credentials and the server returns `HTTP 401`.
+        env:
+          SONAR_TOKEN: $(SONAR_TOKEN)
+          SONAR_HOST_URL: $(SONAR_HOST_URL)
     continueOnError: true

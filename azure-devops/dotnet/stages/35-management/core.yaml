@@ -57,6 +57,13 @@ stages:
                 /d:sonar.qualitygate.wait="true" /d:sonar.coverage.exclusions="Tests/**"
               dotnet build $(Restore.SlnFile)
               dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
+            # Explicit mapping so the secret `$(SONAR_TOKEN)` reaches the
+            # shell as `$SONAR_TOKEN`. Azure Pipelines withholds secret
+            # variables from the process environment; without this block the
+            # scanner sends no credentials and the server returns `HTTP 401`.
+            env:
+              SONAR_TOKEN: $(SONAR_TOKEN)
+              SONAR_HOST_URL: $(SONAR_HOST_URL)
             continueOnError: true
 
       - job: 'report_dependency_track'

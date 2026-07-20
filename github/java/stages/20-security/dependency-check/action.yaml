@@ -71,12 +71,30 @@ runs:
         NVD_DATAFEED_URL: ${{ inputs.nvd_datafeed_url }}
         NVD_VALID_FOR_HOURS: ${{ inputs.nvd_valid_for_hours }}
 
+    # run.sh writes this marker only after the analysis returns 0, so it is the one reliable signal
+    # that the database on disk is whole rather than the tail of an interrupted download.
+    - name: 'Check CVE database completeness'
+      id: 'odc_complete'
+      shell: 'bash'
+      run: |
+        if [[ -f '.owasp/.odc-complete' ]]; then
+          echo 'complete=true' >> "$GITHUB_OUTPUT"
+        else
+          echo 'complete=false' >> "$GITHUB_OUTPUT"
+          echo '::warning::CVE database is incomplete; skipping the cache save so the next run does not inherit a partial database.'
+        fi
+      if: always()
+
+    # Gated on completeness, not just on `always()`. Saving unconditionally is what turned a single
+    # cancelled run into a permanent failure: the partial database was published under the day's key,
+    # the next run restored it, Dependency-Check rejected it and restarted the full ~350k-record
+    # download, ran out of time, and saved a fresh partial -- a loop the cache could never escape.
     - name: 'Save NVD database'
       uses: 'actions/cache/save@v4'
       with:
         path: '.owasp'
         key: "owasp-nvd-${{ runner.os }}-${{ steps.date.outputs.date }}"
-      if: "always() && steps.restore_nvd.outputs.cache-hit != 'true'"
+      if: "always() && steps.odc_complete.outputs.complete == 'true' && steps.restore_nvd.outputs.cache-hit != 'true'"
 
     - name: 'Upload Report'
       uses: 'actions/upload-artifact@v7'

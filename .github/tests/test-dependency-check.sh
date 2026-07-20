@@ -56,6 +56,15 @@ run_against_stub() {
   mkdir -p "$projectDir/bin"
   touch "$projectDir/$buildFile"
 
+  # Set PREWARM_DB=1 to simulate a restored cache that a previous run finished writing: both the H2
+  # file and the completion marker present. run.sh treats that -- and only that -- as warm, which is
+  # what lets it choose the API delta over a datafeed bootstrap.
+  if [[ -n "${PREWARM_DB:-}" ]]; then
+    mkdir -p "$projectDir/.owasp"
+    : > "$projectDir/.owasp/odc.mv.db"
+    echo '2026-07-20T00:00:00Z' > "$projectDir/.owasp/.odc-complete"
+  fi
+
   local argvFile="$projectDir/argv.txt"
   cat > "$projectDir/bin/$stubName" <<EOF
 #!/usr/bin/env sh
@@ -91,9 +100,25 @@ assert_true "never puts the key's value on the command line" \
   "! grep -q 'super-secret-key-value' <<< \"\$ARGV\""
 assert_true "never uses the leaky -DnvdApiKey property" \
   "! grep -q -- '-DnvdApiKey=' <<< \"\$ARGV\""
-# and with a key it uses the authenticated API rather than the datafeed
-assert_true "does not fall back to the datafeed when a key is present" \
+# A key alone does NOT buy the API path. The run above started from an empty .owasp, and a cold API
+# build is precisely the shape that could not finish: ~350k records at the ~30 records/s a shared
+# runner IP actually sustains is >3h, so the job was cancelled and every rerun started over. A cold
+# database is therefore always bootstrapped from the rate-limit-free datafeed, key or no key.
+assert_true "bootstraps a cold database from the datafeed even when a key is present" \
+  "grep -q -- '-DnvdDatafeedUrl=' <<< \"\$ARGV\""
+assert_true "still passes the key through on a cold run" \
+  "grep -qx -- '-DnvdApiKeyEnvironmentVariable=NVD_API_KEY' <<< \"\$ARGV\""
+assert_true "explains why the datafeed is used despite the key being set" \
+  "grep -q 'no complete CVE database is cached yet' <<< \"\$STDOUT\""
+
+# ...and once a complete database is restored, the API delta is the fast path and the datafeed is
+# dropped. This is the only state in which the API is used at all.
+PREWARM_DB=1 run_against_stub 'pom.xml' 'mvn' NVD_API_KEY='k'
+unset PREWARM_DB
+assert_true "uses the authenticated API for the delta when a complete database is cached" \
   "! grep -q -- '-DnvdDatafeedUrl' <<< \"\$ARGV\""
+assert_true "still passes the key by variable name on the warm path" \
+  "grep -qx -- '-DnvdApiKeyEnvironmentVariable=NVD_API_KEY' <<< \"\$ARGV\""
 
 # =============================================================================
 # Test 2: Maven — the CVE database is pinned to the cached directory
@@ -199,8 +224,20 @@ assert_true "restores with actions/cache/restore" \
   "grep -q 'actions/cache/restore@v4' '$ACTION'"
 assert_true "saves with an explicit actions/cache/save step" \
   "grep -q 'actions/cache/save@v4' '$ACTION'"
-assert_true "saves under always(), so a cancelled or failed run still keeps its progress" \
-  "grep -qE \"if: \\\"always\\(\\) && steps.restore_nvd.outputs.cache-hit\" '$ACTION'"
+# The save still runs under always() -- a post-job step would be skipped on cancellation -- but it is
+# now gated on the database being complete. Saving unconditionally is what made a single cancelled run
+# permanent: the partial database was published, restored by the next run, rejected by
+# Dependency-Check, and rebuilt from zero until the timeout killed it and it saved another partial.
+assert_true "saves under always(), so cancellation cannot skip the step" \
+  "grep -qE \"if: \\\"always\\(\\)\" '$ACTION'"
+assert_true "gates the save on the completion marker so a partial database is never cached" \
+  "grep -qE \"steps.odc_complete.outputs.complete == 'true'\" '$ACTION'"
+assert_true "derives that flag from the marker run.sh writes on success" \
+  "grep -qE '\\.owasp/\\.odc-complete' '$ACTION'"
+assert_true "run.sh writes the completion marker only after the analysis returns" \
+  "grep -qE '^date -u .* > \\\"\\\$completionMarker\\\"' '$RUN_SH'"
+assert_true "run.sh clears a stale marker before running so it describes this run" \
+  "grep -qE '^rm -f \\\"\\\$completionMarker\\\"' '$RUN_SH'"
 assert_true "does not use the all-in-one actions/cache, whose save is skipped on cancellation" \
   "! grep -qE 'uses: .actions/cache@' '$ACTION'"
 assert_true "keys the cache daily so the snapshot cannot go stale forever" \
@@ -215,15 +252,15 @@ assert_true "checks out before restoring, so checkout cannot clean the restored 
 # =============================================================================
 echo "TEST 8: every platform bounds the job's runtime"
 assert_true "GitHub Actions: maven workflow has a timeout" \
-  "grep -q 'timeout-minutes: 30' .github/workflows/maven.yaml"
+  "grep -q 'timeout-minutes: 45' .github/workflows/maven.yaml"
 assert_true "GitHub Actions: gradle workflow has a timeout" \
-  "grep -q 'timeout-minutes: 30' .github/workflows/gradle.yaml"
+  "grep -q 'timeout-minutes: 45' .github/workflows/gradle.yaml"
 assert_true "GitLab CI: maven job has a timeout" \
-  "grep -q \"timeout: '30 minutes'\" gitlab/java/stages/20-security/maven.yaml"
+  "grep -q \"timeout: '45 minutes'\" gitlab/java/stages/20-security/maven.yaml"
 assert_true "GitLab CI: gradle job has a timeout" \
-  "grep -q \"timeout: '30 minutes'\" gitlab/java/stages/20-security/gradle.yaml"
+  "grep -q \"timeout: '45 minutes'\" gitlab/java/stages/20-security/gradle.yaml"
 assert_true "Azure DevOps: dependency-check job has a timeout" \
-  "grep -q 'timeoutInMinutes: 30' azure-devops/java/stages/20-security/java.yaml"
+  "grep -q 'timeoutInMinutes: 45' azure-devops/java/stages/20-security/java.yaml"
 
 # =============================================================================
 # Test 9: all three platforms run the same script

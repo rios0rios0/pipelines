@@ -1,0 +1,12 @@
+stages:
+  - stage: 'management'
+    displayName: 'management'
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    jobs:
+      - template: '../../../global/stages/35-management/sonarqube.yaml'
+        parameters:
+          # Helm chart repositories don't produce a `coverage` artifact, so the
+          # default download step would emit `##[error]Artifact coverage was not
+          # found` and turn the job yellow. Skip it (mirrors the Terraform
+          # management stage, which has no coverage either).
+          DOWNLOAD_COVERAGE_ARTIFACT: false

@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [4.17.0] - 2026-07-20
+
 ### Added
 
 - added a SonarQube analysis stage (`35-management`) to the Helm chart pipeline (`azure-devops/helm/helm-chart.yaml`), bringing it in line with the Go, Python, JavaScript and Terraform templates that already run the scanner. The new `azure-devops/helm/stages/35-management/helm.yaml` reuses the shared `azure-devops/global/stages/35-management/sonarqube.yaml` job with `DOWNLOAD_COVERAGE_ARTIFACT: false` (Helm charts produce no coverage artifact, so the download step is skipped to avoid turning the job yellow). Chart repositories that extend `azure-devops/helm/helm-chart.yaml` now report to SonarQube on every non-tag build with no per-repository change

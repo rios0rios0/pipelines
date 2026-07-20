@@ -31,5 +31,5 @@ sca:dependency-check:
     when: 'always'
     paths:
       - "$REPORT_PATH/dependency-check/"
-  timeout: '30 minutes'
+  timeout: '45 minutes'
   allow_failure: true

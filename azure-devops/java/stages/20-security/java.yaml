@@ -24,7 +24,7 @@ stages:
           # Building the CVE database is the only slow path left, and it is bounded rather than
           # trusted: the job is killed at 30 minutes so a pathological NVD download can never run for
           # hours against the account's build minutes.
-          timeoutInMinutes: 30
+          timeoutInMinutes: 45
           steps:
             - template: '../../abstracts/gradle.yaml'
             - template: '../../../global/abstracts/scripts-repo.yaml'

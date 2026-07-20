@@ -35,7 +35,7 @@ sca:dependency-check:
     reports:
       dependency_scanning:
         - "$PREFIX$REPORT_PATH/dependency-check/dependency-check-report.xml"
-  timeout: '30 minutes'
+  timeout: '45 minutes'
   allow_failure: true
 
 # TODO: check this https://gitlab.com/gitlab-org/gitlab/-/issues/299363

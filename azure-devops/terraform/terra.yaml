@@ -5,10 +5,10 @@ parameters:
   # apply-time (`test:e2e`) jobs which run `terraform init`.
   #
   # Required for any module whose `*.tf` files reference private-git
-  # submodules -- e.g. the `git@dev.azure.com-arancia:` host alias used
+  # submodules -- e.g. the `git@dev.azure.com-northwind:` host alias used
   # by `k8s-deployment` to fetch `tf-container-image`. Without the alias
   # configured on the agent, both the SAST parsers and `terraform init`
-  # abort with `ssh: Could not resolve hostname dev.azure.com-arancia`.
+  # abort with `ssh: Could not resolve hostname dev.azure.com-northwind`.
   #
   # Mirrors the `PRE_STEPS` hook already accepted by the `terra/`
   # template family used by customer-clusters / shared-toolbox /

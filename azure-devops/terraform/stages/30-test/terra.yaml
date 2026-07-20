@@ -2,9 +2,9 @@ parameters:
   # Steps injected before `terraform init` in both the smoke and e2e
   # jobs. Required for any module that references private-git submodules
   # (e.g. `k8s-deployment` pulling `tf-container-image` via the
-  # `git@dev.azure.com-arancia:` host alias) -- without the alias
+  # `git@dev.azure.com-northwind:` host alias) -- without the alias
   # configured on the agent, `terraform init` aborts with
-  # `ssh: Could not resolve hostname dev.azure.com-arancia`.
+  # `ssh: Could not resolve hostname dev.azure.com-northwind`.
   #
   # Mirrors the `PRE_STEPS` hook already accepted by `terra/` for
   # customer-clusters etc. Consumers pass a single list of steps that

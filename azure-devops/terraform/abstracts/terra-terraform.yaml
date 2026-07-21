@@ -5,8 +5,48 @@ steps:
     displayName: 'Install Terraform'
 
   - script: |
-      curl -L -o terragrunt $(curl -s https://api.github.com/repos/gruntwork-io/terragrunt/releases/latest \
-        | grep "browser_download_url.*terragrunt_linux_amd64" | cut -d '"' -f 4)
-      chmod +x terragrunt
-      ./terragrunt --version
+      set -uo pipefail
+
+      # Retried because both halves of this install are flaky from a shared CI
+      # egress IP: the release lookup is an unauthenticated GitHub API call
+      # subject to the 60-requests-per-hour anonymous limit, and the asset
+      # download itself can drop mid-transfer.
+      #
+      # Previously neither the lookup nor the download was checked, so a
+      # throttled response left `url` empty, `curl` wrote no usable binary, and
+      # `chmod +x` handed the resulting text file to the shell -- surfacing as
+      # `./terragrunt: line 1016: syntax error: unexpected end of file`, which
+      # says nothing about the real cause. Each attempt now has to produce a
+      # working `terragrunt --version` before it counts as success.
+      attempts=3
+
+      for attempt in $(seq 1 "$attempts"); do
+        echo "Installing Terragrunt (attempt ${attempt}/${attempts})..."
+
+        # The trailing quote in the pattern pins the match to the raw binary:
+        # upstream also ships `terragrunt_linux_amd64.tar.gz` and `.zip`, and an
+        # unanchored match expands to three URLs against a single `-o`.
+        # `head -1` keeps that guarantee even if the asset list changes again.
+        url=$(curl -sS "https://api.github.com/repos/gruntwork-io/terragrunt/releases/latest" \
+          | grep "browser_download_url.*terragrunt_linux_amd64\"" | cut -d '"' -f 4 | head -1)
+
+        if [ -z "$url" ]; then
+          echo "Attempt ${attempt}: could not resolve a download URL (API throttled or response changed)." >&2
+        elif ! curl -fsSL -o terragrunt "$url"; then
+          echo "Attempt ${attempt}: download failed from ${url}" >&2
+        else
+          chmod +x terragrunt
+          if ./terragrunt --version; then
+            exit 0
+          fi
+          echo "Attempt ${attempt}: downloaded file did not execute as Terragrunt." >&2
+        fi
+
+        if [ "$attempt" -lt "$attempts" ]; then
+          sleep $((attempt * 10))
+        fi
+      done
+
+      echo "ERROR: could not install Terragrunt after ${attempts} attempts." >&2
+      exit 1
     displayName: 'Install Terragrunt'

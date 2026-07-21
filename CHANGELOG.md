@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- ignored the compiled tool binaries (`bin/`) and the root-level test, coverage and SAST outputs (`cobertura.xml`, `coverage.txt`, `coverage.xml`, `junit.xml`, `reports/`) that the scripts write when run from a project that does not set `REPORT_PATH`. `bin/golangci-lint` and `global/containers/tor-proxy.latest/health/health` had been committed by accident and carried roughly 45 MB through every clone; both were purged from the history, and these entries stop a stray `make` run from re-adding them
+
 ### Fixed
 
 - fixed the Java `sca:dependency-check` job timing out at 30 minutes on every run, which left it permanently red and produced no report. Two independent causes: (1) an NVD API key was treated as sufficient to use the NVD API, but a *cold* database bootstrap paginates ~350k records and a shared CI egress IP sustains only ~30 records/s even authenticated — over 3 hours, so no timeout short of the 6h job cap could have helped; (2) `github/java/stages/20-security/dependency-check/action.yaml` saved the cache under `always()`, so a killed run published its half-written database, the next run restored it, Dependency-Check rejected it and restarted the full download, and the loop could never escape. `global/scripts/languages/java/dependency-check/run.sh` now chooses the update mechanism by *database state* rather than by credential: a cold or partial database is bootstrapped from the rate-limit-free NVD datafeed regardless of the key, and the authenticated API is used only for the delta once a complete database is restored. Completion is recorded with a `.owasp/.odc-complete` marker that `run.sh` clears before running and writes only after the analysis returns, and the GitHub Actions `cache/save` step is gated on it so a partial database is never cached again

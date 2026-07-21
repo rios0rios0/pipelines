@@ -16,18 +16,20 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [4.17.0] - 2026-07-21
+
+### Added
+
+- added a SonarQube analysis stage (`35-management`) to the Helm chart pipeline (`azure-devops/helm/helm-chart.yaml`), bringing it in line with the Go, Python, JavaScript and Terraform templates that already run the scanner. The new `azure-devops/helm/stages/35-management/helm.yaml` reuses the shared `azure-devops/global/stages/35-management/sonarqube.yaml` job with `DOWNLOAD_COVERAGE_ARTIFACT: false` (Helm charts produce no coverage artifact, so the download step is skipped to avoid turning the job yellow). Chart repositories that extend `azure-devops/helm/helm-chart.yaml` now report to SonarQube on every non-tag build with no per-repository change
+
 ### Changed
 
 - ignored the compiled tool binaries (`bin/`) and the root-level test, coverage and SAST outputs (`cobertura.xml`, `coverage.txt`, `coverage.xml`, `junit.xml`, `reports/`) that the scripts write when run from a project that does not set `REPORT_PATH`. `bin/golangci-lint` and `global/containers/tor-proxy.latest/health/health` had been committed by accident and carried roughly 45 MB through every clone; both were purged from the history, and these entries stop a stray `make` run from re-adding them
 
 ### Fixed
 
-- fixed the Java `sca:dependency-check` job timing out at 30 minutes on every run, which left it permanently red and produced no report. Two independent causes: (1) an NVD API key was treated as sufficient to use the NVD API, but a *cold* database bootstrap paginates ~350k records and a shared CI egress IP sustains only ~30 records/s even authenticated — over 3 hours, so no timeout short of the 6h job cap could have helped; (2) `github/java/stages/20-security/dependency-check/action.yaml` saved the cache under `always()`, so a killed run published its half-written database, the next run restored it, Dependency-Check rejected it and restarted the full download, and the loop could never escape. `global/scripts/languages/java/dependency-check/run.sh` now chooses the update mechanism by *database state* rather than by credential: a cold or partial database is bootstrapped from the rate-limit-free NVD datafeed regardless of the key, and the authenticated API is used only for the delta once a complete database is restored. Completion is recorded with a `.owasp/.odc-complete` marker that `run.sh` clears before running and writes only after the analysis returns, and the GitHub Actions `cache/save` step is gated on it so a partial database is never cached again
 - fixed the `sca:dependency-check` timeout being too tight for a legitimate cold build, raising it from 30 to 45 minutes on all three platforms (`.github/workflows/{maven,gradle}.yaml`, `gitlab/java/stages/20-security/{maven,gradle}.yaml`, `azure-devops/java/stages/20-security/java.yaml`). This is a safety net rather than the fix — the datafeed bootstrap is what brings a cold build back under the ceiling — so a pathological download is still killed instead of burning Actions minutes
-
-### Added
-
-- added a SonarQube analysis stage (`35-management`) to the Helm chart pipeline (`azure-devops/helm/helm-chart.yaml`), bringing it in line with the Go, Python, JavaScript and Terraform templates that already run the scanner. The new `azure-devops/helm/stages/35-management/helm.yaml` reuses the shared `azure-devops/global/stages/35-management/sonarqube.yaml` job with `DOWNLOAD_COVERAGE_ARTIFACT: false` (Helm charts produce no coverage artifact, so the download step is skipped to avoid turning the job yellow). Chart repositories that extend `azure-devops/helm/helm-chart.yaml` now report to SonarQube on every non-tag build with no per-repository change
+- fixed the Java `sca:dependency-check` job timing out at 30 minutes on every run, which left it permanently red and produced no report. Two independent causes: (1) an NVD API key was treated as sufficient to use the NVD API, but a *cold* database bootstrap paginates ~350k records and a shared CI egress IP sustains only ~30 records/s even authenticated — over 3 hours, so no timeout short of the 6h job cap could have helped; (2) `github/java/stages/20-security/dependency-check/action.yaml` saved the cache under `always()`, so a killed run published its half-written database, the next run restored it, Dependency-Check rejected it and restarted the full download, and the loop could never escape. `global/scripts/languages/java/dependency-check/run.sh` now chooses the update mechanism by *database state* rather than by credential: a cold or partial database is bootstrapped from the rate-limit-free NVD datafeed regardless of the key, and the authenticated API is used only for the delta once a complete database is restored. Completion is recorded with a `.owasp/.odc-complete` marker that `run.sh` clears before running and writes only after the analysis returns, and the GitHub Actions `cache/save` step is gated on it so a partial database is never cached again
 
 ## [4.16.0] - 2026-07-16
 

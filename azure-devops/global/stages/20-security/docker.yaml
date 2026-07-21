@@ -1,0 +1,33 @@
+# Backward-compatibility bundle.
+#
+# `20-security/docker.yaml` was split into per-tool job templates in
+# `refactor(sast): renamed docker-named SAST stage files to per-tool names`:
+# it was renamed to `semgrep.yaml` and its Gitleaks job was extracted into a
+# new `gitleaks.yaml`. Consumers that still reference
+# `azure-devops/global/stages/20-security/docker.yaml@pipelines` were orphaned
+# by that rename and fail to compile with `Could not find ... docker.yaml`.
+#
+# This shim restores that reference by re-composing the same two jobs
+# (`sast:semgrep` + `sast:gitleaks`) it used to emit, delegating to the per-tool
+# templates rather than duplicating their bodies so the two stay in sync.
+#
+# New pipelines should reference the per-tool templates directly
+# (`semgrep.yaml` and `gitleaks.yaml`); this file exists only so the pre-refactor
+# reference keeps working.
+parameters:
+  - name: 'SEMGREP_LANGUAGE'
+    type: 'string'
+  # Passed through to the Semgrep job; only that job needs pre-steps (e.g. SSH
+  # setup so the Semgrep parser can resolve private module sources). Gitleaks
+  # scans local git history and needs none.
+  - name: 'PRE_STEPS'
+    type: 'stepList'
+    default: []
+
+jobs:
+  - template: 'semgrep.yaml'
+    parameters:
+      SEMGREP_LANGUAGE: '${{ parameters.SEMGREP_LANGUAGE }}'
+      PRE_STEPS: ${{ parameters.PRE_STEPS }}
+
+  - template: 'gitleaks.yaml'

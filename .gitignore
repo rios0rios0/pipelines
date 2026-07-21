@@ -5,3 +5,17 @@ __pycache__/
 
 # Local report output emitted by the scripts when run at a repo root
 build/reports/
+
+# Compiled tool binaries. `bin/golangci-lint` and the tor-proxy health binary were
+# committed by accident and carried ~45 MB through every clone until they were purged
+# from history; ignoring the directory keeps a stray `make` run from re-adding them.
+bin/
+
+# Test, coverage and SAST output written to the repo root when the scripts are run
+# from a project that does not set REPORT_PATH. `build/reports/` above covers the
+# normal case; these are the root-level fallbacks.
+/cobertura.xml
+/coverage.txt
+/coverage.xml
+/junit.xml
+/reports/

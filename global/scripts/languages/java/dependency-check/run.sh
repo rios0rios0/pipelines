@@ -62,8 +62,34 @@ case "${NVD_DATAFEED_URL:-}" in
 esac
 export NVD_API_KEY
 
-if [ -n "${NVD_API_KEY:-}" ]; then
-  echo "NVD API key found: updating over the authenticated NVD API (50 requests / 30s)."
+# A run that populated the database all the way through leaves this marker behind; one killed
+# mid-download does not. The marker -- not the mere presence of the H2 file -- is what makes a cached
+# directory trustworthy, because a cancelled run leaves a partial `odc.mv.db` that looks identical to
+# a good one on disk. It decides the update mechanism below, and the GitHub Actions job keys its
+# `cache/save` off the same file so a partial database is never published to the cache.
+completionMarker="$dataDirectory/.odc-complete"
+if [ -f "$completionMarker" ] && [ -f "$dataDirectory/odc.mv.db" ]; then
+  databaseIsWarm='true'
+else
+  databaseIsWarm='false'
+fi
+
+# The API and the datafeed are chosen per *run state*, not per credential. A key makes the incremental
+# update fast, but it does not make the initial ~350k-record bootstrap survivable: even authenticated,
+# hosted runners share egress IPs and the observed throughput is ~30 records/s, i.e. >3h for a cold
+# build -- far past any sane job timeout, so the job is cancelled and starts over next time. The
+# datafeed is a handful of gzipped files with no rate limit, so it is always the right way to *build*
+# the database; the API is the right way to *top it up* once one exists.
+if [ -n "${NVD_API_KEY:-}" ] && [ "$databaseIsWarm" = 'true' ]; then
+  echo "NVD API key found and a complete database is cached: updating the delta over the authenticated NVD API (50 requests / 30s)."
+elif [ -n "${NVD_API_KEY:-}" ]; then
+  if [ -z "$datafeedUrl" ]; then
+    datafeedUrl="$DEFAULT_DATAFEED_URL"
+  fi
+  echo "NVD API key found, but no complete CVE database is cached yet."
+  echo "Bootstrapping from the NVD datafeed at $datafeedUrl instead of the API: a cold API build"
+  echo "downloads ~350k records at a rate that does not finish inside a CI job timeout. Subsequent"
+  echo "runs that restore a complete database will use the authenticated API for the delta."
 else
   if [ -z "$datafeedUrl" ]; then
     datafeedUrl="$DEFAULT_DATAFEED_URL"
@@ -118,6 +144,11 @@ runGradle() {
     dependencyCheckAnalyze
 }
 
+# Cleared up front and rewritten only after the tool returns 0, so the marker always describes the
+# run that last touched this directory. Without the clear, a cancelled *delta* update would inherit
+# the marker left by the previous good run and republish a half-written database as if it were sound.
+rm -f "$completionMarker"
+
 if [ -f 'pom.xml' ]; then
   runMaven
 elif [ -f 'gradlew' ] || [ -f 'build.gradle' ] || [ -f 'build.gradle.kts' ]; then
@@ -127,3 +158,7 @@ else
   echo "ERROR: Dependency-Check runs against a Maven or Gradle project."
   exit 1
 fi
+
+# `set -e` means reaching this line implies the analysis completed and the database is whole.
+date -u '+%Y-%m-%dT%H:%M:%SZ' > "$completionMarker"
+echo "Dependency-Check completed; marked the CVE database at $dataDirectory as complete."

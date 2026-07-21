@@ -1,12 +1,66 @@
+parameters:
+  # Terragrunt is pinned rather than resolved from the GitHub API at runtime.
+  # The previous implementation was:
+  #
+  #   curl -L -o terragrunt $(curl -s https://api.github.com/repos/gruntwork-io/terragrunt/releases/latest \
+  #     | grep "browser_download_url.*terragrunt_linux_amd64" | cut -d '"' -f 4)
+  #
+  # which had two independent failure modes, both silent:
+  #
+  #   1. The inner call is an UNAUTHENTICATED GitHub API request, and shared CI
+  #      runners share an egress IP, so they routinely exhaust the 60-requests
+  #      per hour anonymous limit. Nothing checks that response: on a throttled
+  #      or otherwise unexpected body the `grep` matches nothing and the command
+  #      substitution collapses to an empty string, so the outer `curl` runs
+  #      without a usable URL. Observed result was a ~72 kB text payload written
+  #      to `terragrunt` (a real binary is ~85 MB); `chmod +x` then ran it as a
+  #      shell script and the job died with `./terragrunt: line 1016: syntax
+  #      error: unexpected end of file` -- an error that says nothing about the
+  #      real cause.
+  #
+  #   2. Upstream now ships `terragrunt_linux_amd64.tar.gz` and
+  #      `terragrunt_linux_amd64.zip` beside the raw binary, so the glob matches
+  #      THREE assets. The substitution then expands to three URLs against a
+  #      single `-o`, sending the archives to stdout as binary noise.
+  #
+  # Pinning removes the API dependency entirely and makes the toolchain
+  # reproducible, matching how `TerraformInstaller` is pinned below. Override
+  # this parameter to move the version.
+  - name: 'TERRAGRUNT_VERSION'
+    type: 'string'
+    default: 'v1.1.1'
+
+  - name: 'TERRAFORM_VERSION'
+    type: 'string'
+    default: '1.15.8'
+
 steps:
   - task: 'TerraformInstaller@1'
     inputs:
-      terraformVersion: '1.15.8'
+      terraformVersion: '${{ parameters.TERRAFORM_VERSION }}'
     displayName: 'Install Terraform'
 
   - script: |
-      curl -L -o terragrunt $(curl -s https://api.github.com/repos/gruntwork-io/terragrunt/releases/latest \
-        | grep "browser_download_url.*terragrunt_linux_amd64" | cut -d '"' -f 4)
+      set -euo pipefail
+
+      version='${{ parameters.TERRAGRUNT_VERSION }}'
+      url="https://github.com/gruntwork-io/terragrunt/releases/download/${version}/terragrunt_linux_amd64"
+
+      echo "Installing Terragrunt ${version} from ${url}"
+      # `-f` makes curl exit non-zero on an HTTP error instead of writing the
+      # error page to the output file, which is what let the old failure reach
+      # `chmod +x` and surface as a shell syntax error.
+      curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o terragrunt "$url"
       chmod +x terragrunt
+
+      # Guard against a well-formed HTTP 200 that is not the binary (a proxy or
+      # captive-portal interstitial, say). Cheaper to fail here with a readable
+      # message than to let the next command run an HTML page.
+      if ! head -c 4 terragrunt | grep -q $'\x7fELF'; then
+        echo "ERROR: downloaded file is not a Linux ELF binary. First bytes:" >&2
+        head -c 200 terragrunt >&2
+        exit 1
+      fi
+
       ./terragrunt --version
     displayName: 'Install Terragrunt'

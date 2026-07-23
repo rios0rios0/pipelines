@@ -8,6 +8,9 @@ parameters:
   - name: 'RUN_AFTER_DELIVERY'
     type: 'string'
     default: 'echo "No after script"'
+  - name: 'IMAGE_NAME'
+    type: 'string'
+    default: ''
 
 stages:
   - stage: 'delivery'
@@ -26,6 +29,7 @@ stages:
               WORKING_DIRECTORY: "${{ parameters.WORKING_DIRECTORY }}"
               RUN_BEFORE_DELIVERY: ${{ parameters.RUN_BEFORE_DELIVERY }}
               RUN_AFTER_DELIVERY: ${{ parameters.RUN_AFTER_DELIVERY }}
+              IMAGE_NAME: ${{ parameters.IMAGE_NAME }}
         continueOnError: false
 
       - template: '../../../global/stages/40-delivery/release.yaml'

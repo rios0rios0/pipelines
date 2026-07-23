@@ -14,6 +14,9 @@ parameters:
   - name: 'RUN_BEFORE_BUILD'
     type: 'string'
     default: ''
+  - name: 'IMAGE_NAME'
+    type: 'string'
+    default: ''
 
 steps:
   - script: ${{ parameters.RUN_BEFORE_DELIVERY }}
@@ -36,3 +39,4 @@ steps:
       DOCKER_BUILD_ARGS: "${{ parameters.DOCKER_BUILD_ARGS }}"
       WORKING_DIRECTORY: "${{ parameters.WORKING_DIRECTORY }}"
       RUN_BEFORE_BUILD: "${{ parameters.RUN_BEFORE_BUILD }}"
+      IMAGE_NAME: "${{ parameters.IMAGE_NAME }}"

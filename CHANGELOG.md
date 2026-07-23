@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- propagated the version-tag release-recovery path to the `bundler`, `dotnet`, `gradle`, `npm`, `pdm`, and `yarn` library workflows, which were missing it. Their `delivery-release` job only fired on a `main`-branch bump merge, so a bump whose `main` run failed the quality gate could not be recovered by (re-)pushing its tag the way `maven-library.yaml` (and `composer`/`go`) already allowed — the job stayed skipped on the tag ref and no release was cut. All library workflows now share the same two-path condition
+
 ## [4.18.0] - 2026-07-23
 
 ### Added

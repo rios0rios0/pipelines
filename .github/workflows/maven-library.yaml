@@ -8,6 +8,14 @@ on:
         required: false
         type: string
         default: ''
+      codeql_upload:
+        description: |
+          Whether sast:codeql uploads its SARIF results ('always', 'failure-only' or 'never').
+          Set to 'never' on a private repository without GitHub Advanced Security, where code
+          scanning is unavailable and only the upload -- not the analysis -- fails.
+        required: false
+        type: string
+        default: 'always'
       tag_prefixes:
         type: 'string'
         required: false
@@ -25,6 +33,7 @@ jobs:
     uses: 'rios0rios0/pipelines/.github/workflows/maven.yaml@main'
     with:
       sonar_host: '${{ inputs.sonar_host }}'
+      codeql_upload: '${{ inputs.codeql_upload }}'
     secrets:
       NVD_API_KEY: '${{ secrets.NVD_API_KEY }}'
       sonar_token: '${{ secrets.sonar_token }}'
@@ -71,6 +80,7 @@ jobs:
 #   permissions:
 #     checks: 'write' # tests-test_all (test results annotations)
 #     security-events: 'write' # security-sast_codeql
+#     actions: 'read' # security-sast_codeql (required only on a private repository)
 #     contents: 'write' # delivery-release
 #
 # This workflow validates a Maven (Java) library and creates a release tag when

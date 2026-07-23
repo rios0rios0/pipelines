@@ -8,6 +8,14 @@ on:
         required: false
         type: string
         default: ''
+      codeql_upload:
+        description: |
+          Whether sast:codeql uploads its SARIF results ('always', 'failure-only' or 'never').
+          Set to 'never' on a private repository without GitHub Advanced Security, where code
+          scanning is unavailable and only the upload -- not the analysis -- fails.
+        required: false
+        type: string
+        default: 'always'
     secrets:
       NVD_API_KEY:
         required: false
@@ -63,6 +71,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
         with:
           codeql_language: 'java-kotlin'
+          upload: '${{ inputs.codeql_upload }}'
     needs: [ 'code_check-style_maven_verify', 'code_check-quality_proguard' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -217,4 +226,5 @@ jobs:
 #
 #   permissions:
 #     security-events: 'write' # security-sast_codeql
+#     actions: 'read' # security-sast_codeql (required only on a private repository)
 #     checks: 'write' # tests-test_all (test results annotations)

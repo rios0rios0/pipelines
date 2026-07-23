@@ -19,6 +19,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Added
 
 - exposed an `IMAGE_NAME` parameter on the Azure DevOps delivery templates so a consumer repository can override the published image name instead of always deriving it from the repository name. The shared `azure-devops/global/stages/40-delivery/docker.yaml` step already honored `IMAGE_NAME`, but the `golang`, `javascript`, and `python` delivery wrappers (and the javascript `steps/delivery.yaml`) never forwarded it; they now pass it through, defaulting to the empty string so the repository name is still used when unset and existing pipelines are unaffected. This lets two repositories that share the same name publish distinct images to the same registry
+- added an `upload` input to the `20-security/codeql` action, forwarded as `codeql_upload` by the Maven and Gradle workflows (`maven.yaml`, `gradle.yaml` and their `-library` / `-docker` wrappers). Uploading SARIF results requires code scanning, which on a private repository means GitHub Advanced Security; without it the CodeQL analysis still succeeds and only the upload fails, taking the whole `sast:codeql` job down with it. Such a repository can now pass `codeql_upload: 'never'` to keep the scan running as a build-breaking check without the alerts. The default of `'always'` leaves every existing consumer unchanged
+
+### Changed
+
+- documented `actions: 'read'` alongside `security-events: 'write'` in the recommended permissions of every workflow that runs `sast:codeql`. The CodeQL action reads the workflow run through an endpoint that is public on a public repository but permission-gated on a private one, where omitting it fails the job with "Resource not accessible by integration"
 
 ## [4.17.0] - 2026-07-22
 

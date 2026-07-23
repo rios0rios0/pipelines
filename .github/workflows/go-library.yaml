@@ -69,6 +69,7 @@ jobs:
 #   permissions:
 #     checks: 'write' # code_check-style_golangci_lint
 #     security-events: 'write' # security-sast_codeql
+#     actions: 'read' # security-sast_codeql (required only on a private repository)
 #     contents: 'write' # delivery-release
 #
 # workflow_dispatch inputs can only be defined in the workflow that is directly triggered

@@ -2,6 +2,15 @@ inputs:
   codeql_language:
     description: 'CodeQL language to analyze (e.g., go, python, java-kotlin, javascript-typescript, csharp)'
     required: true
+  upload:
+    description: |
+      Whether to upload the SARIF results to code scanning ('always', 'failure-only' or 'never').
+      Uploading requires code scanning to be enabled on the repository, which on a private
+      repository means GitHub Advanced Security. Without it the analysis itself still succeeds and
+      only the upload fails, taking the whole job down with it -- set this to 'never' on such a
+      repository to keep the scan running as a build-breaking check without the alerts.
+    required: false
+    default: 'always'
 
 runs:
   using: 'composite'
@@ -36,3 +45,4 @@ runs:
       uses: 'github/codeql-action/analyze@v4'
       with:
         category: '/language:${{ inputs.codeql_language }}'
+        upload: '${{ inputs.upload }}'

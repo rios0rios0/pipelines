@@ -6,6 +6,14 @@ on:
         required: false
         type: string
         default: ''
+      codeql_upload:
+        description: |
+          Whether sast:codeql uploads its SARIF results ('always', 'failure-only' or 'never').
+          Set to 'never' on a private repository without GitHub Advanced Security, where code
+          scanning is unavailable and only the upload -- not the analysis -- fails.
+        required: false
+        type: string
+        default: 'always'
     secrets:
       sonar_token:
         description: 'SonarQube authentication token'
@@ -19,6 +27,7 @@ jobs:
     uses: 'rios0rios0/pipelines/.github/workflows/gradle.yaml@main'
     with:
       sonar_host: ${{ inputs.sonar_host }}
+      codeql_upload: '${{ inputs.codeql_upload }}'
     secrets:
       sonar_token: ${{ secrets.sonar_token }}
       NVD_API_KEY: ${{ secrets.NVD_API_KEY }}

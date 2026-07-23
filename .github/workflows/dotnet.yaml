@@ -132,3 +132,4 @@ jobs:
 #
 #   permissions:
 #     security-events: 'write' # security-sast_codeql
+#     actions: 'read' # security-sast_codeql (required only on a private repository)

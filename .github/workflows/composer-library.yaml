@@ -55,6 +55,7 @@ jobs:
 #   permissions:
 #     checks: 'write' # tests-test_all (test results annotations)
 #     security-events: 'write' # security-sast_codeql
+#     actions: 'read' # security-sast_codeql (required only on a private repository)
 #     contents: 'write' # delivery-release
 #
 # This workflow validates a Composer (PHP) library and creates a release tag when

@@ -5,6 +5,9 @@ parameters:
   - name: 'RUN_BEFORE_BUILD'
     type: 'string'
     default: ''
+  - name: 'IMAGE_NAME'
+    type: 'string'
+    default: ''
 
 stages:
   - stage: 'delivery'
@@ -25,5 +28,6 @@ stages:
               CONTAINER_REGISTRY_SERVICE_CONNECTION: "$(CONTAINER_REGISTRY_SERVICE_CONNECTION)"
               DOCKER_BUILD_ARGS: ${{ parameters.DOCKER_BUILD_ARGS }}
               RUN_BEFORE_BUILD: ${{ parameters.RUN_BEFORE_BUILD }}
+              IMAGE_NAME: ${{ parameters.IMAGE_NAME }}
 
       - template: '../../../global/stages/40-delivery/release.yaml'

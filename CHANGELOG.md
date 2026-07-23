@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- exposed an `IMAGE_NAME` parameter on the Azure DevOps delivery templates so a consumer repository can override the published image name instead of always deriving it from the repository name. The shared `azure-devops/global/stages/40-delivery/docker.yaml` step already honored `IMAGE_NAME`, but the `golang`, `javascript`, and `python` delivery wrappers (and the javascript `steps/delivery.yaml`) never forwarded it; they now pass it through, defaulting to the empty string so the repository name is still used when unset and existing pipelines are unaffected. This lets two repositories that share the same name publish distinct images to the same registry
+
 ## [4.17.0] - 2026-07-22
 
 ### Added

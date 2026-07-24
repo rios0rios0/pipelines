@@ -29,10 +29,15 @@ directories=""
 [ -d "$(pwd)/pkg" ] && directories="$directories ./pkg/..."
 [ -d "$(pwd)/internal" ] && directories="$directories ./internal/..."
 
-# check if directories is empty, meaning no directories were found
+# Fall back to the whole module when none of the conventional directories
+# exist. The standard layout is only a convention: a Go module is free to keep
+# its packages at the repository root or under a differently named directory,
+# and such a project previously failed here before a single test could run --
+# adding tests could not fix it, because they would never be discovered.
+# Projects that do use cmd/pkg/internal keep their narrower, unchanged scope.
 if [ -z "$directories" ]; then
-  echo >&2 "No directories found to test"
-  exit 1
+  echo "No cmd/, pkg/ or internal/ directory found - falling back to ./..."
+  directories="./..."
 fi
 
 # trim leading or trailing spaces

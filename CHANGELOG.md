@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added a non-conventional-layout scenario to the Go test-runner validation harness (`.github/tests/test-go-validation.sh`) that exercises the `./...` fallback: a module with none of `cmd/`, `pkg/`, or `internal/` (packages kept at the repository root and an entry point under `main/`) now asserts that the runner logs the fallback, tests the whole module, and reports coverage — so a future refactor cannot silently regress the fallback without turning the test red. Also refreshed the "No directories found to test it" troubleshooting entries in `README.md` and `.github/copilot-instructions.md`, which still described the removed hard failure, to document the automatic `./...` fallback
+
 ### Fixed
 
 - mapped `System.AccessToken` into the `env:` of the `Load Custom Configuration` step of the Azure DevOps Go Lambda delivery stage (`azure-devops/golang/stages/40-delivery/lambda.yaml`), the last template that sourced the Go init script without it. The step runs the project `config.sh`, which authenticates private Go module fetches with the built-in pipeline identity; without the mapping the token is empty, the fetch gets `401`, and `go build` inside `sam build` fails with the misleading `no secure protocol found for repository` (Go reports an authentication failure as if no usable protocol existed). The defect stayed hidden for as long as the job's Go module cache kept hitting, then broke delivery on the first cold-cache build. Aliasing the token through the `variables:` block is not a workaround: a variable that expands a secret is itself treated as a secret and is still withheld from the process environment

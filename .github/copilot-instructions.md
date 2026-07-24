@@ -761,8 +761,8 @@ Test scripts are located in `.github/tests/`.
 #### Pipeline-Specific Issues
 
 **Issue: "No directories found to test it" (Go projects)**
-- **Cause:** Go project structure doesn't match expected layout
-- **Solution:** Ensure your project has `cmd/`, `pkg/`, or `internal/` directories
+- **Cause:** a Go module that uses none of the `cmd/`, `pkg/`, or `internal/` directories (packages kept at the repository root or under a differently named directory)
+- **Solution:** none required -- the test runner now falls back to testing the whole module (`./...`) when none of those directories exist; modules that do use them keep their existing, narrower test scope
 
 **Issue: "golangci-lint: command not found"**
 - **Cause:** golangci-lint not installed or not in PATH

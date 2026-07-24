@@ -894,9 +894,9 @@ Two mechanisms guard against this:
 
 **Issue: "No directories found to test it" (Go projects)**
 
-- **Cause:** Go project structure does not match the expected layout
-- **Solution:** Ensure your project has `cmd/`, `pkg/`, or `internal/` directories
-- **Alternative:** Modify the test script to include your custom directories
+- **Cause:** a Go module that uses none of the `cmd/`, `pkg/`, or `internal/` directories -- for example one that keeps its packages at the repository root or under a differently named directory
+- **Solution:** none required -- the test runner now falls back to testing the whole module (`./...`) when none of those directories exist, so the run proceeds instead of aborting
+- **Note:** modules that do use `cmd/`, `pkg/`, or `internal/` keep their existing, narrower test scope
 
 **Issue: "golangci-lint: command not found"**
 

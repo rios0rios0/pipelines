@@ -417,6 +417,90 @@ else
   exit 1
 fi
 
+# Test 5: Project with a non-conventional layout (no cmd/, pkg/ or internal/)
+echo ""
+echo "Test 5: Non-conventional module layout (./... fallback)"
+echo "======================================================="
+
+TEST_DIR_FLAT="/tmp/go-test-validation-flat-layout"
+rm -rf "$TEST_DIR_FLAT"
+mkdir -p "$TEST_DIR_FLAT/main"
+
+cat > "$TEST_DIR_FLAT/go.mod" << 'EOF'
+module github.com/test/validation-flat-layout
+
+go 1.25.1
+EOF
+
+# Production code kept at the repository root instead of under cmd/pkg/internal
+cat > "$TEST_DIR_FLAT/calculator.go" << 'EOF'
+package calculator
+
+func Add(a, b int) int {
+	return a + b
+}
+
+func UncoveredFunction() string {
+	return "not tested"
+}
+EOF
+
+cat > "$TEST_DIR_FLAT/calculator_test.go" << 'EOF'
+package calculator
+
+import "testing"
+
+func TestAdd(t *testing.T) {
+	result := Add(5, 3)
+	if result != 8 {
+		t.Errorf("Add(5, 3) = %d; want 8", result)
+	}
+}
+EOF
+
+# Entry point kept under main/ rather than the conventional cmd/
+cat > "$TEST_DIR_FLAT/main/main.go" << 'EOF'
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println(greeting())
+}
+
+func greeting() string {
+	return "flat layout entry point"
+}
+EOF
+
+cd "$TEST_DIR_FLAT" || exit 1
+echo "Running non-conventional layout test (should fall back to ./...)..."
+FALLBACK_LOG="/tmp/go-test-validation-flat-layout.log"
+if /home/runner/work/pipelines/pipelines/global/scripts/languages/golang/test/run.sh > "$FALLBACK_LOG" 2>&1; then
+  cat "$FALLBACK_LOG"
+  echo "✓ Test 5 PASSED: Non-conventional layout handled via ./... fallback"
+
+  # Verify the runner logged the fallback instead of aborting with a hard error
+  if grep -q "falling back to ./..." "$FALLBACK_LOG"; then
+    echo "✓ Runner logged the ./... fallback"
+  else
+    echo "✗ ERROR: Runner did not log the ./... fallback"
+    exit 1
+  fi
+
+  # Verify the root package was discovered by the ./... fallback
+  if grep -q "calculator.go" coverage.txt; then
+    echo "✓ Root package discovered via ./... fallback and included in coverage"
+  else
+    echo "✗ ERROR: Root package missing from coverage report"
+    exit 1
+  fi
+else
+  cat "$FALLBACK_LOG"
+  echo "✗ Test 5 FAILED: Non-conventional layout scenario"
+  exit 1
+fi
+
 echo ""
 echo "=== All Tests Completed Successfully ==="
 echo "The modified Go test script correctly:"
@@ -431,6 +515,7 @@ echo "✓ Generates synthetic coverage for projects with source but no tests"
 echo "✓ Provides individual function visibility in untested packages"
 echo "✓ Avoids Go 1.25.1 covdata tool dependency issues"
 echo "✓ Handles gocovmerge overlap merge errors gracefully with fallback strategy"
+echo "✓ Falls back to ./... for non-conventional layouts (no cmd/, pkg/ or internal/)"
 echo ""
 echo "Coverage now provides complete visibility into codebase coverage!"
 echo "Test validation completed successfully!"

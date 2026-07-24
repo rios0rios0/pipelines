@@ -28,6 +28,12 @@ directories=""
 [ -d "$(pwd)/cmd" ] && directories="$directories ./cmd/..."
 [ -d "$(pwd)/pkg" ] && directories="$directories ./pkg/..."
 [ -d "$(pwd)/internal" ] && directories="$directories ./internal/..."
+# Some Go projects (typically AWS Lambda handlers, where the build tooling
+# expects the entry point in a fixed directory) keep the whole application
+# under `main/` instead of `cmd/` + `internal/`. Without this, such a project
+# either fails outright with "No directories found to test" or, when it also
+# happens to have a `pkg/`, passes the stage while none of its tests run.
+[ -d "$(pwd)/main" ] && directories="$directories ./main/..."
 
 # check if directories is empty, meaning no directories were found
 if [ -z "$directories" ]; then

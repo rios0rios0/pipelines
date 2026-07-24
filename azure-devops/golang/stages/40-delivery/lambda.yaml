@@ -46,6 +46,14 @@ stages:
 
           - script: $(Scripts.Directory)/global/scripts/languages/golang/init/run.sh
             displayName: 'Load Custom Configuration'
+            # init/run.sh sources the project `config.sh`, which may authenticate
+            # private module fetches with the built-in pipeline identity. Azure
+            # Pipelines withholds secret-like values (including System.AccessToken)
+            # from the script environment unless mapped here. Aliasing it through
+            # the `variables:` block does not work: a variable that expands a
+            # secret is itself treated as a secret, so it is still withheld.
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
             continueOnError: true
 
           - task: 'Cache@2'

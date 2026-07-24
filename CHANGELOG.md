@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [4.18.1] - 2026-07-24
+
 ### Fixed
 
 - mapped `System.AccessToken` into the `env:` of the `Load Custom Configuration` step of the Azure DevOps Go Lambda delivery stage (`azure-devops/golang/stages/40-delivery/lambda.yaml`), the last template that sourced the Go init script without it. The step runs the project `config.sh`, which authenticates private Go module fetches with the built-in pipeline identity; without the mapping the token is empty, the fetch gets `401`, and `go build` inside `sam build` fails with the misleading `no secure protocol found for repository` (Go reports an authentication failure as if no usable protocol existed). The defect stayed hidden for as long as the job's Go module cache kept hitting, then broke delivery on the first cold-cache build. Aliasing the token through the `variables:` block is not a workaround: a variable that expands a secret is itself treated as a secret and is still withheld from the process environment

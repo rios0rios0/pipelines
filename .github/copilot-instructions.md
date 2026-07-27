@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, docker-multi-arch, basic-checks, dependency-check)
+- `make test` - Run all validation tests (Go, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-lambda` - Test Lambda template validation specifically
 - `make test-yaml-merge` - Test YAML merge validation specifically
@@ -643,7 +643,7 @@ docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/
 
 ### Test Suite Usage
 ```bash
-# Run all validation tests (Go, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, docker-multi-arch, basic-checks, dependency-check)
+# Run all validation tests (Go, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile)
 make test
 
 # Run individual test suites
@@ -659,6 +659,8 @@ make test-docker-multi-arch
 make test-basic-checks
 make test-dependency-check
 make test-goreleaser-prepare
+make test-release-version-extraction
+make test-release-reconcile
 ```
 
 Test scripts are located in `.github/tests/`.

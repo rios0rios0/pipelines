@@ -740,8 +740,7 @@ Pre-built container images optimized for CI/CD environments:
 
 | Image                      | Purpose                         | Registry                       |
 |----------------------------|---------------------------------|--------------------------------|
-| `golang.1.18-awscli`       | Go 1.18 + AWS CLI               | `ghcr.io/rios0rios0/pipelines` |
-| `golang.1.19-awscli`       | Go 1.19 + AWS CLI               | `ghcr.io/rios0rios0/pipelines` |
+| `golang.1.26-awscli`       | Go 1.26 + AWS CLI               | `ghcr.io/rios0rios0/pipelines` |
 | `python.3.9-pdm-buster`    | Python 3.9 + PDM                | `ghcr.io/rios0rios0/pipelines` |
 | `python.3.10-pdm-bullseye` | Python 3.10 + PDM               | `ghcr.io/rios0rios0/pipelines` |
 | `awscli.latest`            | AWS CLI tools                   | `ghcr.io/rios0rios0/pipelines` |

@@ -22,6 +22,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Changed
 
+- changed the Go version to `1.26.5` and updated all module dependencies
 - refreshed the `make test` command listing in `CLAUDE.md` and `.github/copilot-instructions.md` to enumerate the `test-goreleaser-prepare`, `test-release-version-extraction`, and `test-release-reconcile` sub-targets, which the Makefile's aggregate `test` target already runs but the docs' summary parenthetical (and the copilot per-target block) still omitted
 
 ### Fixed

@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [4.19.1] - 2026-07-29
+
 ### Fixed
 
 - fixed the Terraform `test:smoke (plan-time)` job (`azure-devops/terraform/stages/30-test/terra.yaml`) failing the whole `test` stage on every module that has no `tests/*.tftest.hcl` suite. When no smoke tests exist the job logs "skipping plan-time smoke" and exits before creating `$(REPORT_PATH)`, but the `Publish smoke test reports` step (`PublishPipelineArtifact@1`, `condition: always()`) then aborted with `Path does not exist: .../build/reports`. The test-less, incremental-onboarding case the job is explicitly designed to support (the job even prints `Run 'make test-gen' locally to bootstrap a smoke suite`) could therefore never pass. The skip path now sets a `SKIP_SMOKE` job variable and both publish steps are gated on `ne(variables['SKIP_SMOKE'], 'true')`, mirroring the `SKIP_E2E` guard already used by the sibling `test_e2e` job

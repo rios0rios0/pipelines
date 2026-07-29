@@ -57,6 +57,14 @@ stages:
               if [ ! -d tests ] || ! ls tests/*.tftest.hcl >/dev/null 2>&1; then
                 echo "No tests/*.tftest.hcl in this module; skipping plan-time smoke."
                 echo "Run 'make test-gen' locally to bootstrap a smoke suite."
+                # With no tests the job never creates $(REPORT_PATH), so the
+                # publish steps below must no-op. Otherwise
+                # PublishPipelineArtifact@1 aborts the job with "Path does
+                # not exist: .../build/reports" and every test-less module
+                # (the incremental-onboarding case this job is designed to
+                # support) fails the whole `test` stage. Mirrors the
+                # SKIP_E2E guard used by the test_e2e job below.
+                echo "##vso[task.setvariable variable=SKIP_SMOKE]true"
                 exit 0
               fi
               mkdir -p "$(REPORT_PATH)"
@@ -66,12 +74,14 @@ stages:
             env:
               REPORT_PATH: $(REPORT_PATH)
 
-          # `condition: always()` so a failing test run still publishes
-          # its JUnit and the Tests tab shows what went wrong. The script
-          # above propagates the non-zero exit, so the job still fails.
+          # `always()` (gated on SKIP_SMOKE) so a failing test run still
+          # publishes its JUnit and the Tests tab shows what went wrong. The
+          # script above propagates the non-zero exit, so the job still
+          # fails. Skipped entirely when the module has no tests, since no
+          # JUnit is produced in that path.
           - task: 'PublishTestResults@2'
             displayName: 'Publish smoke test results'
-            condition: always()
+            condition: and(always(), ne(variables['SKIP_SMOKE'], 'true'))
             inputs:
               testResultsFormat: 'JUnit'
               testResultsFiles: '$(REPORT_PATH)/junit-terra-tests.xml'
@@ -81,7 +91,7 @@ stages:
 
           - task: 'PublishPipelineArtifact@1'
             displayName: 'Publish smoke test reports'
-            condition: always()
+            condition: and(always(), ne(variables['SKIP_SMOKE'], 'true'))
             inputs:
               targetPath: '$(REPORT_PATH)'
               artifactName: 'terraform-test-smoke-reports'

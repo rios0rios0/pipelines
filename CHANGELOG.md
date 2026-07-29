@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- forwarded `WORKING_DIRECTORY` to the JavaScript `30-tests` stage in `azure-devops/javascript/yarn-docker.yaml`, which only the `10-code-check` stage received. The tests stage and its `test-all`/`test-e2e` steps build every published path as `<WORKING_DIRECTORY>/<relative-path>`, so with the parameter unset it defaulted to the empty string and the coverage summary location resolved to the absolute `/cobertura.xml` at the filesystem root instead of the repository-root file. `PublishCodeCoverageResults@2` (with `failIfCoverageEmpty: true`) then reported "no coverage found" and failed the tests stage for every consumer, even when the repository produced a valid `cobertura.xml`. The call now passes `WORKING_DIRECTORY: "$(System.DefaultWorkingDirectory)"` exactly like the sibling `10-code-check` call, so the coverage summary resolves to the repository root
+
 ## [4.19.0] - 2026-07-27
 
 ### Added

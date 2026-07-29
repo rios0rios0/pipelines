@@ -1,7 +1,7 @@
 parameters:
-  - name: 'SELF_HOSTED_POOL' # optional parameter for heavy workloads within JS language
+  - name: 'SELF_HOSTED_POOL' # optional pool for the heavy e2e job; empty runs e2e on the default pool
     type: 'string'
-    default: "$(SELF_HOSTED_POOL)"
+    default: ''
   - name: 'WORKING_DIRECTORY'
     type: 'string'
     default: ''

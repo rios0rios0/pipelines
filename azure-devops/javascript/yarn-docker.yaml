@@ -12,6 +12,11 @@ parameters:
   - name: 'RUN_AFTER_TESTS'
     type: 'string'
     default: 'echo "No after script"'
+  # Optional self-hosted pool for the heavy e2e job. Empty (the default) runs
+  # e2e on the standard/default pool; set it to run e2e on a dedicated pool.
+  - name: 'SELF_HOSTED_POOL'
+    type: 'string'
+    default: ''
 
   - name: 'RUN_BEFORE_MANAGEMENT'
     type: 'string'
@@ -41,6 +46,7 @@ stages:
       RUN_BEFORE_TESTS: ${{ parameters.RUN_BEFORE_TESTS }}
       RUN_AFTER_TESTS: ${{ parameters.RUN_AFTER_TESTS }}
       WORKING_DIRECTORY: "$(System.DefaultWorkingDirectory)"
+      SELF_HOSTED_POOL: ${{ parameters.SELF_HOSTED_POOL }}
 
   - template: 'stages/35-management/yarn.yaml'
     parameters:

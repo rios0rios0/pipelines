@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed the JavaScript `30-tests` stage's `test:e2e` job failing the whole `tests` stage when no self-hosted pool is configured: `SELF_HOSTED_POOL` defaulted to the literal `"$(SELF_HOSTED_POOL)"`, which resolved to a non-existent pool and raised a pool-validity error at job start (before `continueOnError` could apply). It now defaults to an empty string, so `test:e2e` runs on the default pool by default; setting `SELF_HOSTED_POOL` (forwarded from `azure-devops/javascript/yarn-docker.yaml`) is an optional override to run e2e on a dedicated self-hosted pool for heavy workloads
+
 ## [4.19.1] - 2026-07-29
 
 ### Fixed

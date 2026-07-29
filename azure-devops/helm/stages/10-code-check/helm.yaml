@@ -13,7 +13,7 @@ stages:
             inputs:
               helmVersionToInstall: 'latest'
 
-          - script: |
+          - bash: |
               set -euo pipefail
               # Charts that declare `required` values without defaults (a good
               # practice to prevent stale or misconfigured deploys) cannot be

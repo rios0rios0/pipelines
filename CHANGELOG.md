@@ -19,6 +19,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Fixed
 
 - fixed the JavaScript `30-tests` stage's `test:e2e` job failing the whole `tests` stage when no self-hosted pool is configured: `SELF_HOSTED_POOL` defaulted to the literal `"$(SELF_HOSTED_POOL)"`, which resolved to a non-existent pool and raised a pool-validity error at job start (before `continueOnError` could apply). It now defaults to an empty string, so `test:e2e` runs on the default pool by default; setting `SELF_HOSTED_POOL` (forwarded from `azure-devops/javascript/yarn-docker.yaml`) is an optional override to run e2e on a dedicated self-hosted pool for heavy workloads
+- fixed the Helm `10-code-check` stage's `helm lint`/`helm template` validation failing for charts that declare `required` values without defaults (a recommended practice to prevent stale or misconfigured deploys): the commands ran with no values, so any such chart failed the hard code-check gate and skipped every downstream stage (including SonarQube analysis). The step now renders against the chart's `ci/*-values.yaml` example files when present (the chart-testing convention), and keeps the previous no-values behaviour when there are none
 
 ## [4.19.1] - 2026-07-29
 

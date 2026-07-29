@@ -13,8 +13,23 @@ stages:
             inputs:
               helmVersionToInstall: 'latest'
 
-          - script: helm lint .
-            displayName: 'Run Helm lint'
-
-          - script: helm template . > /dev/null
-            displayName: 'Run Helm template validation'
+          - bash: |
+              set -euo pipefail
+              # Charts that declare `required` values without defaults (a good
+              # practice to prevent stale or misconfigured deploys) cannot be
+              # rendered with no values, so a plain `helm lint`/`helm template`
+              # fails. If the chart ships example values under `ci/` (the
+              # chart-testing convention, `ci/*-values.yaml`), render against
+              # them so validation passes; with no such files the behaviour is
+              # unchanged (renders with the chart defaults).
+              values_args=()
+              shopt -s nullglob
+              for file in ci/*-values.yaml; do
+                values_args+=(--values "$file")
+              done
+              if [ ${#values_args[@]} -gt 0 ]; then
+                echo "Rendering with CI example values: ${values_args[*]}"
+              fi
+              helm lint . "${values_args[@]}"
+              helm template . "${values_args[@]}" > /dev/null
+            displayName: 'Run Helm lint and template validation'

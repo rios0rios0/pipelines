@@ -52,6 +52,7 @@ stages:
     parameters:
       RUN_BEFORE_MANAGEMENT: ${{ parameters.RUN_BEFORE_MANAGEMENT }}
       RUN_AFTER_MANAGEMENT: ${{ parameters.RUN_AFTER_MANAGEMENT }}
+      WORKING_DIRECTORY: "$(System.DefaultWorkingDirectory)"
 
   - template: 'stages/40-delivery/docker.yaml'
     parameters:

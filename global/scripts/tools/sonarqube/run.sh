@@ -128,9 +128,32 @@ fi
 #
 # turning a transient infrastructure blip into a red pipeline. Wait for the server
 # to report it can accept an analysis before scanning.
-SONAR_WAIT_TIMEOUT="${SONAR_WAIT_TIMEOUT:-300}"
-SONAR_WAIT_INTERVAL="${SONAR_WAIT_INTERVAL:-10}"
-SONAR_MAX_ATTEMPTS="${SONAR_MAX_ATTEMPTS:-3}"
+# These three tunables are used in numeric comparisons and arithmetic under
+# `set -e`, so a caller passing `5m`, `300s` or an empty string would abort the
+# script with "Illegal number" before the scanner ever ran — the exact opposite
+# of this wrapper's purpose. A zero interval would also spin without ever
+# advancing the budget. Fall back to the default whenever the value is not an
+# integer at or above the stated minimum.
+sonar_int_or_default() {
+  # $1 name (for the warning), $2 supplied value, $3 default, $4 minimum
+  case "$2" in
+    '' | *[!0-9]*) ;;
+    *)
+      if [ "$2" -ge "$4" ]; then
+        printf '%s' "$2"
+        return 0
+      fi
+      ;;
+  esac
+  echo "$1='$2' is not an integer >= $4; falling back to $3." >&2
+  printf '%s' "$3"
+}
+
+# A timeout of 0 is legitimate — it means "do not wait" — but the interval and
+# the attempt count must both be at least 1 to make progress.
+SONAR_WAIT_TIMEOUT=$(sonar_int_or_default SONAR_WAIT_TIMEOUT "${SONAR_WAIT_TIMEOUT-300}" 300 0)
+SONAR_WAIT_INTERVAL=$(sonar_int_or_default SONAR_WAIT_INTERVAL "${SONAR_WAIT_INTERVAL-10}" 10 1)
+SONAR_MAX_ATTEMPTS=$(sonar_int_or_default SONAR_MAX_ATTEMPTS "${SONAR_MAX_ATTEMPTS-3}" 3 1)
 
 # Resolve the server URL from the environment, falling back to the properties file.
 sonar_host_url() {

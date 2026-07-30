@@ -117,4 +117,97 @@ else
   fi
 fi
 
-sonar-scanner
+# SonarQube commonly runs as a single replica, so any restart — a node scale-down,
+# a chart upgrade, an OOM — leaves its ingress answering `503 Service Temporarily
+# Unavailable` for as long as the JVM and the embedded Elasticsearch take to boot.
+# The scanner queries the server on its very first call, so it used to fail the
+# build outright with:
+#
+#   ERROR Failed to query server version: GET .../api/server/version failed with
+#   HTTP 503 Service Unavailable
+#
+# turning a transient infrastructure blip into a red pipeline. Wait for the server
+# to report it can accept an analysis before scanning.
+SONAR_WAIT_TIMEOUT="${SONAR_WAIT_TIMEOUT:-300}"
+SONAR_WAIT_INTERVAL="${SONAR_WAIT_INTERVAL:-10}"
+SONAR_MAX_ATTEMPTS="${SONAR_MAX_ATTEMPTS:-3}"
+
+# Resolve the server URL from the environment, falling back to the properties file.
+sonar_host_url() {
+  if [ -n "${SONAR_HOST_URL:-}" ]; then
+    printf '%s' "${SONAR_HOST_URL%/}"
+    return 0
+  fi
+  sed -n 's/^[[:space:]]*sonar\.host\.url[[:space:]]*=[[:space:]]*//p' sonar-project.properties 2>/dev/null |
+    tail -n 1 | sed 's#/*$##'
+}
+
+# Succeeds only when SonarQube is ready to accept an analysis. `STARTING`,
+# `DB_MIGRATION_NEEDED` and `DB_MIGRATION_RUNNING` are all "not yet" — the scanner
+# would be rejected in each of those states.
+sonar_is_up() {
+  _status_body=$(curl -sS --noproxy '*' --max-time 10 "$1/api/system/status" 2>/dev/null) || return 1
+  case "$_status_body" in
+    *'"status":"UP"'*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Blocks until SonarQube is up or the budget runs out. Exhausting the budget is
+# deliberately NOT fatal here: the scanner runs anyway so the real error is what
+# fails the build, rather than this wrapper masking it with a timeout message.
+wait_for_sonar() {
+  _url=$(sonar_host_url)
+  if [ -z "$_url" ]; then
+    echo "Neither SONAR_HOST_URL nor sonar.host.url is set; skipping the availability check."
+    return 0
+  fi
+
+  _waited=0
+  while ! sonar_is_up "$_url"; do
+    if [ "$_waited" -ge "$SONAR_WAIT_TIMEOUT" ]; then
+      echo "SonarQube at $_url did not become available within ${SONAR_WAIT_TIMEOUT}s; running the scanner anyway so the underlying error surfaces." >&2
+      return 0
+    fi
+    echo "SonarQube at $_url is not ready yet (waited ${_waited}s of ${SONAR_WAIT_TIMEOUT}s); retrying in ${SONAR_WAIT_INTERVAL}s..."
+    sleep "$SONAR_WAIT_INTERVAL"
+    _waited=$((_waited + SONAR_WAIT_INTERVAL))
+  done
+
+  if [ "$_waited" -gt 0 ]; then
+    echo "SonarQube became available after ${_waited}s."
+  fi
+  return 0
+}
+
+wait_for_sonar
+
+# Retry ONLY when the server dropped out mid-analysis. A failure while the server
+# is still up is a genuine one — a failed quality gate, a bad configuration, an
+# unparseable report — and must surface on the first attempt instead of being
+# retried three times and reported minutes late.
+attempt=1
+while :; do
+  set +e
+  sonar-scanner
+  scanner_status=$?
+  set -e
+
+  if [ "$scanner_status" -eq 0 ]; then
+    break
+  fi
+
+  scanner_url=$(sonar_host_url)
+  if [ -z "$scanner_url" ] || sonar_is_up "$scanner_url"; then
+    exit "$scanner_status"
+  fi
+
+  if [ "$attempt" -ge "$SONAR_MAX_ATTEMPTS" ]; then
+    echo "SonarQube was still unreachable after ${SONAR_MAX_ATTEMPTS} attempts; giving up." >&2
+    exit "$scanner_status"
+  fi
+
+  echo "SonarQube became unreachable during the analysis; waiting for it to come back (attempt ${attempt} of ${SONAR_MAX_ATTEMPTS})." >&2
+  attempt=$((attempt + 1))
+  wait_for_sonar
+done

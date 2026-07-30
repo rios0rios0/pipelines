@@ -16,11 +16,13 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [4.19.2] - 2026-07-30
+
 ### Fixed
 
 - fixed `azure-devops/javascript/yarn-docker.yaml` not forwarding `WORKING_DIRECTORY` to its `35-management` stage, unlike the `10-code-check` and `30-tests` stages beside it. The stage already declared the parameter, so it fell back to its empty-string default and every path built by concatenation in `35-management/steps/sonarqube.yaml` resolved against the filesystem root: the SonarQube cache key became `|/yarn.lock` (`System.IO.FileNotFoundException: File not found: /yarn.lock`) and the coverage download targeted `/coverage` (`Access to the path '/coverage' is denied`), leaving `report:sonarqube` permanently `succeededWithIssues`. The `workingDirectory:` usages in the same stage were unaffected, since Azure Pipelines falls back to the default working directory when that field is empty — which is why the failure showed up only in the concatenated paths
-- fixed the JavaScript `30-tests` stage's `test:e2e` job failing the whole `tests` stage when no self-hosted pool is configured: `SELF_HOSTED_POOL` defaulted to the literal `"$(SELF_HOSTED_POOL)"`, which resolved to a non-existent pool and raised a pool-validity error at job start (before `continueOnError` could apply). It now defaults to an empty string, so `test:e2e` runs on the default pool by default; setting `SELF_HOSTED_POOL` (forwarded from `azure-devops/javascript/yarn-docker.yaml`) is an optional override to run e2e on a dedicated self-hosted pool for heavy workloads
 - fixed the Helm `10-code-check` stage's `helm lint`/`helm template` validation failing for charts that declare `required` values without defaults (a recommended practice to prevent stale or misconfigured deploys): the commands ran with no values, so any such chart failed the hard code-check gate and skipped every downstream stage (including SonarQube analysis). The step now renders against the chart's `ci/*-values.yaml` example files when present (the chart-testing convention), and keeps the previous no-values behaviour when there are none
+- fixed the JavaScript `30-tests` stage's `test:e2e` job failing the whole `tests` stage when no self-hosted pool is configured: `SELF_HOSTED_POOL` defaulted to the literal `"$(SELF_HOSTED_POOL)"`, which resolved to a non-existent pool and raised a pool-validity error at job start (before `continueOnError` could apply). It now defaults to an empty string, so `test:e2e` runs on the default pool by default; setting `SELF_HOSTED_POOL` (forwarded from `azure-devops/javascript/yarn-docker.yaml`) is an optional override to run e2e on a dedicated self-hosted pool for heavy workloads
 
 ## [4.19.1] - 2026-07-29
 

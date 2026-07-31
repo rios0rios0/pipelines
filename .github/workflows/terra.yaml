@@ -326,13 +326,20 @@ jobs:
       - name: 'Checkout code'
         uses: 'actions/checkout@v6'
 
-      # Terraform itself, via the terra CLI — the structural tier is
-      # deps-free but this one cannot be.
-      - name: 'Install terra CLI'
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/rios0rios0/terra/main/install.sh | sh
-          terra install
-        shell: 'bash'
+      # Terraform itself — the structural tier is deps-free, this one
+      # cannot be. HashiCorp's action rather than the terra CLI installer
+      # the sibling jobs use: this runner invokes `terraform` directly and
+      # never touches Terragrunt, so the terra CLI would install a second
+      # tool for nothing, and a versioned action avoids piping a fetched
+      # script straight into a shell (flagged as executing an unverified
+      # downloaded artifact, and as following redirects without pinning the
+      # protocol to HTTPS). `terraform_wrapper: false` keeps the real binary
+      # on PATH — the wrapper's output capture is redundant here, since the
+      # runner already collects diagnostics itself.
+      - name: 'Setup Terraform'
+        uses: 'hashicorp/setup-terraform@v3'
+        with:
+          terraform_wrapper: false
 
       # Same reasoning as the sibling jobs: pass the input through `env:`
       # rather than interpolating `${{ }}` into `run:`, so the value is

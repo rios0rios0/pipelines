@@ -2,7 +2,7 @@ TAG := latest
 ROOT := global/containers
 CONTAINER_REGISTRY = ghcr.io/rios0rios0/pipelines
 
-.PHONY: login setup-buildx build-and-push test-go-script test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-docker-multi-arch test-basic-checks test-dependency-check test-release-version-extraction test-release-reconcile test
+.PHONY: login setup-buildx build-and-push test-go-script test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-terraform-validate test-docker-multi-arch test-basic-checks test-dependency-check test-release-version-extraction test-release-reconcile test
 
 login:
 	docker login $(CONTAINER_REGISTRY)
@@ -50,6 +50,10 @@ test-order-check:
 	@echo "Running terraform order-check validation..."
 	@./.github/tests/test-order-check.sh
 
+test-terraform-validate:
+	@echo "Running terraform validate tier validation..."
+	@./.github/tests/test-terraform-validate.sh
+
 test-docker-multi-arch:
 	@echo "Running 40-delivery/docker multi-arch contract validation..."
 	@./.github/tests/test-docker-multi-arch.sh
@@ -74,5 +78,5 @@ test-release-reconcile:
 	@echo "Running release reconciliation validation..."
 	@./.github/tests/test-release-reconcile.sh
 
-test: test-go-script test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile
+test: test-go-script test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-terraform-validate test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile
 	@echo "All tests completed successfully!"

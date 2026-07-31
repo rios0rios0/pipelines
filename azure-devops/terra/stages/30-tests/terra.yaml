@@ -10,6 +10,23 @@ parameters:
     type: 'stepList'
     default: []
 
+  # Opt in to the `test:validate` job, which runs `terraform validate` over
+  # every root module. Off by default, and deliberately so: it is the only tier
+  # that needs the network (to download providers) and, for private module
+  # sources, credentials — so enabling it for everyone would turn a currently
+  # offline stage into one with new prerequisites. It also surfaces reference
+  # errors that have always been there, which is the point, but is a consumer's
+  # decision to take rather than something to impose on their next build.
+  - name: 'ENABLE_VALIDATE'
+    type: 'boolean'
+    default: false
+
+  # Directories searched for root modules, space-separated. Only read when
+  # `ENABLE_VALIDATE` is true. Defaults to the conventional `stacks`.
+  - name: 'VALIDATE_ROOTS'
+    type: 'string'
+    default: 'stacks'
+
 stages:
   - stage: 'tests'
     displayName: 'tests'
@@ -120,6 +137,49 @@ stages:
       # second, so there's no reason to wait. A consumer without
       # `tests/structural.sh` sees the job run, emit a skip message, and
       # exit 0 — no spurious failure.
+      # Fourth tier — the only one that RESOLVES references rather than parsing
+      # them. `terra-test` covers reusable modules that have a test file,
+      # `terratest` parses HCL offline, and `structural` asserts conventions in
+      # bash; none of them has an evaluation context, so a root module can
+      # reference a module, variable or resource that does not exist and all
+      # three stay green. That defect then fails every plan and apply of the
+      # root module, for every target, before a resource is touched.
+      #
+      # `dependsOn: []` so it starts alongside the other jobs. It is the slowest
+      # tier — one `terraform init` per root module — so serialising it behind
+      # them would add its full runtime to the stage.
+      #
+      # `PRE_STEPS` is spliced in for the same reason `test:all` needs it: `init`
+      # resolves module sources, and private ones need credentials configured
+      # first. Without it, `init` fails on the first root module that pins one.
+      - ${{ if parameters.ENABLE_VALIDATE }}:
+          - job: 'test_validate'
+            displayName: 'test:validate'
+            dependsOn: []
+            steps:
+              - template: '../../../global/abstracts/scripts-repo.yaml'
+
+              - template: '../../abstracts/terra.yaml'
+
+              - ${{ each step in parameters.PRE_STEPS }}:
+                  - ${{ step }}
+
+              - script: $(Scripts.Directory)/global/scripts/languages/terraform/validate/run.sh
+                displayName: 'Run terraform validate over root modules'
+                env:
+                  REPORT_PATH: $(REPORT_PATH)
+                  VALIDATE_ROOTS: ${{ parameters.VALIDATE_ROOTS }}
+
+              - task: 'PublishTestResults@2'
+                displayName: 'Publish validate results'
+                condition: always()
+                inputs:
+                  testResultsFormat: 'JUnit'
+                  testResultsFiles: '$(REPORT_PATH)/junit-validate.xml'
+                  testRunTitle: 'validate'
+                  failTaskOnFailedTests: true
+                  mergeTestResults: false
+
       - job: 'test_structural'
         displayName: 'test:structural'
         dependsOn: []

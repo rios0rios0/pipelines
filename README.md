@@ -440,6 +440,30 @@ Every Terra pipeline (Azure DevOps, GitLab CI, GitHub Actions) exposes a single 
 
 The runner auto-detects which tiers the consumer actually has, runs only those, merges both JUnit files into `junit-terra-all.xml` for the single-artifact upload contract used by GitLab CI and GitHub Actions, and propagates a non-zero exit from either tier so CI correctly fails. **When neither tier has tests** (e.g., a stack-only repo without `modules/` tests or `tests/terratest/`), the runner emits an empty-but-valid JUnit and exits `0` so the job passes without a bespoke opt-out.
 
+##### Root-Module Validation (`test:validate`, opt-in)
+
+The tiers above **parse**; none of them **resolves** a reference. `terra-test` covers only reusable modules that carry a test file, `terratest` reads HCL offline, and `structural` asserts conventions in bash — so a root module can reference a module, variable, resource or output that does not exist and every tier stays green. That defect then fails *every* plan and apply of the root module, for every target, before a single resource is touched:
+
+```
+Error: Reference to undeclared module
+Error: Reference to undeclared resource
+Error: Unsupported argument / Missing required argument
+```
+
+The usual way one lands is a rename or a deletion that updates the definition and the obvious call sites but misses one file.
+
+`global/scripts/languages/terraform/validate/run.sh` closes that gap by running `terraform init -backend=false` plus `terraform validate` over every directory under `VALIDATE_ROOTS` (default `stacks`) that holds a `.tf` file, emitting `junit-validate.xml`. `-backend=false` is what makes it a test rather than a deployment step: no backend credentials, no state access, no cloud login. Providers are still downloaded — through one shared `TF_PLUGIN_CACHE_DIR` so a repo with dozens of root modules does not re-fetch the same providers per directory — and module sources are still resolved, so **private module sources need their credentials configured first**; the stage's `PRE_STEPS` hook is spliced in for exactly that.
+
+It is **opt-in** rather than on by default, because unlike its siblings it needs the network and possibly credentials, and because it surfaces pre-existing reference errors — which is the point, but is a consumer's decision to take rather than something to impose on their next build. Each platform opts in the way it already expresses options, and the pre-script hook each already has for private modules is reused rather than adding a second one:
+
+| Platform       | Opt in with                          | Override the roots            | Credentials for private modules |
+|----------------|--------------------------------------|-------------------------------|---------------------------------|
+| Azure DevOps   | `ENABLE_VALIDATE: true` (parameter)  | `VALIDATE_ROOTS` (parameter)  | `PRE_STEPS`                     |
+| GitLab CI      | `ENABLE_VALIDATE: "true"` (variable) | `VALIDATE_ROOTS` (variable)   | `VALIDATE_PRE_SCRIPT`           |
+| GitHub Actions | `enable_validate: true` (input)      | `validate_roots` (input)      | `pre_script`                    |
+
+Locally: `make test-validate`. Vendored copies under `.terraform/` are excluded, and the runner no-ops with a valid empty report when the roots are absent.
+
 #### Required GitLab Variables
 
 Configure these in your GitLab project settings:
@@ -683,6 +707,7 @@ Optional environment variables:
 | **order-check**  | File-ordering checker/auto-fixer (see below)         | `global/scripts/languages/terraform/order-check/`     |
 | **tftest-gen**   | Smoke-test generator for single-module repos         | `global/scripts/languages/terraform/tftest-gen/`      |
 | **terra-test**   | `terraform test` runner over module test suites      | `global/scripts/languages/terraform/terra-test/`      |
+| **validate**     | `terraform validate` over root modules (opt-in)      | `global/scripts/languages/terraform/validate/`        |
 | **CycloneDX**    | SBOM generation for Terraform projects               | `global/scripts/languages/terraform/cyclonedx/`       |
 
 ##### File-Ordering Standard (`order-check`)

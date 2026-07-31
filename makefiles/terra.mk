@@ -5,7 +5,7 @@
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #   -include $(SCRIPTS_DIR)/makefiles/terra.mk
 #
-# Targets provided: format, lint, test, test-terra-test, test-terratest, test-structural, coverage, validate
+# Targets provided: format, lint, test, test-terra-test, test-terratest, test-structural, test-validate, coverage, validate
 # Also sets SEMGREP_LANGUAGE=terraform for the common.mk sast target.
 # Note: CodeQL does not support Terraform; CODEQL_LANGUAGE is left unset.
 #
@@ -15,7 +15,7 @@
 SEMGREP_LANGUAGE ?= terraform
 REPORT_PATH ?= build/reports
 
-.PHONY: format lint test test-terra-test test-terratest test-structural coverage validate
+.PHONY: format lint test test-terra-test test-terratest test-structural test-validate coverage validate
 
 format:
 	@echo "Formatting Terraform files with Terra..."
@@ -55,6 +55,17 @@ test-terratest:
 # don't need a bespoke opt-out.
 test-structural:
 	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/structural/run.sh
+
+# `test-validate` runs `terraform validate` over every root module and emits
+# `$(REPORT_PATH)/junit-validate.xml`. It is the only tier that RESOLVES a
+# reference: the other three parse, and a parser cannot tell whether an
+# identifier exists. Deliberately not part of `test`, because unlike the other
+# tiers it needs the network (providers) and, for private module sources,
+# credentials -- so it stays an explicit opt-in rather than silently changing
+# what `make test` requires. Set `VALIDATE_ROOTS` to search somewhere other than
+# `stacks`. No-op when the roots are absent.
+test-validate:
+	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/validate/run.sh
 
 coverage:
 	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/test-all/run.sh || true

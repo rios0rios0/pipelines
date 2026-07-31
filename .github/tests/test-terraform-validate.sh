@@ -124,6 +124,28 @@ assert_true "JUnit blames the right directory" \
   "grep -A2 'stacks/bad' '$BROKEN_JUNIT' | grep -q '<failure'"
 assert_true "the healthy root module is still reported" "grep -q 'stacks/good' '$BROKEN_JUNIT'"
 
+echo "== the provider cache defaults inside the workspace, not \$HOME =="
+# Terraform's plugin cache is not safe for concurrent use, and $HOME is shared by
+# every agent on a CI host that runs jobs side by side. A $HOME-relative default
+# makes two concurrent runs corrupt each other's provider binaries.
+CACHE_REPO="$TEST_DIR/cache"
+make_valid_root "$CACHE_REPO/stacks/app"
+CACHE_OUT="$(run_validate "$CACHE_REPO" 2>&1)" || true
+assert_true "a workspace-local cache directory is created" \
+  "[ -d '$CACHE_REPO/build/.terraform-plugin-cache' ]"
+assert_true "nothing is written under \$HOME/.terraform.d by default" \
+  "[ ! -e '$CACHE_REPO/.home-was-used' ]"
+
+# An explicit override still wins, so an operator with serialised jobs can point
+# the cache at a durable shared location.
+OVERRIDE_REPO="$TEST_DIR/cache-override"
+make_valid_root "$OVERRIDE_REPO/stacks/app"
+OVERRIDE_DIR="$TEST_DIR/explicit-cache"
+run_validate "$OVERRIDE_REPO" env TF_PLUGIN_CACHE_DIR="$OVERRIDE_DIR" > /dev/null 2>&1 || true
+assert_true "an exported TF_PLUGIN_CACHE_DIR is honoured" "[ -d '$OVERRIDE_DIR' ]"
+assert_true "and the workspace-local default is then not created" \
+  "[ ! -d '$OVERRIDE_REPO/build/.terraform-plugin-cache' ]"
+
 echo "== no-op when the configured roots are absent =="
 EMPTY_REPO="$TEST_DIR/empty"
 mkdir -p "$EMPTY_REPO"

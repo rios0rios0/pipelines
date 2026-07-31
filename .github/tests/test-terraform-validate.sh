@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034,SC2016  # *_OUT/*_RC vars and the single-quoted condition
+# strings are consumed inside assert_true's eval, which shellcheck cannot follow
 set -e
 
 # Test script for the Terraform validate tier.
@@ -123,6 +125,35 @@ assert_true "JUnit records the failure" "grep -q '<failure' '$BROKEN_JUNIT'"
 assert_true "JUnit blames the right directory" \
   "grep -A2 'stacks/bad' '$BROKEN_JUNIT' | grep -q '<failure'"
 assert_true "the healthy root module is still reported" "grep -q 'stacks/good' '$BROKEN_JUNIT'"
+
+echo "== the provider cache defaults inside the workspace, not \$HOME =="
+# Terraform's plugin cache is not safe for concurrent use, and $HOME is shared by
+# every agent on a CI host that runs jobs side by side. A $HOME-relative default
+# makes two concurrent runs corrupt each other's provider binaries.
+# Run with HOME redirected at a scratch directory, so the assertion below is a
+# real observation rather than a restatement of the default: if the runner ever
+# goes back to a $HOME-relative cache, the plugin-cache tree appears THERE and
+# the test fails. Asserting on a path the test itself never creates would pass
+# unconditionally, which is worse than having no assertion at all.
+CACHE_REPO="$TEST_DIR/cache"
+CACHE_HOME="$TEST_DIR/cache-home"
+mkdir -p "$CACHE_HOME"
+make_valid_root "$CACHE_REPO/stacks/app"
+run_validate "$CACHE_REPO" env HOME="$CACHE_HOME" > /dev/null 2>&1 || true
+assert_true "a workspace-local cache directory is created" \
+  "[ -d '$CACHE_REPO/build/.terraform-plugin-cache' ]"
+assert_true "no plugin cache is written under \$HOME" \
+  "[ ! -d '$CACHE_HOME/.terraform.d/plugin-cache' ]"
+
+# An explicit override still wins, so an operator with serialised jobs can point
+# the cache at a durable shared location.
+OVERRIDE_REPO="$TEST_DIR/cache-override"
+make_valid_root "$OVERRIDE_REPO/stacks/app"
+OVERRIDE_DIR="$TEST_DIR/explicit-cache"
+run_validate "$OVERRIDE_REPO" env TF_PLUGIN_CACHE_DIR="$OVERRIDE_DIR" > /dev/null 2>&1 || true
+assert_true "an exported TF_PLUGIN_CACHE_DIR is honoured" "[ -d '$OVERRIDE_DIR' ]"
+assert_true "and the workspace-local default is then not created" \
+  "[ ! -d '$OVERRIDE_REPO/build/.terraform-plugin-cache' ]"
 
 echo "== no-op when the configured roots are absent =="
 EMPTY_REPO="$TEST_DIR/empty"

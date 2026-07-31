@@ -91,12 +91,34 @@ if [ -z "${directories}" ]; then
   exit 0
 fi
 
-# One shared provider cache across every root module. Without it each directory
-# re-downloads the same providers, which dominates the runtime of this tier --
-# a repository with dozens of root modules pulling the same handful of providers
-# would otherwise spend minutes on redundant network I/O.
+# One shared provider cache across every root module IN THIS RUN. Without it each
+# directory re-downloads the same providers, which dominates the runtime of this
+# tier -- a repository with dozens of root modules pulling the same handful of
+# providers would otherwise spend minutes on redundant network I/O.
+#
+# The default is deliberately WORKSPACE-relative and not `$HOME`-relative.
+# Terraform's plugin cache is NOT safe for concurrent use, and `$HOME` is exactly
+# the directory that is shared when a CI host runs more than one job at a time:
+# self-hosted runners commonly place several agents side by side under a single
+# service account, so two agents on one machine get separate workspaces but
+# the same `$HOME`. Two jobs initialising at once then write the same provider
+# binary, and both fail in ways that do not name the cause --
+#
+#   Error: Failed to install provider ... : text file busy
+#   Error: ... the cached package for ... does not match any of the checksums
+#          recorded in the dependency lock file
+#
+# -- the first when one process execs a binary another is still copying, the
+# second when a partially-written cache entry is linked into `.terraform`.
+# Neither mentions the cache, so the failure reads as a corrupt lock file or a
+# flaky registry. Keeping the cache inside the checkout means concurrent jobs
+# cannot collide, while every root module in a single run still shares it, which
+# is where the saving actually came from.
+#
+# An explicitly exported `TF_PLUGIN_CACHE_DIR` still wins, so an operator who
+# knows their jobs are serialised can point it at a durable shared location.
 if [ -z "${TF_PLUGIN_CACHE_DIR:-}" ]; then
-  TF_PLUGIN_CACHE_DIR="${HOME}/.terraform.d/plugin-cache"
+  TF_PLUGIN_CACHE_DIR="$(pwd)/build/.terraform-plugin-cache"
   export TF_PLUGIN_CACHE_DIR
 fi
 mkdir -p "${TF_PLUGIN_CACHE_DIR}"

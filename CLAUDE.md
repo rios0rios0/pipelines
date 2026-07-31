@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile)
+make test              # Run all validation tests (Go, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile)
 make test-go-script    # Test Go validation script only
 make test-lambda       # Test Lambda template validation only
 make test-yaml-merge   # Test YAML merge validation only
@@ -18,6 +18,7 @@ make test-sonarqube    # Test SonarQube auto-derivation only
 make test-release-tag-idempotency  # Test release tag idempotency only
 make test-tftest-gen   # Test tftest-gen generator only
 make test-order-check  # Test the Terragrunt file-ordering checker/fixer only
+make test-terraform-validate  # Test the root-module `terraform validate` tier only
 make test-docker-multi-arch  # Test 40-delivery/docker multi-arch contract only
 make test-basic-checks # Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) only
 make test-dependency-check  # Test the OWASP Dependency-Check NVD cache / API-key contract only
@@ -52,6 +53,7 @@ All platforms follow consistent numbered stages:
   - `terraform/terratest/` — Go Terratest runner over `tests/terratest/*.go` (emits JUnit under `build/reports/`)
   - `terraform/test-all/` — unified orchestrator for the first two tiers; runs both when present, merges JUnits into `build/reports/junit-terra-all.xml`, exits `0` when neither tier has tests (stack-only repos)
   - `terraform/structural/` — third tier runner for `tests/structural.sh` (repo-convention assertions the consumer owns); emits `build/reports/junit-structural.xml` (empty-but-valid on skip). Runs on its own parallel job (`test:structural`) instead of through `test-all` because the shell tier is offline and deps-free and shouldn't block on the heavier tiers
+  - `terraform/validate/` — fourth tier runner: `terraform init -backend=false` + `terraform validate` over every root module under `VALIDATE_ROOTS` (default `stacks`); emits `build/reports/junit-validate.xml` (empty-but-valid on skip). The only tier that RESOLVES references — the other three parse — so it is the only one that can see `Reference to undeclared module` / `Unsupported argument` in a root module. Runs on its own **opt-in** parallel job (`test:validate`), off by default because unlike its siblings it needs the network for provider downloads and, for private module sources, credentials
   - `terraform/cyclonedx/` — CycloneDX BOM generator for Terraform projects (delegates to `trivy filesystem --format cyclonedx`)
   - `terraform/tftest-gen/` — generator that emits `tests/smoke.tftest.hcl` for single-module repos; parses `variables.tf` + `main.tf` / `providers.tf` and emits `mock_provider` blocks plus validation-rejection runs
   - `terraform/order-check/` — checks (and with `--fix` rewrites) the file-ordering standard across `environments/**/root.hcl`, `stacks/*/{variables,providers,outputs}.tf`, and `**/providers.tf`, and additionally reports **dead terragrunt inputs** (an `inputs = {}` key with no matching `variable` in the target stack — reported only, never auto-deleted); emits `build/reports/junit-order-check.xml`. Runs as the `order-check` / `style:order-check` job in the `10-code-check` stage. Stdlib-only `python3`; the `--fix` rewriter is round-trip-safe (parses to exact substrings, then only permutes). See Terraform Ordering Standard below
@@ -123,7 +125,7 @@ With no API key the runner uses NIST's gzipped JSON data feeds (`nvdDatafeedUrl`
 
 ### Terra Test Tiers
 
-The Terra CLI pipeline test stage exposes two parallel jobs on every platform (Azure DevOps, GitLab CI, GitHub Actions):
+The Terra CLI pipeline test stage exposes three parallel jobs on every platform (Azure DevOps, GitLab CI, GitHub Actions) — two always on, one opt-in:
 
 1. **`test:all`** — the unified test job, delegates to `global/scripts/languages/terraform/test-all/run.sh` which orchestrates the two heavier tiers:
 
@@ -138,7 +140,17 @@ The Terra CLI pipeline test stage exposes two parallel jobs on every platform (A
    |---------------|------------------------------------|----------------------------------|---------------------------------|
    | `structural`  | `tests/structural.sh` (consumer-owned) | executes the script directly | `junit-structural.xml`          |
 
-The merged JUnit (`junit-terra-all.xml`) is the portable contract for `test:all` — GitLab CI's `artifacts:reports:junit` and GitHub Actions' `upload-artifact` both only take one file. `test:structural` publishes its own `junit-structural.xml` on a separate pipeline surface because it runs on its own job. When a tier has no tests (e.g., a stack-only repo without `modules/`, `tests/terratest/`, or `tests/structural.sh`), the corresponding runner emits an empty-but-valid JUnit and exits `0` so the job passes without a bespoke opt-out. `test:structural` runs on a parallel job rather than through `test-all` because the shell tier is offline and deps-free — queuing it behind the heavier Go / Terraform tiers would waste feedback time.
+3. **`test:validate`** (opt-in) — fourth-tier root-module check, delegates to `global/scripts/languages/terraform/validate/run.sh`:
+
+   | Tier          | Input                              | Tool                             | Output                          |
+   |---------------|------------------------------------|----------------------------------|---------------------------------|
+   | `validate`    | every `*.tf`-bearing dir under `VALIDATE_ROOTS` (default `stacks`) | `terraform init -backend=false` + `terraform validate` | `junit-validate.xml`  |
+
+   The other three tiers **parse**; this is the only one that **resolves** a reference. `terra-test` covers only reusable modules carrying a test file, `terratest` reads HCL offline, and `structural` asserts conventions in bash — none has an evaluation context, a module graph or a provider schema. So a root module can reference a module, variable, resource or output that does not exist and all three stay green, while the defect fails *every* plan and apply of that root module, for every target, before a resource is touched.
+
+   Opt-in per platform, each in the form that platform already uses for options — Azure DevOps `ENABLE_VALIDATE: true` (template parameter), GitLab CI `ENABLE_VALIDATE: "true"` (CI/CD variable gating `rules`), GitHub Actions `enable_validate: true` (workflow input) — because unlike its siblings it needs the network for provider downloads and, for private module sources, credentials, which each platform's existing pre-script hook supplies (`PRE_STEPS`, `VALIDATE_PRE_SCRIPT`, `pre_script`). `-backend=false` keeps it a test rather than a deployment step: no backend credentials, no state access, no cloud login. Vendored copies under `.terraform/` are excluded.
+
+The merged JUnit (`junit-terra-all.xml`) is the portable contract for `test:all` — GitLab CI's `artifacts:reports:junit` and GitHub Actions' `upload-artifact` both only take one file. `test:structural` publishes its own `junit-structural.xml` on a separate pipeline surface because it runs on its own job. When a tier has nothing to act on (e.g., a stack-only repo without `modules/`, `tests/terratest/` or `tests/structural.sh`, or — for `validate` — no directory matching `VALIDATE_ROOTS`), the corresponding runner emits an empty-but-valid JUnit and exits `0` so the job passes without a bespoke opt-out. `test:structural` runs on a parallel job rather than through `test-all` because the shell tier is offline and deps-free — queuing it behind the heavier Go / Terraform tiers would waste feedback time.
 
 ### Terraform Ordering Standard
 

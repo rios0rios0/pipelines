@@ -18,6 +18,16 @@ on:
         type: 'string'
         default: ''
         description: 'Optional ref (branch, tag, or SHA) to check out `rios0rios0/pipelines` at when sourcing shared scripts. Defaults to the ref this reusable workflow was invoked with (parsed from `github.workflow_ref`), so scripts and workflow stay version-locked when consumers pin to a tag/SHA.'
+      enable_validate:
+        required: false
+        type: 'boolean'
+        default: false
+        description: 'Run `terraform validate` over every root module (the `tests > test:validate` job). Off by default because, unlike the other test tiers, it needs the network to download providers and — for private module sources — credentials, which `pre_script` configures.'
+      validate_roots:
+        required: false
+        type: 'string'
+        default: 'stacks'
+        description: 'Space-separated directories searched for root modules. Only read when `enable_validate` is true.'
 
 jobs:
   # first stage
@@ -294,6 +304,87 @@ jobs:
           if-no-files-found: 'warn'
     needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
+
+  # Fourth tier — the only one that RESOLVES references rather than
+  # parsing them. `terra-test` covers reusable modules that carry a test
+  # file, `terratest` reads HCL offline, and `structural` asserts
+  # conventions in bash; none has an evaluation context, so a root module
+  # can reference a module, variable or resource that does not exist and
+  # all three stay green. That defect then fails every plan and apply of
+  # the root module, for every target, before a resource is touched.
+  #
+  # Opt-in via `enable_validate`. Off by default because, unlike its
+  # siblings, this tier needs the network (to download providers) and —
+  # for private module sources — credentials.
+  tests-test_validate:
+    name: 'tests > test:validate'
+    runs-on: 'ubuntu-latest'
+    env:
+      REPORT_PATH: 'build/reports'
+      VALIDATE_ROOTS: ${{ inputs.validate_roots }}
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v6'
+
+      # Terraform itself, via the terra CLI — the structural tier is
+      # deps-free but this one cannot be.
+      - name: 'Install terra CLI'
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/rios0rios0/terra/main/install.sh | sh
+          terra install
+        shell: 'bash'
+
+      # Same reasoning as the sibling jobs: pass the input through `env:`
+      # rather than interpolating `${{ }}` into `run:`, so the value is
+      # expanded by the shell at runtime instead of being substituted into
+      # the command at YAML-parse time (script-injection path).
+      - name: 'Resolve pipelines ref'
+        id: 'pipelines-ref'
+        shell: 'bash'
+        env:
+          PIPELINES_REF: ${{ inputs.pipelines_ref }}
+        run: |
+          if [ -n "${PIPELINES_REF}" ]; then
+            ref="${PIPELINES_REF}"
+          else
+            ref="${GITHUB_WORKFLOW_REF##*@}"
+          fi
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+
+      - name: 'Checkout pipelines repo for shared scripts'
+        uses: 'actions/checkout@v6'
+        with:
+          repository: 'rios0rios0/pipelines'
+          ref: ${{ steps.pipelines-ref.outputs.ref }}
+          path: '.pipelines'
+
+      # `terraform init` resolves module sources, and private ones need
+      # credentials configured first — the same need `pre_script` already
+      # serves for the security stage's Terraform parser, so it is reused
+      # here rather than introducing a second hook.
+      - name: 'Run pre-script'
+        if: "inputs.pre_script != ''"
+        shell: 'bash'
+        env:
+          PRE_SCRIPT: ${{ inputs.pre_script }}
+        run: |
+          eval "${PRE_SCRIPT}"
+
+      - name: 'Run terraform validate over root modules'
+        run: |
+          export SCRIPTS_DIR="$GITHUB_WORKSPACE/.pipelines"
+          "$SCRIPTS_DIR/global/scripts/languages/terraform/validate/run.sh"
+        shell: 'bash'
+
+      - name: 'Publish validate JUnit'
+        if: 'always()'
+        uses: 'actions/upload-artifact@v7'
+        with:
+          name: 'validate-results'
+          path: "${{ env.REPORT_PATH }}/junit-validate.xml"
+          if-no-files-found: 'ignore'
+    needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy' ]
+    if: "inputs.enable_validate && !startsWith(github.ref, 'refs/tags/')"
 
   # Third tier — repo-convention assertions the consumer owns. Runs
   # `tests/structural.sh` if it exists and uploads the resulting JUnit.

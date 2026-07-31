@@ -28,6 +28,46 @@ test:all:
         coverage_format: 'cobertura'
         path: "${REPORT_PATH}/terra-coverage.xml"
 
+# Fourth tier — the only one that RESOLVES references rather than parsing
+# them. `terra-test` covers reusable modules that carry a test file,
+# `terratest` reads HCL offline, and `structural` asserts conventions in
+# bash; none of them has an evaluation context, so a root module can
+# reference a module, variable or resource that does not exist and all
+# three stay green. That defect then fails every plan and apply of the
+# root module, for every target, before a resource is touched.
+#
+# Opt-in: set `ENABLE_VALIDATE: "true"` in the consumer's `.gitlab-ci.yml`
+# or project CI/CD variables. Off by default because, unlike its siblings,
+# this tier needs the network (to download providers) and — for private
+# module sources — credentials. `VALIDATE_ROOTS` overrides the directories
+# searched for root modules (default `stacks`).
+#
+# Extends `.terra` rather than `.scripts-repo` because it needs Terraform
+# itself; the structural tier below deliberately does not.
+#
+# `VALIDATE_PRE_SCRIPT` mirrors the `SAST_PRE_SCRIPT` hook used by the
+# security stage: `terraform init` resolves module sources, and private
+# ones need SSH (or a token) configured first, or init fails on the first
+# root module that pins one.
+test:validate:
+  extends: '.terra'
+  stage: 'tests'
+  rules:
+    - if: '$ENABLE_VALIDATE == "true"'
+  variables:
+    REPORT_PATH: 'build/reports'
+  before_script:
+    - !reference [.terra, before_script]
+    - if [ -n "$VALIDATE_PRE_SCRIPT" ]; then eval "$VALIDATE_PRE_SCRIPT"; fi
+  script:
+    - "$SCRIPTS_DIR/global/scripts/languages/terraform/validate/run.sh"
+  artifacts:
+    when: 'always'
+    paths:
+      - "${REPORT_PATH}/"
+    reports:
+      junit: "${REPORT_PATH}/junit-validate.xml"
+
 # Third tier — repo-convention assertions the consumer owns. Runs
 # `tests/structural.sh` if it exists and publishes the resulting JUnit.
 # The script is deliberately not shipped here; every repo has its own

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034,SC2016  # *_OUT/*_RC vars and the single-quoted condition
+# strings are consumed inside assert_true's eval, which shellcheck cannot follow
 set -e
 
 # Test script for the Terraform validate tier.
@@ -128,13 +130,20 @@ echo "== the provider cache defaults inside the workspace, not \$HOME =="
 # Terraform's plugin cache is not safe for concurrent use, and $HOME is shared by
 # every agent on a CI host that runs jobs side by side. A $HOME-relative default
 # makes two concurrent runs corrupt each other's provider binaries.
+# Run with HOME redirected at a scratch directory, so the assertion below is a
+# real observation rather than a restatement of the default: if the runner ever
+# goes back to a $HOME-relative cache, the plugin-cache tree appears THERE and
+# the test fails. Asserting on a path the test itself never creates would pass
+# unconditionally, which is worse than having no assertion at all.
 CACHE_REPO="$TEST_DIR/cache"
+CACHE_HOME="$TEST_DIR/cache-home"
+mkdir -p "$CACHE_HOME"
 make_valid_root "$CACHE_REPO/stacks/app"
-CACHE_OUT="$(run_validate "$CACHE_REPO" 2>&1)" || true
+run_validate "$CACHE_REPO" env HOME="$CACHE_HOME" > /dev/null 2>&1 || true
 assert_true "a workspace-local cache directory is created" \
   "[ -d '$CACHE_REPO/build/.terraform-plugin-cache' ]"
-assert_true "nothing is written under \$HOME/.terraform.d by default" \
-  "[ ! -e '$CACHE_REPO/.home-was-used' ]"
+assert_true "no plugin cache is written under \$HOME" \
+  "[ ! -d '$CACHE_HOME/.terraform.d/plugin-cache' ]"
 
 # An explicit override still wins, so an operator with serialised jobs can point
 # the cache at a durable shared location.

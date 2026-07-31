@@ -336,8 +336,12 @@ jobs:
       # protocol to HTTPS). `terraform_wrapper: false` keeps the real binary
       # on PATH — the wrapper's output capture is redundant here, since the
       # runner already collects diagnostics itself.
+      # Pinned to a commit SHA, not a tag: this is the only third-party
+      # action in the workflow (the `actions/*` ones are first-party), and a
+      # tag is a mutable pointer the upstream owner can repoint at any time,
+      # so `@v4` is a promise rather than a guarantee about what executes here.
       - name: 'Setup Terraform'
-        uses: 'hashicorp/setup-terraform@v3'
+        uses: 'hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e' # v4.0.1
         with:
           terraform_wrapper: false
 

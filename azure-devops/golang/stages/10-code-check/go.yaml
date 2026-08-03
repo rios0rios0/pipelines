@@ -46,19 +46,10 @@ stages:
           # It is the right one to sacrifice: it is the larger of the two, and any source or
           # toolchain change invalidates it anyway, whereas `pkg/mod` is a pure network cost.
           # When there is room, both are kept and nothing changes.
-          - script: |
-              set -eu
-              threshold="${DISK_TRIM_THRESHOLD:-85}"
-              used="$(df --output=pcent / | tail -1 | tr -dc '0-9')"
-              echo "Disk usage on /: ${used}% (trim threshold ${threshold}%)"
-
-              if [ "${used:-0}" -ge "$threshold" ]; then
-                echo "Dropping the Go build cache so the module cache can still be saved."
-                go clean -cache || true
-                df -h / | tail -1
-              else
-                echo "Enough room to keep both caches."
-              fi
+          #
+          # `condition: always()` so it still runs when the linter reported findings -- a red
+          # lint result is exactly when the agent has done the most work and has least room left.
+          - script: $(Scripts.Directory)/global/scripts/languages/golang/cache-trim/run.sh
             displayName: 'Trim the Go build cache when the agent is low on disk'
             condition: always()
             continueOnError: true

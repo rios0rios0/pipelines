@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile)
+- `make test` - Run all validation tests (Go, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-lambda` - Test Lambda template validation specifically
 - `make test-yaml-merge` - Test YAML merge validation specifically
@@ -16,6 +16,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-release-tag-idempotency` - Test release tag idempotency specifically
 - `make test-tftest-gen` - Test tftest-gen generator specifically
 - `make test-order-check` - Test the Terragrunt file-ordering checker/fixer specifically
+- `make test-terraform-validate` - Test the root-module `terraform validate` tier specifically
 - `make test-docker-multi-arch` - Test 40-delivery/docker multi-arch contract specifically
 - `make test-basic-checks` - Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) specifically
 - `make test-dependency-check` - Test the OWASP Dependency-Check NVD cache / API-key contract specifically
@@ -160,14 +161,15 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 
 #### Terraform / Terra Tools
 
-The Terra CLI pipeline test stage runs through a single unified `test:all` job on every platform (Azure DevOps, GitLab CI, GitHub Actions) that delegates to the runner below. The orchestrator auto-detects which tiers the consumer has, runs only those, merges the JUnit outputs into `build/reports/junit-terra-all.xml`, and exits `0` when neither tier has tests so stack-only repos pass without a bespoke opt-out.
+The Terra CLI pipeline test stage exposes parallel jobs on every platform (Azure DevOps, GitLab CI, GitHub Actions) — two always on, one opt-in. `test:all` delegates to `test-all/run.sh`, which auto-detects which of the two heavier tiers the consumer has, runs only those, merges the JUnit outputs into `build/reports/junit-terra-all.xml`, and exits `0` when neither has tests so stack-only repos pass without a bespoke opt-out. `test:structural` and the opt-in `test:validate` each run on their own parallel job with their own JUnit. Only `validate` **resolves** references (`terraform validate`) — the other three tiers parse, so a root module referencing an undeclared module/variable/resource/output stays green everywhere else while failing every plan. `test:validate` is off by default (`ENABLE_VALIDATE` / `enable_validate`) because it needs the network for provider downloads and, for private module sources, credentials; each platform reuses its existing pre-script hook (`PRE_STEPS` / `VALIDATE_PRE_SCRIPT` / `pre_script`) and `VALIDATE_ROOTS` (default `stacks`) overrides the search.
 
 | Tool                     | Purpose                                            | Script Location                                         |
 |--------------------------|----------------------------------------------------|---------------------------------------------------------|
-| **Terra Test (unified)** | Orchestrates both tiers behind one `test:all` job  | `global/scripts/languages/terraform/test-all/run.sh`    |
+| **Terra Test (unified)** | Orchestrates both heavier tiers behind one `test:all` job | `global/scripts/languages/terraform/test-all/run.sh`    |
 | **terra-test**           | `terraform test` over `modules/*/tests/*.tftest.hcl` | `global/scripts/languages/terraform/terra-test/run.sh`  |
 | **Terratest**            | Go test suite under `tests/terratest/*.go`         | `global/scripts/languages/terraform/terratest/run.sh`   |
-| **Structural**           | Third-tier runner for `tests/structural.sh`        | `global/scripts/languages/terraform/structural/run.sh`  |
+| **Structural**           | Third-tier runner for `tests/structural.sh` (own `test:structural` job) | `global/scripts/languages/terraform/structural/run.sh`  |
+| **validate** (opt-in)    | Fourth-tier `terraform init -backend=false` + `terraform validate` over root modules under `VALIDATE_ROOTS` (own `test:validate` job) | `global/scripts/languages/terraform/validate/run.sh`    |
 | **tftest-gen**           | Generates `tests/smoke.tftest.hcl` for modules     | `global/scripts/languages/terraform/tftest-gen/run.sh`  |
 | **order-check**          | Checks/auto-fixes file ordering (deps, variables, providers, outputs) and reports dead terragrunt inputs (`inputs = {}` keys not declared as a stack `variable`; reported only, never auto-deleted); runs in `10-code-check` | `global/scripts/languages/terraform/order-check/run.sh` |
 | **Terraform CycloneDX**  | SBOM generation for Terraform projects             | `global/scripts/languages/terraform/cyclonedx/run.sh`   |
@@ -256,7 +258,7 @@ pipelines/
 │   │   │   ├── php/           # PHP scripts (unused-code detection)
 │   │   │   ├── python/        # Python scripts (cyclonedx, unused-code detection)
 │   │   │   ├── ruby/          # Ruby scripts (unused-code detection)
-│   │   │   └── terraform/     # Terraform scripts (terra-test, terratest, test-all, structural, cyclonedx, tftest-gen, order-check)
+│   │   │   └── terraform/     # Terraform scripts (terra-test, terratest, test-all, structural, validate, cyclonedx, tftest-gen, order-check)
 │   │   └── shared/            # Common utilities
 │   ├── containers/            # Custom Docker images
 │   │   ├── golang.*/          # Go development images
@@ -640,7 +642,7 @@ docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/
 
 ### Test Suite Usage
 ```bash
-# Run all validation tests (Go, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile)
+# Run all validation tests (Go, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile)
 make test
 
 # Run individual test suites
@@ -652,6 +654,7 @@ make test-sonarqube
 make test-release-tag-idempotency
 make test-tftest-gen
 make test-order-check
+make test-terraform-validate
 make test-docker-multi-arch
 make test-basic-checks
 make test-dependency-check

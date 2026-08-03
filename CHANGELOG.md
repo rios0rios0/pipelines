@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- refreshed `.github/copilot-instructions.md` to document the opt-in `test:validate` Terraform tier and its `make test-terraform-validate` target, which the `4.20.0` release added but the Copilot guidance still omitted (both `make test` listings, the Terraform tools section, and the repository-structure tree)
+
 ## [4.20.0] - 2026-08-01
 
 ### Added

@@ -23,11 +23,29 @@ if [ -d "pkg" ]; then
   echo "Found 'pkg' directory, using 'cyclonedx-gomod mod' command..."
   "$(go env GOPATH)/bin/cyclonedx-gomod" mod -json -output "$BOM_PATH/bom.json" -licenses
 else
-  folder="$(find . -type f -name main.go -not -path '*/.go/*' -exec dirname {} \;)"
-  if [ -z "$folder" ]; then
+  # One line per directory holding a `main.go`. A module may legitimately hold SEVERAL -- a
+  # server plus a scheduled worker, a CLI plus its daemon -- and `-main` accepts exactly one
+  # path, so handing it the raw multi-line result made cyclonedx-gomod refuse the whole run with
+  # `invalid options: - main: "..." does not exist`. No BOM was written, the SBOM upload that
+  # consumes it had nothing to send, and the job failed on every single build.
+  folders="$(find . -type f -name main.go -not -path '*/.go/*' -exec dirname {} \;)"
+  if [ -z "$folders" ]; then
     echo "Could not find a directory containing Go files"
     exit 1
   fi
-  echo "Using 'cyclonedx-gomod app' command..."
-  "$(go env GOPATH)/bin/cyclonedx-gomod" app -json -output "$BOM_PATH/bom.json" -packages -files -licenses -main "$folder"
+
+  mainCount="$(printf '%s\n' "$folders" | grep -c '^')"
+
+  if [ "$mainCount" -gt 1 ]; then
+    # `app` describes ONE binary's reachable dependencies; with several binaries in the module no
+    # single one represents the repository, and picking one arbitrarily would silently drop the
+    # dependencies only the others pull in. `mod` describes the module -- a superset of every
+    # binary's dependencies -- which is the safe direction for vulnerability tracking: it can
+    # over-report a component, never miss one.
+    echo "Found $mainCount main packages, using 'cyclonedx-gomod mod' command..."
+    "$(go env GOPATH)/bin/cyclonedx-gomod" mod -json -output "$BOM_PATH/bom.json" -licenses
+  else
+    echo "Using 'cyclonedx-gomod app' command..."
+    "$(go env GOPATH)/bin/cyclonedx-gomod" app -json -output "$BOM_PATH/bom.json" -packages -files -licenses -main "$folders"
+  fi
 fi

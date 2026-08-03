@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed CycloneDX BOM generation failing on every build of a Go module that holds MORE THAN ONE `main` package. `global/scripts/languages/golang/cyclonedx/run.sh` fed the raw, newline-separated output of `find ... -name main.go -exec dirname {} \;` straight into `cyclonedx-gomod app -main`, which accepts exactly one path — so a module with two entry points (a server plus a scheduled worker, a CLI plus its daemon) was rejected with `invalid options: - main: "..." does not exist`, no `bom.json` was ever written, and the SBOM upload that consumes it had nothing to send. The script now counts the `main` packages: exactly one still takes the `app` path unchanged, while several fall back to `cyclonedx-gomod mod`, which describes the MODULE rather than a single binary. That is the safe direction for vulnerability tracking — a module BOM is a superset of every binary's dependency set, so it can over-report a component but never miss one, whereas picking one `main` arbitrarily would silently drop whatever only the others import. Covered by `.github/tests/test-cyclonedx-main-detection.sh`
+
 ## [4.20.0] - 2026-08-01
 
 ### Added

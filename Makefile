@@ -2,7 +2,7 @@ TAG := latest
 ROOT := global/containers
 CONTAINER_REGISTRY = ghcr.io/rios0rios0/pipelines
 
-.PHONY: login setup-buildx build-and-push test-go-script test-cyclonedx-main test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-terraform-validate test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test
+.PHONY: login setup-buildx build-and-push test-go-script test-cyclonedx-main test-go-cache-trim test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-terraform-validate test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test
 
 login:
 	docker login $(CONTAINER_REGISTRY)
@@ -25,6 +25,10 @@ test-go-script:
 test-cyclonedx-main:
 	@echo "Running Go CycloneDX entry-point detection validation..."
 	@./.github/tests/test-cyclonedx-main-detection.sh
+
+test-go-cache-trim:
+	@echo "Running Go build-cache disk guard validation..."
+	@./.github/tests/test-go-cache-trim.sh
 
 test-lambda:
 	@echo "Running Lambda template validation..."
@@ -82,5 +86,5 @@ test-release-reconcile:
 	@echo "Running release reconciliation validation..."
 	@./.github/tests/test-release-reconcile.sh
 
-test: test-go-script test-cyclonedx-main test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-terraform-validate test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile
+test: test-go-script test-cyclonedx-main test-go-cache-trim test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-terraform-validate test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile
 	@echo "All tests completed successfully!"

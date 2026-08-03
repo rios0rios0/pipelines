@@ -31,3 +31,34 @@ stages:
 
           - script: $(Scripts.Directory)/global/scripts/languages/golang/golangci-lint/run.sh
             displayName: 'Run GolangCI-Lint'
+
+          # This job is the only Go job whose GOCACHE lives inside $(GOPATH), so its post-job
+          # `Cache@2` save tars the module cache AND the build cache together. On a large module
+          # the two outgrow the agent: the save aborts with `tar: Wrote only N of M bytes` after
+          # a `Free disk space on / is lower than 5%` warning.
+          #
+          # That matters more than the yellow job it produces. A cache save is ALL-OR-NOTHING,
+          # so when the archive fails nothing is stored -- including the module cache -- and the
+          # next run re-downloads every dependency. The cache stops paying for itself precisely
+          # on the repositories that need it most.
+          #
+          # So when the disk is already tight, drop the build cache and keep the module cache.
+          # It is the right one to sacrifice: it is the larger of the two, and any source or
+          # toolchain change invalidates it anyway, whereas `pkg/mod` is a pure network cost.
+          # When there is room, both are kept and nothing changes.
+          - script: |
+              set -eu
+              threshold="${DISK_TRIM_THRESHOLD:-85}"
+              used="$(df --output=pcent / | tail -1 | tr -dc '0-9')"
+              echo "Disk usage on /: ${used}% (trim threshold ${threshold}%)"
+
+              if [ "${used:-0}" -ge "$threshold" ]; then
+                echo "Dropping the Go build cache so the module cache can still be saved."
+                go clean -cache || true
+                df -h / | tail -1
+              else
+                echo "Enough room to keep both caches."
+              fi
+            displayName: 'Trim the Go build cache when the agent is low on disk'
+            condition: always()
+            continueOnError: true

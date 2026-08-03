@@ -34,15 +34,15 @@ else
     exit 1
   fi
 
-  mainCount="$(printf '%s\n' "$folders" | grep -c '^')"
+  main_count="$(printf '%s\n' "$folders" | grep -c '^')"
 
-  if [ "$mainCount" -gt 1 ]; then
+  if [ "$main_count" -gt 1 ]; then
     # `app` describes ONE binary's reachable dependencies; with several binaries in the module no
     # single one represents the repository, and picking one arbitrarily would silently drop the
     # dependencies only the others pull in. `mod` describes the module -- a superset of every
     # binary's dependencies -- which is the safe direction for vulnerability tracking: it can
     # over-report a component, never miss one.
-    echo "Found $mainCount main packages, using 'cyclonedx-gomod mod' command..."
+    echo "Found $main_count main packages, using 'cyclonedx-gomod mod' command..."
     "$(go env GOPATH)/bin/cyclonedx-gomod" mod -json -output "$BOM_PATH/bom.json" -licenses
   else
     echo "Using 'cyclonedx-gomod app' command..."

@@ -189,7 +189,7 @@ Four constraints shape this family; do not "simplify" any of them away:
 | **Render's API key is preferred over its deploy hook** | A deploy hook is fire-and-forget: Render returns success for "request accepted", so the job goes **green even when the build that follows fails**, making the job's status meaningless. The API path returns a deploy id the script polls to a terminal state. The hook path warns about exactly this |
 | **`flyctl` comes from the GitHub release archive, never `curl \| sh`** | Piping a remote script into a shell hands the runner's credentials to whatever that URL returns at that moment — the supply-chain shape this repository's own SAST stage exists to flag. Matches the gitleaks/hadolint/shellcheck install pattern |
 
-Covered by `.github/tests/test-deploy-providers.sh` (92 assertions): the cross-platform wiring contract (a provider added to one platform and forgotten on the other two leaves three files that are each valid YAML on their own, so nothing else in CI would catch it), the argv each provider builds under dry run, and a sentinel-credential leak check over the whole report directory.
+Covered by `.github/tests/test-deploy-providers.sh` (96 assertions): the cross-platform wiring contract (a provider added to one platform and forgotten on the other two leaves three files that are each valid YAML on their own, so nothing else in CI would catch it), the argv each provider builds under dry run, and a sentinel-credential leak check over the whole report directory.
 
 ### Makefile Include Pattern
 

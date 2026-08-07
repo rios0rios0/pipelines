@@ -357,6 +357,37 @@ assert_true "dry run: the log states that nothing was deployed" \
   "grep -q 'no deploy performed' <<< \"\$OUT\""
 echo ""
 
+# ---------------------------------------------------------------------------
+echo "9. Transport pinning"
+# ---------------------------------------------------------------------------
+# `curl -L` follows a redirect from HTTPS into plain HTTP by default. That
+# matters most in the one place it is unavoidable: flyctl's version is resolved
+# THROUGH a redirect, and the asset URL redirects to a CDN -- and those bytes
+# become a binary this script marks executable and runs with the job's
+# credentials in scope. `--proto '=https' --proto-redir '=https'` removes the
+# downgrade as an option instead of trusting the remote not to offer it.
+FLYIO_SH="$SCRIPTS_DIR/global/scripts/deploy/flyio/run.sh"
+while IFS= read -r line; do
+  [[ -z "$line" ]] && continue
+  assert_true "flyio: redirect-following curl pins HTTPS -- ${line:0:48}..." \
+    "grep -q -- \"--proto-redir '=https'\" <<< \"\$line\""
+done < <(sed 's/#.*//' "$FLYIO_SH" | grep -E "curl .*-[a-zA-Z]*L")
+
+# Render's URLs are consumer-supplied (RENDER_API_URL is overridable and the
+# deploy hook URL carries its secret in the query string), so a plain-HTTP value
+# would put a bearer token or an embedded key on the wire in cleartext.
+RENDER_SH="$SCRIPTS_DIR/global/scripts/deploy/render/run.sh"
+# Comments are stripped first: the script explains the pinning in prose next to
+# each block, and counting those mentions would let the assertion pass on the
+# documentation alone even if the code had lost the flag.
+RENDER_CODE="$(sed 's/#.*//' "$RENDER_SH")"
+RENDER_URL_LINES="$(grep -c 'url = ' <<< "$RENDER_CODE")"
+RENDER_PINNED_LINES="$(grep -cF 'proto = "=https"' <<< "$RENDER_CODE")"
+assert_equals "render: every curl config block pins the protocol to HTTPS" \
+  "$RENDER_URL_LINES" "$RENDER_PINNED_LINES"
+assert_true "render: at least one curl config block exists to pin" "[[ $RENDER_URL_LINES -ge 2 ]]"
+echo ""
+
 echo "================================"
 echo -e "Tests passed: ${GREEN}${TESTS_PASSED}${NC}"
 if [[ $TESTS_FAILED -gt 0 ]]; then

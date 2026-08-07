@@ -41,6 +41,9 @@ RENDER_API_URL="${RENDER_API_URL:-https://api.render.com/v1}"
 RENDER_POLL_INTERVAL="${RENDER_POLL_INTERVAL:-10}"
 RENDER_POLL_TIMEOUT="${RENDER_POLL_TIMEOUT:-1800}"
 
+# Named once so the receipt written on every exit path cannot drift between them.
+PROVIDER="render"
+
 if [ -z "${RENDER_API_KEY:-}" ] && [ -z "${RENDER_DEPLOY_HOOK_URL:-}" ]; then
   echo "ERROR: neither RENDER_API_KEY nor RENDER_DEPLOY_HOOK_URL is set." >&2
   echo "Create an API key at https://dashboard.render.com/u/settings#api-keys (preferred," >&2
@@ -58,8 +61,13 @@ if [ -z "${RENDER_API_KEY:-}" ]; then
   # The hook URL embeds its own secret key, so it is passed on stdin via
   # `curl --config -` rather than on argv, where `ps` and `command.txt` would
   # both capture it. Only the redacted form is recorded.
+  # `proto = "=https"` pins the transport. The hook URL is consumer-supplied and
+  # carries its secret in the query string, so an `http://` value -- pasted by
+  # mistake or injected into a pipeline variable -- would put that secret on the
+  # wire in cleartext. Rejecting the request is the right outcome; downgrading
+  # silently is not.
   if deploy_note_command "curl --config - # POST (RENDER_DEPLOY_HOOK_URL redacted)"; then
-    if ! printf 'url = "%s"\nrequest = "POST"\nfail\nsilent\nshow-error\n' "$RENDER_DEPLOY_HOOK_URL" \
+    if ! printf 'url = "%s"\nrequest = "POST"\nproto = "=https"\nproto-redir = "=https"\nfail\nsilent\nshow-error\n' "$RENDER_DEPLOY_HOOK_URL" \
       | curl --config -; then
       echo "ERROR: the Render deploy hook returned a non-success status." >&2
       exit 1
@@ -67,7 +75,7 @@ if [ -z "${RENDER_API_KEY:-}" ]; then
     echo "Deploy hook accepted."
   fi
 
-  deploy_record "render" "deploy-hook"
+  deploy_record "$PROVIDER" "deploy-hook"
   exit 0
 fi
 
@@ -82,17 +90,22 @@ fi
 
 # `curl --config -` keeps the bearer token off argv and out of `ps`; the token
 # is written to curl's stdin, which is not readable from the process table.
+# `proto = "=https"` pins the transport for the same reason as the hook path
+# above: RENDER_API_URL is overridable, and a plain-HTTP override would send the
+# bearer token in cleartext.
 render_api() {
   _ra_method="$1"
   _ra_path="$2"
 
-  printf 'url = "%s%s"\nrequest = "%s"\nheader = "Authorization: Bearer %s"\nheader = "Accept: application/json"\nheader = "Content-Type: application/json"\ndata = "{}"\nfail\nsilent\nshow-error\n' \
+  printf 'url = "%s%s"\nrequest = "%s"\nheader = "Authorization: Bearer %s"\nheader = "Accept: application/json"\nheader = "Content-Type: application/json"\ndata = "{}"\nproto = "=https"\nproto-redir = "=https"\nfail\nsilent\nshow-error\n' \
     "$RENDER_API_URL" "$_ra_path" "$_ra_method" "$RENDER_API_KEY" \
     | curl --config -
+
+  return $?
 }
 
 if ! deploy_note_command "curl --config - # POST $RENDER_API_URL/services/$RENDER_SERVICE_ID/deploys"; then
-  deploy_record "render" "$RENDER_SERVICE_ID"
+  deploy_record "$PROVIDER" "$RENDER_SERVICE_ID"
   exit 0
 fi
 
@@ -130,13 +143,13 @@ while [ "$ELAPSED" -lt "$RENDER_POLL_TIMEOUT" ]; do
   case "$STATUS" in
     live)
       echo "Deploy $DEPLOY_ID is live."
-      deploy_record "render" "$RENDER_SERVICE_ID"
+      deploy_record "$PROVIDER" "$RENDER_SERVICE_ID"
       exit 0
       ;;
     build_failed | update_failed | pre_deploy_failed | canceled | deactivated)
       echo "ERROR: deploy $DEPLOY_ID finished in state '$STATUS'." >&2
       echo "See https://dashboard.render.com/web/$RENDER_SERVICE_ID/deploys/$DEPLOY_ID for the log." >&2
-      deploy_record "render" "$RENDER_SERVICE_ID"
+      deploy_record "$PROVIDER" "$RENDER_SERVICE_ID"
       exit 1
       ;;
     *)
@@ -147,5 +160,5 @@ done
 
 echo "ERROR: deploy $DEPLOY_ID did not reach a terminal state within ${RENDER_POLL_TIMEOUT}s." >&2
 echo "The deploy may still be running -- check the Render dashboard before retrying." >&2
-deploy_record "render" "$RENDER_SERVICE_ID"
+deploy_record "$PROVIDER" "$RENDER_SERVICE_ID"
 exit 1

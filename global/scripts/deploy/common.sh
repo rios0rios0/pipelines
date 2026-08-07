@@ -36,6 +36,8 @@ deploy_require_env() {
     exit 1
   fi
   unset _de_value
+
+  return 0
 }
 
 # deploy_npm_cli <binary> <npm-package>
@@ -120,10 +122,12 @@ deploy_run() {
 # through `deploy_run` would either execute the redacted placeholder or publish
 # the secret.
 deploy_note_command() {
-  printf '%s\n' "$1" > "$REPORT_PATH/command.txt"
+  _dc_command="$1"
+
+  printf '%s\n' "$_dc_command" > "$REPORT_PATH/command.txt"
 
   if [ "${DEPLOY_DRY_RUN:-false}" = "true" ]; then
-    echo "DRY RUN (no deploy performed): $1"
+    echo "DRY RUN (no deploy performed): $_dc_command"
     return 1
   fi
 
@@ -150,4 +154,6 @@ deploy_record() {
 }
 EOF
   echo "Deployment record written to: $REPORT_PATH/deployment.json"
+
+  return 0
 }

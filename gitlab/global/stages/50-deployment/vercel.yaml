@@ -1,0 +1,33 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
+
+# Deploy to Vercel.
+#
+# Required CI/CD variables (mask VERCEL_TOKEN):
+#   VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
+# Optional:
+#   VERCEL_WORKING_DIRECTORY, VERCEL_COMMERCIAL, VERCEL_PLAN, DEPLOY_BUILD_COMMAND
+#
+# The job is gated on VERCEL_PROJECT_ID so that merely including this template
+# does not add a red job to every consumer's pipeline: a repository that has not
+# configured Vercel simply does not get the job.
+deployment:vercel:
+  extends: '.scripts-repo'
+  image: 'node:22-alpine'
+  stage: 'deployment'
+  environment:
+    name: 'production'
+  before_script:
+    - apk add --no-cache git curl
+    - !reference [ '.scripts-repo', 'before_script' ]
+  script:
+    - if [ -n "$DEPLOY_BUILD_COMMAND" ]; then sh -c "$DEPLOY_BUILD_COMMAND"; fi
+    - $SCRIPTS_DIR/global/scripts/deploy/vercel/run.sh
+  artifacts:
+    when: 'always'
+    paths:
+      - "$REPORT_PATH/deploy-vercel/"
+  dependencies: [] # prevent from fetching artifacts
+  rules:
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $VERCEL_PROJECT_ID"

@@ -1,0 +1,68 @@
+parameters:
+  # Secrets come from a variable group or a secret pipeline variable and are
+  # referenced as "$(VERCEL_TOKEN)" so the value is resolved at run time and
+  # masked in the log, rather than being expanded into the compiled YAML.
+  - name: 'VERCEL_TOKEN'
+    type: 'string'
+    default: "$(VERCEL_TOKEN)"
+  - name: 'VERCEL_ORG_ID'
+    type: 'string'
+    default: "$(VERCEL_ORG_ID)"
+  - name: 'VERCEL_PROJECT_ID'
+    type: 'string'
+    default: "$(VERCEL_PROJECT_ID)"
+  - name: 'ENVIRONMENT'
+    type: 'string'
+    default: 'production'
+  - name: 'WORKING_DIRECTORY'
+    type: 'string'
+    default: ''
+  # Vercel's free Hobby tier is licensed for non-commercial use only. Setting
+  # this to true while PLAN is still 'hobby' produces a warning in the log.
+  - name: 'COMMERCIAL'
+    type: 'boolean'
+    default: false
+  - name: 'PLAN'
+    type: 'string'
+    default: 'hobby'
+    values: [ 'hobby', 'pro' ]
+  - name: 'BUILD_COMMAND'
+    type: 'string'
+    default: ''
+  - name: 'DRY_RUN'
+    type: 'boolean'
+    default: false
+
+jobs:
+  - job: 'deployment_vercel'
+    displayName: 'deployment:vercel'
+    steps:
+      - template: '../../abstracts/scripts-repo.yaml'
+
+      - task: 'NodeTool@0'
+        inputs:
+          versionSpec: '22.x'
+        displayName: 'Setup Node.js'
+
+      - ${{ if ne(parameters.BUILD_COMMAND, '') }}:
+          - script: ${{ parameters.BUILD_COMMAND }}
+            displayName: 'Build'
+
+      - script: $(Scripts.Directory)/global/scripts/deploy/vercel/run.sh
+        displayName: 'Deploy to Vercel'
+        env:
+          VERCEL_TOKEN: ${{ parameters.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ parameters.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ parameters.VERCEL_PROJECT_ID }}
+          VERCEL_WORKING_DIRECTORY: ${{ parameters.WORKING_DIRECTORY }}
+          VERCEL_COMMERCIAL: ${{ lower(parameters.COMMERCIAL) }}
+          VERCEL_PLAN: ${{ parameters.PLAN }}
+          DEPLOY_ENVIRONMENT: ${{ parameters.ENVIRONMENT }}
+          DEPLOY_DRY_RUN: ${{ lower(parameters.DRY_RUN) }}
+
+      - task: 'PublishPipelineArtifact@1'
+        inputs:
+          artifactName: 'deploy-vercel'
+          targetPath: 'build/reports/deploy-vercel'
+        displayName: 'Upload Report'
+        condition: succeededOrFailed()

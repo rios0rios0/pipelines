@@ -1,0 +1,36 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
+
+# Deploy to Netlify.
+#
+# Required CI/CD variables (mask NETLIFY_AUTH_TOKEN):
+#   NETLIFY_AUTH_TOKEN, NETLIFY_SITE_ID
+# Optional:
+#   NETLIFY_OUTPUT_DIRECTORY, NETLIFY_DEPLOY_MESSAGE, DEPLOY_BUILD_COMMAND
+#
+# Netlify's free tier is a 300 credit/month pool and each deploy costs 15 of
+# them, so this job is deliberately scoped to the default branch: redeploying
+# on every push to every branch can exhaust the month's allowance in 20 deploys
+# without a single visitor being served.
+deployment:netlify:
+  extends: '.scripts-repo'
+  image: 'node:22-alpine'
+  stage: 'deployment'
+  environment:
+    name: 'production'
+  variables:
+    NETLIFY_DEPLOY_MESSAGE: "$CI_COMMIT_SHORT_SHA -- $CI_COMMIT_TITLE"
+  before_script:
+    - apk add --no-cache git curl
+    - !reference [ '.scripts-repo', 'before_script' ]
+  script:
+    - if [ -n "$DEPLOY_BUILD_COMMAND" ]; then sh -c "$DEPLOY_BUILD_COMMAND"; fi
+    - $SCRIPTS_DIR/global/scripts/deploy/netlify/run.sh
+  artifacts:
+    when: 'always'
+    paths:
+      - "$REPORT_PATH/deploy-netlify/"
+  dependencies: [] # prevent from fetching artifacts
+  rules:
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $NETLIFY_SITE_ID"

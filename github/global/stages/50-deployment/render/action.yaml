@@ -1,0 +1,68 @@
+inputs:
+  render_api_key:
+    description: |
+      Render API key (Account settings > API Keys). Preferred over a deploy
+      hook: the API returns a deploy id this action polls to a terminal state,
+      so the job's status reflects whether the deploy actually succeeded.
+    type: 'string'
+    required: false
+    default: ''
+  render_service_id:
+    description: 'Service id (starts with `srv-`), from the service dashboard URL. Required with `render_api_key`.'
+    type: 'string'
+    required: false
+    default: ''
+  render_deploy_hook_url:
+    description: |
+      Deploy hook URL (service Settings > Deploy Hook). Simpler, but
+      fire-and-forget: Render returns success for "request accepted", so the job
+      goes green even when the build that follows fails. Use only when the API
+      key is unavailable.
+    type: 'string'
+    required: false
+    default: ''
+  environment:
+    description: 'Deployment environment label, recorded in the deployment report.'
+    type: 'string'
+    required: false
+    default: 'production'
+  poll_timeout:
+    description: 'Seconds to wait for the deploy to reach a terminal state before failing the job.'
+    type: 'string'
+    required: false
+    default: '1800'
+  dry_run:
+    description: 'Resolve and record the deploy request without performing it.'
+    type: 'string'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - name: 'Get Scripts'
+      uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - name: 'Execute'
+      shell: 'bash'
+      run: $SCRIPTS_DIR/global/scripts/deploy/render/run.sh
+      env:
+        RENDER_API_KEY: '${{ inputs.render_api_key }}'
+        RENDER_SERVICE_ID: '${{ inputs.render_service_id }}'
+        RENDER_DEPLOY_HOOK_URL: '${{ inputs.render_deploy_hook_url }}'
+        RENDER_POLL_TIMEOUT: '${{ inputs.poll_timeout }}'
+        DEPLOY_ENVIRONMENT: '${{ inputs.environment }}'
+        DEPLOY_DRY_RUN: '${{ inputs.dry_run }}'
+
+    - name: 'Upload Report'
+      uses: 'actions/upload-artifact@v7'
+      with:
+        name: 'deploy-render'
+        path: 'build/reports/deploy-render/'
+        if-no-files-found: 'warn'
+        overwrite: 'true'
+        retention-days: 10
+      if: always()

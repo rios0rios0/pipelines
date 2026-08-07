@@ -1,0 +1,52 @@
+parameters:
+  # Prefer the API-key pairing: the script polls the deploy to a terminal state,
+  # so this job's status reflects whether the deploy actually succeeded. The
+  # deploy-hook path is fire-and-forget and cannot fail on a broken build.
+  - name: 'RENDER_API_KEY'
+    type: 'string'
+    default: "$(RENDER_API_KEY)"
+  - name: 'RENDER_SERVICE_ID'
+    type: 'string'
+    default: "$(RENDER_SERVICE_ID)"
+  - name: 'RENDER_DEPLOY_HOOK_URL'
+    type: 'string'
+    default: ''
+  - name: 'ENVIRONMENT'
+    type: 'string'
+    default: 'production'
+  - name: 'POLL_TIMEOUT'
+    type: 'number'
+    default: 1800
+  - name: 'DRY_RUN'
+    type: 'boolean'
+    default: false
+
+jobs:
+  - job: 'deployment_render'
+    displayName: 'deployment:render'
+    # The script's own POLL_TIMEOUT bounds the wait; this is the outer backstop
+    # so a hung free-tier build is killed rather than running to the agent's
+    # default job cap.
+    timeoutInMinutes: 45
+    steps:
+      - template: '../../abstracts/scripts-repo.yaml'
+
+      # No Node.js: Render publishes no CLI, so the script drives the REST API
+      # with curl and parses the response with jq. Both are present on the
+      # Microsoft-hosted Ubuntu images.
+      - script: $(Scripts.Directory)/global/scripts/deploy/render/run.sh
+        displayName: 'Deploy to Render'
+        env:
+          RENDER_API_KEY: ${{ parameters.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ parameters.RENDER_SERVICE_ID }}
+          RENDER_DEPLOY_HOOK_URL: ${{ parameters.RENDER_DEPLOY_HOOK_URL }}
+          RENDER_POLL_TIMEOUT: ${{ parameters.POLL_TIMEOUT }}
+          DEPLOY_ENVIRONMENT: ${{ parameters.ENVIRONMENT }}
+          DEPLOY_DRY_RUN: ${{ lower(parameters.DRY_RUN) }}
+
+      - task: 'PublishPipelineArtifact@1'
+        inputs:
+          artifactName: 'deploy-render'
+          targetPath: 'build/reports/deploy-render'
+        displayName: 'Upload Report'
+        condition: succeededOrFailed()

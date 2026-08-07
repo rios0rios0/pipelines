@@ -87,6 +87,12 @@ pipelines/
 │   │   ├── languages/         # Language-specific scripts
 │   │   │   ├── golang/        # Go scripts (test, cyclonedx, golangci-lint, init)
 │   │   │   └── python/        # Python scripts (cyclonedx)
+│   │   ├── deploy/            # MVP hosting providers (50-deployment stage)
+│   │   │   ├── cloudflare/    # Cloudflare Pages + Workers
+│   │   │   ├── vercel/        # Vercel
+│   │   │   ├── render/        # Render
+│   │   │   ├── netlify/       # Netlify
+│   │   │   └── flyio/         # Fly.io
 │   │   └── shared/            # Common utilities
 │   ├── containers/            # Custom Docker images
 │   │   ├── golang.*/          # Go development images
@@ -712,6 +718,18 @@ Optional environment variables:
 | **validate**     | `terraform validate` over root modules (opt-in)      | `global/scripts/languages/terraform/validate/`        |
 | **CycloneDX**    | SBOM generation for Terraform projects               | `global/scripts/languages/terraform/cyclonedx/`       |
 
+#### MVP Hosting Providers
+
+See [MVP Hosting & Deployment](#mvp-hosting--deployment) for the ranked comparison and usage.
+
+| Provider       | Deploys via                             | Script Location                        |
+|----------------|-----------------------------------------|----------------------------------------|
+| **Cloudflare** | `wrangler` (Pages or Workers)           | `global/scripts/deploy/cloudflare/`    |
+| **Vercel**     | `vercel` CLI                            | `global/scripts/deploy/vercel/`        |
+| **Render**     | REST API (polled to a terminal state)   | `global/scripts/deploy/render/`        |
+| **Netlify**    | `netlify-cli`                           | `global/scripts/deploy/netlify/`       |
+| **Fly.io**     | `flyctl` (remote build, no local Docker)| `global/scripts/deploy/flyio/`         |
+
 ##### File-Ordering Standard (`order-check`)
 
 Dense Terragrunt monorepos keep their `*.hcl` / `*.tf` files in a consistent order. The `order-check` job runs in the **Code Check** stage of the `terra` and `terraform` pipelines (all three platforms) and enforces:
@@ -760,6 +778,111 @@ make security   # Run all security tools (CodeQL, Gitleaks, Hadolint, Trivy, Sem
 SCRIPTS_DIR=$HOME/Development/github.com/rios0rios0/pipelines
 ln -s $SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/.golangci.yml ~/.golangci.yml
 ```
+
+## MVP Hosting & Deployment
+
+The `50-deployment` stage ships ready-made jobs for the five platforms most worth using to host an
+MVP cheaply. Each provider is wired identically on **GitHub Actions**, **GitLab CI** and **Azure
+DevOps**, and all three delegate to one shared script under `global/scripts/deploy/<provider>/`, so
+the deploy behaves the same wherever the pipeline runs.
+
+### The Top 5, Ranked
+
+Ranked by a composite of the three dimensions below, weighted for the MVP case: **price 50%,
+reliability 30%, popularity 20%**. Each dimension is scored separately so the ranking can be
+re-derived under different weights. Figures verified August 2026 — free tiers in this market change
+often, so treat the vendor's own pricing page as authoritative before committing.
+
+| # | Platform | Free tier (price) | Reliability | Popularity | Best for |
+|---|----------|-------------------|-------------|------------|----------|
+| **1** | **Cloudflare** Pages + Workers | **Best.** Permanently free, **commercial use allowed**, bandwidth **unmetered** on Pages. Workers: 100k req/day, 10ms CPU/invocation. D1 5 GB, R2 10 GB, KV 1 GB | **Best.** Global anycast edge, no cold starts, no sleep | 3rd of the frontend trio, rising | Static sites, SPAs, and APIs that fit the edge runtime |
+| **2** | **Vercel** | Free Hobby: 100 GB transfer, 1M edge requests, 6k build min, 1M function calls. **Non-commercial only** — revenue means Pro at $20/seat/mo | Excellent; 45-min build cap, 1 concurrent build | **#1 — ~33% market share** | Next.js and frontend-first projects, pre-revenue |
+| **3** | **Render** | Free web service: 512 MB RAM, 0.1 CPU. **Sleeps after 15 min idle** (30–60s cold start). Free Postgres **expires after 30 days**. Commercial use allowed | Good when warm; the sleep is the caveat | Moderate | Full-stack apps — the closest true **Heroku replacement** |
+| **4** | **Netlify** | 300 credits/mo. Deploys cost 15 each, bandwidth 20/GB, compute 10/GB-hr, requests 2/10k. Roughly **20 deploys/month** if nothing else draws on it | Very good; mature platform | **#2 — ~19.5% market share** | Jamstack and content sites with infrequent deploys |
+| **5** | **Fly.io** | **No free tier** (withdrawn 2024; new accounts get a 2-hour trial). ~**$2/mo** for shared-cpu-1x/256 MB — the cheapest always-on option here | Very good; ~35 regions | Moderate | Containers that **must not cold-start**: webhooks, bots, daemons |
+
+**Picking one:**
+
+- **Cloudflare** unless you have a reason not to. It is the only free tier here that is permanent,
+  permits commercial use, and does not sleep — which is exactly the combination an MVP needs.
+- **Vercel** if the project is Next.js and pre-revenue. Move to Cloudflare or pay for Pro *before*
+  you turn on billing, not after.
+- **Render** if you need a long-running server process and a database on a free tier, and can live
+  with cold starts. Budget for the Postgres expiry at day 30 — it is a trial, not a free tier.
+- **Fly.io** if ~$2/month is acceptable and cold starts are not. It is the only one that runs an
+  ordinary `Dockerfile` across many regions.
+- **Netlify** if you are already on it. Its free tier is now the tightest of the five.
+
+Two things changed recently enough to catch people out: **Railway removed its free tier** (a one-off
+$5 trial credit replaced it) and **Fly.io withdrew its permanent free allowance in 2024**. Neither is
+a "free" option today, whatever older comparisons say.
+
+### Usage
+
+| Platform | Reference |
+|----------|-----------|
+| GitHub Actions | `rios0rios0/pipelines/github/global/stages/50-deployment/<provider>@main` |
+| GitLab CI | `remote: '.../main/gitlab/global/stages/50-deployment/<provider>.yaml'` |
+| Azure DevOps | `template: 'azure-devops/global/stages/50-deployment/<provider>.yaml@pipelines'` |
+
+**GitHub Actions** — deploy to Cloudflare Pages after building:
+
+```yaml
+jobs:
+  deployment-cloudflare:
+    name: 'deployment > cloudflare'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/cloudflare@main'
+        with:
+          cloudflare_api_token: '${{ secrets.CLOUDFLARE_API_TOKEN }}'
+          cloudflare_account_id: '${{ secrets.CLOUDFLARE_ACCOUNT_ID }}'
+          project_name: 'my-mvp'
+          build_command: 'npm ci && npm run build'
+          output_directory: 'dist'
+    if: "github.ref == 'refs/heads/main'"
+```
+
+**GitLab CI** — add the include and set the CI/CD variables; the job self-gates on them:
+
+```yaml
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/50-deployment/render.yaml'
+```
+
+**Azure DevOps**:
+
+```yaml
+stages:
+  - template: 'azure-devops/global/stages/50-deployment/flyio.yaml@pipelines'
+    parameters:
+      APP_NAME: 'my-mvp'
+```
+
+### Credentials
+
+Every provider reads its token from an environment variable and **never** takes it on the command
+line. That is deliberate: argv is readable via `ps` for the process's lifetime on a shared or
+self-hosted runner, and each job publishes `build/reports/deploy-<provider>/` as an artifact, so a
+token on argv would also be written into `command.txt` and kept for the artifact's retention period.
+Render, which publishes no CLI, is driven with `curl --config -` so its bearer token arrives on
+stdin instead.
+
+| Provider | Required | Optional |
+|----------|----------|----------|
+| Cloudflare | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_PROJECT_NAME` (Pages) | `CLOUDFLARE_TARGET` (`pages`\|`workers`), `CLOUDFLARE_OUTPUT_DIRECTORY`, `CLOUDFLARE_BRANCH` |
+| Vercel | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `VERCEL_WORKING_DIRECTORY`, `VERCEL_COMMERCIAL`, `VERCEL_PLAN` |
+| Render | `RENDER_API_KEY` + `RENDER_SERVICE_ID`, **or** `RENDER_DEPLOY_HOOK_URL` | `RENDER_POLL_TIMEOUT`, `RENDER_POLL_INTERVAL` |
+| Netlify | `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID` | `NETLIFY_OUTPUT_DIRECTORY`, `NETLIFY_DEPLOY_MESSAGE` |
+| Fly.io | `FLY_API_TOKEN` | `FLY_APP_NAME`, `FLY_CONFIG`, `FLY_STRATEGY` |
+
+Prefer Render's **API key** over its deploy hook. A deploy hook is fire-and-forget — Render returns
+success for "request accepted", so the job goes green even when the build that follows fails. With
+an API key the script polls the deploy to a terminal state, and the job's status means something.
+
+Set `DEPLOY_ENVIRONMENT` to anything other than `production` to get a preview/draft deploy where the
+provider supports one. Set `DEPLOY_DRY_RUN=true` to resolve and record the deploy command without
+performing it — this is how `make test-deploy-providers` exercises all five offline.
 
 ## Container Images
 

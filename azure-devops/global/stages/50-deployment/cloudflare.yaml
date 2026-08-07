@@ -1,0 +1,63 @@
+parameters:
+  - name: 'CLOUDFLARE_API_TOKEN'
+    type: 'string'
+    default: "$(CLOUDFLARE_API_TOKEN)"
+  - name: 'CLOUDFLARE_ACCOUNT_ID'
+    type: 'string'
+    default: "$(CLOUDFLARE_ACCOUNT_ID)"
+  - name: 'TARGET'
+    type: 'string'
+    default: 'pages'
+    values: [ 'pages', 'workers' ]
+  - name: 'PROJECT_NAME'
+    type: 'string'
+    default: ''
+  - name: 'OUTPUT_DIRECTORY'
+    type: 'string'
+    default: 'dist'
+  - name: 'ENVIRONMENT'
+    type: 'string'
+    default: 'production'
+  - name: 'BUILD_COMMAND'
+    type: 'string'
+    default: ''
+  - name: 'DRY_RUN'
+    type: 'boolean'
+    default: false
+
+jobs:
+  - job: 'deployment_cloudflare'
+    displayName: 'deployment:cloudflare'
+    steps:
+      - template: '../../abstracts/scripts-repo.yaml'
+
+      - task: 'NodeTool@0'
+        inputs:
+          versionSpec: '22.x'
+        displayName: 'Setup Node.js'
+
+      - ${{ if ne(parameters.BUILD_COMMAND, '') }}:
+          - script: ${{ parameters.BUILD_COMMAND }}
+            displayName: 'Build'
+
+      - script: $(Scripts.Directory)/global/scripts/deploy/cloudflare/run.sh
+        displayName: 'Deploy to Cloudflare'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ parameters.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ parameters.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_TARGET: ${{ parameters.TARGET }}
+          CLOUDFLARE_PROJECT_NAME: ${{ parameters.PROJECT_NAME }}
+          CLOUDFLARE_OUTPUT_DIRECTORY: ${{ parameters.OUTPUT_DIRECTORY }}
+          # Azure DevOps checks out a detached HEAD, so the branch Pages should
+          # record is taken from Build.SourceBranchName rather than left for
+          # wrangler to infer (which would publish every deploy as a preview).
+          CLOUDFLARE_BRANCH: "$(Build.SourceBranchName)"
+          DEPLOY_ENVIRONMENT: ${{ parameters.ENVIRONMENT }}
+          DEPLOY_DRY_RUN: ${{ lower(parameters.DRY_RUN) }}
+
+      - task: 'PublishPipelineArtifact@1'
+        inputs:
+          artifactName: 'deploy-cloudflare'
+          targetPath: 'build/reports/deploy-cloudflare'
+        displayName: 'Upload Report'
+        condition: succeededOrFailed()

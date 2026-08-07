@@ -2,7 +2,7 @@ TAG := latest
 ROOT := global/containers
 CONTAINER_REGISTRY = ghcr.io/rios0rios0/pipelines
 
-.PHONY: login setup-buildx build-and-push test-go-script test-cyclonedx-main test-go-cache-trim test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-terraform-validate test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test
+.PHONY: login setup-buildx build-and-push test-go-script test-cyclonedx-main test-go-cache-trim test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test
 
 login:
 	docker login $(CONTAINER_REGISTRY)
@@ -58,6 +58,10 @@ test-order-check:
 	@echo "Running terraform order-check validation..."
 	@./.github/tests/test-order-check.sh
 
+test-var-catalog:
+	@echo "Running terraform var-catalog generator validation..."
+	@./.github/tests/test-var-catalog.sh
+
 test-terraform-validate:
 	@echo "Running terraform validate tier validation..."
 	@./.github/tests/test-terraform-validate.sh
@@ -90,5 +94,6 @@ test-deploy-providers:
 	@echo "Running MVP hosting deployment provider validation..."
 	@./.github/tests/test-deploy-providers.sh
 
-test: test-go-script test-cyclonedx-main test-go-cache-trim test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-terraform-validate test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers
+
+test: test-go-script test-cyclonedx-main test-go-cache-trim test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers
 	@echo "All tests completed successfully!"

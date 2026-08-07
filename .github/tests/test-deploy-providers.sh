@@ -80,6 +80,13 @@ trap cleanup EXIT
 
 PROVIDERS=(vercel cloudflare netlify render flyio)
 
+# Declared here rather than beside their first use: these paths are read from
+# several sections, and a variable defined inside a later section expands to
+# empty in an earlier one -- which makes `grep` search stdin and the assertion
+# fail for a reason that has nothing to do with the code under test.
+RENDER_SH="$SCRIPTS_DIR/global/scripts/deploy/render/run.sh"
+FLYIO_SH="$SCRIPTS_DIR/global/scripts/deploy/flyio/run.sh"
+
 # A value that cannot plausibly occur anywhere else, so a grep hit in the report
 # directory is unambiguously a leak of the credential it was fed as.
 SENTINEL='s3nt1nel-must-never-be-recorded'
@@ -326,6 +333,18 @@ assert_true "render: the GET poll sends no Content-Type" \
 assert_true "render: the bearer token interpolates rather than staying a literal" \
   "grep -q 'Authorization: Bearer probe-token' <<< \"\$RENDER_POST_CFG\""
 
+# Render nests deploys under their service and has NO top-level
+# `/v1/deploys/<id>`. Polling the short path 404s, and because the curl config
+# sets `fail` the 404 yields empty stdout -- so the loop never leaves its retry
+# branch and a deploy that actually went live is reported as a timeout failure
+# after the full RENDER_POLL_TIMEOUT, on the path the docs call preferred.
+# shellcheck disable=SC2034  # read by assert_true's eval'd condition below
+RENDER_POLL_PATTERN='render_api "GET" "/services/$RENDER_SERVICE_ID/deploys/$DEPLOY_ID"'
+assert_true "render: the status poll is service-scoped, not top-level" \
+  "grep -qF \"\$RENDER_POLL_PATTERN\" '$RENDER_SH'"
+assert_true "render: no call targets the non-existent top-level /deploys path" \
+  "! sed 's/#.*//' '$RENDER_SH' | grep -qE 'render_api \"GET\" \"/deploys/'"
+
 run_provider render
 assert_true "render: neither credential set fails the job" "[[ $STATUS -eq 1 ]]"
 assert_true "render: the failure explains both configuration options" \
@@ -396,7 +415,6 @@ echo "9. Transport pinning"
 # become a binary this script marks executable and runs with the job's
 # credentials in scope. `--proto '=https' --proto-redir '=https'` removes the
 # downgrade as an option instead of trusting the remote not to offer it.
-FLYIO_SH="$SCRIPTS_DIR/global/scripts/deploy/flyio/run.sh"
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   assert_true "flyio: redirect-following curl pins HTTPS -- ${line:0:48}..." \
@@ -406,7 +424,6 @@ done < <(sed 's/#.*//' "$FLYIO_SH" | grep -E "curl .*-[a-zA-Z]*L")
 # Render's URLs are consumer-supplied (RENDER_API_URL is overridable and the
 # deploy hook URL carries its secret in the query string), so a plain-HTTP value
 # would put a bearer token or an embedded key on the wire in cleartext.
-RENDER_SH="$SCRIPTS_DIR/global/scripts/deploy/render/run.sh"
 # Comments are stripped first: the script explains the pinning in prose next to
 # each block, and counting those mentions would let the assertion pass on the
 # documentation alone even if the code had lost the flag.
@@ -416,6 +433,66 @@ RENDER_PINNED_LINES="$(grep -cF 'proto = "=https"' <<< "$RENDER_CODE")"
 assert_equals "render: every curl config block pins the protocol to HTTPS" \
   "$RENDER_URL_LINES" "$RENDER_PINNED_LINES"
 assert_true "render: at least one curl config block exists to pin" "[[ $RENDER_URL_LINES -ge 2 ]]"
+echo ""
+
+# ---------------------------------------------------------------------------
+echo "10. Azure DevOps boolean stringification"
+# ---------------------------------------------------------------------------
+# Azure DevOps renders a `boolean` template parameter as `True` / `False`
+# (PascalCase). A strict `= "true"` test therefore turned a REQUESTED DRY RUN
+# INTO A REAL DEPLOY on Azure alone -- the worst direction for this flag to fail
+# in -- and `deploy_record` interpolated the raw value, so every Azure deploy
+# (including ordinary production runs that never asked for a dry run) wrote a
+# receipt containing `"dry_run": False`, which no JSON parser accepts.
+#
+# Driving the scripts directly could never have caught this: the value only
+# takes that spelling once Azure has rendered the template. So the contract is
+# pinned from both ends -- the scripts accept the platform's spelling, and the
+# templates are asserted to lowercase it.
+run_provider vercel VERCEL_TOKEN="$SENTINEL" VERCEL_ORG_ID=team_1 VERCEL_PROJECT_ID=prj_1 \
+  DEPLOY_DRY_RUN=True
+assert_true "azure: DEPLOY_DRY_RUN=True (PascalCase) is honoured as a dry run" \
+  "grep -q 'no deploy performed' <<< \"\$OUT\""
+assert_true "azure: a PascalCase dry run still writes a valid-JSON receipt" \
+  "python3 -c \"import json; json.load(open('$REPORT_DIR/deployment.json'))\""
+assert_true "azure: the receipt normalises True to a JSON boolean" \
+  "grep -q '\"dry_run\": true' '$REPORT_DIR/deployment.json'"
+
+# `DEPLOY_DRY_RUN=False` means a REAL deploy, which cannot be driven here, so
+# the false branch is probed at `deploy_record` directly rather than through a
+# provider. This is the branch that mattered most in practice: it is the one an
+# ordinary Azure production run takes, and it was writing `"dry_run": False`
+# into every published receipt.
+RECORD_PROBE_DIR="$WORK_DIR/record-probe"
+rm -rf "$RECORD_PROBE_DIR" && mkdir -p "$RECORD_PROBE_DIR"
+(
+  REPORT_PATH="$RECORD_PROBE_DIR"
+  export REPORT_PATH
+  DEPLOY_DRY_RUN=False
+  export DEPLOY_DRY_RUN
+  # shellcheck disable=SC1091
+  . "$SCRIPTS_DIR/global/scripts/deploy/common.sh"
+  deploy_record "vercel" "prj_1" > /dev/null
+)
+assert_true "azure: DEPLOY_DRY_RUN=False (PascalCase) writes valid JSON" \
+  "python3 -c \"import json; json.load(open('$RECORD_PROBE_DIR/deployment.json'))\""
+assert_true "azure: the receipt normalises False to a JSON boolean" \
+  "grep -q '\"dry_run\": false' '$RECORD_PROBE_DIR/deployment.json'"
+
+# The Vercel licence warning is gated on the same kind of flag, so it had the
+# same blind spot: on Azure it could never fire.
+run_provider vercel VERCEL_TOKEN="$SENTINEL" VERCEL_ORG_ID=team_1 VERCEL_PROJECT_ID=prj_1 \
+  VERCEL_COMMERCIAL=True
+assert_true "azure: the commercial-use warning fires for PascalCase True" \
+  "grep -q 'non-commercial' <<< \"\$OUT\""
+
+for provider in "${PROVIDERS[@]}"; do
+  adoTemplate="$SCRIPTS_DIR/azure-devops/global/stages/50-deployment/$provider.yaml"
+  assert_true "$provider: the Azure template lowercases DEPLOY_DRY_RUN" \
+    "grep -q 'DEPLOY_DRY_RUN: \${{ lower(parameters.DRY_RUN) }}' '$adoTemplate'"
+done
+assert_true "vercel: the Azure template lowercases VERCEL_COMMERCIAL" \
+  "grep -q 'VERCEL_COMMERCIAL: \${{ lower(parameters.COMMERCIAL) }}' '$SCRIPTS_DIR/azure-devops/global/stages/50-deployment/vercel.yaml'"
 echo ""
 
 echo "================================"

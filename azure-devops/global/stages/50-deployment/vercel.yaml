@@ -55,10 +55,10 @@ jobs:
           VERCEL_ORG_ID: ${{ parameters.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ parameters.VERCEL_PROJECT_ID }}
           VERCEL_WORKING_DIRECTORY: ${{ parameters.WORKING_DIRECTORY }}
-          VERCEL_COMMERCIAL: ${{ parameters.COMMERCIAL }}
+          VERCEL_COMMERCIAL: ${{ lower(parameters.COMMERCIAL) }}
           VERCEL_PLAN: ${{ parameters.PLAN }}
           DEPLOY_ENVIRONMENT: ${{ parameters.ENVIRONMENT }}
-          DEPLOY_DRY_RUN: ${{ parameters.DRY_RUN }}
+          DEPLOY_DRY_RUN: ${{ lower(parameters.DRY_RUN) }}
 
       - task: 'PublishPipelineArtifact@1'
         inputs:

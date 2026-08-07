@@ -53,7 +53,7 @@ jobs:
           # wrangler to infer (which would publish every deploy as a preview).
           CLOUDFLARE_BRANCH: "$(Build.SourceBranchName)"
           DEPLOY_ENVIRONMENT: ${{ parameters.ENVIRONMENT }}
-          DEPLOY_DRY_RUN: ${{ parameters.DRY_RUN }}
+          DEPLOY_DRY_RUN: ${{ lower(parameters.DRY_RUN) }}
 
       - task: 'PublishPipelineArtifact@1'
         inputs:

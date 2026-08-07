@@ -34,7 +34,7 @@ DEPLOY_ENVIRONMENT="${DEPLOY_ENVIRONMENT:-production}"
 export DEPLOY_ENVIRONMENT
 
 FLY_CONFIG="${FLY_CONFIG:-fly.toml}"
-if [ ! -f "$FLY_CONFIG" ] && [ -z "${FLY_APP_NAME:-}" ] && [ "${DEPLOY_DRY_RUN:-false}" != "true" ]; then
+if [ ! -f "$FLY_CONFIG" ] && [ -z "${FLY_APP_NAME:-}" ] && ! deploy_is_dry_run; then
   echo "ERROR: neither '$FLY_CONFIG' nor FLY_APP_NAME is present." >&2
   echo "Run 'flyctl launch' locally to generate fly.toml and commit it, or set FLY_APP_NAME." >&2
   exit 1
@@ -43,7 +43,7 @@ fi
 # A dry run only resolves and records the command line, so downloading the CLI
 # would be pure cost -- and skipping it is what lets the validation harness run
 # this provider offline.
-if ! command -v flyctl > /dev/null 2>&1 && [ "${DEPLOY_DRY_RUN:-false}" = "true" ]; then
+if ! command -v flyctl > /dev/null 2>&1 && deploy_is_dry_run; then
   echo "DRY RUN: skipping installation of flyctl."
 elif ! command -v flyctl > /dev/null 2>&1; then
   echo "Downloading flyctl..."
@@ -95,7 +95,7 @@ elif ! command -v flyctl > /dev/null 2>&1; then
   mv /tmp/flyctl "$HOME/.local/bin/flyctl"
 fi
 
-if ! command -v flyctl > /dev/null 2>&1 && [ "${DEPLOY_DRY_RUN:-false}" != "true" ]; then
+if ! command -v flyctl > /dev/null 2>&1 && ! deploy_is_dry_run; then
   echo "ERROR: flyctl installation did not produce a runnable 'flyctl' binary." >&2
   exit 1
 fi

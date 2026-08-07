@@ -149,7 +149,14 @@ while [ "$ELAPSED" -lt "$RENDER_POLL_TIMEOUT" ]; do
   sleep "$RENDER_POLL_INTERVAL"
   ELAPSED=$((ELAPSED + RENDER_POLL_INTERVAL))
 
-  STATUS=$(render_api "GET" "/deploys/$DEPLOY_ID" | jq -r '.status // empty')
+  # Service-scoped, matching the create call above. Render nests deploys under
+  # their service and has NO top-level `/v1/deploys/<id>` resource, so the
+  # shorter path 404s. With `fail` set on the curl config that 404 yields empty
+  # stdout, `STATUS` stays empty, and the loop below only ever reaches its retry
+  # `continue` -- meaning a deploy that actually went live was reported as a
+  # timeout failure after the full RENDER_POLL_TIMEOUT, on the very path the
+  # docs recommend. See https://api-docs.render.com/reference/retrieve-deploy
+  STATUS=$(render_api "GET" "/services/$RENDER_SERVICE_ID/deploys/$DEPLOY_ID" | jq -r '.status // empty')
   if [ -z "$STATUS" ]; then
     echo "WARN: could not read a status from the Render API; retrying." >&2
     continue

@@ -44,7 +44,7 @@ jobs:
           NETLIFY_OUTPUT_DIRECTORY: ${{ parameters.OUTPUT_DIRECTORY }}
           NETLIFY_DEPLOY_MESSAGE: "$(Build.SourceVersionMessage)"
           DEPLOY_ENVIRONMENT: ${{ parameters.ENVIRONMENT }}
-          DEPLOY_DRY_RUN: ${{ parameters.DRY_RUN }}
+          DEPLOY_DRY_RUN: ${{ lower(parameters.DRY_RUN) }}
 
       - task: 'PublishPipelineArtifact@1'
         inputs:

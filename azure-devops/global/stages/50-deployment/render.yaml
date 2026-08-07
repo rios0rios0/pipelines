@@ -42,7 +42,7 @@ jobs:
           RENDER_DEPLOY_HOOK_URL: ${{ parameters.RENDER_DEPLOY_HOOK_URL }}
           RENDER_POLL_TIMEOUT: ${{ parameters.POLL_TIMEOUT }}
           DEPLOY_ENVIRONMENT: ${{ parameters.ENVIRONMENT }}
-          DEPLOY_DRY_RUN: ${{ parameters.DRY_RUN }}
+          DEPLOY_DRY_RUN: ${{ lower(parameters.DRY_RUN) }}
 
       - task: 'PublishPipelineArtifact@1'
         inputs:

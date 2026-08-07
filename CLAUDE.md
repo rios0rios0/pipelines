@@ -41,7 +41,7 @@ All platforms follow consistent numbered stages:
 3. **30 - Tests** — Unit/integration tests, coverage. For the Azure DevOps `terraform` template, this stage runs three opt-in test tiers as parallel jobs: a plan-time smoke job (`tests/*.tftest.hcl` via `terraform test` with `mock_provider`) and an apply-time e2e job that provisions a disposable [kind](https://kind.sigs.k8s.io/) cluster and runs both `tests/e2e/*.tftest.hcl` (via `terraform test`) and `tests/terratest/*.go` (via the shared `terratest/run.sh`). All tiers are blocking so a red apply-time regression prevents `35-management` and `40-delivery` from running. The earlier `45-e2e` design was merged into `30-test` so smoke and apply-time feedback land in the same stage.
 4. **35 - Management** — SBOM generation, dependency tracking
 5. **40 - Delivery** — Artifact builds, container images
-6. **50 - Deployment** — Azure DevOps only (ARM, Lambda, K8s)
+6. **50 - Deployment** — two families with different platform coverage. The infrastructure targets (ARM, Lambda, K8s) remain **Azure DevOps only**; the **MVP hosting providers** (Cloudflare, Vercel, Render, Netlify, Fly.io) are wired on **all three platforms** — see MVP Hosting Providers below
 
 ### Directory Layout
 
@@ -189,7 +189,7 @@ Four constraints shape this family; do not "simplify" any of them away:
 | **Render's API key is preferred over its deploy hook** | A deploy hook is fire-and-forget: Render returns success for "request accepted", so the job goes **green even when the build that follows fails**, making the job's status meaningless. The API path returns a deploy id the script polls to a terminal state. The hook path warns about exactly this |
 | **`flyctl` comes from the GitHub release archive, never `curl \| sh`** | Piping a remote script into a shell hands the runner's credentials to whatever that URL returns at that moment — the supply-chain shape this repository's own SAST stage exists to flag. Matches the gitleaks/hadolint/shellcheck install pattern |
 
-Covered by `.github/tests/test-deploy-providers.sh` (100 assertions): the cross-platform wiring contract (a provider added to one platform and forgotten on the other two leaves three files that are each valid YAML on their own, so nothing else in CI would catch it), the argv each provider builds under dry run, and a sentinel-credential leak check over the whole report directory.
+Covered by `.github/tests/test-deploy-providers.sh` (114 assertions): the cross-platform wiring contract (a provider added to one platform and forgotten on the other two leaves three files that are each valid YAML on their own, so nothing else in CI would catch it), the argv each provider builds under dry run, and a sentinel-credential leak check over the whole report directory.
 
 ### Makefile Include Pattern
 

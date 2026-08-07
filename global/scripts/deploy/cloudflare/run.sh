@@ -37,7 +37,7 @@ case "$CLOUDFLARE_TARGET" in
       "The Pages project name, as shown in the Cloudflare dashboard (Workers & Pages)."
 
     CLOUDFLARE_OUTPUT_DIRECTORY="${CLOUDFLARE_OUTPUT_DIRECTORY:-dist}"
-    if [ ! -d "$CLOUDFLARE_OUTPUT_DIRECTORY" ] && [ "${DEPLOY_DRY_RUN:-false}" != "true" ]; then
+    if [ ! -d "$CLOUDFLARE_OUTPUT_DIRECTORY" ] && ! deploy_is_dry_run; then
       echo "ERROR: build output directory '$CLOUDFLARE_OUTPUT_DIRECTORY' does not exist." >&2
       echo "Run the project's build before this step, or set CLOUDFLARE_OUTPUT_DIRECTORY." >&2
       exit 1

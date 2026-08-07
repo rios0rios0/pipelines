@@ -65,7 +65,7 @@ deploy_npm_cli() {
   # CLI is never invoked and installing it would be pure cost -- a ~100 MB npm
   # download per provider. Skipping it is also what lets the validation harness
   # exercise all five providers offline, with no Node.js toolchain present.
-  if [ "${DEPLOY_DRY_RUN:-false}" = "true" ]; then
+  if deploy_is_dry_run; then
     echo "DRY RUN: skipping installation of '$_dn_package'."
     return 0
   fi
@@ -88,6 +88,38 @@ deploy_npm_cli() {
   fi
 }
 
+# deploy_is_dry_run
+#
+# True when DEPLOY_DRY_RUN holds a truthy value, compared case-insensitively.
+#
+# The case folding is not cosmetic. Azure DevOps stringifies a `boolean`
+# template parameter as `True` / `False` (PascalCase), so a strict `= "true"`
+# test silently turned a REQUESTED DRY RUN INTO A REAL DEPLOY on that platform
+# alone -- the most dangerous possible direction for this particular flag to
+# fail in, and invisible to a test suite that only ever drives the scripts
+# directly. The Azure templates now pass `lower(...)` as well, but accepting
+# the platform's own spelling here is the belt to that braces: it means a
+# future template (or a consumer exporting the variable by hand) cannot
+# reintroduce the same failure by forgetting the wrapper.
+deploy_is_dry_run() {
+  deploy_is_truthy "${DEPLOY_DRY_RUN:-false}"
+}
+
+# deploy_is_truthy <value>
+#
+# The case-folding comparison itself, for every other flag this family reads
+# from a platform template. `DEPLOY_DRY_RUN` is the dangerous one but not the
+# only one: `VERCEL_COMMERCIAL` is also declared `boolean` in the Azure
+# template, so a strict comparison meant the Hobby-tier licence warning could
+# never fire on Azure -- silently removing the one guard against a monetised
+# project running on a non-commercial plan.
+deploy_is_truthy() {
+  case "$(printf '%s' "${1:-false}" | tr '[:upper:]' '[:lower:]')" in
+    true | 1 | yes) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # deploy_run <command> [args...]
 #
 # Record the resolved command line into the job's report directory, then run it
@@ -103,7 +135,7 @@ deploy_npm_cli() {
 deploy_run() {
   deploy_note_command "$*"
 
-  if [ "${DEPLOY_DRY_RUN:-false}" = "true" ]; then
+  if deploy_is_dry_run; then
     echo "DRY RUN (no deploy performed): $*"
     return 0
   fi
@@ -126,7 +158,7 @@ deploy_note_command() {
 
   printf '%s\n' "$_dc_command" > "$REPORT_PATH/command.txt"
 
-  if [ "${DEPLOY_DRY_RUN:-false}" = "true" ]; then
+  if deploy_is_dry_run; then
     echo "DRY RUN (no deploy performed): $_dc_command"
     return 1
   fi
@@ -145,11 +177,23 @@ deploy_record() {
   _dr_provider="$1"
   _dr_target="$2"
 
+  # Normalised through `deploy_is_dry_run` rather than interpolated raw. The
+  # raw value is whatever the platform handed over, and JSON accepts exactly
+  # two spellings of a boolean: Azure DevOps' `True` / `False` produced a
+  # receipt that no parser would read, on EVERY Azure deploy including ordinary
+  # production runs that never asked for a dry run. Emitting the canonical
+  # literal means the file is valid whatever the caller wrote.
+  if deploy_is_dry_run; then
+    _dr_dry="true"
+  else
+    _dr_dry="false"
+  fi
+
   cat > "$REPORT_PATH/deployment.json" <<EOF
 {
   "provider": "$_dr_provider",
   "target": "$_dr_target",
-  "dry_run": ${DEPLOY_DRY_RUN:-false},
+  "dry_run": $_dr_dry,
   "environment": "${DEPLOY_ENVIRONMENT:-production}"
 }
 EOF

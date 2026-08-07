@@ -29,7 +29,7 @@ NETLIFY_OUTPUT_DIRECTORY="${NETLIFY_OUTPUT_DIRECTORY:-dist}"
 DEPLOY_ENVIRONMENT="${DEPLOY_ENVIRONMENT:-production}"
 export DEPLOY_ENVIRONMENT
 
-if [ ! -d "$NETLIFY_OUTPUT_DIRECTORY" ] && [ "${DEPLOY_DRY_RUN:-false}" != "true" ]; then
+if [ ! -d "$NETLIFY_OUTPUT_DIRECTORY" ] && ! deploy_is_dry_run; then
   echo "ERROR: build output directory '$NETLIFY_OUTPUT_DIRECTORY' does not exist." >&2
   echo "Run the project's build before this step, or set NETLIFY_OUTPUT_DIRECTORY." >&2
   exit 1

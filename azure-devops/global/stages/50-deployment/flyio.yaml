@@ -1,0 +1,46 @@
+parameters:
+  - name: 'FLY_API_TOKEN'
+    type: 'string'
+    default: "$(FLY_API_TOKEN)"
+  - name: 'APP_NAME'
+    type: 'string'
+    default: ''
+  - name: 'CONFIG'
+    type: 'string'
+    default: 'fly.toml'
+  - name: 'STRATEGY'
+    type: 'string'
+    default: ''
+  - name: 'ENVIRONMENT'
+    type: 'string'
+    default: 'production'
+  - name: 'DRY_RUN'
+    type: 'boolean'
+    default: false
+
+jobs:
+  - job: 'deployment_flyio'
+    displayName: 'deployment:flyio'
+    timeoutInMinutes: 45
+    steps:
+      - template: '../../abstracts/scripts-repo.yaml'
+
+      # No Docker task: the script passes `--remote-only`, so the image is built
+      # on Fly's builder. That keeps this job runnable on a self-hosted agent
+      # with no Docker daemon, which is the common case on Azure DevOps.
+      - script: $(Scripts.Directory)/global/scripts/deploy/flyio/run.sh
+        displayName: 'Deploy to Fly.io'
+        env:
+          FLY_API_TOKEN: ${{ parameters.FLY_API_TOKEN }}
+          FLY_APP_NAME: ${{ parameters.APP_NAME }}
+          FLY_CONFIG: ${{ parameters.CONFIG }}
+          FLY_STRATEGY: ${{ parameters.STRATEGY }}
+          DEPLOY_ENVIRONMENT: ${{ parameters.ENVIRONMENT }}
+          DEPLOY_DRY_RUN: ${{ parameters.DRY_RUN }}
+
+      - task: 'PublishPipelineArtifact@1'
+        inputs:
+          artifactName: 'deploy-flyio'
+          targetPath: 'build/reports/deploy-flyio'
+        displayName: 'Upload Report'
+        condition: succeededOrFailed()

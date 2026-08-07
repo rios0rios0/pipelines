@@ -1,0 +1,33 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
+
+# Deploy to Fly.io.
+#
+# Required CI/CD variables (mask FLY_API_TOKEN):
+#   FLY_API_TOKEN
+# Optional:
+#   FLY_APP_NAME (when fly.toml does not declare it), FLY_CONFIG, FLY_STRATEGY
+#
+# No Docker-in-Docker service: the script passes `--remote-only`, so the image
+# is built on Fly's builder. That is the whole reason this job can run on an
+# ordinary shared runner without privileged mode.
+deployment:flyio:
+  extends: '.scripts-repo'
+  image: 'alpine:latest'
+  stage: 'deployment'
+  environment:
+    name: 'production'
+  before_script:
+    - apk add --no-cache git curl tar
+    - !reference [ '.scripts-repo', 'before_script' ]
+  script:
+    - $SCRIPTS_DIR/global/scripts/deploy/flyio/run.sh
+  artifacts:
+    when: 'always'
+    paths:
+      - "$REPORT_PATH/deploy-flyio/"
+  dependencies: [] # prevent from fetching artifacts
+  timeout: '45 minutes'
+  rules:
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $FLY_API_TOKEN"

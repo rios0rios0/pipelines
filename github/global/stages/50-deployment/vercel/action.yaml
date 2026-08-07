@@ -1,0 +1,95 @@
+inputs:
+  vercel_token:
+    description: 'Vercel access token (https://vercel.com/account/tokens). Pass a secret.'
+    type: 'string'
+    required: true
+  vercel_org_id:
+    description: 'Vercel organization/team id, from .vercel/project.json after `vercel link`.'
+    type: 'string'
+    required: true
+  vercel_project_id:
+    description: 'Vercel project id, from .vercel/project.json after `vercel link`.'
+    type: 'string'
+    required: true
+  environment:
+    description: 'Deployment environment. `production` publishes to the production alias; anything else creates a preview deployment.'
+    type: 'string'
+    required: false
+    default: 'production'
+  working_directory:
+    description: 'Sub-directory to deploy, for monorepos. Defaults to the repository root.'
+    type: 'string'
+    required: false
+    default: ''
+  build_command:
+    description: |
+      Command run after checkout and before deploying. This action checks the
+      repository out itself, and `actions/checkout` cleans the workspace -- so a
+      build performed in an earlier step of the same job would be discarded.
+      Building here instead keeps the artifact and the deploy in one place.
+    type: 'string'
+    required: false
+    default: ''
+  commercial:
+    description: |
+      Set to `true` when the project generates revenue. Vercel's free Hobby tier
+      is licensed for non-commercial use only, so this surfaces a warning in the
+      log rather than letting the violation be discovered as a suspended account.
+    type: 'string'
+    required: false
+    default: 'false'
+  plan:
+    description: 'Vercel plan in use (`hobby` or `pro`). Silences the commercial-use warning once set to `pro`.'
+    type: 'string'
+    required: false
+    default: 'hobby'
+  dry_run:
+    description: 'Resolve and record the deploy command without performing it.'
+    type: 'string'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - name: 'Get Scripts'
+      uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - name: 'Setup Node.js'
+      uses: 'actions/setup-node@v6'
+      with:
+        node-version: '22'
+
+    - name: 'Build'
+      shell: 'bash'
+      run: '${{ inputs.build_command }}'
+      if: "inputs.build_command != ''"
+
+    - name: 'Execute'
+      shell: 'bash'
+      run: $SCRIPTS_DIR/global/scripts/deploy/vercel/run.sh
+      env:
+        VERCEL_TOKEN: '${{ inputs.vercel_token }}'
+        VERCEL_ORG_ID: '${{ inputs.vercel_org_id }}'
+        VERCEL_PROJECT_ID: '${{ inputs.vercel_project_id }}'
+        VERCEL_WORKING_DIRECTORY: '${{ inputs.working_directory }}'
+        VERCEL_COMMERCIAL: '${{ inputs.commercial }}'
+        VERCEL_PLAN: '${{ inputs.plan }}'
+        DEPLOY_ENVIRONMENT: '${{ inputs.environment }}'
+        DEPLOY_DRY_RUN: '${{ inputs.dry_run }}'
+
+    # `if-no-files-found: warn` rather than `error`: when the run script exits
+    # early on a missing credential it writes no report, and failing the upload
+    # too would bury the actionable error under an artifact error.
+    - name: 'Upload Report'
+      uses: 'actions/upload-artifact@v7'
+      with:
+        name: 'deploy-vercel'
+        path: 'build/reports/deploy-vercel/'
+        if-no-files-found: 'warn'
+        overwrite: 'true'
+        retention-days: 10
+      if: always()

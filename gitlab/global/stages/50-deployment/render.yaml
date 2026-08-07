@@ -1,0 +1,42 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
+
+# Deploy to Render.
+#
+# Required CI/CD variables -- one of these two pairings (mask the secret):
+#   RENDER_API_KEY + RENDER_SERVICE_ID   (preferred: the deploy is polled to a
+#                                         terminal state, so this job fails when
+#                                         the deploy fails)
+#   RENDER_DEPLOY_HOOK_URL               (fire-and-forget: Render acknowledges
+#                                         the request without reporting the
+#                                         build result, so the job cannot fail
+#                                         on a broken deploy)
+# Optional:
+#   RENDER_POLL_TIMEOUT (default 1800), RENDER_POLL_INTERVAL (default 10)
+#
+# No Node.js image here -- Render has no CLI; the script drives the REST API
+# with curl and parses it with jq.
+deployment:render:
+  extends: '.scripts-repo'
+  image: 'alpine:latest'
+  stage: 'deployment'
+  environment:
+    name: 'production'
+  before_script:
+    - apk add --no-cache git curl jq
+    - !reference [ '.scripts-repo', 'before_script' ]
+  script:
+    - $SCRIPTS_DIR/global/scripts/deploy/render/run.sh
+  artifacts:
+    when: 'always'
+    paths:
+      - "$REPORT_PATH/deploy-render/"
+  dependencies: [] # prevent from fetching artifacts
+  # The polling loop can legitimately sit for a long time on a cold free-tier
+  # build; the script's own RENDER_POLL_TIMEOUT bounds it, and this is the outer
+  # backstop.
+  timeout: '45 minutes'
+  rules:
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $RENDER_SERVICE_ID"
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $RENDER_DEPLOY_HOOK_URL"

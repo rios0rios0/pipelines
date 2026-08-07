@@ -1,0 +1,79 @@
+inputs:
+  netlify_auth_token:
+    description: 'Netlify personal access token (User settings > Applications). Pass a secret.'
+    type: 'string'
+    required: true
+  netlify_site_id:
+    description: 'Site API ID, from Site configuration > General > Site details.'
+    type: 'string'
+    required: true
+  output_directory:
+    description: 'Directory of built assets to upload.'
+    type: 'string'
+    required: false
+    default: 'dist'
+  environment:
+    description: 'Deployment environment. `production` publishes to the live site; anything else creates a draft deploy with its own preview URL.'
+    type: 'string'
+    required: false
+    default: 'production'
+  deploy_message:
+    description: 'Message shown against the deploy in the Netlify UI.'
+    type: 'string'
+    required: false
+    default: ''
+  build_command:
+    description: |
+      Command run after checkout and before deploying. Building here rather than
+      on Netlify also matters for cost: Netlify's free tier is a pool of 300
+      credits/month and compute is billed at 10 credits per GB-hour, so a build
+      that runs on the CI runner (already paid for in minutes) draws nothing
+      from it.
+    type: 'string'
+    required: false
+    default: ''
+  dry_run:
+    description: 'Resolve and record the deploy command without performing it.'
+    type: 'string'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - name: 'Get Scripts'
+      uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - name: 'Setup Node.js'
+      uses: 'actions/setup-node@v6'
+      with:
+        node-version: '22'
+
+    - name: 'Build'
+      shell: 'bash'
+      run: '${{ inputs.build_command }}'
+      if: "inputs.build_command != ''"
+
+    - name: 'Execute'
+      shell: 'bash'
+      run: $SCRIPTS_DIR/global/scripts/deploy/netlify/run.sh
+      env:
+        NETLIFY_AUTH_TOKEN: '${{ inputs.netlify_auth_token }}'
+        NETLIFY_SITE_ID: '${{ inputs.netlify_site_id }}'
+        NETLIFY_OUTPUT_DIRECTORY: '${{ inputs.output_directory }}'
+        NETLIFY_DEPLOY_MESSAGE: '${{ inputs.deploy_message }}'
+        DEPLOY_ENVIRONMENT: '${{ inputs.environment }}'
+        DEPLOY_DRY_RUN: '${{ inputs.dry_run }}'
+
+    - name: 'Upload Report'
+      uses: 'actions/upload-artifact@v7'
+      with:
+        name: 'deploy-netlify'
+        path: 'build/reports/deploy-netlify/'
+        if-no-files-found: 'warn'
+        overwrite: 'true'
+        retention-days: 10
+      if: always()

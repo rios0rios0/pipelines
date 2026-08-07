@@ -1,0 +1,62 @@
+inputs:
+  fly_api_token:
+    description: 'Fly.io deploy token (`flyctl tokens create deploy`). Pass a secret.'
+    type: 'string'
+    required: true
+  app_name:
+    description: 'Fly application name. Optional when fly.toml declares it.'
+    type: 'string'
+    required: false
+    default: ''
+  config:
+    description: 'Path to the Fly configuration file.'
+    type: 'string'
+    required: false
+    default: 'fly.toml'
+  strategy:
+    description: 'Deployment strategy (`rolling`, `immediate`, `canary`, `bluegreen`). Left unset, Fly picks its own default.'
+    type: 'string'
+    required: false
+    default: ''
+  environment:
+    description: 'Deployment environment label, recorded in the deployment report.'
+    type: 'string'
+    required: false
+    default: 'production'
+  dry_run:
+    description: 'Resolve and record the deploy command without performing it.'
+    type: 'string'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - name: 'Get Scripts'
+      uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    # No Docker setup step: the run script passes `--remote-only`, so the image
+    # is built on Fly's builder rather than needing a daemon on the runner.
+    - name: 'Execute'
+      shell: 'bash'
+      run: $SCRIPTS_DIR/global/scripts/deploy/flyio/run.sh
+      env:
+        FLY_API_TOKEN: '${{ inputs.fly_api_token }}'
+        FLY_APP_NAME: '${{ inputs.app_name }}'
+        FLY_CONFIG: '${{ inputs.config }}'
+        FLY_STRATEGY: '${{ inputs.strategy }}'
+        DEPLOY_ENVIRONMENT: '${{ inputs.environment }}'
+        DEPLOY_DRY_RUN: '${{ inputs.dry_run }}'
+
+    - name: 'Upload Report'
+      uses: 'actions/upload-artifact@v7'
+      with:
+        name: 'deploy-flyio'
+        path: 'build/reports/deploy-flyio/'
+        if-no-files-found: 'warn'
+        overwrite: 'true'
+        retention-days: 10
+      if: always()

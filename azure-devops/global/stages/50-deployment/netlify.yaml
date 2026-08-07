@@ -1,0 +1,54 @@
+parameters:
+  - name: 'NETLIFY_AUTH_TOKEN'
+    type: 'string'
+    default: "$(NETLIFY_AUTH_TOKEN)"
+  - name: 'NETLIFY_SITE_ID'
+    type: 'string'
+    default: "$(NETLIFY_SITE_ID)"
+  - name: 'OUTPUT_DIRECTORY'
+    type: 'string'
+    default: 'dist'
+  - name: 'ENVIRONMENT'
+    type: 'string'
+    default: 'production'
+  - name: 'BUILD_COMMAND'
+    type: 'string'
+    default: ''
+  - name: 'DRY_RUN'
+    type: 'boolean'
+    default: false
+
+jobs:
+  - job: 'deployment_netlify'
+    displayName: 'deployment:netlify'
+    steps:
+      - template: '../../abstracts/scripts-repo.yaml'
+
+      - task: 'NodeTool@0'
+        inputs:
+          versionSpec: '22.x'
+        displayName: 'Setup Node.js'
+
+      # Building here rather than on Netlify keeps the work on the agent this
+      # pipeline already pays for: Netlify's free tier is a 300 credit/month
+      # pool and its compute is billed at 10 credits per GB-hour.
+      - ${{ if ne(parameters.BUILD_COMMAND, '') }}:
+          - script: ${{ parameters.BUILD_COMMAND }}
+            displayName: 'Build'
+
+      - script: $(Scripts.Directory)/global/scripts/deploy/netlify/run.sh
+        displayName: 'Deploy to Netlify'
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ parameters.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ parameters.NETLIFY_SITE_ID }}
+          NETLIFY_OUTPUT_DIRECTORY: ${{ parameters.OUTPUT_DIRECTORY }}
+          NETLIFY_DEPLOY_MESSAGE: "$(Build.SourceVersionMessage)"
+          DEPLOY_ENVIRONMENT: ${{ parameters.ENVIRONMENT }}
+          DEPLOY_DRY_RUN: ${{ parameters.DRY_RUN }}
+
+      - task: 'PublishPipelineArtifact@1'
+        inputs:
+          artifactName: 'deploy-netlify'
+          targetPath: 'build/reports/deploy-netlify'
+        displayName: 'Upload Report'
+        condition: succeededOrFailed()

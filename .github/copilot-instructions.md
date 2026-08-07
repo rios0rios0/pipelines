@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile)
+- `make test` - Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-lambda` - Test Lambda template validation specifically
 - `make test-yaml-merge` - Test YAML merge validation specifically
@@ -23,6 +23,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-goreleaser-prepare` - Test the GoReleaser main package detection specifically
 - `make test-release-version-extraction` - Test release version extraction (tag ref + bump commit) specifically
 - `make test-release-reconcile` - Test release reconciliation gap detection specifically
+- `make test-deploy-providers` - Test the MVP hosting deployment providers (Cloudflare, Vercel, Render, Netlify, Fly.io) specifically
 - `bash global/scripts/shared/cleanup.sh` - Clean up build reports
 - `docker --version && make --version && go version` - Check dependencies
 
@@ -259,6 +260,13 @@ pipelines/
 │   │   │   ├── python/        # Python scripts (cyclonedx, unused-code detection)
 │   │   │   ├── ruby/          # Ruby scripts (unused-code detection)
 │   │   │   └── terraform/     # Terraform scripts (terra-test, terratest, test-all, structural, validate, cyclonedx, tftest-gen, order-check)
+│   │   ├── deploy/            # MVP hosting providers for the 50-deployment stage
+│   │   │   ├── common.sh      # Shared helpers (sourced, not executed)
+│   │   │   ├── cloudflare/    # Cloudflare Pages + Workers (wrangler)
+│   │   │   ├── vercel/        # Vercel (vercel CLI)
+│   │   │   ├── render/        # Render (REST API, polled to a terminal state)
+│   │   │   ├── netlify/       # Netlify (netlify-cli)
+│   │   │   └── flyio/         # Fly.io (flyctl, remote build)
 │   │   └── shared/            # Common utilities
 │   ├── containers/            # Custom Docker images
 │   │   ├── golang.*/          # Go development images
@@ -290,6 +298,29 @@ Each platform follows a consistent **5-stage pipeline architecture**:
 3. **🧪 Tests** - Unit tests, integration tests, coverage reporting
 4. **📊 Management** - Dependency tracking, SBOM generation
 5. **🚀 Delivery** - Build artifacts, container images, deployments
+6. **🌐 Deployment** - Optional per-provider hosting deploys (see below)
+
+### MVP Hosting Deployment Providers
+
+The `50-deployment` stage ships jobs for the five platforms most worth using to host an MVP cheaply.
+Each is wired identically on all three CI platforms and delegates to one shared script under
+`global/scripts/deploy/<provider>/run.sh`:
+
+| Provider       | Free tier (Aug 2026)                                                        | Deploys via                          |
+|----------------|-----------------------------------------------------------------------------|--------------------------------------|
+| **Cloudflare** | Permanent, commercial use allowed, unmetered Pages bandwidth; 100k req/day  | `wrangler` (Pages or Workers)        |
+| **Vercel**     | 100 GB transfer, 1M edge requests — **non-commercial use only**             | `vercel` CLI                         |
+| **Render**     | 512 MB web service, sleeps after 15 min; free Postgres **expires at 30 days** | REST API (polled to terminal state) |
+| **Netlify**    | 300 credits/month (~20 deploys)                                             | `netlify-cli`                        |
+| **Fly.io**     | **None** — withdrawn 2024; ~$2/mo always-on                                 | `flyctl` (remote build)              |
+
+Two rules govern this family and must not be relaxed:
+
+- **Credentials never go on argv.** Every CLI takes its token from an environment variable; Render
+  uses `curl --config -` (stdin). Argv is readable via `ps` on shared runners AND the resolved
+  command line is recorded into `command.txt`, which is published as a job artifact.
+- **`DEPLOY_DRY_RUN=true` must stay hermetic** — no CLI install, no network. That is what lets
+  `make test-deploy-providers` exercise all five offline.
 
 ### Platform and Language Support Matrix
 

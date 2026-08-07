@@ -1,0 +1,90 @@
+inputs:
+  cloudflare_api_token:
+    description: 'Cloudflare API token with the "Edit Cloudflare Workers" template. Pass a secret.'
+    type: 'string'
+    required: true
+  cloudflare_account_id:
+    description: 'Cloudflare account id, from the sidebar of any domain overview page.'
+    type: 'string'
+    required: true
+  target:
+    description: 'Which product to deploy to: `pages` (static/SPA output) or `workers` (edge runtime).'
+    type: 'string'
+    required: false
+    default: 'pages'
+  project_name:
+    description: 'Pages project name, as shown under Workers & Pages. Required when target is `pages`.'
+    type: 'string'
+    required: false
+    default: ''
+  output_directory:
+    description: 'Directory of built assets to upload. Only used when target is `pages`.'
+    type: 'string'
+    required: false
+    default: 'dist'
+  branch:
+    description: |
+      Branch name recorded with the Pages deployment. Pages maps the project's
+      production branch to the production URL and every other branch to a
+      preview URL, so this is passed explicitly -- most CI checkouts leave a
+      detached HEAD, which Pages would otherwise treat as an unnamed preview.
+    type: 'string'
+    required: false
+    default: ''
+  environment:
+    description: 'Deployment environment. For `workers`, any value other than `production` is passed as `--env`, selecting the matching `[env.<name>]` section of wrangler.toml.'
+    type: 'string'
+    required: false
+    default: 'production'
+  build_command:
+    description: 'Command run after checkout and before deploying (this action checks out itself, so an earlier build in the same job would be discarded).'
+    type: 'string'
+    required: false
+    default: ''
+  dry_run:
+    description: 'Resolve and record the deploy command without performing it.'
+    type: 'string'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - name: 'Get Scripts'
+      uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - name: 'Setup Node.js'
+      uses: 'actions/setup-node@v6'
+      with:
+        node-version: '22'
+
+    - name: 'Build'
+      shell: 'bash'
+      run: '${{ inputs.build_command }}'
+      if: "inputs.build_command != ''"
+
+    - name: 'Execute'
+      shell: 'bash'
+      run: $SCRIPTS_DIR/global/scripts/deploy/cloudflare/run.sh
+      env:
+        CLOUDFLARE_API_TOKEN: '${{ inputs.cloudflare_api_token }}'
+        CLOUDFLARE_ACCOUNT_ID: '${{ inputs.cloudflare_account_id }}'
+        CLOUDFLARE_TARGET: '${{ inputs.target }}'
+        CLOUDFLARE_PROJECT_NAME: '${{ inputs.project_name }}'
+        CLOUDFLARE_OUTPUT_DIRECTORY: '${{ inputs.output_directory }}'
+        CLOUDFLARE_BRANCH: '${{ inputs.branch }}'
+        DEPLOY_ENVIRONMENT: '${{ inputs.environment }}'
+        DEPLOY_DRY_RUN: '${{ inputs.dry_run }}'
+
+    - name: 'Upload Report'
+      uses: 'actions/upload-artifact@v7'
+      with:
+        name: 'deploy-cloudflare'
+        path: 'build/reports/deploy-cloudflare/'
+        if-no-files-found: 'warn'
+        overwrite: 'true'
+        retention-days: 10
+      if: always()

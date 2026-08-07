@@ -1,0 +1,36 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
+
+# Deploy to Cloudflare Pages or Workers.
+#
+# Required CI/CD variables (mask CLOUDFLARE_API_TOKEN):
+#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+#   CLOUDFLARE_PROJECT_NAME (when CLOUDFLARE_TARGET is 'pages', the default)
+# Optional:
+#   CLOUDFLARE_TARGET (pages|workers), CLOUDFLARE_OUTPUT_DIRECTORY, DEPLOY_BUILD_COMMAND
+deployment:cloudflare:
+  extends: '.scripts-repo'
+  image: 'node:22-alpine'
+  stage: 'deployment'
+  environment:
+    name: 'production'
+  variables:
+    # Pages maps the project's production branch to the production URL and every
+    # other branch to a preview URL. GitLab checks out a detached HEAD, so the
+    # branch is passed explicitly from CI_COMMIT_BRANCH rather than left for
+    # wrangler to infer (which would publish every deploy as an unnamed preview).
+    CLOUDFLARE_BRANCH: "$CI_COMMIT_BRANCH"
+  before_script:
+    - apk add --no-cache git curl
+    - !reference [ '.scripts-repo', 'before_script' ]
+  script:
+    - if [ -n "$DEPLOY_BUILD_COMMAND" ]; then sh -c "$DEPLOY_BUILD_COMMAND"; fi
+    - $SCRIPTS_DIR/global/scripts/deploy/cloudflare/run.sh
+  artifacts:
+    when: 'always'
+    paths:
+      - "$REPORT_PATH/deploy-cloudflare/"
+  dependencies: [] # prevent from fetching artifacts
+  rules:
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CLOUDFLARE_API_TOKEN"

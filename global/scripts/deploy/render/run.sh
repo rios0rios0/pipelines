@@ -97,9 +97,25 @@ render_api() {
   _ra_method="$1"
   _ra_path="$2"
 
-  printf 'url = "%s%s"\nrequest = "%s"\nheader = "Authorization: Bearer %s"\nheader = "Accept: application/json"\nheader = "Content-Type: application/json"\ndata = "{}"\nproto = "=https"\nproto-redir = "=https"\nfail\nsilent\nshow-error\n' \
-    "$RENDER_API_URL" "$_ra_path" "$_ra_method" "$RENDER_API_KEY" \
-    | curl --config -
+  # The body and its Content-Type belong only on the POST that creates a
+  # deploy. Sending `data = "{}"` on the GET poll made curl carry a request
+  # body on a read, which some servers and proxies reject outright -- that
+  # would have failed the polling loop for a reason unrelated to the deploy it
+  # is meant to be reporting on, and the resulting error would have pointed at
+  # Render rather than at this script.
+  #
+  # Emitted as three printf calls rather than one interpolated format string:
+  # putting the conditional fragment inside the format would make the body a
+  # variable in printf's first argument, which is how format-string injection
+  # gets in.
+  {
+    printf 'url = "%s%s"\nrequest = "%s"\nheader = "Authorization: Bearer %s"\nheader = "Accept: application/json"\n' \
+      "$RENDER_API_URL" "$_ra_path" "$_ra_method" "$RENDER_API_KEY"
+    if [ "$_ra_method" = "POST" ]; then
+      printf 'header = "Content-Type: application/json"\ndata = "{}"\n'
+    fi
+    printf 'proto = "=https"\nproto-redir = "=https"\nfail\nsilent\nshow-error\n'
+  } | curl --config -
 
   return $?
 }

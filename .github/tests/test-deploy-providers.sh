@@ -296,6 +296,36 @@ assert_true "render: the deploy-hook path warns that it cannot fail on a bad dep
 run_provider render RENDER_API_KEY="$SENTINEL"
 assert_true "render: an API key without a service id fails the job" "[[ $STATUS -eq 1 ]]"
 
+# Exercise `render_api` directly with curl stubbed to echo its config. A GET
+# carrying a request body is rejected outright by some servers and proxies,
+# which would fail the polling loop for a reason unrelated to the deploy it is
+# reporting on -- and the error would point at Render rather than at this
+# script. Also confirms the bearer token actually interpolates: a format string
+# that lost its `%s` would authenticate as a literal and 401 on every call.
+RENDER_PROBE="$WORK_DIR/render-probe.sh"
+{
+  echo 'RENDER_API_URL="https://api.render.com/v1"'
+  echo 'RENDER_API_KEY="probe-token"'
+  echo 'curl() { cat; }'
+  sed -n '/^render_api() {/,/^}/p' "$SCRIPTS_DIR/global/scripts/deploy/render/run.sh"
+  echo 'echo "===POST==="; render_api POST /services/srv-1/deploys'
+  echo 'echo "===GET==="; render_api GET /deploys/dep-1'
+} > "$RENDER_PROBE"
+RENDER_PROBE_OUT="$(sh "$RENDER_PROBE")"
+# shellcheck disable=SC2034  # both are read by assert_true's eval'd conditions below
+RENDER_POST_CFG="$(sed -n '/===POST===/,/===GET===/p' <<< "$RENDER_PROBE_OUT")"
+# shellcheck disable=SC2034  # read by assert_true's eval'd conditions below
+RENDER_GET_CFG="$(sed -n '/===GET===/,$p' <<< "$RENDER_PROBE_OUT")"
+
+assert_true "render: the POST that creates a deploy sends a JSON body" \
+  "grep -q 'data = ' <<< \"\$RENDER_POST_CFG\""
+assert_true "render: the GET poll sends no request body" \
+  "! grep -q 'data = ' <<< \"\$RENDER_GET_CFG\""
+assert_true "render: the GET poll sends no Content-Type" \
+  "! grep -q 'Content-Type' <<< \"\$RENDER_GET_CFG\""
+assert_true "render: the bearer token interpolates rather than staying a literal" \
+  "grep -q 'Authorization: Bearer probe-token' <<< \"\$RENDER_POST_CFG\""
+
 run_provider render
 assert_true "render: neither credential set fails the job" "[[ $STATUS -eq 1 ]]"
 assert_true "render: the failure explains both configuration options" \

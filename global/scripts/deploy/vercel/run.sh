@@ -36,8 +36,8 @@ DEPLOY_ENVIRONMENT="${DEPLOY_ENVIRONMENT:-production}"
 export DEPLOY_ENVIRONMENT
 
 if [ "${VERCEL_COMMERCIAL:-false}" = "true" ] && [ "${VERCEL_PLAN:-hobby}" = "hobby" ]; then
-  echo "WARN: VERCEL_COMMERCIAL=true but VERCEL_PLAN is still 'hobby'. Vercel's Hobby tier"
-  echo "WARN: is licensed for non-commercial use only -- a revenue-generating project needs"
+  echo "WARN: VERCEL_COMMERCIAL=true but VERCEL_PLAN is still 'hobby'. Vercel's Hobby tier" >&2
+  echo "WARN: is licensed for non-commercial use only -- a revenue-generating project needs" >&2
   echo "WARN: Pro. Set VERCEL_PLAN=pro once the account is upgraded to silence this." >&2
 fi
 

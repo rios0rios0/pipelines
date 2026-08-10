@@ -15,6 +15,12 @@ parameters:
   - name: 'OUTPUT_DIRECTORY'
     type: 'string'
     default: 'dist'
+  # The branch a Pages project treats as production, used only when the project
+  # has to be created. Not the branch the deployment is labelled with -- that
+  # one comes from Build.SourceBranchName below and may name a preview.
+  - name: 'PRODUCTION_BRANCH'
+    type: 'string'
+    default: 'main'
   - name: 'ENVIRONMENT'
     type: 'string'
     default: 'production'
@@ -52,6 +58,7 @@ jobs:
           # record is taken from Build.SourceBranchName rather than left for
           # wrangler to infer (which would publish every deploy as a preview).
           CLOUDFLARE_BRANCH: "$(Build.SourceBranchName)"
+          CLOUDFLARE_PRODUCTION_BRANCH: ${{ parameters.PRODUCTION_BRANCH }}
           DEPLOY_ENVIRONMENT: ${{ parameters.ENVIRONMENT }}
           DEPLOY_DRY_RUN: ${{ lower(parameters.DRY_RUN) }}
 

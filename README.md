@@ -843,6 +843,23 @@ jobs:
     if: "github.ref == 'refs/heads/main'"
 ```
 
+**Gating a tag-triggered deploy.** If your CI skips its expensive jobs on tags — the usual optimisation, since the commit already passed on `main` — add `require-checks` ahead of the deploy. Nothing otherwise stops a tag cut from an untested or red commit, and the delivery job still runs because GitHub counts a skipped `needs:` as satisfied:
+
+```yaml
+    permissions:
+      contents: 'read'
+      checks: 'read' # not in the restricted default set
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/require-checks@main'
+        with:
+          # the delivery job's own `needs:` list — one definition of "fit to ship"
+          required_checks: |
+            code-check > style:golangci-lint
+            tests > test:all
+      - uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/render@main'
+        with: { render_api_key: '${{ secrets.RENDER_API_KEY }}', render_service_id: '${{ secrets.RENDER_SERVICE_ID }}' }
+```
+
 **GitLab CI** — add the include and set the CI/CD variables; the job self-gates on them:
 
 ```yaml

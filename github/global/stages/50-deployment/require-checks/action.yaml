@@ -1,0 +1,58 @@
+inputs:
+  required_checks:
+    description: |
+      Newline-separated check-run names that must have SUCCEEDED on the commit
+      before the deploy is allowed to proceed. The natural value is the delivery
+      job's own `needs:` list -- the repository's existing definition of "fit to
+      ship" -- so that the two stay one decision rather than two.
+    type: 'string'
+    required: true
+  commit:
+    description: 'Commit to verify. Defaults to the commit that triggered this run.'
+    type: 'string'
+    required: false
+    default: '${{ github.sha }}'
+  repository:
+    description: 'Repository to query, as `owner/repo`.'
+    type: 'string'
+    required: false
+    default: '${{ github.repository }}'
+  token:
+    description: |
+      Token used to read check runs. The default `GITHUB_TOKEN` is enough, but
+      the calling job must grant it `checks: read` -- that permission is not in
+      the restricted default set.
+    type: 'string'
+    required: false
+    default: '${{ github.token }}'
+  dry_run:
+    description: 'Report what would be required without calling the API.'
+    type: 'string'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Get Scripts'
+      uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - name: 'Execute'
+      shell: 'bash'
+      run: $SCRIPTS_DIR/global/scripts/deploy/require-checks/run.sh
+      env:
+        REQUIRE_CHECKS_NAMES: '${{ inputs.required_checks }}'
+        REQUIRE_CHECKS_COMMIT: '${{ inputs.commit }}'
+        REQUIRE_CHECKS_REPOSITORY: '${{ inputs.repository }}'
+        GH_TOKEN: '${{ inputs.token }}'
+        DEPLOY_DRY_RUN: '${{ inputs.dry_run }}'
+
+    - name: 'Upload Report'
+      uses: 'actions/upload-artifact@v7'
+      with:
+        name: 'require-checks'
+        path: 'build/reports/require-checks/'
+        if-no-files-found: 'warn'
+        overwrite: 'true'
+        retention-days: 10
+      if: always()

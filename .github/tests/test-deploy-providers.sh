@@ -530,6 +530,120 @@ assert_true "vercel: the Azure template lowercases VERCEL_COMMERCIAL" \
   "grep -q 'VERCEL_COMMERCIAL: \${{ lower(parameters.COMMERCIAL) }}' '$SCRIPTS_DIR/azure-devops/global/stages/50-deployment/vercel.yaml'"
 echo ""
 
+# ---------------------------------------------------------------------------
+echo "11. Functional: require-checks"
+# ---------------------------------------------------------------------------
+# The gate reads the GitHub API, so `gh` is stubbed with a fixture rather than
+# the script being trusted to describe itself. What is asserted is the verdict
+# it reaches from a given set of check runs, which is the only thing a caller
+# depends on.
+REQUIRE_SH="$SCRIPTS_DIR/global/scripts/deploy/require-checks/run.sh"
+RC_DIR="$WORK_DIR/require-checks"
+mkdir -p "$RC_DIR/stub"
+cat > "$RC_DIR/stub/gh" <<'STUB'
+#!/bin/sh
+cat "$GH_STUB_FIXTURE"
+STUB
+chmod +x "$RC_DIR/stub/gh"
+
+# Runs the gate against a fixture, leaving the exit status in $RC_STATUS and the
+# output in $RC_OUT.
+run_require_checks() {
+  local fixture="$1"
+  RC_STATUS=0
+  (
+    cd "$RC_DIR"
+    PATH="$RC_DIR/stub:$PATH" \
+    GH_STUB_FIXTURE="$RC_DIR/$fixture" \
+    REQUIRE_CHECKS_NAMES="$(printf 'tests > test:all\ncode-check > style:golangci-lint')" \
+    REQUIRE_CHECKS_COMMIT=abc REQUIRE_CHECKS_REPOSITORY=o/r \
+    SCRIPTS_DIR="$SCRIPTS_DIR" sh "$REQUIRE_SH"
+  ) > "$RC_DIR/out.txt" 2>&1 || RC_STATUS=$?
+  RC_OUT="$(cat "$RC_DIR/out.txt")"
+}
+
+printf '{"name":"tests > test:all","conclusion":"success"}\n{"name":"code-check > style:golangci-lint","conclusion":"success"}\n' > "$RC_DIR/green.json"
+printf '{"name":"tests > test:all","conclusion":"success"}\n{"name":"code-check > style:golangci-lint","conclusion":"success"}\n{"name":"deployment > render","conclusion":"failure"}\n{"name":"ping /healthz","conclusion":"failure"}\n' > "$RC_DIR/unrelated.json"
+printf '' > "$RC_DIR/empty.json"
+printf '{"name":"tests > test:all","conclusion":"failure"}\n{"name":"code-check > style:golangci-lint","conclusion":"success"}\n' > "$RC_DIR/testfail.json"
+
+assert_true "require-checks: run.sh is executable" "[[ -x '$REQUIRE_SH' ]]"
+assert_true "require-checks: a GitHub Actions composite action exists" \
+  "[[ -f '$SCRIPTS_DIR/github/global/stages/50-deployment/require-checks/action.yaml' ]]"
+
+run_require_checks green.json
+assert_true "require-checks: every required check green passes the gate" "[[ $RC_STATUS -eq 0 ]]"
+
+# The regression this gate is most likely to grow: every workflow attaches its
+# runs to the same commit, so a keep-alive ping or a previous failed deploy must
+# not block the deploy -- the second of those would make the gate permanently
+# refuse to retry the very job it guards.
+run_require_checks unrelated.json
+assert_true "require-checks: unrelated failing checks on the same commit are ignored" \
+  "[[ $RC_STATUS -eq 0 ]]"
+
+# A commit nobody tested carries no failures either, so absence must fail.
+run_require_checks empty.json
+assert_true "require-checks: a commit with no check runs is refused" "[[ $RC_STATUS -eq 1 ]]"
+assert_true "require-checks: the refusal names the missing check" \
+  "grep -q 'no successful .tests > test:all.' <<< \"\$RC_OUT\""
+
+run_require_checks testfail.json
+assert_true "require-checks: a failed required check is refused" "[[ $RC_STATUS -eq 1 ]]"
+
+# Dry run must reach a verdict without the API, like every other script here.
+RC_STATUS=0
+(
+  cd "$RC_DIR"
+  REQUIRE_CHECKS_NAMES='tests > test:all' REQUIRE_CHECKS_COMMIT=abc \
+  REQUIRE_CHECKS_REPOSITORY=o/r DEPLOY_DRY_RUN=true \
+  SCRIPTS_DIR="$SCRIPTS_DIR" sh "$REQUIRE_SH"
+) > "$RC_DIR/out.txt" 2>&1 || RC_STATUS=$?
+RC_OUT="$(cat "$RC_DIR/out.txt")"
+assert_true "require-checks: a dry run exits cleanly without calling the API" "[[ $RC_STATUS -eq 0 ]]"
+assert_true "require-checks: a dry run lists what it would require" \
+  "grep -q 'tests > test:all' <<< \"\$RC_OUT\""
+
+# "Hermetic" has to mean without the binaries too, not merely without the
+# network. The rest of this section runs on a machine that happens to have `gh`
+# and `jq` installed, so an availability check sitting above the dry-run exit
+# would pass every assertion here and still fail on a runner that has neither.
+# This builds a PATH holding only what the dry-run path genuinely uses and
+# asserts the verdict is still reached.
+RC_BIN="$RC_DIR/minimal-bin"
+mkdir -p "$RC_BIN"
+for tool in sh dirname realpath sed rm mkdir tr cat env; do
+  for dir in /bin /usr/bin; do
+    if [[ -x "$dir/$tool" ]]; then ln -sf "$dir/$tool" "$RC_BIN/$tool"; break; fi
+  done
+done
+
+RC_STATUS=0
+(
+  cd "$RC_DIR"
+  env -i PATH="$RC_BIN" HOME="$RC_DIR" \
+    REQUIRE_CHECKS_NAMES='tests > test:all' REQUIRE_CHECKS_COMMIT=abc \
+    REQUIRE_CHECKS_REPOSITORY=o/r DEPLOY_DRY_RUN=true SCRIPTS_DIR="$SCRIPTS_DIR" \
+    "$RC_BIN/sh" "$REQUIRE_SH"
+) > "$RC_DIR/out.txt" 2>&1 || RC_STATUS=$?
+RC_OUT="$(cat "$RC_DIR/out.txt")"
+assert_true "require-checks: a dry run needs neither gh nor jq on PATH" "[[ $RC_STATUS -eq 0 ]]"
+
+# The check must still exist, just later: a real run without the binaries has to
+# say so rather than fail somewhere further down with a confusing error.
+RC_STATUS=0
+(
+  cd "$RC_DIR"
+  env -i PATH="$RC_BIN" HOME="$RC_DIR" \
+    REQUIRE_CHECKS_NAMES='tests > test:all' REQUIRE_CHECKS_COMMIT=abc \
+    REQUIRE_CHECKS_REPOSITORY=o/r SCRIPTS_DIR="$SCRIPTS_DIR" \
+    "$RC_BIN/sh" "$REQUIRE_SH"
+) > "$RC_DIR/out.txt" 2>&1 || RC_STATUS=$?
+RC_OUT="$(cat "$RC_DIR/out.txt")"
+assert_true "require-checks: a real run without gh fails with a named reason" \
+  "[[ $RC_STATUS -eq 1 ]] && grep -q \"'gh' is required\" <<< \"\$RC_OUT\""
+echo ""
+
 echo "================================"
 echo -e "Tests passed: ${GREEN}${TESTS_PASSED}${NC}"
 if [[ $TESTS_FAILED -gt 0 ]]; then

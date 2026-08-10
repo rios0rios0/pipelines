@@ -111,6 +111,7 @@ run_provider() {
       VERCEL_COMMERCIAL VERCEL_PLAN \
       CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_TARGET \
       CLOUDFLARE_PROJECT_NAME CLOUDFLARE_OUTPUT_DIRECTORY CLOUDFLARE_BRANCH \
+      CLOUDFLARE_PRODUCTION_BRANCH CLOUDFLARE_API_URL \
       NETLIFY_AUTH_TOKEN NETLIFY_SITE_ID NETLIFY_OUTPUT_DIRECTORY NETLIFY_DEPLOY_MESSAGE \
       RENDER_API_KEY RENDER_SERVICE_ID RENDER_DEPLOY_HOOK_URL \
       FLY_API_TOKEN FLY_APP_NAME FLY_CONFIG FLY_STRATEGY \
@@ -256,6 +257,40 @@ assert_true "cloudflare: an unknown target fails instead of guessing" "[[ $STATU
 
 run_provider cloudflare CLOUDFLARE_API_TOKEN="$SENTINEL" CLOUDFLARE_ACCOUNT_ID=acc_1
 assert_true "cloudflare: Pages without a project name fails the job" "[[ $STATUS -eq 1 ]]"
+
+# A Pages project must exist before anything can be uploaded to it, and
+# `wrangler pages deploy` will not create one. The check that closes that gap
+# talks to the real API, so it has to stay behind the dry-run guard -- it would
+# otherwise be the only part of this family that needs a network and a live
+# credential, and this suite has neither.
+run_provider cloudflare CLOUDFLARE_API_TOKEN="$SENTINEL" CLOUDFLARE_ACCOUNT_ID=acc_1 \
+  CLOUDFLARE_PROJECT_NAME=my-mvp
+assert_true "cloudflare: the project existence check is skipped on a dry run" \
+  "grep -q 'skipping the existence check' <<< \"\$OUT\""
+assert_equals "cloudflare: the existence check leaves the deploy command untouched" \
+  "wrangler pages deploy dist --project-name my-mvp" "$CMD"
+assert_no_leak "cloudflare: the existence check never records the API token"
+
+# Workers have no production branch and no project to create, so the check must
+# not run for that target at all.
+run_provider cloudflare CLOUDFLARE_TARGET=workers CLOUDFLARE_API_TOKEN="$SENTINEL" \
+  CLOUDFLARE_ACCOUNT_ID=acc_1
+assert_true "cloudflare: Workers never consult the Pages project check" \
+  "! grep -q 'existence check' <<< \"\$OUT\""
+
+# The production branch and the deployment label are different questions.
+# Creating a project with the deployment label would make a preview branch the
+# project's production branch, publishing every preview to the production URL,
+# so the two must never collapse into one variable.
+CLOUDFLARE_SH="$SCRIPTS_DIR/global/scripts/deploy/cloudflare/run.sh"
+assert_true "cloudflare: project creation uses CLOUDFLARE_PRODUCTION_BRANCH, not CLOUDFLARE_BRANCH" \
+  "grep -A2 'pages project create' '$CLOUDFLARE_SH' | grep -q 'CLOUDFLARE_PRODUCTION_BRANCH'"
+assert_true "cloudflare: GitHub action forwards CLOUDFLARE_PRODUCTION_BRANCH" \
+  "grep -q 'CLOUDFLARE_PRODUCTION_BRANCH' '$SCRIPTS_DIR/github/global/stages/50-deployment/cloudflare/action.yaml'"
+assert_true "cloudflare: Azure template forwards CLOUDFLARE_PRODUCTION_BRANCH" \
+  "grep -q 'CLOUDFLARE_PRODUCTION_BRANCH' '$SCRIPTS_DIR/azure-devops/global/stages/50-deployment/cloudflare.yaml'"
+assert_true "cloudflare: GitLab template documents CLOUDFLARE_PRODUCTION_BRANCH" \
+  "grep -q 'CLOUDFLARE_PRODUCTION_BRANCH' '$SCRIPTS_DIR/gitlab/global/stages/50-deployment/cloudflare.yaml'"
 echo ""
 
 # ---------------------------------------------------------------------------

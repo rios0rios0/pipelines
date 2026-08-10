@@ -9,6 +9,9 @@ include:
 #   CLOUDFLARE_PROJECT_NAME (when CLOUDFLARE_TARGET is 'pages', the default)
 # Optional:
 #   CLOUDFLARE_TARGET (pages|workers), CLOUDFLARE_OUTPUT_DIRECTORY, DEPLOY_BUILD_COMMAND
+#   CLOUDFLARE_PRODUCTION_BRANCH (default 'main') -- the branch a Pages project
+#     treats as production, used only when the project has to be created. Not
+#     CLOUDFLARE_BRANCH, which labels the deployment being uploaded.
 deployment:cloudflare:
   extends: '.scripts-repo'
   image: 'node:22-alpine'

@@ -31,6 +31,16 @@ inputs:
     type: 'string'
     required: false
     default: ''
+  production_branch:
+    description: |
+      Branch that a `pages` project treats as production, used only when the
+      project does not exist yet and has to be created. This is NOT `branch`:
+      that one labels the deployment being uploaded and may name a preview, and
+      creating the project with it would send every preview to the production
+      URL.
+    type: 'string'
+    required: false
+    default: 'main'
   environment:
     description: 'Deployment environment. For `workers`, any value other than `production` is passed as `--env`, selecting the matching `[env.<name>]` section of wrangler.toml.'
     type: 'string'
@@ -76,6 +86,7 @@ runs:
         CLOUDFLARE_PROJECT_NAME: '${{ inputs.project_name }}'
         CLOUDFLARE_OUTPUT_DIRECTORY: '${{ inputs.output_directory }}'
         CLOUDFLARE_BRANCH: '${{ inputs.branch }}'
+        CLOUDFLARE_PRODUCTION_BRANCH: '${{ inputs.production_branch }}'
         DEPLOY_ENVIRONMENT: '${{ inputs.environment }}'
         DEPLOY_DRY_RUN: '${{ inputs.dry_run }}'
 

@@ -42,6 +42,21 @@ deploy_require_env "REQUIRE_CHECKS_COMMIT" \
 deploy_require_env "REQUIRE_CHECKS_REPOSITORY" \
   "The owner/repo to query. Defaults to GITHUB_REPOSITORY inside GitHub Actions."
 
+# A dry run resolves what would be asserted without calling the API, matching
+# every other script in this family and keeping the validation harness offline.
+if deploy_is_dry_run; then
+  echo "DRY RUN: would require these checks on $REQUIRE_CHECKS_COMMIT:"
+  printf '%s\n' "$REQUIRE_CHECKS_NAMES" | while IFS= read -r _rc_name; do
+    [ -n "$_rc_name" ] && echo "  - $_rc_name"
+  done
+  exit 0
+fi
+
+# Below the dry-run exit on purpose. A dry run reaches its verdict without
+# calling the API or reading any JSON, so demanding these binaries first would
+# make the hermetic path depend on tools it never uses -- and fail on a runner
+# that has neither. `deploy_npm_cli` skips its own installation on a dry run for
+# the same reason.
 for _rc_tool in gh jq; do
   if ! command -v "$_rc_tool" > /dev/null 2>&1; then
     echo "ERROR: '$_rc_tool' is required to read check runs but is not installed." >&2
@@ -53,16 +68,6 @@ unset _rc_tool
 # `cleanup.sh` re-exports REPORT_PATH as the tool's own subdirectory, so the
 # tool name must NOT be repeated here.
 CHECKS_FILE="$REPORT_PATH/check-runs.json"
-
-# A dry run resolves what would be asserted without calling the API, matching
-# every other script in this family and keeping the validation harness offline.
-if deploy_is_dry_run; then
-  echo "DRY RUN: would require these checks on $REQUIRE_CHECKS_COMMIT:"
-  printf '%s\n' "$REQUIRE_CHECKS_NAMES" | while IFS= read -r _rc_name; do
-    [ -n "$_rc_name" ] && echo "  - $_rc_name"
-  done
-  exit 0
-fi
 
 if ! gh api --paginate "repos/$REQUIRE_CHECKS_REPOSITORY/commits/$REQUIRE_CHECKS_COMMIT/check-runs" \
   --jq '.check_runs[] | {name, conclusion}' | jq -s '.' > "$CHECKS_FILE"; then

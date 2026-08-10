@@ -603,6 +603,45 @@ RC_OUT="$(cat "$RC_DIR/out.txt")"
 assert_true "require-checks: a dry run exits cleanly without calling the API" "[[ $RC_STATUS -eq 0 ]]"
 assert_true "require-checks: a dry run lists what it would require" \
   "grep -q 'tests > test:all' <<< \"\$RC_OUT\""
+
+# "Hermetic" has to mean without the binaries too, not merely without the
+# network. The rest of this section runs on a machine that happens to have `gh`
+# and `jq` installed, so an availability check sitting above the dry-run exit
+# would pass every assertion here and still fail on a runner that has neither.
+# This builds a PATH holding only what the dry-run path genuinely uses and
+# asserts the verdict is still reached.
+RC_BIN="$RC_DIR/minimal-bin"
+mkdir -p "$RC_BIN"
+for tool in sh dirname realpath sed rm mkdir tr cat env; do
+  for dir in /bin /usr/bin; do
+    if [[ -x "$dir/$tool" ]]; then ln -sf "$dir/$tool" "$RC_BIN/$tool"; break; fi
+  done
+done
+
+RC_STATUS=0
+(
+  cd "$RC_DIR"
+  env -i PATH="$RC_BIN" HOME="$RC_DIR" \
+    REQUIRE_CHECKS_NAMES='tests > test:all' REQUIRE_CHECKS_COMMIT=abc \
+    REQUIRE_CHECKS_REPOSITORY=o/r DEPLOY_DRY_RUN=true SCRIPTS_DIR="$SCRIPTS_DIR" \
+    "$RC_BIN/sh" "$REQUIRE_SH"
+) > "$RC_DIR/out.txt" 2>&1 || RC_STATUS=$?
+RC_OUT="$(cat "$RC_DIR/out.txt")"
+assert_true "require-checks: a dry run needs neither gh nor jq on PATH" "[[ $RC_STATUS -eq 0 ]]"
+
+# The check must still exist, just later: a real run without the binaries has to
+# say so rather than fail somewhere further down with a confusing error.
+RC_STATUS=0
+(
+  cd "$RC_DIR"
+  env -i PATH="$RC_BIN" HOME="$RC_DIR" \
+    REQUIRE_CHECKS_NAMES='tests > test:all' REQUIRE_CHECKS_COMMIT=abc \
+    REQUIRE_CHECKS_REPOSITORY=o/r SCRIPTS_DIR="$SCRIPTS_DIR" \
+    "$RC_BIN/sh" "$REQUIRE_SH"
+) > "$RC_DIR/out.txt" 2>&1 || RC_STATUS=$?
+RC_OUT="$(cat "$RC_DIR/out.txt")"
+assert_true "require-checks: a real run without gh fails with a named reason" \
+  "[[ $RC_STATUS -eq 1 ]] && grep -q \"'gh' is required\" <<< \"\$RC_OUT\""
 echo ""
 
 echo "================================"

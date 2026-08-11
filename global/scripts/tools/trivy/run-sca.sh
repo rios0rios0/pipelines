@@ -144,5 +144,19 @@ fi
 rm -f "$trivyLog"
 rm -f "$mergedIgnore"
 
+# `--format json --output <file>` sends the findings to disk, which leaves the
+# console holding nothing but Trivy's INFO lines. A failing scan therefore went
+# red on a bare `exit 1` having named not one vulnerable package, and the only
+# way to learn what broke was to download the job artifact -- so render the
+# report back to the log. `trivy convert` re-reads the JSON that was just
+# written, so this costs no second scan and cannot disagree with the published
+# artifact. `--scanners` has to be repeated because `convert` re-reads the
+# project's `trivy.yaml`, which need not set it.
+if [ "${EXIT_CODE:-0}" -ne 0 ] && [ -f "$fileName" ]; then
+  echo "Trivy SCA found dependency vulnerabilities:"
+  trivy convert --scanners vuln --format table "$fileName" \
+    || echo "Could not render the findings as a table; $fileName is authoritative."
+fi
+
 echo "Trivy SCA analysis complete. Results written to: $fileName"
 exit ${EXIT_CODE:-0}

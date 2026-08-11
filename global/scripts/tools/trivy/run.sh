@@ -212,5 +212,14 @@ trivy convert \
 rm -f "$sanitizedJsonFile"
 rm -f "$mergedIgnore"
 
+# Same reasoning as the SCA scan: the findings go to JSON/SARIF, so without this
+# a failing misconfiguration scan names nothing on the console. Render the report
+# that was just written rather than re-scanning.
+if [ "${EXIT_CODE:-0}" -ne 0 ] && [ -f "$jsonFile" ]; then
+  echo "Trivy found misconfigurations:"
+  trivy convert --scanners misconfig --format table "$jsonFile" \
+    || echo "Could not render the findings as a table; $jsonFile is authoritative."
+fi
+
 echo "Trivy analysis complete. Results written to: $jsonFile (and $sarifFile when convertible)."
 exit ${EXIT_CODE:-0}

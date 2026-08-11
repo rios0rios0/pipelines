@@ -27,6 +27,7 @@ make test-goreleaser-prepare  # Test the GoReleaser main package detection only
 make test-release-version-extraction  # Test release version extraction (tag ref + bump commit) only
 make test-release-reconcile  # Test release reconciliation gap detection only
 make test-deploy-providers   # Test the MVP hosting deployment providers (Cloudflare, Vercel, Render, Netlify, Fly.io) only
+make test-memory-detection  # Test the cgroup-aware memory ceiling detection only
 make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
 ```
 

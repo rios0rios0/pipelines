@@ -7,11 +7,11 @@ if [ -z "$SCRIPTS_DIR" ]; then
   export SCRIPTS_DIR
 fi
 
-# GitLab CI/CD just supports cache in the project directory
-if [ -z "${GOPATH+x}" ]; then
-  GOPATH="$(pwd)/.go"
-  export GOPATH
-fi
+# Resolves GOPATH (GitLab CI/CD just supports cache in the project directory) and
+# keeps the resulting module cache out of $TMPDIR, where its read-only entries
+# cannot be deleted again.
+. "$SCRIPTS_DIR/global/scripts/shared/go-modcache.sh"
+resolve_go_paths
 
 # TODO: this should not be needed since it's covered by the parent YAML file that calls this shell script
 BOM_PATH="$PREFIX$REPORT_PATH" && mkdir -p "$BOM_PATH"

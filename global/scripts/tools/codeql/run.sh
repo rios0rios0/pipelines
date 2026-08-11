@@ -12,6 +12,43 @@ fileName="$(pwd)/$REPORT_PATH/codeql.sarif"
 CODEQL_RAM="${CODEQL_RAM:-}"
 CODEQL_THREADS="${CODEQL_THREADS:-1}"
 
+# When `--ram` is not given, CodeQL sizes its own JVM heap -- and inside a
+# memory-limited container it gets that badly wrong, because the number it
+# reasons from is the host's total rather than the cgroup's. On an 8 GiB CI pod
+# it settled on a 1100 MB heap and left the query evaluator 660 MiB, which is
+# not enough to evaluate the `security-and-quality` suite over a large codebase:
+# the run died with `OutOfMemoryError "Java heap space"` on the FIRST query and
+# wrote no SARIF at all.
+#
+# That failure mode is quiet in the worst way. The calling step is conventionally
+# `continueOnError`, so the job went yellow rather than red, the report directory
+# published as an empty artifact, and the SARIF-missing guard below never got to
+# speak because `database analyze` had already exited non-zero. A repository can
+# sit in that state indefinitely looking scanned while CodeQL has not evaluated a
+# single query.
+#
+# So derive the budget from the container's real ceiling instead of leaving it to
+# a guess. 75% leaves headroom for the extractor, the JVM's own non-heap overhead
+# and the agent process itself. An explicit CODEQL_RAM always wins.
+if [ -z "$CODEQL_RAM" ]; then
+  . "$SCRIPTS_DIR/global/scripts/shared/memory.sh"
+  detectedRamMb="$(detect_memory_limit_mb)" || detectedRamMb=''
+  if [ -n "$detectedRamMb" ]; then
+    candidateRamMb=$((detectedRamMb * 75 / 100))
+    # Under this, an explicit budget would only be tighter than what CodeQL
+    # would have picked on its own, so leave the decision with CodeQL and let it
+    # report its own out-of-memory error rather than one we caused.
+    if [ "$candidateRamMb" -ge 2048 ]; then
+      CODEQL_RAM="$candidateRamMb"
+      echo "Detected a ${detectedRamMb} MB memory ceiling for this runner."
+    else
+      echo "Detected a ${detectedRamMb} MB memory ceiling -- too small to improve on CodeQL's own default; leaving --ram unset."
+    fi
+  else
+    echo "Could not detect a memory ceiling for this runner; leaving --ram unset."
+  fi
+fi
+
 RAM_FLAG=""
 if [ -n "$CODEQL_RAM" ]; then
   RAM_FLAG="--ram=$CODEQL_RAM"

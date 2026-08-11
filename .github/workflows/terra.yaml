@@ -17,7 +17,7 @@ on:
         required: false
         type: 'string'
         default: ''
-        description: 'Optional ref (branch, tag, or SHA) to check out `rios0rios0/pipelines` at when sourcing shared scripts. Defaults to the ref this reusable workflow was invoked with (parsed from `github.workflow_ref`), so scripts and workflow stay version-locked when consumers pin to a tag/SHA.'
+        description: 'Optional ref (branch, tag, or SHA) to check out `rios0rios0/pipelines` at when sourcing shared scripts. Defaults to the ref this reusable workflow was invoked with (parsed from `job.workflow_ref`, falling back to `GITHUB_WORKFLOW_REF` where that context is unavailable), so scripts and workflow stay version-locked when consumers pin to a tag/SHA.'
       enable_validate:
         required: false
         type: 'boolean'
@@ -106,11 +106,13 @@ jobs:
         shell: 'bash'
         env:
           PIPELINES_REF: ${{ inputs.pipelines_ref }}
+          JOB_WORKFLOW_REF: ${{ job.workflow_ref }}
         run: |
           if [ -n "${PIPELINES_REF}" ]; then
             ref="${PIPELINES_REF}"
           else
-            ref="${GITHUB_WORKFLOW_REF##*@}"
+            ref="${JOB_WORKFLOW_REF:-${GITHUB_WORKFLOW_REF}}"
+            ref="${ref##*@}"
           fi
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 
@@ -255,12 +257,29 @@ jobs:
 
       # Derive the pipelines ref from the reusable workflow's own invocation
       # ref so the shared scripts stay in sync with the workflow. When the
-      # consumer calls `uses: 'rios0rios0/pipelines/.github/workflows/terra.yaml@v4.6.2'`,
-      # `github.workflow_ref` resolves to
-      # `rios0rios0/pipelines/.github/workflows/terra.yaml@refs/tags/v4.6.2`;
+      # consumer calls `uses: 'rios0rios0/pipelines/.github/workflows/terra.yaml@4.20.1'`,
+      # `job.workflow_ref` resolves to
+      # `rios0rios0/pipelines/.github/workflows/terra.yaml@refs/tags/4.20.1`;
       # stripping everything up to the last `@` yields the ref that
       # `actions/checkout` accepts. The `pipelines_ref` input overrides this
       # for consumers who deliberately want a different script version.
+      #
+      # It must be `job.workflow_ref`, not `github.workflow_ref`: inside a
+      # called reusable workflow the `github` context belongs to the CALLER, so
+      # `github.workflow_ref` names the consumer's workflow and its ref, and
+      # checking this repo out at that ref only works by coincidence when the
+      # consumer sits on an identically-named branch. `job.workflow_ref` is
+      # documented as "the full ref of the workflow file that defines the
+      # current job [...] for jobs defined in a reusable workflow, this refers
+      # to the reusable workflow file" — exactly what "stay in sync with the
+      # workflow" means, and the property GitHub added for this case.
+      #
+      # It has to come through `env:` because there is no `GITHUB_JOB_WORKFLOW_REF`
+      # runner variable: only `github.*` populates default env vars, and the
+      # `job` context is reachable from expressions alone. The fallback to
+      # `GITHUB_WORKFLOW_REF` covers GitHub Enterprise Server, where
+      # `job.workflow_ref` is not available, and any run outside a
+      # `workflow_call`, where the two values are identical anyway.
       # Pass `inputs.pipelines_ref` via the step's `env:` mapping rather
       # than interpolating `${{ }}` directly into the `run:` script. The
       # `${{ }}` form is substituted into the shell command at YAML-parse
@@ -274,11 +293,13 @@ jobs:
         shell: 'bash'
         env:
           PIPELINES_REF: ${{ inputs.pipelines_ref }}
+          JOB_WORKFLOW_REF: ${{ job.workflow_ref }}
         run: |
           if [ -n "${PIPELINES_REF}" ]; then
             ref="${PIPELINES_REF}"
           else
-            ref="${GITHUB_WORKFLOW_REF##*@}"
+            ref="${JOB_WORKFLOW_REF:-${GITHUB_WORKFLOW_REF}}"
+            ref="${ref##*@}"
           fi
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 
@@ -354,11 +375,13 @@ jobs:
         shell: 'bash'
         env:
           PIPELINES_REF: ${{ inputs.pipelines_ref }}
+          JOB_WORKFLOW_REF: ${{ job.workflow_ref }}
         run: |
           if [ -n "${PIPELINES_REF}" ]; then
             ref="${PIPELINES_REF}"
           else
-            ref="${GITHUB_WORKFLOW_REF##*@}"
+            ref="${JOB_WORKFLOW_REF:-${GITHUB_WORKFLOW_REF}}"
+            ref="${ref##*@}"
           fi
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 
@@ -427,11 +450,13 @@ jobs:
         shell: 'bash'
         env:
           PIPELINES_REF: ${{ inputs.pipelines_ref }}
+          JOB_WORKFLOW_REF: ${{ job.workflow_ref }}
         run: |
           if [ -n "${PIPELINES_REF}" ]; then
             ref="${PIPELINES_REF}"
           else
-            ref="${GITHUB_WORKFLOW_REF##*@}"
+            ref="${JOB_WORKFLOW_REF:-${GITHUB_WORKFLOW_REF}}"
+            ref="${ref##*@}"
           fi
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 

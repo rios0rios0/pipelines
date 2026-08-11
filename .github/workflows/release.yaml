@@ -10,6 +10,11 @@ on:
         required: false
         default: '[""]'
         description: 'JSON array of tag prefixes (e.g., ''["", "v"]''). Use ''[""]'' for no prefix.'
+      update_major_tag:
+        type: 'boolean'
+        required: false
+        default: false
+        description: 'Maintain a floating `vN` tag pointing at the latest release. Only for repos consumed as `uses: owner/repo/...@vN`.'
 
 permissions:
   contents: 'write'
@@ -33,7 +38,20 @@ jobs:
   update-major-tag:
     name: 'delivery > update major version tag'
     needs: 'delivery-release'
-    if: "needs.delivery-release.outputs.tag_name != ''"
+    # A floating `vN` tag only means something for repos consumed as
+    # `uses: owner/repo/...@vN` — actions and reusable workflows. Every other
+    # consumer pins a branch or an exact SemVer tag, so the tag is dead weight
+    # plus a stray GitHub Release on their Releases page. Hence opt-in.
+    #
+    # `github.event_name` cannot gate this: inside a called reusable workflow
+    # the `github` context belongs to the CALLER, so the event stays `push` and
+    # never becomes `workflow_call` (this is also why `delivery-release` above
+    # can gate on `push` at all). `github.repository` is likewise the caller's
+    # repo, which makes it the reliable way to let this repo opt itself in for
+    # its own `on: push` releases, where no caller exists to pass the input.
+    if: >-
+      needs.delivery-release.outputs.tag_name != '' &&
+      (inputs.update_major_tag || github.repository == 'rios0rios0/pipelines')
     uses: 'rios0rios0/pipelines/.github/workflows/update-major-version-tag.yaml@main'
     with:
       tag_name: '${{ needs.delivery-release.outputs.tag_name }}'

@@ -262,6 +262,47 @@ assert_true "both roots initialise" "[ $FALLBACK_RC -eq 0 ]"
 assert_true "and nothing reports the symlink error" \
   '[[ "$FALLBACK_OUT" != *"because it is a symlink"* ]]'
 
+echo "== a mirror miss still serves the providers the mirror does hold =="
+# This is what made two root modules keep failing after the mirror shipped. One
+# provider the mirror cannot satisfy sends the whole directory to the fallback,
+# and a pure-`direct` fallback then re-resolves EVERY provider from the registry
+# -- including the ones sitting in the mirror, whose checksums come from github.
+# The fallback keeps the mirror in play, so only the genuine miss goes out.
+#
+# The mirrored provider is pinned to a version the mirror holds and the missing
+# one to a version that exists nowhere locally; with the network blocked, the
+# whole init must fail (the miss is unreachable) while the mirrored provider is
+# still resolved locally, which the log line proves.
+#
+# The network is deliberately LEFT UP here, because that is the failing condition
+# in production: `registry.terraform.io` is reachable and github is the throttled
+# host. It is also the only way to tell the two fallbacks apart — with the
+# network blocked, both fail identically on the registry version query, so an
+# offline assertion cannot see the difference.
+#
+# The discriminator is Terraform's own install line. A provider taken from a
+# filesystem mirror installs `(unauthenticated)`, because a mirror carries no
+# signature; one fetched through `direct` installs `(signed by ...)` after the
+# github checksum round trip that is being avoided.
+MISS_REPO="$TEST_DIR/miss"
+MISS_CACHE="$TEST_DIR/miss-cache"
+mkdir -p "$MISS_REPO/stacks/app" "$MISS_CACHE"
+cat > "$MISS_REPO/stacks/app/main.tf" << 'EOF'
+terraform {
+  required_providers {
+    null    = { source = "hashicorp/null" }
+    missing = { source = "hashicorp/nonexistent-for-tests" }
+  }
+}
+EOF
+MISS_OUT="$(run_validate "$MISS_REPO" env \
+  TF_PROVIDER_MIRROR_DIR="$MIRROR_DIR" TF_PLUGIN_CACHE_DIR="$MISS_CACHE" TF_INIT_MAX_ATTEMPTS=1 2>&1 || true)"
+
+assert_true "the fallback ran and reported the genuine miss" \
+  '[[ "$MISS_OUT" == *"nonexistent-for-tests"* ]]'
+assert_true "the mirrored provider was still served by the mirror, not the registry" \
+  '[[ "$MISS_OUT" == *"hashicorp/null"*"(unauthenticated)"* ]]'
+
 echo "== a cache poisoned by an earlier revision is repaired =="
 # Simulate the artifact the shipped version left behind on persistent agents:
 # a leaf symlink pointing into the mirror. It must be removed, because the online

@@ -64,12 +64,17 @@ case "$(uname -m)" in
 esac
 
 YQ=""
-# mikefarah/yq prints its own repository URL in the version banner; kislyuk/yq prints a bare
-# `yq <version>`. Matching the URL is what separates them, since both answer `--version`.
-if command -v yq > /dev/null 2>&1 && yq --version 2>&1 | grep -q 'mikefarah'; then
-  YQ="yq"
-fi
-if [ -z "$YQ" ]; then
+
+# Called only from the branch that has a config to merge. A repository without `.golangci.yml`
+# copies the shared default verbatim and never reads `$YQ`, so resolving it there would add a
+# network dependency -- and a way for the run to fail -- to the one case that needs neither.
+resolve_yq() {
+  # mikefarah/yq prints its own repository URL in the version banner; kislyuk/yq prints a bare
+  # `yq <version>`. Matching the URL is what separates them, since both answer `--version`.
+  if command -v yq > /dev/null 2>&1 && yq --version 2>&1 | grep -q 'mikefarah'; then
+    YQ="yq"
+    return 0
+  fi
   mkdir -p ./bin
   download \
     "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_${YQ_OS}_${YQ_ARCH}" \
@@ -77,7 +82,8 @@ if [ -z "$YQ" ]; then
     || die "could not download mikefarah/yq ${YQ_VERSION} for ${YQ_OS}/${YQ_ARCH}"
   chmod +x ./bin/yq || die 'could not make the downloaded yq executable'
   YQ="./bin/yq"
-fi
+  return 0
+}
 
 mergedYamlFile="merged.yml"
 defaultYamlFile="$SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/.golangci.yml"
@@ -85,6 +91,8 @@ defaultYamlFile="$SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/.gol
 if [ -f ".golangci.yml" ]; then
   # Start with the default config
   cp "$defaultYamlFile" "$mergedYamlFile"
+
+  resolve_yq
 
   # Collect enabled linters from repo config and add new ones in a single operation
   repo_enabled=$("$YQ" eval '.linters.enable[]?' ".golangci.yml") \

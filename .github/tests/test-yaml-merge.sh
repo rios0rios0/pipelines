@@ -45,8 +45,10 @@ merge_yaml() {
   local output_file="$2"
   local extra_path="${3:-}"
 
+  # Created under TEST_DIR so the EXIT trap reclaims it. A standalone mktemp would leak on every
+  # failure path, because `set -e` aborts the script before the explicit cleanup below is reached.
   local workdir
-  workdir="$(mktemp -d)"
+  workdir="$(mktemp -d "$TEST_DIR/work.XXXXXX")"
   if [[ -f "$repo_file" ]]; then
     cp "$repo_file" "$workdir/.golangci.yml"
   fi
@@ -71,6 +73,20 @@ merge_yaml() {
   rm -rf "$workdir"
 }
 
+# Impersonates kislyuk/yq: a bare version banner, and no support for `eval`. Used by the tests
+# that need run.sh to find an unusable `yq` first on PATH.
+mkdir -p "$TEST_DIR/fakebin"
+cat > "$TEST_DIR/fakebin/yq" << 'SHIM'
+#!/usr/bin/env sh
+if [ "$1" = "--version" ]; then
+  echo "yq 3.4.3"
+  exit 0
+fi
+echo "yq: error: argument files: can't open '$2'" >&2
+exit 2
+SHIM
+chmod +x "$TEST_DIR/fakebin/yq"
+
 # =============================================================================
 # Test 1: No custom config - should use default as-is
 # =============================================================================
@@ -79,6 +95,20 @@ merge_yaml "$TEST_DIR/does-not-exist.yml" "$TEST_DIR/merged.yml"
 assert_true "merged file created" "[ -s '$TEST_DIR/merged.yml' ]"
 assert_true "default linters present" \
   "yq eval '.linters.enable | contains([\"errcheck\", \"govet\", \"staticcheck\"])' '$TEST_DIR/merged.yml' | grep -q true"
+
+# With no config there is nothing to merge and `$YQ` is never read, so the script must not reach
+# for a binary at all. Asserted with the unusable shim first on PATH: if the resolution were not
+# gated, that shim would force a download, and `./bin/yq` would exist afterwards.
+noconfig_dir="$(mktemp -d "$TEST_DIR/noconfig.XXXXXX")"
+(
+  cd "$noconfig_dir" || exit 1
+  export PATH="$TEST_DIR/fakebin:$PATH"
+  GOLANGCI_LINT_MERGE_ONLY=1 sh "$RUN_SH"
+) > /dev/null 2>&1
+assert_true "no yq downloaded when the repo has no .golangci.yml" \
+  "[ ! -e '$noconfig_dir/bin/yq' ]"
+assert_true "the default config is still produced without yq" \
+  "[ -s '$noconfig_dir/merged.yml' ]"
 
 # =============================================================================
 # Test 2: Custom config with additional enabled linters
@@ -196,19 +226,6 @@ assert_true "only 1 new linter added (no dupes)" "[ '$actual_count' = '$expected
 # The shim below impersonates kislyuk/yq; run.sh must notice and fetch a usable binary.
 # =============================================================================
 echo "TEST 8: Wrong yq flavour on PATH"
-mkdir -p "$TEST_DIR/fakebin"
-cat > "$TEST_DIR/fakebin/yq" << 'SHIM'
-#!/usr/bin/env sh
-# Impersonates kislyuk/yq: a bare version banner, and no support for `eval`.
-if [ "$1" = "--version" ]; then
-  echo "yq 3.4.3"
-  exit 0
-fi
-echo "yq: error: argument files: can't open '$2'" >&2
-exit 2
-SHIM
-chmod +x "$TEST_DIR/fakebin/yq"
-
 cat > "$TEST_DIR/repo.yml" << 'YAML'
 linters:
   disable:

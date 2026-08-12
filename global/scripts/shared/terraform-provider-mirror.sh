@@ -112,17 +112,33 @@ provider_mirror_configure() {
     return 1
   fi
 
+  # The terra CLI's default store only has a meaning when there is a cache home
+  # to derive it from, so it is resolved before the loop rather than inline.
+  # Spelling it `${XDG_CACHE_HOME:-${HOME:-}/.cache}` would expand to
+  # `/.cache/terra/providers` with BOTH variables unset -- a path at the
+  # filesystem root belonging to no user, and an ABSOLUTE one, so the `/*` guard
+  # below could not catch it either.
+  provider_mirror_terra_dir=''
+  if [ -n "${XDG_CACHE_HOME:-}" ]; then
+    provider_mirror_terra_dir="${XDG_CACHE_HOME}/terra/providers"
+  elif [ -n "${HOME:-}" ]; then
+    provider_mirror_terra_dir="${HOME}/.cache/terra/providers"
+  fi
+
   provider_mirror_candidates=''
   for provider_mirror_dir in \
     "${TF_PROVIDER_MIRROR_DIR:-}" \
     "${TERRA_PROVIDER_CACHE_DIR:-}" \
-    "${XDG_CACHE_HOME:-${HOME:-}/.cache}/terra/providers" \
+    "${provider_mirror_terra_dir}" \
     "${TF_PLUGIN_CACHE_DIR:-}"; do
     [ -n "${provider_mirror_dir}" ] || continue
     [ -d "${provider_mirror_dir}" ] || continue
 
-    # A `$HOME`-derived candidate degrades to a relative `.cache/...` path when
-    # HOME is unset, which would silently mirror something inside the workspace.
+    # Terraform resolves a relative `filesystem_mirror` path against its own
+    # working directory, which `-chdir` moves per root module -- so a relative
+    # candidate would name a different place for every directory in the loop.
+    # `XDG_CACHE_HOME` is required to be absolute but nothing enforces it, and an
+    # operator override is free-form.
     case "${provider_mirror_dir}" in
       /*) ;;
       *) continue ;;

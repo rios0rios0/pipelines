@@ -96,6 +96,39 @@ OFF_OUT="$(env -i PATH="$PATH" HOME="$TEST_DIR" TF_PROVIDER_MIRROR=off sh -c \
 assert_true "returns non-zero" '[[ "$OFF_OUT" == *"rc=1"* ]]'
 assert_true "names the knob" '[[ "$OFF_OUT" == *"disabled via TF_PROVIDER_MIRROR"* ]]'
 
+echo "== the terra store is derived from XDG_CACHE_HOME, then HOME, then not at all =="
+# Each arm is asserted against a store that only that arm can find, so getting the
+# branching wrong fails the suite instead of silently falling through to another
+# candidate. The both-unset arm is the one that matters: spelling this
+# `${XDG_CACHE_HOME:-${HOME:-}/.cache}` yields `/.cache/terra/providers`, which is
+# ABSOLUTE and therefore slips past the relative-path guard.
+#
+# These probe the derived path itself rather than the finished config, and that
+# is deliberate. The both-unset case is only reachable through the derivation:
+# the finished config filters every candidate through `[ -d ... ]`, and
+# `/.cache/terra/providers` does not exist on a normal machine and cannot be
+# created without root — so a config-level assertion would pass just as happily
+# against the broken expansion. POSIX `sh` has no `local`, so the derivation
+# variable survives the call and can be read directly.
+XDG_STORE="$TEST_DIR/xdg-home/terra/providers"
+HOME_STORE="$TEST_DIR/real-home/.cache/terra/providers"
+mkdir -p "$XDG_STORE" "$HOME_STORE"
+derive_terra_dir() {
+  env -i PATH="$PATH" "$@" sh -c \
+    ". '$LIB_SH'; provider_mirror_configure > /dev/null 2>&1; printf '%s' \"\${provider_mirror_terra_dir}\""
+}
+XDG_DERIVED="$(derive_terra_dir XDG_CACHE_HOME="$TEST_DIR/xdg-home" HOME="$TEST_DIR/real-home")"
+HOME_DERIVED="$(derive_terra_dir HOME="$TEST_DIR/real-home")"
+NONE_DERIVED="$(derive_terra_dir TF_PROVIDER_MIRROR_DIR="$XDG_STORE")"
+XDG_CONF="$(env -i PATH="$PATH" XDG_CACHE_HOME="$TEST_DIR/xdg-home" HOME="$TEST_DIR/real-home" sh -c \
+  ". '$LIB_SH'; provider_mirror_configure > /dev/null 2>&1; cat \"\${TF_PROVIDER_MIRROR_CONFIG:-/dev/null}\"")"
+
+assert_true "XDG_CACHE_HOME wins when set" "[ '$XDG_DERIVED' = '$XDG_STORE' ]"
+assert_true "and HOME's store is not also picked up" '[[ "$XDG_CONF" != *"$HOME_STORE"* ]]'
+assert_true "the resolved store reaches the generated config" '[[ "$XDG_CONF" == *"$XDG_STORE"* ]]'
+assert_true "HOME is used when XDG_CACHE_HOME is unset" "[ '$HOME_DERIVED' = '$HOME_STORE' ]"
+assert_true "nothing is guessed when both are unset" "[ -z '$NONE_DERIVED' ]"
+
 echo "== a caller's own CLI config file is never overridden =="
 EXISTING_TFRC="$TEST_DIR/caller.tfrc"
 echo '# the caller owns this' > "$EXISTING_TFRC"

@@ -12,7 +12,9 @@ runs:
 
     - name: 'Enable Corepack'
       if: inputs.package_manager == 'yarn'
-      run: corepack enable
+      run: |
+        npm i -g corepack@latest --force
+        corepack enable
       shell: 'bash'
 
     - name: 'Setup Node.js'

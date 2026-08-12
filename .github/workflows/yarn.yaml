@@ -8,6 +8,53 @@ on:
         required: false
         type: string
         default: ''
+      runs_on:
+        type: 'string'
+        required: false
+        default: '["ubuntu-latest"]'
+        description: |
+          JSON array of runner labels (e.g. '["self-hosted"]'). `runs-on` is a hard selector --
+          GitHub matches it against the runner labels and never substitutes, so there is no
+          fallback to a self-hosted runner when the hosted minutes are exhausted. A JSON array
+          rather than a plain string because a reusable-workflow input cannot be typed as a
+          list, and multi-label runners need more than one value.
+      codeql_upload:
+        type: 'string'
+        required: false
+        default: 'always'
+        description: |
+          Whether CodeQL uploads its SARIF to code scanning ('always', 'failure-only' or
+          'never'). Uploading requires code scanning to be enabled, which on a private
+          repository means GitHub Advanced Security; without it the analysis still succeeds and
+          only the upload fails, taking the whole job down with it.
+      build_env:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Dotenv-style lines (KEY=value, one per line) exported before the build and test steps.
+          A bundler that refuses to build without an API URL -- rather than silently falling
+          back to localhost, deploying, looking fine and having every request refused -- needs
+          a value here for CI to pass. The value is a placeholder: these jobs only prove the
+          bundle compiles and never publish it.
+      e2e_typecheck:
+        type: 'boolean'
+        required: false
+        default: false
+        description: |
+          Run `yarn e2e:typecheck`. End-to-end specs usually sit outside the root
+          `tsconfig.json`, so `yarn build` never type-checks them and a spec can rot --
+          renamed selector, changed fixture signature -- until someone runs the browser suite by
+          hand. This is a type-check only: it starts no browser, no API and no database.
+      node_version:
+        type: 'string'
+        required: false
+        default: '20'
+        description: |
+          Node.js version handed to `actions/setup-node`. The default is the version every job
+          here hardcoded before this input existed, so leaving it unset changes nothing -- but
+          Node 20 reached end of life on 30 April 2026, so a consumer on the default is building
+          on an unsupported runtime and should name a supported major.
     secrets:
       sonar_token:
         description: 'SonarQube authentication token'
@@ -17,7 +64,7 @@ jobs:
   # first stage
   code_check-basic_checks:
     name: 'code-check > quality:basic-checks'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/10-code-check/basic-checks@main'
         with:
@@ -26,18 +73,21 @@ jobs:
 
   code_check-style_eslint:
     name: 'code-check > style:eslint'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - name: 'Checkout code'
         uses: 'actions/checkout@v6'
 
       - name: 'Enable Corepack'
-        run: 'corepack enable'
+        run: |
+          npm i -g corepack@latest --force
+          corepack enable
+        shell: 'bash'
 
       - name: 'Setup Node.js'
         uses: 'actions/setup-node@v6'
         with:
-          node-version: '20'
+          node-version: '${{ inputs.node_version }}'
           cache: 'yarn'
 
       - run: |
@@ -50,7 +100,7 @@ jobs:
 
   code_check-quality_knip:
     name: 'code-check > quality:knip'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/javascript/stages/10-code-check/knip@main'
         with:
@@ -62,17 +112,18 @@ jobs:
   # second stage
   security-sast_codeql:
     name: 'security > sast:codeql'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
         with:
           codeql_language: 'javascript-typescript'
+          upload: '${{ inputs.codeql_upload }}'
     needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_semgrep:
     name: 'security > sast:semgrep'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/semgrep@main'
         with:
@@ -82,7 +133,7 @@ jobs:
 
   security-sast_gitleaks:
     name: 'security > sast:gitleaks'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/gitleaks@main'
     needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
@@ -90,7 +141,7 @@ jobs:
 
   security-sast_hadolint:
     name: 'security > sast:hadolint'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
     needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
@@ -99,7 +150,7 @@ jobs:
 
   security-sast_trivy:
     name: 'security > sast:trivy'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy@main'
     needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
@@ -108,7 +159,7 @@ jobs:
 
   security-sca_trivy:
     name: 'security > sca:trivy'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy-sca@main'
     needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
@@ -117,18 +168,21 @@ jobs:
 
   security-sca_yarn_audit:
     name: 'security > sca:yarn-audit'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - name: 'Checkout code'
         uses: 'actions/checkout@v6'
 
       - name: 'Enable Corepack'
-        run: 'corepack enable'
+        run: |
+          npm i -g corepack@latest --force
+          corepack enable
+        shell: 'bash'
 
       - name: 'Setup Node.js'
         uses: 'actions/setup-node@v6'
         with:
-          node-version: '20'
+          node-version: '${{ inputs.node_version }}'
           cache: 'yarn'
 
       - run: 'yarn npm audit --recursive --severity high'
@@ -141,23 +195,38 @@ jobs:
   # third stage
   tests-test_all:
     name: 'tests > test:all'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - name: 'Checkout code'
         uses: 'actions/checkout@v6'
 
       - name: 'Enable Corepack'
-        run: 'corepack enable'
+        run: |
+          npm i -g corepack@latest --force
+          corepack enable
+        shell: 'bash'
 
       - name: 'Setup Node.js'
         uses: 'actions/setup-node@v6'
         with:
-          node-version: '20'
+          node-version: '${{ inputs.node_version }}'
           cache: 'yarn'
+
+      - name: 'Export the build environment'
+        if: "inputs.build_env != ''"
+        run: 'printf ''%s\n'' "$BUILD_ENV" >> "$GITHUB_ENV"'
+        shell: 'bash'
+        env:
+          BUILD_ENV: '${{ inputs.build_env }}'
 
       - run: |
           yarn install --immutable
           yarn test:ci
+        shell: 'bash'
+
+      - name: 'Type check the end-to-end specs'
+        if: 'inputs.e2e_typecheck'
+        run: 'yarn e2e:typecheck'
         shell: 'bash'
 
       - name: 'Coverage Report'
@@ -188,19 +257,29 @@ jobs:
 
   tests-test_build:
     name: 'tests > test:build'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - name: 'Checkout code'
         uses: 'actions/checkout@v6'
 
       - name: 'Enable Corepack'
-        run: 'corepack enable'
+        run: |
+          npm i -g corepack@latest --force
+          corepack enable
+        shell: 'bash'
 
       - name: 'Setup Node.js'
         uses: 'actions/setup-node@v6'
         with:
-          node-version: '20'
+          node-version: '${{ inputs.node_version }}'
           cache: 'yarn'
+
+      - name: 'Export the build environment'
+        if: "inputs.build_env != ''"
+        run: 'printf ''%s\n'' "$BUILD_ENV" >> "$GITHUB_ENV"'
+        shell: 'bash'
+        env:
+          BUILD_ENV: '${{ inputs.build_env }}'
 
       - run: |
           yarn install --immutable
@@ -213,7 +292,7 @@ jobs:
   # management stage (optional)
   management-report_sonarqube:
     name: 'management > report:sonarqube'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     container:
       image: 'sonarsource/sonar-scanner-cli:6.2.1'
     needs: ['tests-test_all']

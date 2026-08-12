@@ -19,6 +19,30 @@ if [ -z "$SCRIPTS_DIR" ]; then
   export SCRIPTS_DIR
 fi
 
+# A merge step that fails must stop the run. Reporting the repository's own configuration as
+# violations is worse than reporting nothing: it sends people to change correct code.
+die() {
+  echo "::error::golangci-lint config merge failed: $1"
+  exit 1
+}
+
+# Fetches $1 into $2 over HTTPS only -- including redirects, which is the point: the release URL
+# redirects to GitHub's asset host, and the file being fetched is about to be marked executable,
+# so a redirect walked down to plain HTTP would hand execution to whatever answered. `curl` is
+# preferred but not assumed; a runner carrying only one of the two is common, and a self-hosted
+# runner may carry neither, which is why the caller reports the failure instead of continuing.
+download() {
+  if command -v curl > /dev/null 2>&1; then
+    curl --proto '=https' --proto-redir '=https' --tlsv1.2 \
+      --location --fail --silent --show-error --output "$2" "$1"
+  elif command -v wget > /dev/null 2>&1; then
+    wget --https-only -O "$2" -nv "$1"
+  else
+    echo 'neither curl nor wget is available' >&2
+    return 127
+  fi
+}
+
 # `yq` is two unrelated programs sharing a name: this script needs mikefarah/yq (Go, `yq eval
 # '<expression>' <file>`), while many distributions and `pip` ship kislyuk/yq (a jq wrapper that
 # reads the expression as a filename and rejects `eval` outright). Accepting whichever one is on
@@ -47,21 +71,13 @@ if command -v yq > /dev/null 2>&1 && yq --version 2>&1 | grep -q 'mikefarah'; th
 fi
 if [ -z "$YQ" ]; then
   mkdir -p ./bin
-  # `--https-only` because the release URL redirects to GitHub's asset host: without it a
-  # redirect could walk the download down to plain HTTP, where the binary about to be marked
-  # executable is whatever answered.
-  wget --https-only -O ./bin/yq -nv \
-    "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_${YQ_OS}_${YQ_ARCH}"
-  chmod +x ./bin/yq
+  download \
+    "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_${YQ_OS}_${YQ_ARCH}" \
+    ./bin/yq \
+    || die "could not download mikefarah/yq ${YQ_VERSION} for ${YQ_OS}/${YQ_ARCH}"
+  chmod +x ./bin/yq || die 'could not make the downloaded yq executable'
   YQ="./bin/yq"
 fi
-
-# A merge step that fails must stop the run. Reporting the repository's own configuration as
-# violations is worse than reporting nothing: it sends people to change correct code.
-die() {
-  echo "::error::golangci-lint config merge failed: $1"
-  exit 1
-}
 
 mergedYamlFile="merged.yml"
 defaultYamlFile="$SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/.golangci.yml"

@@ -51,13 +51,21 @@ merge_yaml() {
     cp "$repo_file" "$workdir/.golangci.yml"
   fi
 
-  (
+  # The script's own output is kept and echoed when it fails. Discarding it is how a merge that
+  # aborted (an undownloadable yq, an unreadable config) became indistinguishable from a merge
+  # that silently produced the wrong result -- the assertions fail identically, and the reason
+  # only exists in the output that was thrown away.
+  local log="$workdir/run.log"
+  if ! (
     cd "$workdir" || exit 1
     if [[ -n "$extra_path" ]]; then
       export PATH="$extra_path:$PATH"
     fi
-    GOLANGCI_LINT_MERGE_ONLY=1 sh "$RUN_SH" > /dev/null 2>&1
-  )
+    GOLANGCI_LINT_MERGE_ONLY=1 sh "$RUN_SH"
+  ) > "$log" 2>&1; then
+    echo "    (run.sh exited non-zero; output follows)"
+    sed 's/^/    | /' "$log"
+  fi
 
   cp "$workdir/merged.yml" "$output_file"
   rm -rf "$workdir"

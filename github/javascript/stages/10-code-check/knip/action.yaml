@@ -10,9 +10,15 @@ runs:
     - name: 'Checkout code'
       uses: 'actions/checkout@v6'
 
+    # Node 25 dropped the bundled Corepack, so `corepack enable` is a command-not-found there.
+    # Installed only when genuinely absent: on the versions that still bundle it npm refuses to
+    # overwrite the shim it did not install and fails with `EEXIST`. `0.34.7` is the last release
+    # whose engines span Node 20 through 26.
     - name: 'Enable Corepack'
       if: inputs.package_manager == 'yarn'
-      run: corepack enable
+      run: |
+        command -v corepack > /dev/null 2>&1 || npm i -g --ignore-scripts corepack@0.34.7
+        corepack enable
       shell: 'bash'
 
     - name: 'Setup Node.js'

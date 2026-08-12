@@ -6,6 +6,16 @@ on:
         required: false
         type: string
         default: ''
+      runs_on:
+        type: 'string'
+        required: false
+        default: '["ubuntu-latest"]'
+        description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See npm.yaml.'
+      codeql_upload:
+        type: 'string'
+        required: false
+        default: 'always'
+        description: "CodeQL SARIF upload mode ('always', 'failure-only' or 'never'). See npm.yaml."
     secrets:
       sonar_token:
         description: 'SonarQube authentication token'
@@ -16,13 +26,15 @@ jobs:
     uses: 'rios0rios0/pipelines/.github/workflows/npm.yaml@main'
     with:
       sonar_host: ${{ inputs.sonar_host }}
+      runs_on: ${{ inputs.runs_on }}
+      codeql_upload: ${{ inputs.codeql_upload }}
     secrets:
       sonar_token: ${{ secrets.sonar_token }}
 
   # fourth stage
   delivery-release:
     name: 'delivery > release'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     outputs:
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
@@ -33,7 +45,7 @@ jobs:
 
   delivery-docker:
     name: 'delivery > docker'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/docker@main'
         with:

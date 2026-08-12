@@ -32,6 +32,16 @@ on:
         required: false
         default: false
         description: 'When true, import a GPG key during delivery-binary so GoReleaser can populate GPG_FINGERPRINT and run a `signs:` block. Required for projects that publish a signed SHA256SUMS (e.g., Terraform providers). Consumers must also pass the gpg_private_key and gpg_passphrase secrets.'
+      runs_on:
+        type: 'string'
+        required: false
+        default: '["ubuntu-latest"]'
+        description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See go.yaml.'
+      codeql_upload:
+        type: 'string'
+        required: false
+        default: 'always'
+        description: "CodeQL SARIF upload mode ('always', 'failure-only' or 'never'). See go.yaml."
     secrets:
       sonar_token:
         description: 'SonarQube authentication token'
@@ -48,13 +58,15 @@ jobs:
     uses: 'rios0rios0/pipelines/.github/workflows/go.yaml@main'
     with:
       sonar_host: ${{ inputs.sonar_host }}
+      runs_on: ${{ inputs.runs_on }}
+      codeql_upload: ${{ inputs.codeql_upload }}
     secrets:
       sonar_token: ${{ secrets.sonar_token }}
 
   # fourth stage
   delivery-release:
     name: 'delivery > release'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     outputs:
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
@@ -65,7 +77,7 @@ jobs:
 
   delivery-binary:
     name: 'delivery > binary'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/golang/stages/40-delivery/binary@main'
         with:
@@ -80,7 +92,7 @@ jobs:
 
   delivery-docker:
     name: 'delivery > docker'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/docker@main'
         with:

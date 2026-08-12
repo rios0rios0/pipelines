@@ -18,6 +18,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-order-check` - Test the Terragrunt file-ordering checker/fixer specifically
 - `make test-var-catalog` - Test the shared variable-declaration generator specifically
 - `make test-terraform-validate` - Test the root-module `terraform validate` tier specifically
+- `make test-terraform-provider-mirror` - Test the local Terraform provider mirror specifically
 - `make test-docker-multi-arch` - Test 40-delivery/docker multi-arch contract specifically
 - `make test-basic-checks` - Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) specifically
 - `make test-dependency-check` - Test the OWASP Dependency-Check NVD cache / API-key contract specifically

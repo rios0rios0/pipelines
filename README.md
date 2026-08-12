@@ -462,6 +462,25 @@ The usual way one lands is a rename or a deletion that updates the definition an
 
 That cache defaults to `build/.terraform-plugin-cache`, inside the checkout, and deliberately **not** to a `$HOME` path. Terraform's plugin cache is not safe for concurrent use, and `$HOME` is what is shared when a machine runs several agents under one service account — two jobs initialising at once then write the same provider binary and fail with `text file busy` and dependency-lock checksum mismatches, neither of which names the cache. Override it only if your jobs cannot overlap.
 
+##### The Provider Mirror
+
+Caching the provider *binary* is only half the round trip. Terraform still runs the registry protocol per directory, and the last leg of it fetches the provider's `SHA256SUMS` and `SHA256SUMS.sig` — from `releases.hashicorp.com` for a HashiCorp-namespace provider, and from that provider's **GitHub release page** for every community one. Those costs are per directory, so they multiply by the number of root modules. A repo with dozens of roots and a handful of community providers therefore asks github.com for the same few checksum files dozens of times inside a single job, from one egress IP, and github.com starts answering `503 Service Unavailable`.
+
+`global/scripts/shared/terraform-provider-mirror.sh` removes those requests instead of retrying them. A Terraform `filesystem_mirror` is an installation *method*: when one can satisfy a provider, no registry query and no checksum fetch happens at all. Its on-disk layout for an unpacked provider — `<host>/<namespace>/<name>/<version>/<os>_<arch>/` — is byte-for-byte the layout `TF_PLUGIN_CACHE_DIR` and Terragrunt's provider cache already write, so the stores this machine has been filling for months are already valid mirrors and nothing is repacked or re-downloaded. Measured with `TF_LOG=DEBUG` on a root module declaring three providers, one of them community-hosted — outbound requests per `terraform init`:
+
+| Setup                              | registry.terraform.io | releases.hashicorp.com | github.com |
+|------------------------------------|-----------------------|------------------------|------------|
+| warm plugin cache, no lock file    | 7                     | 4                      | 2          |
+| lock file, no plugin cache         | 7                     | 4                      | 2          |
+| lock file **and** warm plugin cache| 4                     | 0                      | 0          |
+| `filesystem_mirror`                | 0                     | 0                      | 0          |
+
+Stores are searched in this order, and each one that exists contributes a mirror: `TF_PROVIDER_MIRROR_DIR` (explicit override), `TERRA_PROVIDER_CACHE_DIR`, the terra CLI's `~/.cache/terra/providers`, then the tier's own `TF_PLUGIN_CACHE_DIR`. That last entry is what makes a cold machine converge inside a single run — the fallback writes there, so only the first directory needing a given provider version pays for it.
+
+The fallback is per directory and automatic: anything the mirror cannot serve is initialised again against the origin registry, with the same flags and the same output, wrapped in the bounded retry (`TF_INIT_MAX_ATTEMPTS`, default `4`; `TF_INIT_RETRY_DELAY`, default `5`). A machine with no local store therefore behaves exactly as it did before. Two other guards are worth knowing: a consumer that has already set `TF_CLI_CONFIG_FILE` is never overridden — Terraform takes one config file and two `provider_installation` blocks cannot be merged — and a directory that already has a `.terraform.lock.hcl` is initialised `-lockfile=readonly`, because an unpacked mirror can only produce `h1:` hashes and an unguarded run would strip the `zh:` hashes from a complete lock file. Set `TF_PROVIDER_MIRROR=off` to disable the whole thing.
+
+Note one deliberate consequence in the `terra-test` tier, which inits with `-upgrade`: with a warm mirror, `-upgrade` resolves to the newest version *present in the mirror* rather than the newest published. The modules there are exercised with `mock_provider` against ephemeral state, so that trade buys determinism at no real cost — but a scheduled build that wants true upstream resolution should set `TF_PROVIDER_MIRROR=off`.
+
 It is **opt-in** rather than on by default, because unlike its siblings it needs the network and possibly credentials, and because it surfaces pre-existing reference errors — which is the point, but is a consumer's decision to take rather than something to impose on their next build. Each platform opts in the way it already expresses options, and the pre-script hook each already has for private modules is reused rather than adding a second one:
 
 | Platform       | Opt in with                          | Override the roots            | Credentials for private modules |

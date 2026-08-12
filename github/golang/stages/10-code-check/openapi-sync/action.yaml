@@ -1,0 +1,54 @@
+name: 'OpenAPI Sync'
+description: |
+  Regenerates a committed OpenAPI document from the source annotations and fails when the
+  committed copy no longer matches. A test that walks the router catches a route without an
+  annotation, but it cannot see a stale *body*: a renamed response field or a reworded summary
+  leaves the committed document describing an API that no longer exists, and consumers trust
+  the document.
+
+inputs:
+  command:
+    description: 'Command that regenerates the document (e.g. `make swagger`).'
+    required: false
+    default: 'make swagger'
+  path:
+    description: 'Path to the committed document that the command regenerates.'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - name: 'Setup Go'
+      uses: 'actions/setup-go@v6'
+      with:
+        go-version-file: 'go.mod'
+        cache-dependency-path: 'go.sum'
+
+    - name: 'Load Custom Configuration'
+      shell: 'bash'
+      run: |
+        INIT_SCRIPT="config.sh"
+        if [ -f "$INIT_SCRIPT" ]; then
+          env_before=$(mktemp)
+          env | sort > "$env_before"
+          . ./"$INIT_SCRIPT"
+          env | sort | comm -13 "$env_before" - >> "$GITHUB_ENV"
+          rm -f "$env_before"
+        else
+          echo "The '$INIT_SCRIPT' file was not found, skipping..."
+        fi
+
+    - name: 'Regenerate the document'
+      shell: 'bash'
+      run: '${{ inputs.command }}'
+
+    - name: 'Fail when the committed document is stale'
+      shell: 'bash'
+      run: |
+        if ! git diff --exit-code -- '${{ inputs.path }}'; then
+          echo '::error::the committed document does not match the annotations; run `${{ inputs.command }}` and commit the result'
+          exit 1
+        fi

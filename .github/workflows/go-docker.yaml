@@ -6,6 +6,41 @@ on:
         required: false
         type: string
         default: ''
+      runs_on:
+        type: 'string'
+        required: false
+        default: '["ubuntu-latest"]'
+        description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See go.yaml.'
+      codeql_upload:
+        type: 'string'
+        required: false
+        default: 'always'
+        description: "CodeQL SARIF upload mode ('always', 'failure-only' or 'never'). See go.yaml."
+      database_image:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'Database image to run the tests against (e.g. ''postgres:18-alpine''). See go.yaml.'
+      database_url_env:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'Environment variable the composed connection URL is exported into. See go.yaml.'
+      coverage_threshold:
+        type: 'number'
+        required: false
+        default: 0
+        description: 'Minimum total coverage percentage; 0 disables the gate. See go.yaml.'
+      openapi_sync_path:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'Committed OpenAPI document to regenerate and diff. See go.yaml.'
+      openapi_sync_command:
+        type: 'string'
+        required: false
+        default: 'make swagger'
+        description: 'Command that regenerates the document named by `openapi_sync_path`.'
     secrets:
       sonar_token:
         description: 'SonarQube authentication token'
@@ -16,13 +51,20 @@ jobs:
     uses: 'rios0rios0/pipelines/.github/workflows/go.yaml@main'
     with:
       sonar_host: ${{ inputs.sonar_host }}
+      runs_on: ${{ inputs.runs_on }}
+      codeql_upload: ${{ inputs.codeql_upload }}
+      database_image: ${{ inputs.database_image }}
+      database_url_env: ${{ inputs.database_url_env }}
+      coverage_threshold: ${{ inputs.coverage_threshold }}
+      openapi_sync_path: ${{ inputs.openapi_sync_path }}
+      openapi_sync_command: ${{ inputs.openapi_sync_command }}
     secrets:
       sonar_token: ${{ secrets.sonar_token }}
 
   # fourth stage
   delivery-release:
     name: 'delivery > release'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     outputs:
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
@@ -33,7 +75,7 @@ jobs:
 
   delivery-docker:
     name: 'delivery > docker'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/docker@main'
         with:

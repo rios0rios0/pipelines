@@ -13,17 +13,78 @@ on:
         required: false
         type: string
         default: ''
+      runs_on:
+        type: 'string'
+        required: false
+        default: '["ubuntu-latest"]'
+        description: |
+          JSON array of runner labels (e.g. '["self-hosted"]'). `runs-on` is a hard selector --
+          GitHub matches it against the runner labels and never substitutes, so there is no
+          fallback to a self-hosted runner when the hosted minutes are exhausted. Naming the
+          runner here rather than in each caller's job list makes moving a whole pipeline one
+          switch. A JSON array rather than a plain string because a reusable-workflow input
+          cannot be typed as a list, and multi-label runners need more than one value.
+      codeql_upload:
+        type: 'string'
+        required: false
+        default: 'always'
+        description: |
+          Whether CodeQL uploads its SARIF to code scanning ('always', 'failure-only' or
+          'never'). Uploading requires code scanning to be enabled, which on a private
+          repository means GitHub Advanced Security; without it the analysis still succeeds and
+          only the upload fails, taking the whole job down with it. Set 'never' on such a
+          repository to keep the scan as a build-breaking check without the alerts.
+      database_image:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Container image of a PostgreSQL-compatible database to run the tests against (e.g.
+          'postgres:18-alpine'). Empty skips it entirely. Provisioned inside the test stage with
+          `docker run` rather than a `services:` block, because a service block cannot be
+          omitted by expression -- declaring one unconditionally would force a database on every
+          consumer that does not want one.
+      database_url_env:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Name of the environment variable the composed connection URL is exported into (e.g.
+          'MEDHUB_TEST_DATABASE_URL'). Required when `database_image` is set. Deliberately named
+          by the caller: a test harness that truncates tables between tests must never be able
+          to read the variable an application uses.
+      coverage_threshold:
+        type: 'number'
+        required: false
+        default: 0
+        description: |
+          Minimum total coverage percentage; the test job fails below it. 0 disables the gate.
+          Without this the number can drift down one merge at a time and nothing notices.
+      openapi_sync_path:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Path to a committed OpenAPI document generated from source annotations. When set, a
+          code-check job regenerates it and fails on any diff. Empty skips the job. Annotations
+          are comments, so nothing in the compiler objects when the committed document drifts.
+      openapi_sync_command:
+        type: 'string'
+        required: false
+        default: 'make swagger'
+        description: 'Command that regenerates the document named by `openapi_sync_path`.'
     secrets:
       sonar_token:
         description: 'SonarQube authentication token'
         required: false
 
-# it wasn't needed to set up anything for GoLang because 'ubuntu-latest' has all dependencies
+# `ubuntu-latest` carries the Go toolchain, Make and Docker; a bare self-hosted runner selected
+# through `runs_on` carries none of them and must be provisioned before these jobs will pass.
 jobs:
   # first stage
   code_check-basic_checks:
     name: 'code-check > quality:basic-checks'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/10-code-check/basic-checks@main'
         with:
@@ -32,15 +93,25 @@ jobs:
 
   code_check-style_golangci_lint:
     name: 'code-check > style:golangci-lint'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/golang/stages/10-code-check/golangci-lint@main'
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
+  code_check-docs_openapi_sync:
+    name: 'code-check > docs:openapi-sync'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    steps:
+      - uses: 'rios0rios0/pipelines/github/golang/stages/10-code-check/openapi-sync@main'
+        with:
+          command: '${{ inputs.openapi_sync_command }}'
+          path: '${{ inputs.openapi_sync_path }}'
+    if: "inputs.openapi_sync_path != '' && !startsWith(github.ref, 'refs/tags/')"
+
   code_check-cross_compile:
     name: 'code-check > quality:cross-compile (${{ matrix.goos }}/${{ matrix.goarch }})'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     strategy:
       fail-fast: false
       matrix:
@@ -68,17 +139,18 @@ jobs:
   # second stage
   security-sast_codeql:
     name: 'security > sast:codeql'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
         with:
           codeql_language: 'go'
+          upload: '${{ inputs.codeql_upload }}'
     needs: [ 'code_check-style_golangci_lint' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_semgrep:
     name: 'security > sast:semgrep'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/semgrep@main'
         with:
@@ -88,7 +160,7 @@ jobs:
 
   security-sast_gitleaks:
     name: 'security > sast:gitleaks'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/gitleaks@main'
     needs: [ 'code_check-style_golangci_lint' ]
@@ -96,7 +168,7 @@ jobs:
 
   security-sast_hadolint:
     name: 'security > sast:hadolint'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
     needs: [ 'code_check-style_golangci_lint' ]
@@ -105,7 +177,7 @@ jobs:
 
   security-sast_trivy:
     name: 'security > sast:trivy'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy@main'
     needs: [ 'code_check-style_golangci_lint' ]
@@ -114,7 +186,7 @@ jobs:
 
   security-sca_trivy:
     name: 'security > sca:trivy'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy-sca@main'
     needs: [ 'code_check-style_golangci_lint' ]
@@ -123,7 +195,7 @@ jobs:
 
   security-sca_govulncheck:
     name: 'security > sca:govulncheck'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/golang/stages/20-security/govulncheck@main'
     needs: [ 'code_check-style_golangci_lint' ]
@@ -134,9 +206,13 @@ jobs:
   # third stage
   tests-test_all:
     name: 'tests > test:all'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/golang/stages/30-tests/all@main'
+        with:
+          database_image: '${{ inputs.database_image }}'
+          database_url_env: '${{ inputs.database_url_env }}'
+          coverage_threshold: '${{ inputs.coverage_threshold }}'
 
       - name: 'Test Results'
         if: "always() && hashFiles('junit.xml') != ''"
@@ -163,7 +239,7 @@ jobs:
   # management stage (optional)
   management-report_sonarqube:
     name: 'management > report:sonarqube'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     container:
       image: 'sonarsource/sonar-scanner-cli:6.2.1'
     needs: ['tests-test_all']

@@ -42,6 +42,28 @@ resolve_go_paths() {
     export GOPATH
   fi
 
+  # Ask Go to create module cache entries read-write. The relocation below only fires when the
+  # cache would land under $TMPDIR, which leaves the far more common case untouched: the default
+  # GOPATH above puts the cache *inside the workspace*, and on a hosted runner that is harmless
+  # only because the workspace is discarded whole after every job.
+  #
+  # A persistent runner reuses its workspace, so the next run's checkout tries to clean it and
+  # cannot -- `actions/checkout` gives up with "File was unable to be removed Error: EACCES:
+  # permission denied, rmdir '<workspace>/.go/pkg/mod/<module>/...'" and takes down every job on
+  # that machine before any of them start, including the ones that never touch Go.
+  #
+  # `-modcacherw` is the flag Go added for exactly this: it keeps the cache where the GitLab
+  # constraint needs it while leaving whatever cleans up next able to remove it. It applies to
+  # newly created entries only, so a cache already written read-only still needs one
+  # `chmod -R u+w` (or `go clean -modcache`) before it can be deleted.
+  case " ${GOFLAGS:-} " in
+    *" -modcacherw "*) ;;
+    *)
+      GOFLAGS="${GOFLAGS:+$GOFLAGS }-modcacherw"
+      export GOFLAGS
+      ;;
+  esac
+
   # An explicit GOMODCACHE means the caller has already decided where it goes.
   if [ -n "${GOMODCACHE:-}" ]; then
     return 0

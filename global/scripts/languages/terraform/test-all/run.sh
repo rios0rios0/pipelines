@@ -66,6 +66,16 @@ TESTS_DIR="${TESTS_DIR:-tests/terratest}"
 # here is safe and matches HashiCorp's documented guidance for shared
 # CI caches. Consumers can override either variable before invoking this
 # script.
+#
+# The cache is only half the story: it holds provider BINARIES, but every
+# `terraform init` still runs the registry protocol per directory, and the
+# last leg of that fetches each provider's `SHA256SUMS` + `.sig` — from
+# github.com for every community provider. Tier 1 therefore serves providers
+# from a local mirror instead (see
+# `global/scripts/shared/terraform-provider-mirror.sh`), which honours
+# `TF_PROVIDER_MIRROR` (`off` restores the pure-registry behaviour) and
+# `TF_PROVIDER_MIRROR_DIR` (an extra store to search first). Both are read by
+# the tier runner, so exporting them here reaches it.
 if [ -z "${TF_PLUGIN_CACHE_DIR:-}" ]; then
   # Guard `HOME` so `set -u` doesn't abort on minimal CI/container images
   # that launch without it. Fall back to `TMPDIR` (or `/tmp`) so the cache

@@ -123,6 +123,22 @@ if [ -z "${TF_PLUGIN_CACHE_DIR:-}" ]; then
 fi
 mkdir -p "${TF_PLUGIN_CACHE_DIR}"
 
+# The cache above stops the SAME provider binary being downloaded once per root
+# module, and that is all it stops. Terraform still runs the registry protocol per
+# directory, and the last step of that protocol fetches the provider's
+# `SHA256SUMS` + `.sig` -- from github.com for every community provider. A repo
+# with a couple of dozen roots therefore asks github.com for the same handful of
+# checksum files dozens of times per run, from one egress IP, and github.com
+# starts answering `503`. Serving the providers from a local mirror removes those
+# requests entirely; see the helper for the measurements and for why an
+# unrestricted `direct` fallback does not work. `|| true` because a machine with
+# no local store is an ordinary state, not a failure -- the loop below then
+# behaves exactly as it did before.
+# shellcheck source=/dev/null
+. "${SCRIPTS_DIR}/global/scripts/shared/terraform-provider-mirror.sh"
+provider_mirror_configure || true
+terraform_init_retry_defaults
+
 # Escape the five XML predefined entities so a Terraform diagnostic containing
 # `<`, `&` or a quote cannot produce a malformed report. The ampersand must be
 # replaced FIRST -- doing it after would re-escape the ampersands introduced by
@@ -138,14 +154,20 @@ escape_xml() {
 total=0
 failed=0
 cases_file="$(mktemp)"
-trap 'rm -f "${cases_file}"' EXIT
+trap 'rm -f "${cases_file}"; provider_mirror_cleanup' EXIT
 
 for directory in ${directories}; do
   total=$((total + 1))
   printf 'Validating %s ... ' "${directory}"
 
   output_file="$(mktemp)"
-  if terraform -chdir="${directory}" init -backend=false -input=false -no-color > "${output_file}" 2>&1 \
+  # `terraform_init_cached` tries the local mirror first and silently falls back
+  # to the original online `init` -- same flags, same output -- so what lands in
+  # `${output_file}` on failure is the real registry diagnostic, never a mirror
+  # miss. The fallback also populates `TF_PLUGIN_CACHE_DIR`, which is one of the
+  # mirror's search paths, so the first root module to need a given provider
+  # version is the only one that pays for it.
+  if terraform_init_cached "${directory}" -backend=false -input=false -no-color > "${output_file}" 2>&1 \
     && terraform -chdir="${directory}" validate -no-color >> "${output_file}" 2>&1; then
     echo 'ok'
     printf '    <testcase classname="validate" name="%s"/>\n' \

@@ -320,6 +320,94 @@ assert_true "the fallback ran and reported the genuine miss" \
 assert_true "the mirrored provider was still served by the mirror, not the registry" \
   '[[ "$MISS_OUT" == *"hashicorp/null"*"(unauthenticated)"* ]]'
 
+echo "== the plugin cache is a mirror source for the primary attempt, never for the fallback =="
+# The invariant: a directory may be an active TF_PLUGIN_CACHE_DIR or a
+# filesystem_mirror source in one `init`, never both. The primary attempt lists the
+# cache and unsets the variable; the fallback keeps the variable and must therefore
+# drop the cache from its store list. Asserted on the generated configs directly,
+# because this is a property of the configs rather than of any one init's outcome.
+INVARIANT_CACHE="$TEST_DIR/invariant-cache"
+mkdir -p "$INVARIANT_CACHE/registry.terraform.io"
+INVARIANT_OUT="$(env -i PATH="$PATH" HOME="$TEST_DIR/no-home" \
+  TF_PROVIDER_MIRROR_DIR="$MIRROR_DIR" TF_PLUGIN_CACHE_DIR="$INVARIANT_CACHE" sh -c \
+  ". '$LIB_SH'
+   provider_mirror_configure > /dev/null 2>&1
+   echo '--PRIMARY--';  cat \"\${TF_PROVIDER_MIRROR_CONFIG:-/dev/null}\"
+   echo '--FALLBACK--'; cat \"\${TF_PROVIDER_MIRROR_FALLBACK_CONFIG:-/dev/null}\"
+   provider_mirror_cleanup")"
+INVARIANT_PRIMARY="${INVARIANT_OUT%%--FALLBACK--*}"
+INVARIANT_FALLBACK="${INVARIANT_OUT#*--FALLBACK--}"
+
+assert_true "the primary lists the plugin cache" '[[ "$INVARIANT_PRIMARY" == *"$INVARIANT_CACHE"* ]]'
+assert_true "the fallback does NOT list the plugin cache" '[[ "$INVARIANT_FALLBACK" != *"$INVARIANT_CACHE"* ]]'
+assert_true "the fallback still lists the other stores" '[[ "$INVARIANT_FALLBACK" == *"$MIRROR_DIR"* ]]'
+
+echo "== Terraform really does refuse when a store is both the cache and a mirror =="
+# Pins the reason the invariant above exists, at the level where it is observable:
+# Terraform itself, with no helper involved. Two inits of the same root against the
+# same seeded cache, differing only in whether that cache is also listed as a
+# `filesystem_mirror`.
+#
+# It is done directly rather than through `run_validate` because the runner's
+# primary attempt installs into `.terraform` before it fails, so the fallback finds
+# the provider already there and never re-installs it — a version of this test
+# routed through the runner passes against the BROKEN code, which is worse than no
+# test. End-to-end coverage of the runner belongs to the full-repository harness,
+# not here.
+# The live regression. Once the cache holds anything, every later root module that
+# takes the fallback died with "cannot install existing provider directory ... to
+# itself", because the cache was both the mirror it selected from and the target it
+# installed into. Reproduced by warming the cache first, then forcing the fallback
+# with a provider no store can satisfy. The init still fails on that provider — what
+# must NOT appear is the self-install error for the cached ones.
+#
+# The warmed provider must be one the OTHER stores do not carry. Terraform takes
+# the first mirror that can satisfy a provider, so if `$MIRROR_DIR` also had it the
+# cache would never be selected and the bug would not reproduce — the assertion
+# would pass for the wrong reason. `hashicorp/local` is seeded into the cache alone.
+SELF_CACHE="$TEST_DIR/self-install-cache"
+SELF_ROOT="$TEST_DIR/self-install-root"
+mkdir -p "$SELF_CACHE" "$SELF_ROOT"
+cat > "$SELF_ROOT/main.tf" << 'EOF'
+terraform {
+  required_providers {
+    local = {
+      source = "hashicorp/local"
+    }
+  }
+}
+EOF
+(cd "$SELF_ROOT" && TF_PLUGIN_CACHE_DIR="$SELF_CACHE" \
+  terraform init -backend=false -input=false -no-color) > /dev/null 2>&1 || true
+
+self_install_init() {
+  # $1 = extra filesystem_mirror path, or empty for none
+  local cfg="$TEST_DIR/self-install-$2.tfrc"
+  {
+    echo 'provider_installation {'
+    if [ -n "$1" ]; then
+      printf '  filesystem_mirror {\n    path    = "%s"\n    include = ["registry.terraform.io/*/*"]\n  }\n' "$1"
+    fi
+    echo '  direct {}'
+    echo '}'
+  } > "$cfg"
+  rm -rf "$SELF_ROOT/.terraform" "$SELF_ROOT/.terraform.lock.hcl"
+  TF_CLI_CONFIG_FILE="$cfg" TF_PLUGIN_CACHE_DIR="$SELF_CACHE" \
+    terraform -chdir="$SELF_ROOT" init -backend=false -input=false -no-color 2>&1
+}
+
+# `|| true` on both: the bad case is EXPECTED to exit non-zero, and under `set -e`
+# a failing command substitution would abort the suite before it could assert on it.
+SELF_BAD="$(self_install_init "$SELF_CACHE" bad || true)"
+SELF_GOOD="$(self_install_init "" good || true)"
+
+assert_true "the cache was seeded, so the case is live" \
+  "[ -d '$SELF_CACHE/registry.terraform.io/hashicorp/local' ]"
+assert_true "cache listed as its own mirror: Terraform refuses" \
+  '[[ "$SELF_BAD" == *"to itself"* ]]'
+assert_true "cache not listed as a mirror: the same init succeeds" \
+  '[[ "$SELF_GOOD" == *"Installed hashicorp/local"* ]]'
+
 echo "== a cache poisoned by an earlier revision is repaired =="
 # Simulate the artifact the shipped version left behind on persistent agents:
 # a leaf symlink pointing into the mirror. It must be removed, because the online

@@ -227,12 +227,22 @@ echo "== a mirror hit leaves the plugin cache free of symlinks =="
 # Nothing fails at that moment — the damage lands on the next online install,
 # which cannot write a real package over a symlink and fails deterministically
 # with "cannot install package into target directory ... because it is a symlink".
+#
+# The run's exit status is asserted BEFORE the symlink check, and that ordering is
+# the point. An `init` that failed outright writes no symlink either, so checking
+# only for symlinks would pass for the wrong reason — the same vacuous shape as
+# asserting on a path the test never creates.
 SYMLINK_REPO="$TEST_DIR/symlink"
 SYMLINK_CACHE="$TEST_DIR/symlink-cache"
 mkdir -p "$SYMLINK_CACHE"
 make_valid_root "$SYMLINK_REPO/stacks/app"
-run_validate "$SYMLINK_REPO" "${OFFLINE_ENV[@]}" \
-  TF_PROVIDER_MIRROR_DIR="$MIRROR_DIR" TF_PLUGIN_CACHE_DIR="$SYMLINK_CACHE" > /dev/null 2>&1 || true
+SYMLINK_RC=0
+SYMLINK_OUT="$(run_validate "$SYMLINK_REPO" "${OFFLINE_ENV[@]}" \
+  TF_PROVIDER_MIRROR_DIR="$MIRROR_DIR" TF_PLUGIN_CACHE_DIR="$SYMLINK_CACHE" 2>&1)" || SYMLINK_RC=$?
+
+assert_true "the mirrored init actually succeeded" "[ $SYMLINK_RC -eq 0 ]"
+assert_true "and the mirror is what served it, with the network unreachable" \
+  '[[ "$SYMLINK_OUT" == *"1 passed, 0 failed"* ]]'
 assert_true "the mirrored init wrote no symlink into the plugin cache" \
   "[ -z \"\$(find '$SYMLINK_CACHE' -type l 2>/dev/null)\" ]"
 

@@ -31,11 +31,12 @@ fail() { EXIT_CODE=1; echo "[test-go-tmpdir-modcache] FAIL: $1" >&2; }
 # the resolved GOPATH and GOMODCACHE. `set -e` is on, matching the runners that
 # source it, so a library that returns non-zero fails the case loudly.
 resolve() {
-    local workdir="$1" tmpdir="$2" home="$3" gopath="$4" gomodcache="$5"
+    local workdir="$1" tmpdir="$2" home="$3" gopath="$4" gomodcache="$5" goflags="${6:--}"
     local prelude=""
 
     [ "$gopath" = "-" ] && prelude="$prelude unset GOPATH;" || prelude="$prelude export GOPATH='$gopath';"
     [ "$gomodcache" = "-" ] && prelude="$prelude unset GOMODCACHE;" || prelude="$prelude export GOMODCACHE='$gomodcache';"
+    [ "$goflags" = "-" ] && prelude="$prelude unset GOFLAGS;" || prelude="$prelude export GOFLAGS='$goflags';"
 
     mkdir -p "$workdir"
     env -i PATH="$PATH" TMPDIR="$tmpdir" HOME="$home" sh -c "
@@ -46,6 +47,7 @@ resolve() {
         resolve_go_paths
         echo \"GOPATH=\$GOPATH\"
         echo \"GOMODCACHE=\${GOMODCACHE:-<unset>}\"
+        echo \"GOFLAGS=\${GOFLAGS:-<unset>}\"
     " 2>/dev/null
 }
 
@@ -116,6 +118,25 @@ check "leaves GOMODCACHE alone when \$HOME is unset" \
 check "still resolves GOPATH when \$HOME is unset" \
       "$(echo "$out" | grep '^GOPATH=')" \
       "GOPATH=$FAKE_TMP/project/.go"
+
+# --- the module cache must stay removable ------------------------------------
+# The default GOPATH puts the cache inside the workspace, which is fine only while the workspace
+# is thrown away after every job. A persistent runner reuses it, and the next checkout then fails
+# to clean a read-only cache with EACCES -- before any job on that machine starts.
+out="$(resolve "$SANDBOX/project" "$FAKE_TMP" "$FAKE_HOME" - -)"
+check "asks Go for a writable module cache" \
+      "$(echo "$out" | grep '^GOFLAGS=')" \
+      "GOFLAGS=-modcacherw"
+
+out="$(resolve "$SANDBOX/project" "$FAKE_TMP" "$FAKE_HOME" - - "-mod=readonly")"
+check "appends to an existing GOFLAGS rather than replacing it" \
+      "$(echo "$out" | grep '^GOFLAGS=')" \
+      "GOFLAGS=-mod=readonly -modcacherw"
+
+out="$(resolve "$SANDBOX/project" "$FAKE_TMP" "$FAKE_HOME" - - "-modcacherw")"
+check "does not repeat the flag when it is already set" \
+      "$(echo "$out" | grep '^GOFLAGS=')" \
+      "GOFLAGS=-modcacherw"
 
 # --- the property the whole library exists for -------------------------------
 # Reproduce Go's own permissions and prove the placement decision is what makes

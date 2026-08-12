@@ -102,7 +102,14 @@
 # it in the mirror. A cold run pays one checksum fetch per distinct provider
 # version instead of one per directory.
 provider_mirror_configure() {
+  # BOTH are cleared up front. Every path out of this function other than the
+  # last one is a decline, and a decline has to leave `terraform_init_cached`
+  # with nothing to reach for -- otherwise a second call in the same shell (a
+  # runner that re-configures, a caller that disables the mirror partway) would
+  # still see the previous call's paths and hand Terraform a `-config-file` that
+  # `provider_mirror_cleanup` has already deleted.
   TF_PROVIDER_MIRROR_CONFIG=''
+  TF_PROVIDER_MIRROR_FALLBACK_CONFIG=''
 
   provider_mirror_disabled=0
   case "${TF_PROVIDER_MIRROR:-on}" in

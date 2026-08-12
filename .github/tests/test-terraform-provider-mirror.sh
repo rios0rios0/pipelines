@@ -129,6 +129,23 @@ assert_true "the resolved store reaches the generated config" '[[ "$XDG_CONF" ==
 assert_true "HOME is used when XDG_CACHE_HOME is unset" "[ '$HOME_DERIVED' = '$HOME_STORE' ]"
 assert_true "nothing is guessed when both are unset" "[ -z '$NONE_DERIVED' ]"
 
+echo "== a declining call clears BOTH config paths =="
+# Every decline has to leave `terraform_init_cached` with nothing to reach for.
+# Seed both variables with paths that no longer exist, the way a second call in
+# the same shell would see them, and require the decline to clear them — a stale
+# fallback path would otherwise be handed to Terraform as a config file that
+# `provider_mirror_cleanup` has already deleted.
+for decline in "TF_PROVIDER_MIRROR=off" "TF_CLI_CONFIG_FILE=$TEST_DIR/caller.tfrc"; do
+  DECLINE_OUT="$(env -i PATH="$PATH" HOME="$TEST_DIR/no-home" "$decline" sh -c \
+    ". '$LIB_SH'
+     TF_PROVIDER_MIRROR_CONFIG=/nonexistent/stale-primary
+     TF_PROVIDER_MIRROR_FALLBACK_CONFIG=/nonexistent/stale-fallback
+     provider_mirror_configure > /dev/null 2>&1
+     printf 'primary=[%s] fallback=[%s]' \"\${TF_PROVIDER_MIRROR_CONFIG:-}\" \"\${TF_PROVIDER_MIRROR_FALLBACK_CONFIG:-}\"")"
+  assert_true "declining via ${decline%%=*} clears both paths" \
+    '[[ "$DECLINE_OUT" == "primary=[] fallback=[]" ]]'
+done
+
 echo "== a caller's own CLI config file is never overridden =="
 EXISTING_TFRC="$TEST_DIR/caller.tfrc"
 echo '# the caller owns this' > "$EXISTING_TFRC"

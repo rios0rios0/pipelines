@@ -342,6 +342,30 @@ assert_true "the primary lists the plugin cache" '[[ "$INVARIANT_PRIMARY" == *"$
 assert_true "the fallback does NOT list the plugin cache" '[[ "$INVARIANT_FALLBACK" != *"$INVARIANT_CACHE"* ]]'
 assert_true "the fallback still lists the other stores" '[[ "$INVARIANT_FALLBACK" == *"$MIRROR_DIR"* ]]'
 
+echo "== the fallback subtraction survives a differently-spelled cache path =="
+# Raw string equality is not enough: `/store` and `/store/` are one directory, as
+# are a symlink and its target. Either slipping through puts the active cache back
+# into the fallback's mirror list and restores the "install to itself" failure.
+SPELL_CACHE="$TEST_DIR/spelling-cache"
+SPELL_LINK="$TEST_DIR/spelling-link"
+mkdir -p "$SPELL_CACHE/registry.terraform.io"
+ln -sfn "$SPELL_CACHE" "$SPELL_LINK"
+spell_fallback() {
+  env -i PATH="$PATH" HOME="$TEST_DIR/no-home" \
+    TF_PROVIDER_MIRROR_DIR="$1" TF_PLUGIN_CACHE_DIR="$2" sh -c \
+    ". '$LIB_SH'
+     provider_mirror_configure > /dev/null 2>&1
+     cat \"\${TF_PROVIDER_MIRROR_FALLBACK_CONFIG:-/dev/null}\"
+     provider_mirror_cleanup"
+}
+SPELL_SLASH="$(spell_fallback "$SPELL_CACHE/" "$SPELL_CACHE")"
+SPELL_SYMLINK="$(spell_fallback "$SPELL_LINK" "$SPELL_CACHE")"
+
+assert_true "a trailing slash does not smuggle the cache back in" \
+  '[[ "$SPELL_SLASH" != *"$SPELL_CACHE"* ]]'
+assert_true "nor does a symlink to it" \
+  '[[ "$SPELL_SYMLINK" != *"$SPELL_CACHE"* && "$SPELL_SYMLINK" != *"$SPELL_LINK"* ]]'
+
 echo "== Terraform really does refuse when a store is both the cache and a mirror =="
 # Pins the reason the invariant above exists, at the level where it is observable:
 # Terraform itself, with no helper involved. Two inits of the same root against the

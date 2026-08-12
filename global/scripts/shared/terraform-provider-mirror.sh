@@ -262,14 +262,25 @@ EOF
   # source in one `init`, never both. The primary attempt keeps the cache in its
   # list and unsets the variable instead, so the cache still serves as a READ
   # source there -- which is what lets a cold machine converge across directories.
+  provider_mirror_cache_canonical=''
+  if [ -n "${TF_PLUGIN_CACHE_DIR:-}" ]; then
+    provider_mirror_cache_canonical="$(provider_mirror_canonical "${TF_PLUGIN_CACHE_DIR}")"
+  fi
   provider_mirror_fallback_candidates=''
-  printf '%s' "${provider_mirror_candidates}" | while IFS= read -r provider_mirror_dir; do
+  # Fed by a here-document rather than a pipe so the accumulator below builds in
+  # THIS shell; a `... | while` would run the loop in a subshell and the list would
+  # come back empty, which is why an earlier revision round-tripped through a file.
+  while IFS= read -r provider_mirror_dir; do
     [ -n "${provider_mirror_dir}" ] || continue
-    [ "${provider_mirror_dir}" = "${TF_PLUGIN_CACHE_DIR:-}" ] && continue
-    echo "${provider_mirror_dir}"
-  done > "${provider_mirror_config}.fallback-list"
-  provider_mirror_fallback_candidates="$(cat "${provider_mirror_config}.fallback-list")"
-  rm -f "${provider_mirror_config}.fallback-list"
+    if [ -n "${provider_mirror_cache_canonical}" ] \
+      && [ "$(provider_mirror_canonical "${provider_mirror_dir}")" = "${provider_mirror_cache_canonical}" ]; then
+      continue
+    fi
+    provider_mirror_fallback_candidates="${provider_mirror_fallback_candidates}${provider_mirror_dir}
+"
+  done << EOF
+${provider_mirror_candidates}
+EOF
 
   # Emits `filesystem_mirror` blocks for the newline-separated list in $1.
   provider_mirror_emit_mirrors() {
@@ -319,6 +330,33 @@ EOF
   echo "  provider mirror: anything missing falls back to the origin registry, per directory."
 
   return 0
+}
+
+# Resolves a directory to a canonical absolute path, so two spellings of the same
+# location compare equal. Raw string equality is not enough for the fallback
+# subtraction below: `/store` and `/store/` are the same directory, as are a
+# symlink and its target, and two of the four candidate variables can easily be
+# pointed at one store. Any of those slipping through puts the active cache back
+# into the fallback's mirror list and restores the "install to itself" failure.
+#
+# `realpath` handles both cases; where it is absent (busybox images) fall back to
+# trimming trailing slashes, which still catches the spelling difference an
+# operator is most likely to produce by hand.
+provider_mirror_canonical() {
+  if command -v realpath > /dev/null 2>&1; then
+    if provider_mirror_resolved="$(realpath "$1" 2> /dev/null)"; then
+      printf '%s' "${provider_mirror_resolved}"
+      return 0
+    fi
+  fi
+  provider_mirror_trimmed="$1"
+  while :; do
+    case "${provider_mirror_trimmed}" in
+      ?*/) provider_mirror_trimmed="${provider_mirror_trimmed%/}" ;;
+      *) break ;;
+    esac
+  done
+  printf '%s' "${provider_mirror_trimmed}"
 }
 
 # Guards the two public retry overrides. A non-integer -- or, for the attempt

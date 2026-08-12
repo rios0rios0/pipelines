@@ -163,6 +163,54 @@ ${provider_mirror_dir}
     return 1
   fi
 
+  # Repair a plugin cache that an earlier revision of this helper poisoned. That
+  # revision ran the mirror attempt with `TF_PLUGIN_CACHE_DIR` still set, so
+  # Terraform wrote symlinks-into-the-mirror there, and every later online
+  # install of those exact versions fails with "cannot install package into
+  # target directory ... because it is a symlink" until they are removed. The
+  # `validate` tier heals itself because its cache is workspace-relative and the
+  # checkout wipes it, but `terra-test` defaults to a `$HOME` path that persists
+  # across builds on a self-hosted machine, so without this the tier stays broken
+  # until somebody clears the directory by hand.
+  #
+  # Only links pointing INTO one of the mirrors resolved above are removed --
+  # those are exactly this helper's own artifacts. A consumer who legitimately
+  # runs their own `filesystem_mirror` alongside a plugin cache has the same
+  # symlinks for a different target, and deleting theirs would force a needless
+  # re-download.
+  if [ -n "${TF_PLUGIN_CACHE_DIR:-}" ] && [ -d "${TF_PLUGIN_CACHE_DIR}" ] \
+    && command -v readlink > /dev/null 2>&1; then
+    provider_mirror_pruned=0
+    # Fed by a here-document rather than a pipe so the counter below increments in
+    # THIS shell; a `find | while` would run the loop in a subshell and the total
+    # would always print as zero.
+    while IFS= read -r provider_mirror_link; do
+      [ -n "${provider_mirror_link}" ] || continue
+      provider_mirror_target="$(readlink "${provider_mirror_link}" 2>/dev/null)" || continue
+      provider_mirror_saved_ifs="${IFS}"
+      IFS='
+'
+      # shellcheck disable=SC2086 # word splitting on the newline IFS set above is
+      # how the candidate list is iterated; the paths themselves may contain spaces
+      for provider_mirror_dir in ${provider_mirror_candidates}; do
+        case "${provider_mirror_target}" in
+          "${provider_mirror_dir}"/*)
+            rm -f "${provider_mirror_link}"
+            provider_mirror_pruned=$((provider_mirror_pruned + 1))
+            break
+            ;;
+          *) ;;
+        esac
+      done
+      IFS="${provider_mirror_saved_ifs}"
+    done << EOF
+$(find "${TF_PLUGIN_CACHE_DIR}" -type l 2> /dev/null)
+EOF
+    if [ "${provider_mirror_pruned}" -gt 0 ]; then
+      echo "  provider mirror: removed ${provider_mirror_pruned} stale symlink(s) from ${TF_PLUGIN_CACHE_DIR} left by an earlier revision."
+    fi
+  fi
+
   if ! provider_mirror_config="$(mktemp 2> /dev/null)"; then
     echo "  provider mirror: could not create a temporary CLI config; using the origin registry." >&2
     return 1
@@ -258,6 +306,23 @@ terraform_init_cached() {
   shift
 
   if [ -n "${TF_PROVIDER_MIRROR_CONFIG:-}" ]; then
+    # `env -u TF_PLUGIN_CACHE_DIR` is load-bearing, and leaving it out breaks the
+    # FALLBACK rather than this attempt. With a plugin cache configured AND a
+    # `filesystem_mirror` serving the package, Terraform populates the cache by
+    # writing a SYMLINK into it pointing at the mirror. Nothing complains at the
+    # time. But the online fallback later has to install a real package at that
+    # exact path, and refuses:
+    #
+    #   Error while installing hashicorp/tls v4.3.0: cannot install package into
+    #   target directory <cache>/registry.terraform.io/hashicorp/tls/4.3.0/
+    #   linux_amd64 because it is a symlink
+    #
+    # That is deterministic, so the retry loop below burns every attempt on it
+    # and blames a transient registry for a failure that will never clear. The
+    # mirror gains nothing from the cache anyway -- it is already a local
+    # directory -- so the two are never enabled together, leaving the fallback as
+    # the cache's only writer.
+    #
     # `-lockfile=readonly` only when a lock file is already there, and the
     # conditional is not cosmetic: with no lock file the flag makes `init` fail
     # outright ("Changes to the required provider dependencies were detected, but
@@ -272,12 +337,12 @@ terraform_init_cached() {
     # complete entry. When the lock file is already complete the flag is inert --
     # `init` succeeds and the file is untouched.
     if [ -f "${terraform_init_dir}/.terraform.lock.hcl" ]; then
-      if TF_CLI_CONFIG_FILE="${TF_PROVIDER_MIRROR_CONFIG}" \
+      if env -u TF_PLUGIN_CACHE_DIR TF_CLI_CONFIG_FILE="${TF_PROVIDER_MIRROR_CONFIG}" \
         terraform -chdir="${terraform_init_dir}" init -lockfile=readonly "$@" > /dev/null 2>&1; then
         return 0
       fi
     else
-      if TF_CLI_CONFIG_FILE="${TF_PROVIDER_MIRROR_CONFIG}" \
+      if env -u TF_PLUGIN_CACHE_DIR TF_CLI_CONFIG_FILE="${TF_PROVIDER_MIRROR_CONFIG}" \
         terraform -chdir="${terraform_init_dir}" init "$@" > /dev/null 2>&1; then
         return 0
       fi

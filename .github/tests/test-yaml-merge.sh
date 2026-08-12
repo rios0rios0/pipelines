@@ -47,13 +47,13 @@ merge_yaml() {
 
   local workdir
   workdir="$(mktemp -d)"
-  if [ -f "$repo_file" ]; then
+  if [[ -f "$repo_file" ]]; then
     cp "$repo_file" "$workdir/.golangci.yml"
   fi
 
   (
     cd "$workdir" || exit 1
-    if [ -n "$extra_path" ]; then
+    if [[ -n "$extra_path" ]]; then
       export PATH="$extra_path:$PATH"
     fi
     GOLANGCI_LINT_MERGE_ONLY=1 sh "$RUN_SH" > /dev/null 2>&1

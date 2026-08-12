@@ -40,16 +40,17 @@ case "$(uname -m)" in
 esac
 
 YQ=""
-if command -v yq > /dev/null 2>&1; then
-  # mikefarah/yq prints its own repository URL in the version banner; kislyuk/yq prints a bare
-  # `yq <version>`. Matching the URL is what separates them, since both answer `--version`.
-  if yq --version 2>&1 | grep -q 'mikefarah'; then
-    YQ="yq"
-  fi
+# mikefarah/yq prints its own repository URL in the version banner; kislyuk/yq prints a bare
+# `yq <version>`. Matching the URL is what separates them, since both answer `--version`.
+if command -v yq > /dev/null 2>&1 && yq --version 2>&1 | grep -q 'mikefarah'; then
+  YQ="yq"
 fi
 if [ -z "$YQ" ]; then
   mkdir -p ./bin
-  wget -O ./bin/yq -nv \
+  # `--https-only` because the release URL redirects to GitHub's asset host: without it a
+  # redirect could walk the download down to plain HTTP, where the binary about to be marked
+  # executable is whatever answered.
+  wget --https-only -O ./bin/yq -nv \
     "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_${YQ_OS}_${YQ_ARCH}"
   chmod +x ./bin/yq
   YQ="./bin/yq"

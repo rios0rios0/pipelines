@@ -60,6 +60,15 @@ on:
         description: 'SonarQube authentication token'
         required: false
 
+# Corepack is what turns `packageManager: yarn@4.x` into a usable `yarn`, and it is enabled
+# BEFORE `actions/setup-node` because that action probes `yarn --version` to decide which cache
+# layout to restore. Node 25 dropped the bundled Corepack, so `corepack enable` is simply a
+# command-not-found there and the job dies on its second step -- which is what a consumer would
+# hit the moment they pointed `node_version` at a supported major. It is installed only when it
+# is genuinely absent: on the versions that still bundle it, npm refuses to overwrite the shim
+# it did not install and fails with `EEXIST`, so an unconditional install would break exactly
+# the consumers this is meant to leave alone. `0.34.7` is the last release whose engines span
+# Node 20 through 26; `0.35.0` covers neither the 20 defaulted to here nor the 25 that needs it.
 jobs:
   # first stage
   code_check-basic_checks:
@@ -80,7 +89,7 @@ jobs:
 
       - name: 'Enable Corepack'
         run: |
-          npm i -g corepack@latest --force
+          command -v corepack > /dev/null 2>&1 || npm i -g --ignore-scripts corepack@0.34.7
           corepack enable
         shell: 'bash'
 
@@ -175,7 +184,7 @@ jobs:
 
       - name: 'Enable Corepack'
         run: |
-          npm i -g corepack@latest --force
+          command -v corepack > /dev/null 2>&1 || npm i -g --ignore-scripts corepack@0.34.7
           corepack enable
         shell: 'bash'
 
@@ -202,7 +211,7 @@ jobs:
 
       - name: 'Enable Corepack'
         run: |
-          npm i -g corepack@latest --force
+          command -v corepack > /dev/null 2>&1 || npm i -g --ignore-scripts corepack@0.34.7
           corepack enable
         shell: 'bash'
 
@@ -264,7 +273,7 @@ jobs:
 
       - name: 'Enable Corepack'
         run: |
-          npm i -g corepack@latest --force
+          command -v corepack > /dev/null 2>&1 || npm i -g --ignore-scripts corepack@0.34.7
           corepack enable
         shell: 'bash'
 

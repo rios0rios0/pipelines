@@ -36,11 +36,22 @@ runs:
           exit 1
         fi
 
+        # A hosted runner is discarded after the job, but a self-hosted one is not: a container
+        # left behind by a cancelled or crashed run still holds the name, and `docker run`
+        # refuses to start a second one with it.
+        docker rm --force 'pipelines-test-db' >/dev/null 2>&1 || true
+
+        # `127.0.0.1::5432` rather than `5432:5432`: the empty host port asks Docker for a free
+        # ephemeral one, so a machine already running PostgreSQL on 5432 -- the normal state of
+        # a developer box or a long-lived self-hosted runner -- does not collide; and binding
+        # the published port to loopback keeps the database off every other interface, since
+        # the default `0.0.0.0` would put an instance with well-known credentials on the
+        # network the runner sits in.
         docker run --detach --name 'pipelines-test-db' \
           --env POSTGRES_USER='pipelines' \
           --env POSTGRES_PASSWORD='pipelines' \
           --env POSTGRES_DB='pipelines_test' \
-          --publish '5432:5432' \
+          --publish '127.0.0.1::5432' \
           --health-cmd 'pg_isready -U pipelines' \
           --health-interval '5s' \
           --health-timeout '5s' \
@@ -59,11 +70,20 @@ runs:
           exit 1
         fi
 
+        # Read the port Docker actually assigned. `docker port` answers `127.0.0.1:49163`, and
+        # an IPv6 host would answer `[::1]:49163`, so take the field after the LAST colon.
+        host_port="$(docker port 'pipelines-test-db' '5432/tcp' | head -n 1)"
+        host_port="${host_port##*:}"
+        if [ -z "$host_port" ]; then
+          echo '::error::could not resolve the published port of the test database'
+          exit 1
+        fi
+
         # printf rather than interpolation: the Gitleaks "Password in URL" rule matches the
         # literal `://<something>:<something>@` shape, and an interpolated user:password@ still
         # reads as that shape even though it holds no credential. A format string does not.
         url="$(printf 'postgres://%s:%s@%s:%s/%s?sslmode=disable' \
-          'pipelines' 'pipelines' 'localhost' '5432' 'pipelines_test')"
+          'pipelines' 'pipelines' '127.0.0.1' "$host_port" 'pipelines_test')"
         echo "${{ inputs.database_url_env }}=${url}" >> "$GITHUB_ENV"
 
     - name: 'Setup Go'

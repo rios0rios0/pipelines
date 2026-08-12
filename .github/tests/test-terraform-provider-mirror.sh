@@ -129,6 +129,23 @@ assert_true "the resolved store reaches the generated config" '[[ "$XDG_CONF" ==
 assert_true "HOME is used when XDG_CACHE_HOME is unset" "[ '$HOME_DERIVED' = '$HOME_STORE' ]"
 assert_true "nothing is guessed when both are unset" "[ -z '$NONE_DERIVED' ]"
 
+echo "== a declining call clears BOTH config paths =="
+# Every decline has to leave `terraform_init_cached` with nothing to reach for.
+# Seed both variables with paths that no longer exist, the way a second call in
+# the same shell would see them, and require the decline to clear them — a stale
+# fallback path would otherwise be handed to Terraform as a config file that
+# `provider_mirror_cleanup` has already deleted.
+for decline in "TF_PROVIDER_MIRROR=off" "TF_CLI_CONFIG_FILE=$TEST_DIR/caller.tfrc"; do
+  DECLINE_OUT="$(env -i PATH="$PATH" HOME="$TEST_DIR/no-home" "$decline" sh -c \
+    ". '$LIB_SH'
+     TF_PROVIDER_MIRROR_CONFIG=/nonexistent/stale-primary
+     TF_PROVIDER_MIRROR_FALLBACK_CONFIG=/nonexistent/stale-fallback
+     provider_mirror_configure > /dev/null 2>&1
+     printf 'primary=[%s] fallback=[%s]' \"\${TF_PROVIDER_MIRROR_CONFIG:-}\" \"\${TF_PROVIDER_MIRROR_FALLBACK_CONFIG:-}\"")"
+  assert_true "declining via ${decline%%=*} clears both paths" \
+    '[[ "$DECLINE_OUT" == "primary=[] fallback=[]" ]]'
+done
+
 echo "== a caller's own CLI config file is never overridden =="
 EXISTING_TFRC="$TEST_DIR/caller.tfrc"
 echo '# the caller owns this' > "$EXISTING_TFRC"
@@ -261,6 +278,47 @@ FALLBACK_OUT="$(run_validate "$FALLBACK_REPO" env \
 assert_true "both roots initialise" "[ $FALLBACK_RC -eq 0 ]"
 assert_true "and nothing reports the symlink error" \
   '[[ "$FALLBACK_OUT" != *"because it is a symlink"* ]]'
+
+echo "== a mirror miss still serves the providers the mirror does hold =="
+# This is what made two root modules keep failing after the mirror shipped. One
+# provider the mirror cannot satisfy sends the whole directory to the fallback,
+# and a pure-`direct` fallback then re-resolves EVERY provider from the registry
+# -- including the ones sitting in the mirror, whose checksums come from github.
+# The fallback keeps the mirror in play, so only the genuine miss goes out.
+#
+# The mirrored provider is pinned to a version the mirror holds and the missing
+# one to a version that exists nowhere locally; with the network blocked, the
+# whole init must fail (the miss is unreachable) while the mirrored provider is
+# still resolved locally, which the log line proves.
+#
+# The network is deliberately LEFT UP here, because that is the failing condition
+# in production: `registry.terraform.io` is reachable and github is the throttled
+# host. It is also the only way to tell the two fallbacks apart — with the
+# network blocked, both fail identically on the registry version query, so an
+# offline assertion cannot see the difference.
+#
+# The discriminator is Terraform's own install line. A provider taken from a
+# filesystem mirror installs `(unauthenticated)`, because a mirror carries no
+# signature; one fetched through `direct` installs `(signed by ...)` after the
+# github checksum round trip that is being avoided.
+MISS_REPO="$TEST_DIR/miss"
+MISS_CACHE="$TEST_DIR/miss-cache"
+mkdir -p "$MISS_REPO/stacks/app" "$MISS_CACHE"
+cat > "$MISS_REPO/stacks/app/main.tf" << 'EOF'
+terraform {
+  required_providers {
+    null    = { source = "hashicorp/null" }
+    missing = { source = "hashicorp/nonexistent-for-tests" }
+  }
+}
+EOF
+MISS_OUT="$(run_validate "$MISS_REPO" env \
+  TF_PROVIDER_MIRROR_DIR="$MIRROR_DIR" TF_PLUGIN_CACHE_DIR="$MISS_CACHE" TF_INIT_MAX_ATTEMPTS=1 2>&1 || true)"
+
+assert_true "the fallback ran and reported the genuine miss" \
+  '[[ "$MISS_OUT" == *"nonexistent-for-tests"* ]]'
+assert_true "the mirrored provider was still served by the mirror, not the registry" \
+  '[[ "$MISS_OUT" == *"hashicorp/null"*"(unauthenticated)"* ]]'
 
 echo "== a cache poisoned by an earlier revision is repaired =="
 # Simulate the artifact the shipped version left behind on persistent agents:

@@ -221,6 +221,65 @@ ZH_AFTER=0
 assert_true "the seed run produced zh: hashes to protect" "[ '$ZH_BEFORE' -gt 0 ]"
 assert_true "the mirrored run preserved every one of them" "[ '$ZH_BEFORE' -eq '$ZH_AFTER' ]"
 
+echo "== a mirror hit leaves the plugin cache free of symlinks =="
+# The regression this pins: running the mirror attempt with TF_PLUGIN_CACHE_DIR
+# still set makes Terraform populate the cache with a SYMLINK into the mirror.
+# Nothing fails at that moment — the damage lands on the next online install,
+# which cannot write a real package over a symlink and fails deterministically
+# with "cannot install package into target directory ... because it is a symlink".
+#
+# The run's exit status is asserted BEFORE the symlink check, and that ordering is
+# the point. An `init` that failed outright writes no symlink either, so checking
+# only for symlinks would pass for the wrong reason — the same vacuous shape as
+# asserting on a path the test never creates.
+SYMLINK_REPO="$TEST_DIR/symlink"
+SYMLINK_CACHE="$TEST_DIR/symlink-cache"
+mkdir -p "$SYMLINK_CACHE"
+make_valid_root "$SYMLINK_REPO/stacks/app"
+SYMLINK_RC=0
+SYMLINK_OUT="$(run_validate "$SYMLINK_REPO" "${OFFLINE_ENV[@]}" \
+  TF_PROVIDER_MIRROR_DIR="$MIRROR_DIR" TF_PLUGIN_CACHE_DIR="$SYMLINK_CACHE" 2>&1)" || SYMLINK_RC=$?
+
+assert_true "the mirrored init actually succeeded" "[ $SYMLINK_RC -eq 0 ]"
+assert_true "and the mirror is what served it, with the network unreachable" \
+  '[[ "$SYMLINK_OUT" == *"1 passed, 0 failed"* ]]'
+assert_true "the mirrored init wrote no symlink into the plugin cache" \
+  "[ -z \"\$(find '$SYMLINK_CACHE' -type l 2>/dev/null)\" ]"
+
+echo "== a fallback still works against a cache a mirror hit already touched =="
+# End-to-end version of the same regression: mirror-serve one root, then force a
+# root the mirror cannot satisfy through the online fallback using that very
+# cache. This is the exact sequence that failed in CI.
+FALLBACK_REPO="$TEST_DIR/fallback"
+FALLBACK_CACHE="$TEST_DIR/fallback-cache"
+mkdir -p "$FALLBACK_CACHE"
+make_valid_root "$FALLBACK_REPO/stacks/one"
+make_valid_root "$FALLBACK_REPO/stacks/two"
+FALLBACK_RC=0
+FALLBACK_OUT="$(run_validate "$FALLBACK_REPO" env \
+  TF_PROVIDER_MIRROR_DIR="$MIRROR_DIR" TF_PLUGIN_CACHE_DIR="$FALLBACK_CACHE" TF_INIT_MAX_ATTEMPTS=1 2>&1)" || FALLBACK_RC=$?
+assert_true "both roots initialise" "[ $FALLBACK_RC -eq 0 ]"
+assert_true "and nothing reports the symlink error" \
+  '[[ "$FALLBACK_OUT" != *"because it is a symlink"* ]]'
+
+echo "== a cache poisoned by an earlier revision is repaired =="
+# Simulate the artifact the shipped version left behind on persistent agents:
+# a leaf symlink pointing into the mirror. It must be removed, because the online
+# fallback can never install over it.
+POISON_CACHE="$TEST_DIR/poisoned-cache"
+POISON_LEAF="$POISON_CACHE/registry.terraform.io/hashicorp/null/9.9.9/linux_amd64"
+FOREIGN_LEAF="$POISON_CACHE/registry.terraform.io/hashicorp/other/1.0.0/linux_amd64"
+mkdir -p "$(dirname "$POISON_LEAF")" "$(dirname "$FOREIGN_LEAF")" "$TEST_DIR/not-a-mirror"
+ln -s "$MIRROR_DIR/registry.terraform.io/hashicorp/null/9.9.9/linux_amd64" "$POISON_LEAF"
+ln -s "$TEST_DIR/not-a-mirror" "$FOREIGN_LEAF"
+POISON_OUT="$(env -i PATH="$PATH" HOME="$TEST_DIR/real-home" \
+  TF_PROVIDER_MIRROR_DIR="$MIRROR_DIR" TF_PLUGIN_CACHE_DIR="$POISON_CACHE" sh -c \
+  ". '$LIB_SH'; provider_mirror_configure; provider_mirror_cleanup" 2>&1)"
+
+assert_true "the mirror-pointing symlink is removed" "[ ! -e '$POISON_LEAF' ]"
+assert_true "it says so" '[[ "$POISON_OUT" == *"stale symlink"* ]]'
+assert_true "a symlink pointing elsewhere is left alone" "[ -L '$FOREIGN_LEAF' ]"
+
 echo "== the generated CLI config is cleaned up =="
 assert_true "no stray tfrc is left in the workspace" \
   "! find '$MIRROR_REPO' -name '*.tfrc' | grep -q ."

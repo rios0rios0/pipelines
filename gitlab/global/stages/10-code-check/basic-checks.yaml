@@ -6,6 +6,7 @@ quality:basic-checks:
   script:
     - |
       TARGET_BRANCH="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-$CI_DEFAULT_BRANCH}"
+      SOURCE_BRANCH="${CI_MERGE_REQUEST_SOURCE_BRANCH_NAME:-}"
 
       echo "=== Rebase Check ==="
       echo "Checking if branch is rebased on top of '$TARGET_BRANCH'..."
@@ -41,28 +42,58 @@ quality:basic-checks:
 
       if [ -f ".chlog.yaml" ]; then
         echo "Detected chlog-based changelog (found .chlog.yaml)."
-        echo "Checking for new fragments in '.changes/unreleased/'..."
 
-        NEW_FRAGMENTS=$(git diff --name-only --diff-filter=A "origin/$TARGET_BRANCH"...HEAD -- '.changes/unreleased/' 2>/dev/null || true)
-        if [ -z "$NEW_FRAGMENTS" ]; then
-          echo ""
-          echo "============================================================"
-          echo "  ERROR: No changelog fragment was added."
-          echo ""
-          echo "  This project uses chlog for changelog management."
-          echo "  Every change must include a changelog fragment."
-          echo ""
-          echo "  Run: chlog new -k <Kind> -b \"<description>\""
-          echo "  Kinds: Added, Changed, Deprecated, Removed, Fixed, Security"
-          echo ""
-          echo "  See: https://github.com/luizjhonata/chlog"
-          echo "============================================================"
-          echo ""
-          exit 1
-        fi
+        case "$SOURCE_BRANCH" in
+          chore/bump-*|bump/*)
+            # Release/bump PRs run `chlog merge`, which moves the unreleased
+            # fragments into CHANGELOG.md. They carry no new fragment, so the
+            # requirement flips: the PR must update CHANGELOG.md instead.
+            echo "Release/bump branch detected ('$SOURCE_BRANCH')."
+            echo "Verifying CHANGELOG.md was updated (fragments merged into it)..."
 
-        echo "Found changelog fragment(s):"
-        echo "$NEW_FRAGMENTS"
+            CHANGELOG_MODIFIED=$(git diff --name-only "origin/$TARGET_BRANCH"...HEAD -- 'CHANGELOG.md' 2>/dev/null || true)
+            if [ -z "$CHANGELOG_MODIFIED" ]; then
+              echo ""
+              echo "============================================================"
+              echo "  ERROR: Release/bump PR did not update CHANGELOG.md."
+              echo ""
+              echo "  On a bump, chlog moves the unreleased fragments into"
+              echo "  CHANGELOG.md. This PR must include the updated CHANGELOG.md."
+              echo ""
+              echo "  Run: chlog merge"
+              echo "  See: https://github.com/luizjhonata/chlog"
+              echo "============================================================"
+              echo ""
+              exit 1
+            fi
+
+            echo "CHANGELOG.md was updated. OK."
+            ;;
+          *)
+            echo "Checking for new fragments in '.changes/unreleased/'..."
+
+            NEW_FRAGMENTS=$(git diff --name-only --diff-filter=A "origin/$TARGET_BRANCH"...HEAD -- '.changes/unreleased/' 2>/dev/null || true)
+            if [ -z "$NEW_FRAGMENTS" ]; then
+              echo ""
+              echo "============================================================"
+              echo "  ERROR: No changelog fragment was added."
+              echo ""
+              echo "  This project uses chlog for changelog management."
+              echo "  Every change must include a changelog fragment."
+              echo ""
+              echo "  Run: chlog new -k <Kind> -b \"<description>\""
+              echo "  Kinds: Added, Changed, Deprecated, Removed, Fixed, Security"
+              echo ""
+              echo "  See: https://github.com/luizjhonata/chlog"
+              echo "============================================================"
+              echo ""
+              exit 1
+            fi
+
+            echo "Found changelog fragment(s):"
+            echo "$NEW_FRAGMENTS"
+            ;;
+        esac
       else
         echo "Checking CHANGELOG.md modifications against '$TARGET_BRANCH'..."
 

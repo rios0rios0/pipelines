@@ -2,8 +2,9 @@
 # Test script for the changelog validation logic in
 # azure-devops/global/stages/10-code-check/basic-checks.yaml.
 #
-# Exercises both chlog-based (fragment) and legacy (direct CHANGELOG.md edit)
-# changelog validation by creating temporary git repos that simulate PR diffs.
+# Exercises chlog-based (fragment), chlog release/bump (CHANGELOG.md updated),
+# and legacy (direct CHANGELOG.md edit) changelog validation by creating
+# temporary git repos that simulate PR diffs.
 set -euo pipefail
 
 RED='\033[0;31m'
@@ -26,25 +27,51 @@ cat > "$CHANGELOG_SCRIPT" << 'EXTRACTED'
 #!/usr/bin/env bash
 set -euo pipefail
 
+# In CI the source branch is provided by the platform; for this test harness we
+# derive it from the checked-out branch when SOURCE_BRANCH is not set.
+SOURCE_BRANCH="${SOURCE_BRANCH:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')}"
+
 echo ""
 echo "=== Changelog Check ==="
 
 if [ -f ".chlog.yaml" ]; then
   echo "Detected chlog-based changelog (found .chlog.yaml)."
-  echo "Checking for new fragments in '.changes/unreleased/'..."
 
-  NEW_FRAGMENTS=$(git diff --name-only --diff-filter=A "origin/$TARGET_BRANCH"...HEAD -- '.changes/unreleased/' 2>/dev/null || true)
-  if [ -z "$NEW_FRAGMENTS" ]; then
-    echo ""
-    echo "============================================================"
-    echo "  ERROR: No changelog fragment was added."
-    echo "============================================================"
-    echo ""
-    exit 1
-  fi
+  case "$SOURCE_BRANCH" in
+    chore/bump-*|bump/*)
+      # Release/bump PRs run `chlog merge`, which moves the unreleased fragments
+      # into CHANGELOG.md, so the requirement flips to CHANGELOG.md being updated.
+      echo "Release/bump branch detected ('$SOURCE_BRANCH')."
 
-  echo "Found changelog fragment(s):"
-  echo "$NEW_FRAGMENTS"
+      CHANGELOG_MODIFIED=$(git diff --name-only "origin/$TARGET_BRANCH"...HEAD -- 'CHANGELOG.md' 2>/dev/null || true)
+      if [ -z "$CHANGELOG_MODIFIED" ]; then
+        echo ""
+        echo "============================================================"
+        echo "  ERROR: Release/bump PR did not update CHANGELOG.md."
+        echo "============================================================"
+        echo ""
+        exit 1
+      fi
+
+      echo "CHANGELOG.md was updated. OK."
+      ;;
+    *)
+      echo "Checking for new fragments in '.changes/unreleased/'..."
+
+      NEW_FRAGMENTS=$(git diff --name-only --diff-filter=A "origin/$TARGET_BRANCH"...HEAD -- '.changes/unreleased/' 2>/dev/null || true)
+      if [ -z "$NEW_FRAGMENTS" ]; then
+        echo ""
+        echo "============================================================"
+        echo "  ERROR: No changelog fragment was added."
+        echo "============================================================"
+        echo ""
+        exit 1
+      fi
+
+      echo "Found changelog fragment(s):"
+      echo "$NEW_FRAGMENTS"
+      ;;
+  esac
 else
   echo "Checking CHANGELOG.md modifications against '$TARGET_BRANCH'..."
 
@@ -217,13 +244,62 @@ git add .changes/unreleased/old-fragment.yaml
 git commit -m "modify existing fragment" >/dev/null 2>&1
 assert_fail "chlog repo with only modified (not new) fragment"
 
+echo ""
+echo "Test 4: chlog repo on bump branch with CHANGELOG.md updated (no fragment) → should pass"
+WORK_DIR="$(setup_repo "chlog-bump-pass")"
+cd "$WORK_DIR"
+touch .chlog.yaml
+mkdir -p .changes/unreleased
+echo "kind: Added" > .changes/unreleased/frag.yaml
+git add .chlog.yaml .changes/unreleased/frag.yaml
+git commit -m "add chlog config and fragment" >/dev/null 2>&1
+git push origin main >/dev/null 2>&1
+git checkout -b chore/bump-1.2.0 >/dev/null 2>&1
+# simulate `chlog merge`: consume the fragment into CHANGELOG.md
+git rm -q .changes/unreleased/frag.yaml
+sed -i 's/## \[Unreleased\]/## [Unreleased]\n\n## [1.2.0] - 2026-01-02\n\n### Added\n\n- merged feature/' CHANGELOG.md
+git add CHANGELOG.md
+git commit -m "chore(bump): bumped version to 1.2.0" >/dev/null 2>&1
+assert_pass "chlog repo on bump branch with CHANGELOG.md updated"
+
+echo ""
+echo "Test 5: chlog repo on bump branch without CHANGELOG.md update → should fail"
+WORK_DIR="$(setup_repo "chlog-bump-fail")"
+cd "$WORK_DIR"
+touch .chlog.yaml
+git add .chlog.yaml
+git commit -m "add chlog config" >/dev/null 2>&1
+git push origin main >/dev/null 2>&1
+git checkout -b chore/bump-1.2.0 >/dev/null 2>&1
+echo "some change" > src.txt
+git add src.txt
+git commit -m "chore(bump): bump without changelog" >/dev/null 2>&1
+assert_fail "chlog repo on bump branch without CHANGELOG.md update"
+
+echo ""
+echo "Test 6: chlog repo on 'bump/*' branch with CHANGELOG.md updated → should pass"
+WORK_DIR="$(setup_repo "chlog-bump-slash-pass")"
+cd "$WORK_DIR"
+touch .chlog.yaml
+mkdir -p .changes/unreleased
+echo "kind: Added" > .changes/unreleased/frag.yaml
+git add .chlog.yaml .changes/unreleased/frag.yaml
+git commit -m "add chlog config and fragment" >/dev/null 2>&1
+git push origin main >/dev/null 2>&1
+git checkout -b bump/1.2.0 >/dev/null 2>&1
+git rm -q .changes/unreleased/frag.yaml
+sed -i 's/## \[Unreleased\]/## [Unreleased]\n\n## [1.2.0] - 2026-01-02\n\n### Added\n\n- merged feature/' CHANGELOG.md
+git add CHANGELOG.md
+git commit -m "bump: bumped version to 1.2.0" >/dev/null 2>&1
+assert_pass "chlog repo on 'bump/*' branch with CHANGELOG.md updated"
+
 # ── legacy mode ───────────────────────────────────────────────────────────────
 
 echo ""
 echo "── legacy mode ──"
 
 echo ""
-echo "Test 4: legacy repo with CHANGELOG.md modified under [Unreleased] → should pass"
+echo "Test 7: legacy repo with CHANGELOG.md modified under [Unreleased] → should pass"
 WORK_DIR="$(setup_repo "legacy-pass")"
 cd "$WORK_DIR"
 git checkout -b feat/test >/dev/null 2>&1
@@ -233,7 +309,7 @@ git commit -m "add changelog entry" >/dev/null 2>&1
 assert_pass "legacy repo with CHANGELOG.md entry under [Unreleased]"
 
 echo ""
-echo "Test 5: legacy repo without CHANGELOG.md modification → should fail"
+echo "Test 8: legacy repo without CHANGELOG.md modification → should fail"
 WORK_DIR="$(setup_repo "legacy-fail")"
 cd "$WORK_DIR"
 git checkout -b feat/test >/dev/null 2>&1
@@ -243,7 +319,7 @@ git commit -m "change without changelog" >/dev/null 2>&1
 assert_fail "legacy repo without CHANGELOG.md modification"
 
 echo ""
-echo "Test 6: legacy repo with entry below version section (not under [Unreleased]) → should fail"
+echo "Test 9: legacy repo with entry below version section (not under [Unreleased]) → should fail"
 WORK_DIR="$(setup_repo "legacy-wrong-section")"
 cd "$WORK_DIR"
 git checkout -b feat/test >/dev/null 2>&1
@@ -264,7 +340,7 @@ git commit -m "add entry in wrong section" >/dev/null 2>&1
 assert_fail "legacy repo with entry below version section"
 
 echo ""
-echo "Test 7: legacy repo with CHANGELOG.md missing [Unreleased] section → should fail"
+echo "Test 10: legacy repo with CHANGELOG.md missing [Unreleased] section → should fail"
 WORK_DIR="$(setup_repo "legacy-no-unreleased")"
 cd "$WORK_DIR"
 git checkout -b feat/test >/dev/null 2>&1

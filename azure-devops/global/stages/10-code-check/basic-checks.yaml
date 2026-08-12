@@ -8,14 +8,21 @@ jobs:
         fetchTags: false
 
       - script: |
-          # Extract branch name from full ref (e.g., refs/heads/main -> main)
-          FULL_REF="$(System.PullRequest.TargetBranch)"
+          # Read PR branches from the agent-provided environment variables instead
+          # of Azure "$(...)" macros: a macro is substituted into the script BEFORE
+          # bash runs, so a branch name containing $(...) would be executed as a
+          # command. Env vars reach bash as data and are immune to that injection.
+          FULL_REF="${SYSTEM_PULLREQUEST_TARGETBRANCH:-}"
           TARGET_BRANCH="${FULL_REF#refs/heads/}"
 
-          # Fallback to 'main' if the variable is empty
-          if [ -z "$TARGET_BRANCH" ] || [ "$TARGET_BRANCH" = "$(System.PullRequest.TargetBranch)" ]; then
+          # Fallback to 'main' if the variable is empty (e.g., non-PR build)
+          if [ -z "$TARGET_BRANCH" ]; then
             TARGET_BRANCH="main"
           fi
+
+          # Extract the PR source branch (e.g., refs/heads/chore/bump-1.2.3 -> chore/bump-1.2.3)
+          SOURCE_FULL_REF="${SYSTEM_PULLREQUEST_SOURCEBRANCH:-}"
+          SOURCE_BRANCH="${SOURCE_FULL_REF#refs/heads/}"
 
           echo "=== Rebase Check ==="
           echo "Checking if branch is rebased on top of '$TARGET_BRANCH'..."
@@ -51,28 +58,58 @@ jobs:
 
           if [ -f ".chlog.yaml" ]; then
             echo "Detected chlog-based changelog (found .chlog.yaml)."
-            echo "Checking for new fragments in '.changes/unreleased/'..."
 
-            NEW_FRAGMENTS=$(git diff --name-only --diff-filter=A "origin/$TARGET_BRANCH"...HEAD -- '.changes/unreleased/' 2>/dev/null || true)
-            if [ -z "$NEW_FRAGMENTS" ]; then
-              echo ""
-              echo "============================================================"
-              echo "  ERROR: No changelog fragment was added."
-              echo ""
-              echo "  This project uses chlog for changelog management."
-              echo "  Every change must include a changelog fragment."
-              echo ""
-              echo "  Run: chlog new -k <Kind> -b \"<description>\""
-              echo "  Kinds: Added, Changed, Deprecated, Removed, Fixed, Security"
-              echo ""
-              echo "  See: https://github.com/luizjhonata/chlog"
-              echo "============================================================"
-              echo ""
-              exit 1
-            fi
+            case "$SOURCE_BRANCH" in
+              chore/bump-*|bump/*)
+                # Release/bump PRs run `chlog merge`, which moves the unreleased
+                # fragments into CHANGELOG.md. They carry no new fragment, so the
+                # requirement flips: the PR must update CHANGELOG.md instead.
+                echo "Release/bump branch detected ('$SOURCE_BRANCH')."
+                echo "Verifying CHANGELOG.md was updated (fragments merged into it)..."
 
-            echo "Found changelog fragment(s):"
-            echo "$NEW_FRAGMENTS"
+                CHANGELOG_MODIFIED=$(git diff --name-only "origin/$TARGET_BRANCH"...HEAD -- 'CHANGELOG.md' 2>/dev/null || true)
+                if [ -z "$CHANGELOG_MODIFIED" ]; then
+                  echo ""
+                  echo "============================================================"
+                  echo "  ERROR: Release/bump PR did not update CHANGELOG.md."
+                  echo ""
+                  echo "  On a bump, chlog moves the unreleased fragments into"
+                  echo "  CHANGELOG.md. This PR must include the updated CHANGELOG.md."
+                  echo ""
+                  echo "  Run: chlog merge"
+                  echo "  See: https://github.com/luizjhonata/chlog"
+                  echo "============================================================"
+                  echo ""
+                  exit 1
+                fi
+
+                echo "CHANGELOG.md was updated. OK."
+                ;;
+              *)
+                echo "Checking for new fragments in '.changes/unreleased/'..."
+
+                NEW_FRAGMENTS=$(git diff --name-only --diff-filter=A "origin/$TARGET_BRANCH"...HEAD -- '.changes/unreleased/' 2>/dev/null || true)
+                if [ -z "$NEW_FRAGMENTS" ]; then
+                  echo ""
+                  echo "============================================================"
+                  echo "  ERROR: No changelog fragment was added."
+                  echo ""
+                  echo "  This project uses chlog for changelog management."
+                  echo "  Every change must include a changelog fragment."
+                  echo ""
+                  echo "  Run: chlog new -k <Kind> -b \"<description>\""
+                  echo "  Kinds: Added, Changed, Deprecated, Removed, Fixed, Security"
+                  echo ""
+                  echo "  See: https://github.com/luizjhonata/chlog"
+                  echo "============================================================"
+                  echo ""
+                  exit 1
+                fi
+
+                echo "Found changelog fragment(s):"
+                echo "$NEW_FRAGMENTS"
+                ;;
+            esac
           else
             echo "Checking CHANGELOG.md modifications against '$TARGET_BRANCH'..."
 

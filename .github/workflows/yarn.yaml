@@ -69,6 +69,16 @@ on:
 # it did not install and fails with `EEXIST`, so an unconditional install would break exactly
 # the consumers this is meant to leave alone. `0.34.7` is the last release whose engines span
 # Node 20 through 26; `0.35.0` covers neither the 20 defaulted to here nor the 25 that needs it.
+# The shims are written to `$RUNNER_TEMP` rather than where `corepack enable` puts them by
+# default, which is next to the Node binary -- on a self-hosted runner that is a system path the
+# runner user does not own, so the step dies with `Internal Error: EACCES: permission denied,
+# symlink '../share/nodejs/corepack/dist/pnpm.js' -> '/usr/bin/pnpm'`. The guard above is what
+# lets it get that far: Corepack is present system-wide there, so the install is skipped and the
+# enable is left to fail on its own. That directory is appended to `$GITHUB_PATH`, which is what
+# keeps the shim visible to `actions/setup-node` and every step after it. Only `yarn` is named
+# because the default enables `npm`, `pnpm` and `yarn`, and the shim that failed above is one
+# nothing here ever calls. The directory has to be created first -- `--install-directory` is
+# resolved with `realpath` and does not create what it is given.
 jobs:
   # first stage
   code_check-basic_checks:
@@ -90,7 +100,9 @@ jobs:
       - name: 'Enable Corepack'
         run: |
           command -v corepack > /dev/null 2>&1 || npm i -g --ignore-scripts corepack@0.34.7
-          corepack enable
+          mkdir -p "$RUNNER_TEMP/corepack"
+          corepack enable --install-directory "$RUNNER_TEMP/corepack" yarn
+          echo "$RUNNER_TEMP/corepack" >> "$GITHUB_PATH"
         shell: 'bash'
 
       - name: 'Setup Node.js'
@@ -185,7 +197,9 @@ jobs:
       - name: 'Enable Corepack'
         run: |
           command -v corepack > /dev/null 2>&1 || npm i -g --ignore-scripts corepack@0.34.7
-          corepack enable
+          mkdir -p "$RUNNER_TEMP/corepack"
+          corepack enable --install-directory "$RUNNER_TEMP/corepack" yarn
+          echo "$RUNNER_TEMP/corepack" >> "$GITHUB_PATH"
         shell: 'bash'
 
       - name: 'Setup Node.js'
@@ -212,7 +226,9 @@ jobs:
       - name: 'Enable Corepack'
         run: |
           command -v corepack > /dev/null 2>&1 || npm i -g --ignore-scripts corepack@0.34.7
-          corepack enable
+          mkdir -p "$RUNNER_TEMP/corepack"
+          corepack enable --install-directory "$RUNNER_TEMP/corepack" yarn
+          echo "$RUNNER_TEMP/corepack" >> "$GITHUB_PATH"
         shell: 'bash'
 
       - name: 'Setup Node.js'
@@ -274,7 +290,9 @@ jobs:
       - name: 'Enable Corepack'
         run: |
           command -v corepack > /dev/null 2>&1 || npm i -g --ignore-scripts corepack@0.34.7
-          corepack enable
+          mkdir -p "$RUNNER_TEMP/corepack"
+          corepack enable --install-directory "$RUNNER_TEMP/corepack" yarn
+          echo "$RUNNER_TEMP/corepack" >> "$GITHUB_PATH"
         shell: 'bash'
 
       - name: 'Setup Node.js'

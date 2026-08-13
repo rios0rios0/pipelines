@@ -259,7 +259,7 @@ if [ -s "$NONE/coverage.txt" ] && [ "$(head -n 1 "$NONE/coverage.txt")" = "mode:
     pass "a well-formed coverage profile is still produced"
 else
     fail "a well-formed coverage profile is still produced"
-    head -5 "$NONE/coverage.txt" 2>&1 >&2
+    head -5 "$NONE/coverage.txt" >&2
 fi
 
 if grep -q "internal/only/only.go" "$NONE/coverage.txt" 2>/dev/null; then

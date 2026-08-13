@@ -99,15 +99,99 @@ echo "=========================================="
 integration_start_time=$(date +%s)
 
 # TODO: this should be in another step to run in parallel along the unit tests
+
+# Narrow this phase to the packages that actually gain test files under the
+# `integration` tag. Phase 1 above runs `-tags test,unit`, and this phase used
+# to run the SAME package list with `-tags integration` -- which is only
+# harmless when every unit test carries a `unit` build tag. A consumer whose
+# unit tests are untagged (the Go default, and what a plain `go test ./...`
+# runs) has them compiled into both phases, so the entire unit suite runs a
+# second time here, serially under `-p 1`, and every test is reported twice in
+# the merged `junit.xml`. Narrowing costs two `go list` calls and removes both
+# the wasted wall time and the duplicated test counts.
+#
+# The selection compares, per package, the test files visible WITH the tag
+# against the ones visible without it, and keeps only the packages where the tag
+# makes at least one file APPEAR. Four details are load-bearing:
+#
+#   1. `-e` is mandatory. Every element of a pipeline runs in its own subshell
+#      that inherits `set -e`, so a `go list` exiting non-zero -- one unresolved
+#      import anywhere in the module is enough -- would kill the brace group
+#      before the second `go list` ever ran. The pipeline reports `sort`'s
+#      status, so it still exits 0 and `set -e` never fires: `plain` stays
+#      empty, every tagged package then compares as unique, and the narrowing
+#      silently reverts to running everything, which is exactly the bug this
+#      block exists to fix. `-e` reports those errors in the package's Error
+#      field and exits 0, keeping both lists complete and comparable.
+#   2. The test is a set DIFFERENCE, not an inequality: a package qualifies only
+#      when some file is present WITH the tag and absent without it. Inequality
+#      alone is too weak, and the gap is not academic. A package holding one
+#      untagged test beside one `!integration` test presents a SMALLER list under
+#      the tag while gaining nothing; an inequality would select it, and the
+#      untagged test it still carries would run a second time here -- the exact
+#      duplication this block exists to remove. The same rule excludes a package
+#      that loses ALL of its tests, which `go test` would otherwise have failed
+#      outright with "build constraints exclude all Go files".
+#   3. It compares file LISTS, not counts, so a package that swaps one
+#      `!integration` file for one `integration` file is still selected: the
+#      counts match, but the tagged file is new, so the difference is non-empty.
+#   4. An empty result must skip the phase rather than fall through. `go test`
+#      with no package argument tests the current directory, which at a module
+#      root is either a hard error or, worse, quietly the wrong suite.
+#
+# The trailing `sort` is not cosmetic: awk iterates `for (pkg in ...)` in an
+# unspecified order, and a serial `-p 1` run deserves a reproducible log.
 # shellcheck disable=SC2086
-"$(go env GOPATH)"/bin/gotestsum \
-  --format pkgname \
-  --junitfile junit-integration.xml \
-  -- -p 1 -tags integration \
-  -coverpkg="$(echo $directories | tr ' ' ',')" \
-  -covermode=count \
-  -coverprofile=integration_coverage.txt \
-  $directories || INTEGRATION_EXIT_CODE=$?
+integration_directories=$(
+  {
+    go list -e -tags integration -f 'T {{.ImportPath}} {{.TestGoFiles}} {{.XTestGoFiles}}' $directories
+    go list -e                   -f 'U {{.ImportPath}} {{.TestGoFiles}} {{.XTestGoFiles}}' $directories
+  } | awk '
+      { kind = $1; key = $2; $1 = ""; $2 = ""; files = $0 }
+      kind == "T" { tagged[key] = files; next }
+                  { plain[key] = files }
+      END {
+        for (pkg in tagged) {
+          split("", without)
+          total = split(plain[pkg], plain_files, /[][ ]+/)
+          for (i = 1; i <= total; i++) {
+            if (plain_files[i] != "") { without[plain_files[i]] = 1 }
+          }
+          total = split(tagged[pkg], tagged_files, /[][ ]+/)
+          for (i = 1; i <= total; i++) {
+            if (tagged_files[i] != "" && !(tagged_files[i] in without)) {
+              print pkg
+              break
+            }
+          }
+        }
+      }
+    ' | sort
+)
+
+if [ -z "$integration_directories" ]; then
+  echo "No package adds test files under the 'integration' tag - skipping this phase."
+  # A lone mode line parses as zero coverage blocks, so phase 3 merges it with
+  # the unit profile and emits that profile unchanged. Writing the file matters:
+  # the merge step branches on its presence.
+  echo "mode: count" > integration_coverage.txt
+else
+  echo "Testing integration code in the following packages:"
+  echo "$integration_directories" | sed 's/^/  /'
+
+  # `-coverpkg` deliberately stays the FULL directory set rather than the
+  # narrowed one, so the denominator of the coverage ratio is identical to what
+  # it was before this narrowing existed.
+  # shellcheck disable=SC2086
+  "$(go env GOPATH)"/bin/gotestsum \
+    --format pkgname \
+    --junitfile junit-integration.xml \
+    -- -p 1 -tags integration \
+    -coverpkg="$(echo $directories | tr ' ' ',')" \
+    -covermode=count \
+    -coverprofile=integration_coverage.txt \
+    $integration_directories || INTEGRATION_EXIT_CODE=$?
+fi
 
 integration_end_time=$(date +%s)
 integration_duration=$((integration_end_time - integration_start_time))

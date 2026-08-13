@@ -9,6 +9,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 **Essential Commands:**
 - `make test` - Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers)
 - `make test-go-script` - Test Go script changes specifically
+- `make test-go-integration-scope` - Test which packages the Go runner's integration phase selects specifically
 - `make test-lambda` - Test Lambda template validation specifically
 - `make test-yaml-merge` - Test YAML merge validation specifically
 - `make test-trivy-merge` - Test Trivy global+project `.trivyignore` merge specifically
@@ -682,6 +683,7 @@ make test
 
 # Run individual test suites
 make test-go-script
+make test-go-integration-scope
 make test-lambda
 make test-yaml-merge
 make test-trivy-merge

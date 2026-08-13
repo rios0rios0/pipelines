@@ -11,6 +11,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ```bash
 make test              # Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers)
 make test-go-script    # Test Go validation script only
+make test-go-integration-scope  # Test which packages the Go runner's integration phase selects only
 make test-lambda       # Test Lambda template validation only
 make test-yaml-merge   # Test YAML merge validation only
 make test-trivy-merge  # Test Trivy global+project .trivyignore merge only

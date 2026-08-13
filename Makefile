@@ -2,7 +2,7 @@ TAG := latest
 ROOT := global/containers
 CONTAINER_REGISTRY = ghcr.io/rios0rios0/pipelines
 
-.PHONY: login setup-buildx build-and-push test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test
+.PHONY: login setup-buildx build-and-push test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test
 
 login:
 	docker login $(CONTAINER_REGISTRY)
@@ -33,6 +33,10 @@ test-go-cache-trim:
 test-go-tmpdir-modcache:
 	@echo "Running Go module cache placement validation..."
 	@./.github/tests/test-go-tmpdir-modcache.sh
+
+test-go-integration-scope:
+	@echo "Running Go integration phase scope validation..."
+	@./.github/tests/test-go-integration-scope.sh
 
 test-lambda:
 	@echo "Running Lambda template validation..."
@@ -106,5 +110,5 @@ test-memory-detection:
 	@echo "Running memory ceiling detection validation..."
 	@./.github/tests/test-memory-detection.sh
 
-test: test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection
+test: test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection
 	@echo "All tests completed successfully!"

@@ -111,8 +111,8 @@ integration_start_time=$(date +%s)
 # the wasted wall time and the duplicated test counts.
 #
 # The selection compares, per package, the test files visible WITH the tag
-# against the ones visible without it, and keeps only the packages where those
-# two lists differ. Four details are load-bearing:
+# against the ones visible without it, and keeps only the packages where the tag
+# makes at least one file APPEAR. Four details are load-bearing:
 #
 #   1. `-e` is mandatory. Every element of a pipeline runs in its own subshell
 #      that inherits `set -e`, so a `go list` exiting non-zero -- one unresolved
@@ -123,12 +123,18 @@ integration_start_time=$(date +%s)
 #      silently reverts to running everything, which is exactly the bug this
 #      block exists to fix. `-e` reports those errors in the package's Error
 #      field and exits 0, keeping both lists complete and comparable.
-#   2. The comparison is directional, not symmetric. Only packages that GAIN
-#      files under the tag are selected; one that LOSES them (its tests are all
-#      `!integration`) has nothing left to run, and `go test` would fail it
+#   2. The test is a set DIFFERENCE, not an inequality: a package qualifies only
+#      when some file is present WITH the tag and absent without it. Inequality
+#      alone is too weak, and the gap is not academic. A package holding one
+#      untagged test beside one `!integration` test presents a SMALLER list under
+#      the tag while gaining nothing; an inequality would select it, and the
+#      untagged test it still carries would run a second time here -- the exact
+#      duplication this block exists to remove. The same rule excludes a package
+#      that loses ALL of its tests, which `go test` would otherwise have failed
 #      outright with "build constraints exclude all Go files".
 #   3. It compares file LISTS, not counts, so a package that swaps one
-#      `!integration` file for one `integration` file is still selected.
+#      `!integration` file for one `integration` file is still selected: the
+#      counts match, but the tagged file is new, so the difference is non-empty.
 #   4. An empty result must skip the phase rather than fall through. `go test`
 #      with no package argument tests the current directory, which at a module
 #      root is either a hard error or, worse, quietly the wrong suite.
@@ -144,8 +150,22 @@ integration_directories=$(
       { kind = $1; key = $2; $1 = ""; $2 = ""; files = $0 }
       kind == "T" { tagged[key] = files; next }
                   { plain[key] = files }
-      END { for (pkg in tagged)
-              if (tagged[pkg] != plain[pkg] && tagged[pkg] !~ /^ *\[\] *\[\] *$/) print pkg }
+      END {
+        for (pkg in tagged) {
+          split("", without)
+          total = split(plain[pkg], plain_files, /[][ ]+/)
+          for (i = 1; i <= total; i++) {
+            if (plain_files[i] != "") { without[plain_files[i]] = 1 }
+          }
+          total = split(tagged[pkg], tagged_files, /[][ ]+/)
+          for (i = 1; i <= total; i++) {
+            if (tagged_files[i] != "" && !(tagged_files[i] in without)) {
+              print pkg
+              break
+            }
+          }
+        }
+      }
     ' | sort
 )
 

@@ -60,12 +60,13 @@ selected_packages() {
     ' "$1"
 }
 
-# Writes a module whose four packages cover every branch of the selection.
+# Writes a module whose five packages cover every branch of the selection.
 write_fixture_module() {
     local dir="$1" module="$2"
 
     mkdir -p "$dir/internal/tagged" "$dir/internal/untagged" \
-             "$dir/internal/swap" "$dir/internal/plain"
+             "$dir/internal/swap" "$dir/internal/plain" \
+             "$dir/internal/shrink"
 
     cat > "$dir/go.mod" << EOF
 module $module
@@ -153,6 +154,41 @@ package plain
 
 func Plain() int { return 4 }
 EOF
+
+    # (e) SHRINKS under the tag: it keeps an untagged test and drops an
+    # `!integration` one, so its file list differs while gaining nothing. Merely
+    # comparing the two lists for inequality selects it, and the untagged test it
+    # still carries then runs a second time in phase 2 -- the duplication this
+    # whole block removes. Only a set difference excludes it.
+    cat > "$dir/internal/shrink/shrink.go" << 'EOF'
+package shrink
+
+func Shrink() int { return 6 }
+EOF
+    cat > "$dir/internal/shrink/shrink_test.go" << 'EOF'
+package shrink
+
+import "testing"
+
+func TestShrinkUntagged(t *testing.T) {
+	if Shrink() != 6 {
+		t.Fatal("unexpected value")
+	}
+}
+EOF
+    cat > "$dir/internal/shrink/shrink_unit_test.go" << 'EOF'
+//go:build !integration
+
+package shrink
+
+import "testing"
+
+func TestShrinkExcludedByTheTag(t *testing.T) {
+	if Shrink() != 6 {
+		t.Fatal("unexpected value")
+	}
+}
+EOF
 }
 
 # Writes a module whose only tests are untagged, so phase 2 selects nothing.
@@ -225,6 +261,15 @@ check "the integration-tagged test still runs" "$TAGGED_COUNT" "1"
 SWAP_COUNT="$(grep -c 'name="TestSwapIntegration"' "$MIXED/junit.xml" 2>/dev/null || true)"
 check "a package that swaps one tagged file for one untagged file still runs" \
     "$SWAP_COUNT" "1"
+
+# The shrinking package proves the comparison is a set difference, not an
+# inequality. Its file list differs under the tag but gains nothing, so selecting
+# it would run the untagged test it still carries a second time. The assertion
+# above on the selected package list already excludes it; this pins the symptom
+# that would reach a consumer's junit.xml.
+SHRINK_COUNT="$(grep -c 'name="TestShrinkUntagged"' "$MIXED/junit.xml" 2>/dev/null || true)"
+check "a package that only loses files under the tag is reported exactly once" \
+    "$SHRINK_COUNT" "1"
 
 # ── an empty selection skips the phase and leaves coverage intact ─────────────
 echo "== a module with no integration tests skips phase 2 ==" >&2

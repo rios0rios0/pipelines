@@ -1,0 +1,20 @@
+# Full pipeline for a Flutter application delivered as a container image serving
+# the web build. Set the pipeline variable DART_TEST_BUILD_TARGETS to 'web' so
+# the tests stage compiles the same target the delivery stage ships.
+parameters:
+  - name: 'DOCKER_BUILD_ARGS'
+    type: 'string'
+    default: ''
+  - name: 'RUN_BEFORE_BUILD'
+    type: 'string'
+    default: ''
+
+stages:
+  - template: 'stages/10-code-check/dart.yaml'
+  - template: 'stages/20-security/dart.yaml'
+  - template: 'stages/30-tests/dart.yaml'
+  - template: 'stages/35-management/dart.yaml'
+  - template: 'stages/40-delivery/docker.yaml'
+    parameters:
+      DOCKER_BUILD_ARGS: ${{ parameters.DOCKER_BUILD_ARGS }}
+      RUN_BEFORE_BUILD: ${{ parameters.RUN_BEFORE_BUILD }}

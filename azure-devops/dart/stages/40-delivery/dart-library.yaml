@@ -1,0 +1,42 @@
+stages:
+  - stage: 'delivery'
+    displayName: 'delivery'
+    condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
+    jobs:
+      # Validation on every main build, publication only on a tag.
+      #
+      # The split is not ceremony. Publishing to pub.dev is IRREVERSIBLE -- a
+      # version can be retracted but never replaced or re-uploaded -- so the
+      # checks pub.dev performs at upload time (missing description, missing
+      # licence, unresolvable constraints, files that would ship by mistake)
+      # have to run long before the upload. `dart pub publish --dry-run` runs
+      # exactly those, so a package that would be rejected fails on the merge
+      # rather than on the release.
+      - job: 'publish_validate'
+        displayName: 'publish:validate'
+        condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+        variables:
+          DART_PUBLISH_DRY_RUN: 'true'
+        steps:
+          - template: '../../abstracts/dart.yaml'
+          - script: $(Scripts.Directory)/global/scripts/languages/dart/publish/run.sh
+            displayName: 'Validate the package (dry run)'
+
+      - job: 'publish_prod'
+        displayName: 'publish:prod'
+        condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/')
+        steps:
+          - template: '../../abstracts/dart.yaml'
+          - script: $(Scripts.Directory)/global/scripts/languages/dart/publish/run.sh
+            displayName: 'Publish to pub.dev'
+            # Explicit mapping so the secret `$(PUB_TOKEN)` reaches the shell as
+            # `$PUB_TOKEN`. Azure Pipelines withholds secret variables from the
+            # process environment; without this block the runner would report a
+            # missing token on a correctly configured pipeline. The runner then
+            # passes only the variable's NAME to `dart pub token add --env-var`,
+            # so the value never reaches argv.
+            env:
+              PUB_TOKEN: $(PUB_TOKEN)
+              PUB_HOSTED_URL: $(PUB_HOSTED_URL)
+
+      - template: '../../../global/stages/40-delivery/release.yaml'

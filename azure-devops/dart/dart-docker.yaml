@@ -1,0 +1,20 @@
+# Full pipeline for a pure Dart application delivered as a container image.
+# Suits a server-side Dart application (shelf, dart_frog, a compiled CLI in a
+# container): the delivery stage builds from the project's own Dockerfile.
+parameters:
+  - name: 'DOCKER_BUILD_ARGS'
+    type: 'string'
+    default: ''
+  - name: 'RUN_BEFORE_BUILD'
+    type: 'string'
+    default: ''
+
+stages:
+  - template: 'stages/10-code-check/dart.yaml'
+  - template: 'stages/20-security/dart.yaml'
+  - template: 'stages/30-tests/dart.yaml'
+  - template: 'stages/35-management/dart.yaml'
+  - template: 'stages/40-delivery/docker.yaml'
+    parameters:
+      DOCKER_BUILD_ARGS: ${{ parameters.DOCKER_BUILD_ARGS }}
+      RUN_BEFORE_BUILD: ${{ parameters.RUN_BEFORE_BUILD }}

@@ -1,0 +1,54 @@
+# TOOL COVERAGE FOR DART -- read before adding or removing a job here.
+#
+# Two of the security tools this repository runs for every other language have
+# nothing to offer Dart, and both gaps are handled deliberately rather than by
+# leaving a job that silently checks nothing:
+#
+#   CodeQL   -- has NO Dart extractor (dart-lang/sdk#52953, open since 2023), so
+#               `sast:codeql` is ABSENT from this template rather than included
+#               and failing. Do not add it back "for consistency" with the Go,
+#               Python and .NET security stages.
+#
+#   Semgrep  -- the ENGINE parses Dart, but the REGISTRY publishes no Dart rules
+#               (`p/dart` is a 404, `r/dart` returns an empty `rules: []`). The
+#               job below still runs: the shared runner skips an unpublished
+#               language pack instead of failing on it, and picks up the Dart
+#               ruleset this repository ships at
+#               `global/scripts/tools/semgrep/rules/dart.yaml`.
+#
+# Gitleaks and Hadolint are language-agnostic, and Trivy parses `pubspec.lock`
+# natively, so those apply to Dart unchanged.
+stages:
+  - stage: 'security'
+    displayName: 'security (sca/sast)'
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    jobs:
+      - template: '../../../global/stages/20-security/semgrep.yaml'
+        parameters:
+          SEMGREP_LANGUAGE: 'dart'
+
+      - template: '../../../global/stages/20-security/gitleaks.yaml'
+
+      - template: '../../../global/stages/20-security/hadolint.yaml'
+
+      - template: '../../../global/stages/20-security/trivy.yaml'
+
+      - template: '../../../global/stages/20-security/trivy-sca.yaml'
+
+      # The Dart member of the `sca:govulncheck` / `sca:safety` family, running
+      # ALONGSIDE `sca:trivy` rather than instead of it: Trivy records SDK
+      # provided dependencies at version `0.0.0`, leaving them unmatched against
+      # any advisory, while OSV queries the Pub advisory database directly.
+      - job: 'sca_osv_scanner'
+        displayName: 'sca:osv-scanner'
+        steps:
+          - template: '../../abstracts/dart.yaml'
+          - script: $(Scripts.Directory)/global/scripts/languages/dart/sca/run.sh
+            displayName: 'Run OSV-Scanner over pubspec.lock'
+
+          - task: 'PublishPipelineArtifact@1'
+            inputs:
+              artifactName: 'osv-scanner'
+              targetPath: 'build/reports/osv-scanner'
+            condition: always()
+        continueOnError: true

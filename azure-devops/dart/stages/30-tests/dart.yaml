@@ -1,0 +1,48 @@
+stages:
+  - stage: 'tests'
+    displayName: 'tests'
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    jobs:
+      - job: 'test_all'
+        displayName: 'test:all'
+        steps:
+          - template: '../../abstracts/dart.yaml'
+          - script: $(Scripts.Directory)/global/scripts/languages/dart/test/run.sh
+            displayName: 'Run tests with coverage'
+
+          - task: 'PublishTestResults@2'
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: 'build/reports/junit.xml'
+            displayName: 'Publish JUnit XML Results'
+            condition: always()
+
+          # Dart emits coverage as LCOV and nothing else, which
+          # `PublishCodeCoverageResults@2` cannot read -- the runner's own
+          # converter produces this Cobertura report from it.
+          - task: 'PublishCodeCoverageResults@2'
+            inputs:
+              summaryFileLocation: 'build/reports/cobertura.xml'
+            displayName: 'Publish Cobertura XML Results'
+            condition: always()
+
+          - task: 'PublishPipelineArtifact@1'
+            inputs:
+              artifactName: 'coverage'
+              targetPath: 'build/reports'
+            displayName: 'Publish Coverage Files'
+            condition: always()
+        continueOnError: false
+
+      # Compiling is a check in its own right: `dart analyze` resolves and type
+      # checks but never runs a compiler back end, so a defect only the AOT or
+      # web compiler rejects passes analysis and fails at release time. Mirrors
+      # `test:build` in the Go and Python templates.
+      - job: 'test_build'
+        displayName: 'test:build'
+        variables:
+          DART_BUILD_MODE: '--debug'
+        steps:
+          - template: '../../abstracts/dart.yaml'
+          - script: $(Scripts.Directory)/global/scripts/languages/dart/build/run.sh $(DART_TEST_BUILD_TARGETS)
+            displayName: 'Compile the project'

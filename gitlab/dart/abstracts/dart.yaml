@@ -1,0 +1,68 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
+
+# Base job for every Dart and Flutter job.
+#
+# The image is a plain Debian rather than `dart:stable` or a third-party Flutter
+# image, and the SDK is installed by `global/scripts/languages/dart/setup/run.sh`
+# from Google's own release archive. Two reasons:
+#
+#   1. ONE ABSTRACT COVERS BOTH TOOLCHAINS. The setup script reads the project's
+#      `pubspec.yaml` and installs Dart or Flutter accordingly, so a Flutter app
+#      and a pure Dart package share this job definition instead of needing two
+#      near-identical ones that drift.
+#   2. NO DOCKER HUB PULL FOR THE TOOLCHAIN. Docker Hub rate-limits anonymous
+#      pulls; a large, frequently-pulled SDK image is exactly what trips it. The
+#      base image here is small and the SDK comes from `storage.googleapis.com`,
+#      which is not rate limited.
+#
+# `DART_SDK_INSTALL_DIR` and `PUB_CACHE` are relocated INTO `$CI_PROJECT_DIR`
+# because GitLab CI can only cache paths under it. Left at their defaults
+# (`$HOME`), the Flutter SDK -- several hundred megabytes -- would be
+# re-downloaded by every job of every pipeline.
+.dart:
+  image: 'debian:bookworm-slim'
+  variables:
+    DART_SDK_INSTALL_DIR: "$CI_PROJECT_DIR/.sdk"
+    PUB_CACHE: "$CI_PROJECT_DIR/.pub-cache"
+  cache: # relative to the project directory ($CI_PROJECT_DIR)
+    key: "dart-$CI_COMMIT_REF_SLUG"
+    paths:
+      - '.sdk'
+      - '.pub-cache'
+      - '.dart_tool'
+    when: 'always'
+  before_script:
+    # `xz-utils` unpacks the Flutter tarball, `unzip` the Dart SDK zip, `git` is
+    # required by the Flutter SDK itself (it is a git checkout and shells out to
+    # git on almost every invocation), `jq` resolves the current release from the
+    # Flutter manifest, and `python3` runs the report converters.
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends
+      ca-certificates curl git jq python3 unzip xz-utils zip
+    - !reference [ .scripts-repo, before_script ]
+    - $SCRIPTS_DIR/global/scripts/languages/dart/setup/run.sh
+    - export PATH="$HOME/.local/bin:$PATH:$PUB_CACHE/bin"
+  tags:
+    - 'dev-gitlab-runner-onprem'
+  rules:
+    - if: "$CI_MERGE_REQUEST_IID"
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+
+# Variant for jobs that build Android artifacts (`apk`, `appbundle`).
+#
+# Those need the Android SDK and a JDK, which the Debian base image above does
+# not carry and which this repository will not install ad hoc -- an unattended
+# `sdkmanager` licence acceptance inside a CI job is both slow and a supply-chain
+# decision that belongs to the consuming project, not to a shared template.
+# Point `DART_ANDROID_IMAGE` at an image that already has them; the default is
+# Cirrus Labs' Flutter image, published on GHCR (so no Docker Hub rate limit),
+# which bundles the Flutter SDK, the Android SDK and a JDK.
+.dart-android:
+  extends: '.dart'
+  image: "${DART_ANDROID_IMAGE:-ghcr.io/cirruslabs/flutter:stable}"
+  before_script:
+    - !reference [ .scripts-repo, before_script ]
+    # The image already ships the SDK, so `dart_ensure_sdk` finds it on PATH and
+    # downloads nothing; only `apt-get` is skipped relative to `.dart`.
+    - export PATH="$HOME/.local/bin:$PATH:$PUB_CACHE/bin"

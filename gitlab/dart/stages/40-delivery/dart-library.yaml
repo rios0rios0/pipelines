@@ -1,0 +1,34 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dart/abstracts/dart.yaml'
+
+# Validation on every default-branch build, publication only on a tag.
+#
+# The split is not ceremony. Publishing to pub.dev is IRREVERSIBLE -- a version
+# can be retracted but never replaced or re-uploaded -- so the checks pub.dev
+# performs at upload time (missing description, missing licence, unresolvable
+# constraints, files that would ship by mistake) have to run long before the
+# upload. `dart pub publish --dry-run` runs exactly those checks without
+# uploading, so a package that would be rejected fails on the merge instead of
+# on the release.
+publish:validate:
+  extends: '.dart'
+  stage: 'delivery'
+  variables:
+    DART_PUBLISH_DRY_RUN: 'true'
+  script:
+    - $SCRIPTS_DIR/global/scripts/languages/dart/publish/run.sh
+  rules:
+    - if: "$CI_MERGE_REQUEST_IID"
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+
+publish:prod:
+  extends: '.dart'
+  stage: 'delivery'
+  script:
+    - $SCRIPTS_DIR/global/scripts/languages/dart/publish/run.sh
+  # PUB_TOKEN must be a masked, protected CI/CD variable. The runner passes its
+  # NAME to `dart pub token add --env-var PUB_TOKEN`, never its value, so the
+  # credential never reaches argv (where `ps` and the job's own recorded command
+  # line would both expose it).
+  rules:
+    - if: "$CI_COMMIT_TAG"

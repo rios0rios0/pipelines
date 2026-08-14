@@ -1,0 +1,71 @@
+# Tests and coverage for both toolchains.
+#
+# Produces `build/reports/junit.xml`, `build/reports/cobertura.xml` and
+# `build/reports/lcov.info`. Dart emits coverage as LCOV and nothing else, so the
+# Cobertura report is produced by the runner's own stdlib-Python converter --
+# see `global/scripts/languages/dart/test/lcov_to_cobertura.py` for why that is
+# a converter here rather than a `pip install`.
+inputs:
+  flutter_version:
+    required: false
+    default: ''
+    description: 'Pin an exact Flutter version (e.g. 3.47.0). Defaults to the current stable release.'
+  dart_sdk_version:
+    required: false
+    default: 'latest'
+    description: 'Pin an exact Dart SDK version. Only used for pure Dart projects.'
+  toolchain:
+    required: false
+    default: 'auto'
+    description: "Force the toolchain: 'dart', 'flutter', or 'auto' to detect it from pubspec.yaml."
+  coverage_minimum:
+    required: false
+    default: ''
+    description: 'Fail the job when line coverage falls below this percentage (e.g. 80).'
+  require_tests:
+    required: false
+    default: 'false'
+    description: 'Fail rather than skip when the project has no test/ directory.'
+  test_args:
+    required: false
+    default: ''
+    description: 'Extra arguments appended to `dart test` / `flutter test`.'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - name: 'Cache the Dart/Flutter SDK and pub packages'
+      uses: 'actions/cache@v4'
+      with:
+        path: |
+          ~/.local/share/flutter
+          ~/.local/share/dart-sdk
+          ~/.pub-cache
+        key: "dart-${{ runner.os }}-${{ inputs.flutter_version }}-${{ inputs.dart_sdk_version }}-${{ hashFiles('**/pubspec.lock') }}"
+        restore-keys: "dart-${{ runner.os }}-${{ inputs.flutter_version }}-${{ inputs.dart_sdk_version }}-"
+
+    - name: 'Run tests with coverage'
+      run: $SCRIPTS_DIR/global/scripts/languages/dart/test/run.sh
+      shell: 'bash'
+      env:
+        FLUTTER_VERSION: '${{ inputs.flutter_version }}'
+        DART_SDK_VERSION: '${{ inputs.dart_sdk_version }}'
+        DART_TOOLCHAIN: '${{ inputs.toolchain }}'
+        DART_COVERAGE_MINIMUM: '${{ inputs.coverage_minimum }}'
+        DART_REQUIRE_TESTS: '${{ inputs.require_tests }}'
+        DART_TEST_ARGS: '${{ inputs.test_args }}'
+
+    - name: 'Upload Report'
+      uses: 'actions/upload-artifact@v7'
+      with:
+        name: 'test-results'
+        path: 'build/reports/'
+        if-no-files-found: 'warn'
+        overwrite: 'true'
+        retention-days: 10
+      if: always()

@@ -1,0 +1,212 @@
+# Quality, security and test stages for a Dart or Flutter project.
+#
+# The toolchain is detected from the project's own `pubspec.yaml`, so this one
+# workflow serves both a pure Dart package and a Flutter app; force it with the
+# `toolchain` input when the detection is wrong for your layout.
+#
+# NOTE ON THE SECURITY STAGE -- there is no `security-sast_codeql` job here, and
+# its absence is deliberate. CodeQL has no Dart extractor (dart-lang/sdk#52953,
+# open since 2023), so a CodeQL job could only fail. Semgrep IS present and does
+# run, because the shared runner skips the unpublished `p/dart` registry pack
+# instead of failing on it and picks up the Dart ruleset this repository ships at
+# `global/scripts/tools/semgrep/rules/dart.yaml`. Without that ruleset the scan
+# would be language-agnostic packs only -- the registry publishes no Dart rules
+# at all.
+#
+# see the bottom of the file for more information¹
+# the parent workflow is responsible for setting up the call events²
+on:
+  workflow_call:
+    inputs:
+      flutter_version:
+        required: false
+        type: 'string'
+        default: ''
+        description: 'Pin an exact Flutter version (e.g. 3.47.0). Defaults to the current stable release.'
+      dart_sdk_version:
+        required: false
+        type: 'string'
+        default: 'latest'
+        description: 'Pin an exact Dart SDK version. Only used for pure Dart projects.'
+      toolchain:
+        required: false
+        type: 'string'
+        default: 'auto'
+        description: "Force the toolchain: 'dart', 'flutter', or 'auto'."
+      fatal_infos:
+        required: false
+        type: 'boolean'
+        default: false
+        description: 'Fail the analyze job on INFO-level diagnostics (this is where lints land).'
+      coverage_minimum:
+        required: false
+        type: 'string'
+        default: ''
+        description: 'Fail the test job when line coverage falls below this percentage.'
+      enable_sbom:
+        required: false
+        type: 'boolean'
+        default: true
+        description: 'Generate a CycloneDX SBOM and publish it as a job artifact.'
+
+jobs:
+  # first stage
+  code_check-basic_checks:
+    name: 'code-check > quality:basic-checks'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/10-code-check/basic-checks@main'
+        with:
+          target_branch: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch || 'main' }}
+    if: "github.event_name == 'pull_request'"
+
+  code_check-style_format:
+    name: 'code-check > style:format'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/dart/stages/10-code-check/format@main'
+        with:
+          flutter_version: ${{ inputs.flutter_version }}
+          dart_sdk_version: ${{ inputs.dart_sdk_version }}
+          toolchain: ${{ inputs.toolchain }}
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  code_check-quality_analyze:
+    name: 'code-check > quality:analyze'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/dart/stages/10-code-check/analyze@main'
+        with:
+          flutter_version: ${{ inputs.flutter_version }}
+          dart_sdk_version: ${{ inputs.dart_sdk_version }}
+          toolchain: ${{ inputs.toolchain }}
+          fatal_infos: ${{ inputs.fatal_infos }}
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  code_check-quality_unused_code:
+    name: 'code-check > quality:unused-code'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/dart/stages/10-code-check/unused@main'
+        with:
+          flutter_version: ${{ inputs.flutter_version }}
+          dart_sdk_version: ${{ inputs.dart_sdk_version }}
+          toolchain: ${{ inputs.toolchain }}
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
+  # second stage
+  security-sast_semgrep:
+    name: 'security > sast:semgrep'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/semgrep@main'
+        with:
+          semgrep_lang: 'dart'
+    needs: [ 'code_check-style_format', 'code_check-quality_analyze', 'code_check-quality_unused_code' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sast_gitleaks:
+    name: 'security > sast:gitleaks'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/gitleaks@main'
+    needs: [ 'code_check-style_format', 'code_check-quality_analyze', 'code_check-quality_unused_code' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sast_hadolint:
+    name: 'security > sast:hadolint'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
+    needs: [ 'code_check-style_format', 'code_check-quality_analyze', 'code_check-quality_unused_code' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sast_trivy:
+    name: 'security > sast:trivy'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy@main'
+    needs: [ 'code_check-style_format', 'code_check-quality_analyze', 'code_check-quality_unused_code' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sca_trivy:
+    name: 'security > sca:trivy'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy-sca@main'
+    needs: [ 'code_check-style_format', 'code_check-quality_analyze', 'code_check-quality_unused_code' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  security-sca_osv_scanner:
+    name: 'security > sca:osv-scanner'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/dart/stages/20-security/osv-scanner@main'
+        with:
+          flutter_version: ${{ inputs.flutter_version }}
+          dart_sdk_version: ${{ inputs.dart_sdk_version }}
+          toolchain: ${{ inputs.toolchain }}
+    needs: [ 'code_check-style_format', 'code_check-quality_analyze', 'code_check-quality_unused_code' ]
+    continue-on-error: true
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
+  # third stage
+  tests-test_all:
+    name: 'tests > test:all'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/dart/stages/30-tests/all@main'
+        with:
+          flutter_version: ${{ inputs.flutter_version }}
+          dart_sdk_version: ${{ inputs.dart_sdk_version }}
+          toolchain: ${{ inputs.toolchain }}
+          coverage_minimum: ${{ inputs.coverage_minimum }}
+    needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_osv_scanner' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
+  # fourth stage
+  # The BOM is published as a job artifact rather than pushed to a server: unlike
+  # the GitLab and Azure DevOps templates, this workflow has no Dependency-Track
+  # credentials to assume. A consumer that runs Dependency-Track can download
+  # `bom.json` and upload it, or call the composite action directly with its own
+  # credentials.
+  management-report_sbom:
+    name: 'management > report:sbom'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/dart/stages/35-management/cyclonedx@main'
+        with:
+          flutter_version: ${{ inputs.flutter_version }}
+          dart_sdk_version: ${{ inputs.dart_sdk_version }}
+          toolchain: ${{ inputs.toolchain }}
+    needs: [ 'tests-test_all' ]
+    continue-on-error: true
+    if: "inputs.enable_sbom && !startsWith(github.ref, 'refs/tags/')"
+
+
+# 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations
+# 2 - the recommended events to trigger this workflow and permissions are:
+#   on:
+#     push:
+#       branches:
+#         - 'main'
+#       tags:
+#         - '*'
+#     pull_request:
+#       branches:
+#         - 'main'
+#     workflow_dispatch:
+#
+# permissions:
+#   contents: 'read'
+#
+# There is no `security-events: write` requirement here, unlike the other
+# language workflows: that permission exists for CodeQL, which does not support
+# Dart and is therefore not part of this pipeline.

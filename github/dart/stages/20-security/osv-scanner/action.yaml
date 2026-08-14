@@ -1,0 +1,62 @@
+# Pub dependency vulnerability scanning via OSV-Scanner.
+#
+# The Dart member of the `govulncheck` / `safety` / Dependency-Check family: a
+# language-native SCA running ALONGSIDE the shared `sca:trivy` job, not instead
+# of it. Trivy does read `pubspec.lock`, but it records SDK-provided dependencies
+# (Flutter itself and anything resolved through it) at version `0.0.0`, leaving
+# those components unmatched against any advisory. OSV queries the Pub advisory
+# database the Dart team publishes into OSV.dev directly.
+inputs:
+  flutter_version:
+    required: false
+    default: ''
+    description: 'Pin an exact Flutter version (e.g. 3.47.0). Defaults to the current stable release.'
+  dart_sdk_version:
+    required: false
+    default: 'latest'
+    description: 'Pin an exact Dart SDK version. Only used for pure Dart projects.'
+  toolchain:
+    required: false
+    default: 'auto'
+    description: "Force the toolchain: 'dart', 'flutter', or 'auto' to detect it from pubspec.yaml."
+  lockfile:
+    required: false
+    default: 'pubspec.lock'
+    description: 'Path to the pub lockfile to scan.'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - name: 'Cache the Dart/Flutter SDK and pub packages'
+      uses: 'actions/cache@v4'
+      with:
+        path: |
+          ~/.local/share/flutter
+          ~/.local/share/dart-sdk
+          ~/.pub-cache
+        key: "dart-${{ runner.os }}-${{ inputs.flutter_version }}-${{ inputs.dart_sdk_version }}-${{ hashFiles('**/pubspec.lock') }}"
+        restore-keys: "dart-${{ runner.os }}-${{ inputs.flutter_version }}-${{ inputs.dart_sdk_version }}-"
+
+    - name: 'Run OSV-Scanner over pubspec.lock'
+      run: $SCRIPTS_DIR/global/scripts/languages/dart/sca/run.sh
+      shell: 'bash'
+      env:
+        FLUTTER_VERSION: '${{ inputs.flutter_version }}'
+        DART_SDK_VERSION: '${{ inputs.dart_sdk_version }}'
+        DART_TOOLCHAIN: '${{ inputs.toolchain }}'
+        DART_LOCKFILE: '${{ inputs.lockfile }}'
+
+    - name: 'Upload Report'
+      uses: 'actions/upload-artifact@v7'
+      with:
+        name: 'osv-scanner'
+        path: 'build/reports/osv-scanner/'
+        if-no-files-found: 'warn'
+        overwrite: 'true'
+        retention-days: 10
+      if: always()

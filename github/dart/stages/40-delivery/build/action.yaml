@@ -1,0 +1,85 @@
+# Builds the release artifacts for the `40-delivery` stage.
+#
+# Targets: apk appbundle web linux macos windows ipa (Flutter);
+#          exe js aot-snapshot (pure Dart).
+# With no target given the runner picks one from the project's own shape -- an
+# APK for a Flutter app, a native executable for a Dart package with a `bin/`,
+# and nothing at all for a library.
+#
+# Android targets need the Android SDK and a JDK; GitHub's `ubuntu-latest`
+# runners already ship both. `ipa` needs a macOS runner and is built unsigned.
+inputs:
+  flutter_version:
+    required: false
+    default: ''
+    description: 'Pin an exact Flutter version (e.g. 3.47.0). Defaults to the current stable release.'
+  dart_sdk_version:
+    required: false
+    default: 'latest'
+    description: 'Pin an exact Dart SDK version. Only used for pure Dart projects.'
+  toolchain:
+    required: false
+    default: 'auto'
+    description: "Force the toolchain: 'dart', 'flutter', or 'auto' to detect it from pubspec.yaml."
+  targets:
+    required: false
+    default: ''
+    description: "Space-separated build targets (e.g. 'web appbundle'). Empty means auto-detect."
+  build_mode:
+    required: false
+    default: '--release'
+    description: 'Flutter build mode flag.'
+  build_args:
+    required: false
+    default: ''
+    description: 'Extra arguments appended to the build command.'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - name: 'Cache the Dart/Flutter SDK and pub packages'
+      uses: 'actions/cache@v4'
+      with:
+        path: |
+          ~/.local/share/flutter
+          ~/.local/share/dart-sdk
+          ~/.pub-cache
+        key: "dart-${{ runner.os }}-${{ inputs.flutter_version }}-${{ inputs.dart_sdk_version }}-${{ hashFiles('**/pubspec.lock') }}"
+        restore-keys: "dart-${{ runner.os }}-${{ inputs.flutter_version }}-${{ inputs.dart_sdk_version }}-"
+
+    - name: 'Build the artifacts'
+      run: $SCRIPTS_DIR/global/scripts/languages/dart/build/run.sh
+      shell: 'bash'
+      env:
+        FLUTTER_VERSION: '${{ inputs.flutter_version }}'
+        DART_SDK_VERSION: '${{ inputs.dart_sdk_version }}'
+        DART_TOOLCHAIN: '${{ inputs.toolchain }}'
+        DART_BUILD_TARGETS: '${{ inputs.targets }}'
+        DART_BUILD_MODE: '${{ inputs.build_mode }}'
+        DART_BUILD_ARGS: '${{ inputs.build_args }}'
+        DART_BUILD_NUMBER: '${{ github.run_number }}'
+
+    - name: 'Upload Report'
+      uses: 'actions/upload-artifact@v7'
+      with:
+        name: 'dart-build'
+        # A BLOCK SCALAR, not a quoted multi-line string. `upload-artifact`
+        # splits this input on newlines, and a single-quoted scalar spanning
+        # several lines FOLDS them into one space-separated line -- so the four
+        # patterns below would arrive as a single glob containing spaces,
+        # matching nothing. With `if-no-files-found: warn` that failure is
+        # silent: the job stays green and publishes an empty artifact.
+        path: |
+          build/app/outputs/**
+          build/web/**
+          build/*.js
+          build/*.aot
+        if-no-files-found: 'warn'
+        overwrite: 'true'
+        retention-days: 10
+      if: always()

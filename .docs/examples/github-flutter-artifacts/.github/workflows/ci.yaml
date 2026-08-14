@@ -1,0 +1,26 @@
+name: 'CI/CD Pipeline'
+
+on:
+  push:
+    branches: [ 'main' ]
+    tags: [ '*' ]
+  pull_request:
+    branches: [ 'main' ]
+  workflow_dispatch:
+
+permissions:
+  contents: 'write' # required for releases
+  checks: 'write' # required for test results
+  # NOTE: no `security-events: write` here, unlike the Go/Python/Java examples.
+  # That permission exists for CodeQL, which has no Dart extractor and is
+  # therefore not part of the Dart pipeline. See the workflow's own header.
+
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/flutter-artifacts.yaml@main'
+    with:
+      # Omit to track the current stable release; pin for reproducible builds.
+      flutter_version: '3.47.0'
+      build_web: true
+      build_android: true
+      android_targets: 'apk appbundle'

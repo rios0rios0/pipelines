@@ -1,0 +1,70 @@
+# Dead-code detection for Dart -- the counterpart of `vulture` (Python), `knip`
+# (JavaScript) and golangci-lint's `unused` (Go).
+#
+# It exists for the two things `dart analyze` structurally cannot see: a PUBLIC
+# declaration nothing references, and a `.dart` file nothing imports. Both need a
+# whole-package pass; a per-library analyzer must assume a public API has callers
+# it cannot see.
+#
+# Advisory by default (`continue-on-error` in the calling workflow) because
+# reachability analysis has a false-positive tail -- framework entry points,
+# generated code, `@visibleForTesting` members.
+inputs:
+  flutter_version:
+    required: false
+    default: ''
+    description: 'Pin an exact Flutter version (e.g. 3.47.0). Defaults to the current stable release.'
+  dart_sdk_version:
+    required: false
+    default: 'latest'
+    description: 'Pin an exact Dart SDK version. Only used for pure Dart projects.'
+  toolchain:
+    required: false
+    default: 'auto'
+    description: "Force the toolchain: 'dart', 'flutter', or 'auto' to detect it from pubspec.yaml."
+  targets:
+    required: false
+    default: 'lib'
+    description: 'Directories to scan for unused code.'
+  fatal:
+    required: false
+    default: 'false'
+    description: 'Fail the job when unused code or files are found.'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - name: 'Cache the Dart/Flutter SDK and pub packages'
+      uses: 'actions/cache@v4'
+      with:
+        path: |
+          ~/.local/share/flutter
+          ~/.local/share/dart-sdk
+          ~/.pub-cache
+        key: "dart-${{ runner.os }}-${{ inputs.flutter_version }}-${{ inputs.dart_sdk_version }}-${{ hashFiles('**/pubspec.lock') }}"
+        restore-keys: "dart-${{ runner.os }}-${{ inputs.flutter_version }}-${{ inputs.dart_sdk_version }}-"
+
+    - name: 'Detect unused Dart code and files'
+      run: $SCRIPTS_DIR/global/scripts/languages/dart/unused/run.sh
+      shell: 'bash'
+      env:
+        FLUTTER_VERSION: '${{ inputs.flutter_version }}'
+        DART_SDK_VERSION: '${{ inputs.dart_sdk_version }}'
+        DART_TOOLCHAIN: '${{ inputs.toolchain }}'
+        DART_UNUSED_TARGETS: '${{ inputs.targets }}'
+        DART_UNUSED_FATAL: '${{ inputs.fatal }}'
+
+    - name: 'Upload Report'
+      uses: 'actions/upload-artifact@v7'
+      with:
+        name: 'dart-unused'
+        path: 'build/reports/dart-unused/'
+        if-no-files-found: 'warn'
+        overwrite: 'true'
+        retention-days: 10
+      if: always()

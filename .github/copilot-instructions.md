@@ -164,6 +164,30 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 |-----------------|------------------------------|-----------------------------------------------|
 | **Checkstyle**  | Java code style enforcement  | `global/scripts/languages/java/checkstyle/`   |
 
+#### Dart / Flutter Tools
+
+One set of scripts serves both toolchains: `dart_detect_toolchain` reads the project's `pubspec.yaml` and picks `flutter` when it finds a `flutter:\n    sdk: flutter` dependency, `dart` otherwise (`DART_TOOLCHAIN` overrides). The SDK is installed from Google's release archive rather than pulled as a Docker image, so no anonymous Docker Hub rate limit can fail the job. Every runner honours `DART_DRY_RUN=true`, which resolves and records commands without installing or executing anything — that is what makes the family testable offline.
+
+| Tool             | Purpose                                                     | Script Location                                |
+|------------------|-------------------------------------------------------------|------------------------------------------------|
+| **setup**        | Installs the Dart or Flutter SDK                            | `global/scripts/languages/dart/setup/run.sh`     |
+| **format**       | `dart format` gate (`--fix` rewrites in place)              | `global/scripts/languages/dart/format/run.sh`    |
+| **analyze**      | `dart analyze` → JUnit + JSON, configurable severity gate    | `global/scripts/languages/dart/analyze/run.sh`   |
+| **test**         | Tests + coverage → JUnit, Cobertura, LCOV                   | `global/scripts/languages/dart/test/run.sh`      |
+| **unused**       | Unused code and unused file detection                        | `global/scripts/languages/dart/unused/run.sh`    |
+| **sca**          | OSV-Scanner over `pubspec.lock`                              | `global/scripts/languages/dart/sca/run.sh`       |
+| **cyclonedx**    | SBOM generation for pub projects                             | `global/scripts/languages/dart/cyclonedx/run.sh` |
+| **build**        | Release artifacts (APK, AAB, web, exe, …)                    | `global/scripts/languages/dart/build/run.sh`     |
+| **publish**      | pub.dev publication with a validation gate                   | `global/scripts/languages/dart/publish/run.sh`   |
+
+**Two tools in the standard stack do not support Dart, and both gaps are handled deliberately — do not "restore consistency" with the other languages:**
+
+- **CodeQL is omitted from every Dart template.** It ships no Dart extractor ([dart-lang/sdk#52953](https://github.com/dart-lang/sdk/issues/52953)); a `sast:codeql` job could only fail. `makefiles/dart.mk` leaves `CODEQL_LANGUAGE` unset and `common.mk` skips the target with an explanation.
+- **The Semgrep Registry publishes no Dart rules** (`p/dart` is HTTP 404, `r/dart` returns an empty `rules: []`). `semgrep/run.sh` probes the registry and skips a missing pack — passing one is fatal to the whole invocation — then loads this repository's own ruleset from `global/scripts/tools/semgrep/rules/dart.yaml`.
+- **OWASP Dependency-Check has no pub analyzer**, so OSV-Scanner covers Dart SCA alongside `sca:trivy` (Trivy reads `pubspec.lock` but records SDK-provided dependencies at version `0.0.0`, leaving them unmatched).
+
+`.github/tests/test-dart-pipeline.sh` fails if any of these decisions is reverted.
+
 #### Terraform / Terra Tools
 
 The Terra CLI pipeline test stage exposes parallel jobs on every platform (Azure DevOps, GitLab CI, GitHub Actions) — two always on, one opt-in. `test:all` delegates to `test-all/run.sh`, which auto-detects which of the two heavier tiers the consumer has, runs only those, merges the JUnit outputs into `build/reports/junit-terra-all.xml`, and exits `0` when neither has tests so stack-only repos pass without a bespoke opt-out. `test:structural` and the opt-in `test:validate` each run on their own parallel job with their own JUnit. Only `validate` **resolves** references (`terraform validate`) — the other three tiers parse, so a root module referencing an undeclared module/variable/resource/output stays green everywhere else while failing every plan. `test:validate` is off by default (`ENABLE_VALIDATE` / `enable_validate`) because it needs the network for provider downloads and, for private module sources, credentials; each platform reuses its existing pre-script hook (`PRE_STEPS` / `VALIDATE_PRE_SCRIPT` / `pre_script`) and `VALIDATE_ROOTS` (default `stacks`) overrides the search.
@@ -346,14 +370,16 @@ Two rules govern this family and must not be relaxed:
 | **PHP**                | ✅              | ❌         | ❌            | Composer, Docker                          |
 | **Ruby**               | ✅              | ❌         | ❌            | Bundler, Docker                           |
 | **.NET/C#**            | ✅              | ✅         | ✅            | Framework, Core, Docker, PowerShell       |
+| **Dart**               | ✅              | ✅         | ✅            | pub.dev publishing, Docker, native binary |
+| **Flutter**            | ✅              | ✅         | ✅            | Web bundle, Android APK/AAB, Docker       |
 | **Logstash**           | ❌              | ✅         | ❌            | Docker delivery                           |
 | **Terraform**          | ❌              | ✅         | ✅            | Infrastructure as Code                    |
 | **Terra CLI**          | ✅              | ✅         | ✅            | Terraform/Terragrunt wrapper              |
 
 **Pipeline Templates Available:**
-- **GitHub Actions:** `go.yaml`, `go-docker.yaml`, `go-binary.yaml`, `go-library.yaml`, `pdm.yaml`, `pdm-docker.yaml`, `pdm-library.yaml`, `gradle.yaml`, `gradle-docker.yaml`, `gradle-library.yaml`, `maven.yaml`, `maven-docker.yaml`, `maven-library.yaml`, `yarn.yaml`, `yarn-docker.yaml`, `yarn-library.yaml`, `npm.yaml`, `npm-docker.yaml`, `npm-library.yaml`, `composer.yaml`, `composer-docker.yaml`, `composer-library.yaml`, `bundler.yaml`, `bundler-docker.yaml`, `bundler-library.yaml`, `dotnet.yaml`, `dotnet-docker.yaml`, `dotnet-library.yaml`, `terra.yaml`
-- **GitLab CI:** `go-docker.yaml`, `go-binary.yaml`, `go-docker-k8s-deployment.yaml`, `go-sam.yaml`, `gradle-docker.yaml`, `gradle-docker-k8s-deployment.yaml`, `gradle-library.yaml`, `maven-docker.yaml`, `pdm-docker.yaml`, `pdm-docker-k8s-deployment.yaml`, `pdm-library.yaml`, `yarn-docker.yaml`, `yarn-docker-k8s-deployment.yaml`, `framework.yaml`, `powershell.yaml`, `logstash-docker.yaml`, `terraform/terra.yaml`, `terra/terra.yaml`
-- **Azure DevOps:** `go-docker.yaml`, `go-arm.yaml`, `go-docker-arm.yaml`, `go-docker-k8s.yaml`, `go-docker-with-registry.yaml`, `go-function-arm.yaml`, `go-lambda-sam.yaml`, `go-lambda.yaml`, `go-library.yaml`, `kotlin-gradle.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `core.yaml`, `terraform/terra.yaml`, `terra/terra.yaml`
+- **GitHub Actions:** `go.yaml`, `go-docker.yaml`, `go-binary.yaml`, `go-library.yaml`, `pdm.yaml`, `pdm-docker.yaml`, `pdm-library.yaml`, `gradle.yaml`, `gradle-docker.yaml`, `gradle-library.yaml`, `maven.yaml`, `maven-docker.yaml`, `maven-library.yaml`, `yarn.yaml`, `yarn-docker.yaml`, `yarn-library.yaml`, `npm.yaml`, `npm-docker.yaml`, `npm-library.yaml`, `composer.yaml`, `composer-docker.yaml`, `composer-library.yaml`, `bundler.yaml`, `bundler-docker.yaml`, `bundler-library.yaml`, `dotnet.yaml`, `dotnet-docker.yaml`, `dotnet-library.yaml`, `dart.yaml`, `dart-docker.yaml`, `dart-library.yaml`, `flutter-artifacts.yaml`, `terra.yaml`
+- **GitLab CI:** `go-docker.yaml`, `go-binary.yaml`, `go-docker-k8s-deployment.yaml`, `go-sam.yaml`, `gradle-docker.yaml`, `gradle-docker-k8s-deployment.yaml`, `gradle-library.yaml`, `maven-docker.yaml`, `pdm-docker.yaml`, `pdm-docker-k8s-deployment.yaml`, `pdm-library.yaml`, `yarn-docker.yaml`, `yarn-docker-k8s-deployment.yaml`, `framework.yaml`, `powershell.yaml`, `logstash-docker.yaml`, `dart/dart-docker.yaml`, `dart/dart-library.yaml`, `dart/flutter-docker.yaml`, `dart/flutter-artifacts.yaml`, `terraform/terra.yaml`, `terra/terra.yaml`
+- **Azure DevOps:** `go-docker.yaml`, `go-arm.yaml`, `go-docker-arm.yaml`, `go-docker-k8s.yaml`, `go-docker-with-registry.yaml`, `go-function-arm.yaml`, `go-lambda-sam.yaml`, `go-lambda.yaml`, `go-library.yaml`, `kotlin-gradle.yaml`, `pdm-docker.yaml`, `yarn-docker.yaml`, `core.yaml`, `dart/dart-docker.yaml`, `dart/dart-library.yaml`, `dart/flutter-docker.yaml`, `dart/flutter-artifacts.yaml`, `terraform/terra.yaml`, `terra/terra.yaml`
 
 ## Common Tasks
 

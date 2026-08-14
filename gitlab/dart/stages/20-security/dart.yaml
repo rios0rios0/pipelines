@@ -1,0 +1,50 @@
+# TOOL COVERAGE FOR DART -- read before adding or removing a job here.
+#
+# Two of the security tools this repository runs for every other language have
+# nothing to offer Dart, and both gaps are handled deliberately rather than by
+# leaving a job that silently checks nothing:
+#
+#   CodeQL   -- has NO Dart extractor. `codeql database create --language=dart`
+#               is not a supported invocation (dart-lang/sdk#52953 has tracked
+#               the request since 2023 with no extractor shipped). The
+#               `sast:codeql` job is therefore ABSENT from this template rather
+#               than included and failing. Do not add it back "for consistency".
+#
+#   Semgrep  -- the ENGINE parses Dart (experimental support, actively
+#               maintained), but the REGISTRY publishes no Dart rules: `p/dart`
+#               is a 404 and the language-scoped `r/dart` returns an empty
+#               `rules: []`. The job below still runs, because the shared runner
+#               skips an unpublished language pack instead of failing on it, and
+#               because this repository ships its own Dart ruleset at
+#               `global/scripts/tools/semgrep/rules/dart.yaml`, which the runner
+#               picks up automatically. Without that file the scan would be
+#               language-agnostic packs only.
+#
+# Everything else applies to Dart unchanged: Gitleaks and Hadolint are
+# language-agnostic, and Trivy parses `pubspec.lock` natively.
+variables:
+  SEMGREP_LANG: 'dart'
+
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/semgrep.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/gitleaks.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/hadolint.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/trivy.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/trivy-sca.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dart/abstracts/dart.yaml'
+
+# The Dart member of the `sca:govulncheck` / `sca:safety` family: a language
+# native scanner running ALONGSIDE `sca:trivy`, not instead of it. Trivy does
+# read `pubspec.lock`, but it records SDK-provided dependencies (Flutter itself
+# and anything resolved through it) at version `0.0.0`, so those components go
+# effectively unmatched. OSV queries the Pub advisory database directly.
+sca:osv-scanner:
+  extends: '.dart'
+  stage: 'security (sca/sast)'
+  script:
+    - $SCRIPTS_DIR/global/scripts/languages/dart/sca/run.sh
+  artifacts:
+    when: 'always'
+    paths:
+      - "$REPORT_PATH/osv-scanner"
+  allow_failure: true

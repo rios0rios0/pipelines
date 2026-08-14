@@ -78,13 +78,30 @@ dart_build_ipa() {
   dart_run flutter build ipa $BUILD_MODE --no-codesign $VERSION_FLAGS $DART_BUILD_ARGS
 }
 
-dart_build_exe() {
-  _entry="${DART_ENTRYPOINT:-$(dart_default_entrypoint)}"
-  if [ -z "$_entry" ]; then
-    echo "ERROR: no entry point found for the 'exe' target." >&2
+# dart_resolve_entrypoint <target>
+#
+# Echo the entry point for a `dart compile` target, or fail with an actionable
+# message when there is none.
+#
+# Every `dart compile` target needs one, and NONE of them fails usefully without
+# it: an empty path makes the compiler complain about a file it was never given,
+# and the snapshot targets go further and derive their OUTPUT name from it too,
+# so an empty entry point silently produces `build/.aot`. Resolving and
+# validating in one place is what keeps all three consistent -- the check used to
+# live in `exe` alone, which is exactly how `js` and `aot-snapshot` ended up
+# without it.
+dart_resolve_entrypoint() {
+  _re_entry="${DART_ENTRYPOINT:-$(dart_default_entrypoint)}"
+  if [ -z "$_re_entry" ]; then
+    echo "ERROR: no entry point found for the '$1' target." >&2
     echo "Expected a file under bin/ (or set DART_ENTRYPOINT)." >&2
     exit 1
   fi
+  printf '%s' "$_re_entry"
+}
+
+dart_build_exe() {
+  _entry="$(dart_resolve_entrypoint exe)" || exit 1
   mkdir -p build
   _name="$(basename "$_entry" .dart)"
   # shellcheck disable=SC2086
@@ -92,14 +109,14 @@ dart_build_exe() {
 }
 
 dart_build_js() {
-  _entry="${DART_ENTRYPOINT:-$(dart_default_entrypoint)}"
+  _entry="$(dart_resolve_entrypoint js)" || exit 1
   mkdir -p build
   # shellcheck disable=SC2086
   dart_run dart compile js "$_entry" -o "build/main.js" $DART_BUILD_ARGS
 }
 
 dart_build_aot_snapshot() {
-  _entry="${DART_ENTRYPOINT:-$(dart_default_entrypoint)}"
+  _entry="$(dart_resolve_entrypoint aot-snapshot)" || exit 1
   mkdir -p build
   _name="$(basename "$_entry" .dart)"
   # shellcheck disable=SC2086

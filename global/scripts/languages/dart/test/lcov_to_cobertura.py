@@ -171,9 +171,21 @@ def write_cobertura(files: list[FileCoverage], output: str, sources_root: str) -
         pkg_valid = sum(f.lines_valid for f in members)
         pkg_covered = sum(f.lines_covered for f in members)
         pkg_rate = (pkg_covered / pkg_valid) if pkg_valid else 0.0
+        # Aggregated from the members' BRDA rows, not hard-coded. A fixed `0.0`
+        # here would disagree with the branch rates on the `<class>` elements
+        # inside this very package and with the document-level totals, so any
+        # consumer that aggregates per package (rather than per file) would read
+        # fully branch-covered code as having none.
+        pkg_branches_valid = sum(f.branches_valid for f in members)
+        pkg_branches_covered = sum(f.branches_covered for f in members)
+        pkg_branch_rate = (
+            (pkg_branches_covered / pkg_branches_valid) if pkg_branches_valid else 0.0
+        )
         out.append(
-            '    <package name={name} line-rate="{lr:.4f}" branch-rate="0.0" '
-            'complexity="0">\n      <classes>\n'.format(name=quoteattr(name), lr=pkg_rate)
+            '    <package name={name} line-rate="{lr:.4f}" branch-rate="{br:.4f}" '
+            'complexity="0">\n      <classes>\n'.format(
+                name=quoteattr(name), lr=pkg_rate, br=pkg_branch_rate
+            )
         )
         for entry in members:
             class_name = os.path.basename(entry.path)

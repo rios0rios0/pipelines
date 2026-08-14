@@ -284,6 +284,21 @@ assert_true "dart: a package with no bin/ exits cleanly instead of failing" "[[ 
 assert_true "dart: a package with no bin/ builds nothing" \
   "! grep -q 'dart compile' <<< \"\$CMD\""
 
+# EVERY `dart compile` target needs an entry point, and none of them fails
+# usefully without one: an empty path makes the compiler complain about a file it
+# was never given, and the snapshot targets derive their OUTPUT name from it too,
+# so an empty value silently produces `build/.aot`. The guard originally lived in
+# `exe` alone; these cases keep `js` and `aot-snapshot` from drifting back.
+for target in exe js aot-snapshot; do
+  STATUS=0
+  (cd "$LIB_PROJECT" && env DART_DRY_RUN=true SCRIPTS_DIR="$SCRIPTS_DIR" \
+    sh "$DART_DIR/build/run.sh" "$target" > "$WORK_DIR/entry.$target.log" 2>&1) || STATUS=$?
+  assert_true "build: the '$target' target fails when no entry point can be resolved" \
+    "[[ $STATUS -eq 1 ]]"
+  assert_true "build: the '$target' failure names the target it was building" \
+    "grep -q \"no entry point found for the '$target' target\" '$WORK_DIR/entry.$target.log'"
+done
+
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- 4. Explicit toolchain override ---"
@@ -399,6 +414,14 @@ assert_true "a line covered by only the second record counts as covered" \
   "grep -q '<line number=\"2\" hits=\"3\"/>' '$WORK_DIR/cobertura.xml'"
 assert_true "branch coverage is recomputed from the BRDA rows" \
   "grep -q 'branches-covered=\"1\" branches-valid=\"2\"' '$WORK_DIR/cobertura.xml'"
+# The `<package>` branch rate must be AGGREGATED, not hard-coded. A fixed `0.0`
+# disagrees with the `<class>` rates inside that same package and with the
+# document totals, so a consumer that aggregates per package reads fully
+# branch-covered code as having none.
+assert_true "the package-level branch rate is aggregated, not hard-coded to zero" \
+  "! grep -q '<package [^>]*branch-rate=\"0\.0\"' '$WORK_DIR/cobertura.xml'"
+assert_true "the package holding the branch data reports its real branch rate" \
+  "grep -q '<package name=\"lib\" line-rate=\"0.7500\" branch-rate=\"0.5000\"' '$WORK_DIR/cobertura.xml'"
 # The GitLab templates scrape this exact spelling with a `coverage:` regex.
 assert_true "the coverage line matches the GitLab 'coverage:' regex" \
   "grep -qE 'COVERAGE_PERCENT=[0-9.]+%' <<< \"\$COV_OUT\""
@@ -641,6 +664,20 @@ for action in 10-code-check/format 10-code-check/analyze 10-code-check/unused \
   assert_true "GitHub: the $action composite action exists" \
     "[[ -f '$SCRIPTS_DIR/github/dart/stages/$action/action.yaml' ]]"
 done
+
+# `upload-artifact` splits its `path` input on NEWLINES. A quoted multi-line YAML
+# scalar folds into one space-separated line, so several patterns written that way
+# arrive as a single glob containing spaces and match nothing -- and with
+# `if-no-files-found: warn` the job still goes green, publishing an empty artifact.
+# Assert on the PARSED value, since both spellings look identical in the source.
+assert_equals "the build action's artifact path stays newline-separated (not YAML-folded)" \
+  "4" \
+  "$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/github/dart/stages/40-delivery/build/action.yaml'))
+path = [s for s in d['runs']['steps'] if s.get('uses', '').startswith('actions/upload-artifact')][0]['with']['path']
+print(len([l for l in path.strip().splitlines() if l.strip()]))
+")"
 
 # Every `run.sh` path referenced by any Dart template must exist. A renamed
 # script is otherwise discovered only when the job runs.

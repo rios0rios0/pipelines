@@ -68,10 +68,17 @@ runs:
       uses: 'actions/upload-artifact@v7'
       with:
         name: 'dart-build'
-        path: 'build/app/outputs/**
+        # A BLOCK SCALAR, not a quoted multi-line string. `upload-artifact`
+        # splits this input on newlines, and a single-quoted scalar spanning
+        # several lines FOLDS them into one space-separated line -- so the four
+        # patterns below would arrive as a single glob containing spaces,
+        # matching nothing. With `if-no-files-found: warn` that failure is
+        # silent: the job stays green and publishes an empty artifact.
+        path: |
+          build/app/outputs/**
           build/web/**
           build/*.js
-          build/*.aot'
+          build/*.aot
         if-no-files-found: 'warn'
         overwrite: 'true'
         retention-days: 10

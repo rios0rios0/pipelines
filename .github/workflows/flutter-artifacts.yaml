@@ -29,18 +29,30 @@ on:
         type: 'string'
         default: 'apk appbundle'
         description: "APK is sideloadable for QA; App Bundle is the only format Google Play accepts for new releases."
+      runs_on:
+        type: 'string'
+        required: false
+        default: '["ubuntu-latest"]'
+        description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See dart.yaml.'
 
+# `ubuntu-latest` carries the tools the Dart scripts need (see the same note in dart.yaml) AND
+# the Android SDK and a JDK; a bare self-hosted runner selected through `runs_on` carries none of
+# them. `delivery-android` is the job that makes this more than a provisioning chore: the Android
+# SDK is not something a shared template will install ad hoc, because an unattended `sdkmanager`
+# licence acceptance inside a CI job is a supply-chain decision belonging to the consuming
+# project. Point `runs_on` at a runner that already has it, or leave the default.
 jobs:
   dart:
     uses: 'rios0rios0/pipelines/.github/workflows/dart.yaml@main'
     with:
       flutter_version: ${{ inputs.flutter_version }}
       toolchain: 'flutter'
+      runs_on: ${{ inputs.runs_on }}
 
   # fourth stage
   delivery-release:
     name: 'delivery > release'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     outputs:
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
@@ -51,7 +63,7 @@ jobs:
 
   delivery-web:
     name: 'delivery > delivery:web'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/dart/stages/40-delivery/build@main'
         with:
@@ -63,7 +75,7 @@ jobs:
 
   delivery-android:
     name: 'delivery > delivery:android'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/dart/stages/40-delivery/build@main'
         with:

@@ -22,6 +22,10 @@ inputs:
     required: false
     default: ''
     description: 'Fail the job when line coverage falls below this percentage (e.g. 80).'
+  coverage_exclude:
+    required: false
+    default: ''
+    description: "Glob patterns dropped from the report and the gate (e.g. '*.g.dart *.freezed.dart')."
   require_tests:
     required: false
     default: 'false'
@@ -57,6 +61,7 @@ runs:
         DART_SDK_VERSION: '${{ inputs.dart_sdk_version }}'
         DART_TOOLCHAIN: '${{ inputs.toolchain }}'
         DART_COVERAGE_MINIMUM: '${{ inputs.coverage_minimum }}'
+        DART_COVERAGE_EXCLUDE: '${{ inputs.coverage_exclude }}'
         DART_REQUIRE_TESTS: '${{ inputs.require_tests }}'
         DART_TEST_ARGS: '${{ inputs.test_args }}'
 

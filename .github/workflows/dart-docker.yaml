@@ -17,6 +17,11 @@ on:
         required: false
         type: 'string'
         default: 'auto'
+      runs_on:
+        type: 'string'
+        required: false
+        default: '["ubuntu-latest"]'
+        description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See dart.yaml.'
 
 jobs:
   dart:
@@ -25,11 +30,12 @@ jobs:
       flutter_version: ${{ inputs.flutter_version }}
       dart_sdk_version: ${{ inputs.dart_sdk_version }}
       toolchain: ${{ inputs.toolchain }}
+      runs_on: ${{ inputs.runs_on }}
 
   # fourth stage
   delivery-release:
     name: 'delivery > release'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     outputs:
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
@@ -40,7 +46,7 @@ jobs:
 
   delivery-docker:
     name: 'delivery > docker'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/docker@main'
         with:

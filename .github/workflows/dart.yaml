@@ -33,27 +33,67 @@ on:
         type: 'string'
         default: 'auto'
         description: "Force the toolchain: 'dart', 'flutter', or 'auto'."
+      runs_on:
+        type: 'string'
+        required: false
+        default: '["ubuntu-latest"]'
+        description: |
+          JSON array of runner labels (e.g. '["self-hosted"]'). `runs-on` is a hard selector --
+          GitHub matches it against the runner labels and never substitutes, so there is no
+          fallback to a self-hosted runner when the hosted minutes are exhausted. A JSON array
+          rather than a plain string because a reusable-workflow input cannot be typed as a
+          list, and multi-label runners need more than one value.
       fatal_infos:
         required: false
         type: 'boolean'
         default: false
         description: 'Fail the analyze job on INFO-level diagnostics (this is where lints land).'
+      test_args:
+        required: false
+        type: 'string'
+        default: ''
+        description: |
+          Extra arguments appended to `dart test` / `flutter test`. A project that commits
+          specifications ahead of the code -- BDD `.feature` files for screens not written yet,
+          tagged `@pending` -- runs green locally with `--exclude-tags pending` and permanently
+          red here, because the shared workflow ran the suite bare and had no way to be told
+          otherwise.
       coverage_minimum:
         required: false
         type: 'string'
         default: ''
         description: 'Fail the test job when line coverage falls below this percentage.'
+      coverage_exclude:
+        required: false
+        type: 'string'
+        default: ''
+        description: |
+          Whitespace- or comma-separated glob patterns whose files are dropped from the coverage
+          report and the `coverage_minimum` gate (e.g. '*.g.dart *.freezed.dart'). `build_runner`,
+          `freezed` and `json_serializable` make generated sources near-universal in Dart, and a
+          generator that emits one string literal per line moves the total by tens of points
+          without saying anything about whether the project is tested -- a floor a code generator
+          can move is not measuring what it was put there to protect.
       enable_sbom:
         required: false
         type: 'boolean'
         default: true
         description: 'Generate a CycloneDX SBOM and publish it as a job artifact.'
 
+# `ubuntu-latest` carries `curl`, `unzip`, `xz-utils`, `git`, `python3` and `jq`; a bare
+# self-hosted runner selected through `runs_on` carries none of them and must be provisioned
+# before these jobs will pass. The SDK itself is not among them -- the Dart scripts download it
+# from `storage.googleapis.com` -- but every tool that fetches, unpacks and reports on it is:
+# `curl` retrieves the archive, `jq` resolves the current release from the Flutter manifest,
+# `unzip` and `xz-utils` unpack the Dart zip and the Flutter tarball respectively, `git` is
+# required by the Flutter SDK itself (it is a git checkout and shells out to git on almost every
+# invocation), and `python3` runs the report converters. The GitLab abstract installs exactly
+# this list, for exactly this reason.
 jobs:
   # first stage
   code_check-basic_checks:
     name: 'code-check > quality:basic-checks'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/10-code-check/basic-checks@main'
         with:
@@ -62,7 +102,7 @@ jobs:
 
   code_check-style_format:
     name: 'code-check > style:format'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/dart/stages/10-code-check/format@main'
         with:
@@ -73,7 +113,7 @@ jobs:
 
   code_check-quality_analyze:
     name: 'code-check > quality:analyze'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/dart/stages/10-code-check/analyze@main'
         with:
@@ -85,7 +125,7 @@ jobs:
 
   code_check-quality_unused_code:
     name: 'code-check > quality:unused-code'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/dart/stages/10-code-check/unused@main'
         with:
@@ -99,7 +139,7 @@ jobs:
   # second stage
   security-sast_semgrep:
     name: 'security > sast:semgrep'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/semgrep@main'
         with:
@@ -109,7 +149,7 @@ jobs:
 
   security-sast_gitleaks:
     name: 'security > sast:gitleaks'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/gitleaks@main'
     needs: [ 'code_check-style_format', 'code_check-quality_analyze', 'code_check-quality_unused_code' ]
@@ -117,7 +157,7 @@ jobs:
 
   security-sast_hadolint:
     name: 'security > sast:hadolint'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
     needs: [ 'code_check-style_format', 'code_check-quality_analyze', 'code_check-quality_unused_code' ]
@@ -126,7 +166,7 @@ jobs:
 
   security-sast_trivy:
     name: 'security > sast:trivy'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy@main'
     needs: [ 'code_check-style_format', 'code_check-quality_analyze', 'code_check-quality_unused_code' ]
@@ -135,7 +175,7 @@ jobs:
 
   security-sca_trivy:
     name: 'security > sca:trivy'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy-sca@main'
     needs: [ 'code_check-style_format', 'code_check-quality_analyze', 'code_check-quality_unused_code' ]
@@ -144,7 +184,7 @@ jobs:
 
   security-sca_osv_scanner:
     name: 'security > sca:osv-scanner'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/dart/stages/20-security/osv-scanner@main'
         with:
@@ -159,14 +199,16 @@ jobs:
   # third stage
   tests-test_all:
     name: 'tests > test:all'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/dart/stages/30-tests/all@main'
         with:
           flutter_version: ${{ inputs.flutter_version }}
           dart_sdk_version: ${{ inputs.dart_sdk_version }}
           toolchain: ${{ inputs.toolchain }}
+          test_args: ${{ inputs.test_args }}
           coverage_minimum: ${{ inputs.coverage_minimum }}
+          coverage_exclude: ${{ inputs.coverage_exclude }}
     needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_osv_scanner' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -179,7 +221,7 @@ jobs:
   # credentials.
   management-report_sbom:
     name: 'management > report:sbom'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/dart/stages/35-management/cyclonedx@main'
         with:

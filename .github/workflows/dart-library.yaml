@@ -28,6 +28,11 @@ on:
         required: false
         type: 'string'
         default: 'auto'
+      runs_on:
+        type: 'string'
+        required: false
+        default: '["ubuntu-latest"]'
+        description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See dart.yaml.'
       pub_hosted_url:
         required: false
         type: 'string'
@@ -45,11 +50,12 @@ jobs:
       flutter_version: ${{ inputs.flutter_version }}
       dart_sdk_version: ${{ inputs.dart_sdk_version }}
       toolchain: ${{ inputs.toolchain }}
+      runs_on: ${{ inputs.runs_on }}
 
   # fourth stage
   delivery-publish_validate:
     name: 'delivery > publish:validate'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/dart/stages/40-delivery/publish@main'
         with:
@@ -62,7 +68,7 @@ jobs:
 
   delivery-release:
     name: 'delivery > release'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     outputs:
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
@@ -73,7 +79,7 @@ jobs:
 
   delivery-publish_prod:
     name: 'delivery > publish:prod'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/dart/stages/40-delivery/publish@main'
         with:

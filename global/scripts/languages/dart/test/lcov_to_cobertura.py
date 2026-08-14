@@ -27,14 +27,30 @@ Cobertura can represent are read:
 `DA`/`BRDA` rows instead.  They are summaries the producer is free to get wrong
 (and merged tracefiles routinely do), whereas the per-line rows are the data
 every consumer actually renders.
+
+`DART_COVERAGE_EXCLUDE` drops whole source files from BOTH the document and the
+`DART_COVERAGE_MINIMUM` gate, so the report and the gate never disagree about
+what was measured.  It exists because generated Dart is near-universal --
+`build_runner`, `freezed` and `json_serializable` all emit `*.g.dart` /
+`*.freezed.dart` beside their sources -- and a generator's output moves the total
+without saying anything about whether the project is tested: one real catalogue
+generator emitting a string literal per line took a project from 82.8% to 38.2%.
+A floor a code generator can move is not measuring what it was put there to
+protect.
 """
 
 from __future__ import annotations
 
+import fnmatch
 import os
 import sys
 import time
 from xml.sax.saxutils import quoteattr
+
+# How many excluded paths to name before summarising the rest. The count above
+# them is the signal that matters; naming a few makes a wrong pattern obvious
+# without turning an over-broad one into a thousand lines of log.
+EXCLUDED_PREVIEW = 10
 
 
 class FileCoverage:
@@ -126,6 +142,43 @@ def parse_lcov(path: str) -> list[FileCoverage]:
                 current.branches[key] = current.branches.get(key, 0) + taken
 
     return [files[key] for key in sorted(files)]
+
+
+def exclude_patterns() -> list[str]:
+    """Read `DART_COVERAGE_EXCLUDE` into a list of glob patterns.
+
+    Accepts either separator, because the three platforms spell lists
+    differently: a GitHub Actions input and an Azure DevOps variable are single
+    strings a caller naturally comma-separates, while a GitLab `variables:` entry
+    is as naturally written space-separated.  Taking both removes a class of
+    silent misconfiguration where the whole value is read as one pattern that
+    matches nothing.
+    """
+    raw = os.environ.get("DART_COVERAGE_EXCLUDE", "")
+    return [pattern for pattern in raw.replace(",", " ").split() if pattern]
+
+
+def apply_exclusions(
+    files: list[FileCoverage], patterns: list[str]
+) -> tuple[list[FileCoverage], list[FileCoverage]]:
+    """Split parsed records into kept and excluded.
+
+    Matching is `fnmatch` against the whole relative path, whose `*` crosses `/`
+    -- unlike a shell glob.  That is what makes the useful pattern short:
+    `*.g.dart` matches `lib/presentation/i18n/catalog.g.dart` at any depth, with
+    no `**/` prefix and no per-directory pattern.  It is also why an over-broad
+    pattern is easy to write by accident, which is what the count printed below
+    is for.
+    """
+    if not patterns:
+        return files, []
+
+    kept: list[FileCoverage] = []
+    dropped: list[FileCoverage] = []
+    for entry in files:
+        target = dropped if any(fnmatch.fnmatch(entry.path, p) for p in patterns) else kept
+        target.append(entry)
+    return kept, dropped
 
 
 def package_name(source: str) -> str:
@@ -233,6 +286,29 @@ def main() -> int:
         return 1
 
     files = parse_lcov(lcov_path)
+
+    # Excluded BEFORE the document is written, not only before the gate is
+    # evaluated: a report that still lists a file the percentage no longer counts
+    # sends whoever opens it looking for the discrepancy.
+    patterns = exclude_patterns()
+    total = len(files)
+    files, dropped = apply_exclusions(files, patterns)
+    if patterns:
+        # Printed unconditionally when the variable is set -- including as `0 of
+        # N`, which is how a typo'd pattern announces itself -- and always ahead
+        # of the COVERAGE_PERCENT line, so a consumer scraping the last match
+        # still lands on the percentage.
+        print(
+            "COVERAGE_EXCLUDED={dropped} of {total} file(s) dropped by "
+            "DART_COVERAGE_EXCLUDE ({patterns})".format(
+                dropped=len(dropped), total=total, patterns=" ".join(patterns)
+            )
+        )
+        for entry in dropped[:EXCLUDED_PREVIEW]:
+            print("  excluded: {}".format(entry.path))
+        if len(dropped) > EXCLUDED_PREVIEW:
+            print("  excluded: ... and {} more".format(len(dropped) - EXCLUDED_PREVIEW))
+
     covered, valid = write_cobertura(files, output_path, sources_root)
 
     percent = (covered / valid * 100.0) if valid else 0.0

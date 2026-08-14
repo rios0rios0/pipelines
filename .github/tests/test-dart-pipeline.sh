@@ -436,6 +436,108 @@ DART_COVERAGE_MINIMUM=80 python3 "$DART_DIR/test/lcov_to_cobertura.py" \
   "$WORK_DIR/lcov.info" "$WORK_DIR/c3.xml" . > /dev/null 2>&1 || STATUS=$?
 assert_true "DART_COVERAGE_MINIMUM passes at or above the threshold" "[[ $STATUS -eq 0 ]]"
 
+# Generated Dart is near-universal (`build_runner`, `freezed`, `json_serializable`)
+# and a generator emitting one literal per line moves the total by tens of points
+# while saying nothing about whether anything is tested. The fixture reproduces
+# exactly that shape: a hand-written library at 75%, buried by a 16-line
+# catalogue and a `freezed` union that no test will ever execute.
+cat > "$WORK_DIR/lcov-generated.info" <<'EOF'
+SF:lib/app.dart
+DA:1,1
+DA:2,1
+DA:3,1
+DA:4,0
+end_of_record
+SF:lib/presentation/i18n/catalog.g.dart
+DA:1,0
+DA:2,0
+DA:3,0
+DA:4,0
+DA:5,0
+DA:6,0
+DA:7,0
+DA:8,0
+DA:9,0
+DA:10,0
+DA:11,0
+DA:12,0
+DA:13,0
+DA:14,0
+DA:15,0
+DA:16,0
+end_of_record
+SF:lib/domain/user.freezed.dart
+DA:1,0
+DA:2,0
+end_of_record
+EOF
+
+GEN_OUT="$(python3 "$DART_DIR/test/lcov_to_cobertura.py" \
+  "$WORK_DIR/lcov-generated.info" "$WORK_DIR/gen1.xml" . 2>&1)"
+assert_true "generated sources drag the unexcluded total down (3/22)" \
+  "grep -q 'COVERAGE_PERCENT=13.64%' <<< \"\$GEN_OUT\""
+
+# `fnmatch`'s `*` crosses `/`, unlike a shell glob, which is what keeps the
+# useful pattern short: no `**/` prefix and no per-directory pattern.
+GEN_OUT="$(DART_COVERAGE_EXCLUDE='*.g.dart *.freezed.dart' \
+  python3 "$DART_DIR/test/lcov_to_cobertura.py" \
+  "$WORK_DIR/lcov-generated.info" "$WORK_DIR/gen2.xml" . 2>&1)"
+assert_true "DART_COVERAGE_EXCLUDE drops generated sources from the percentage" \
+  "grep -q 'COVERAGE_PERCENT=75.00%' <<< \"\$GEN_OUT\""
+assert_true "a bare '*.g.dart' matches at any depth (fnmatch, not a shell glob)" \
+  "grep -q 'excluded: lib/presentation/i18n/catalog.g.dart' <<< \"\$GEN_OUT\""
+# The gate and the report must agree on what was measured: a document that still
+# lists a file the percentage no longer counts sends whoever opens it looking for
+# the discrepancy.
+assert_true "an excluded file is dropped from the Cobertura document too" \
+  "! grep -q 'catalog.g.dart' '$WORK_DIR/gen2.xml'"
+assert_true "a file that matches no pattern survives the exclusion" \
+  "grep -q 'app.dart' '$WORK_DIR/gen2.xml'"
+# The count is what makes an over-broad pattern visible; without it a `*` that
+# excluded the whole project would report 0/0 and pass every threshold silently.
+assert_true "the number of excluded files is printed" \
+  "grep -q 'COVERAGE_EXCLUDED=2 of 3 file(s) dropped' <<< \"\$GEN_OUT\""
+assert_true "the exclusion line is printed BEFORE the coverage line GitLab scrapes" \
+  "[[ \$(grep -n 'COVERAGE_EXCLUDED=' <<< \"\$GEN_OUT\" | cut -d: -f1) -lt \$(grep -n 'COVERAGE_PERCENT=' <<< \"\$GEN_OUT\" | cut -d: -f1) ]]"
+assert_true "the coverage line still matches the GitLab 'coverage:' regex" \
+  "grep -qE 'COVERAGE_PERCENT=[0-9.]+%' <<< \"\$GEN_OUT\""
+
+# A GitHub Actions input and an Azure DevOps variable are single strings a caller
+# naturally comma-separates; a GitLab `variables:` entry is as naturally written
+# space-separated. Reading only one spelling turns the other into a single
+# pattern that matches nothing, and nothing would say so.
+GEN_OUT="$(DART_COVERAGE_EXCLUDE='*.g.dart,*.freezed.dart' \
+  python3 "$DART_DIR/test/lcov_to_cobertura.py" \
+  "$WORK_DIR/lcov-generated.info" "$WORK_DIR/gen3.xml" . 2>&1)"
+assert_true "comma-separated patterns behave identically to space-separated ones" \
+  "grep -q 'COVERAGE_PERCENT=75.00%' <<< \"\$GEN_OUT\""
+
+# A typo'd pattern must announce itself as `0 of N` rather than look like success.
+GEN_OUT="$(DART_COVERAGE_EXCLUDE='*.generated.dart' \
+  python3 "$DART_DIR/test/lcov_to_cobertura.py" \
+  "$WORK_DIR/lcov-generated.info" "$WORK_DIR/gen4.xml" . 2>&1)"
+assert_true "a pattern that matches nothing is reported as '0 of N', not silence" \
+  "grep -q 'COVERAGE_EXCLUDED=0 of 3 file(s) dropped' <<< \"\$GEN_OUT\""
+
+# The gate must see the SAME set the report does, or the two disagree by exactly
+# the generated files -- which is the whole reason the variable exists.
+STATUS=0
+DART_COVERAGE_MINIMUM=70 python3 "$DART_DIR/test/lcov_to_cobertura.py" \
+  "$WORK_DIR/lcov-generated.info" "$WORK_DIR/gen5.xml" . > /dev/null 2>&1 || STATUS=$?
+assert_true "the gate fails on generated sources when nothing is excluded" "[[ $STATUS -eq 1 ]]"
+
+STATUS=0
+DART_COVERAGE_MINIMUM=70 DART_COVERAGE_EXCLUDE='*.g.dart *.freezed.dart' \
+  python3 "$DART_DIR/test/lcov_to_cobertura.py" \
+  "$WORK_DIR/lcov-generated.info" "$WORK_DIR/gen6.xml" . > /dev/null 2>&1 || STATUS=$?
+assert_true "the gate is evaluated on the excluded set, not the raw one" "[[ $STATUS -eq 0 ]]"
+
+# An unset variable must change nothing at all, for every existing consumer.
+GEN_OUT="$(python3 "$DART_DIR/test/lcov_to_cobertura.py" \
+  "$WORK_DIR/lcov.info" "$WORK_DIR/gen7.xml" . 2>&1)"
+assert_true "an unset DART_COVERAGE_EXCLUDE prints no exclusion line at all" \
+  "! grep -q 'COVERAGE_EXCLUDED' <<< \"\$GEN_OUT\""
+
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- 8. dart analyze machine-format parsing and severity gate ---"
@@ -656,6 +758,89 @@ done
 for workflow in dart dart-docker dart-library flutter-artifacts; do
   assert_true "GitHub: the $workflow workflow exists" \
     "[[ -f '$SCRIPTS_DIR/.github/workflows/$workflow.yaml' ]]"
+done
+
+# `runs-on` is a HARD selector: GitHub matches it against the runner labels and
+# never substitutes, so a job that hardcodes `ubuntu-latest` is rejected before it
+# starts once an account's hosted minutes run out -- while a registered
+# self-hosted runner sits idle, because nothing asked for it. A reusable workflow
+# also validates its callers against its declared input list, so a consumer
+# cannot work around the omission from outside; the only recourse is abandoning
+# the workflow and re-declaring every job locally.
+#
+# Asserted on the PARSED document rather than by grep: YAML 1.1 reads the `on:`
+# key as the boolean `true`, so the input list is not where a reader expects it,
+# and a grep for the name would equally pass on a file that only mentions it in a
+# comment.
+for workflow in dart dart-docker dart-library flutter-artifacts; do
+  assert_equals "GitHub: $workflow.yaml declares the runs_on input" \
+    "yes" \
+    "$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/$workflow.yaml'))
+trigger = d.get('on', d.get(True))
+print('yes' if 'runs_on' in trigger['workflow_call']['inputs'] else 'no')
+")"
+  assert_equals "GitHub: $workflow.yaml pins no job to a hardcoded runner" \
+    "" \
+    "$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/$workflow.yaml'))
+print(' '.join(sorted(
+    name for name, job in d['jobs'].items()
+    if 'ubuntu-latest' in str(job.get('runs-on', ''))
+)))
+")"
+done
+
+# A child workflow that declares `runs_on` but forgets to FORWARD it moves its own
+# delivery jobs onto the chosen runner while every quality job it calls through
+# `dart.yaml` stays on the hosted one -- half a migration, and green either way,
+# so nothing reports it.
+for workflow in dart-docker dart-library flutter-artifacts; do
+  assert_equals "GitHub: $workflow.yaml forwards runs_on into the dart job" \
+    "yes" \
+    "$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/$workflow.yaml'))
+print('yes' if 'runs_on' in d['jobs']['dart'].get('with', {}) else 'no')
+")"
+done
+
+# The `30-tests/all` action declared `test_args` and `coverage_exclude` long
+# before the reusable workflow exposed them, which made them unreachable: the
+# workflow is the only entry point a GitHub consumer has. Assert the whole chain
+# -- declared on `dart.yaml`, forwarded to the action, turned into the
+# environment variable the runner and the converter actually read -- because a
+# break at any one link leaves the other two looking correct.
+for input in test_args coverage_exclude; do
+  assert_equals "GitHub: dart.yaml declares the $input input" \
+    "yes" \
+    "$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
+trigger = d.get('on', d.get(True))
+print('yes' if '$input' in trigger['workflow_call']['inputs'] else 'no')
+")"
+  assert_equals "GitHub: dart.yaml forwards $input to the 30-tests/all action" \
+    "yes" \
+    "$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
+step = d['jobs']['tests-test_all']['steps'][0]
+print('yes' if '$input' in step.get('with', {}) else 'no')
+")"
+done
+
+for pair in 'test_args:DART_TEST_ARGS' 'coverage_exclude:DART_COVERAGE_EXCLUDE'; do
+  assert_equals "GitHub: the 30-tests/all action maps ${pair%%:*} onto ${pair##*:}" \
+    "yes" \
+    "$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/github/dart/stages/30-tests/all/action.yaml'))
+steps = [s for s in d['runs']['steps'] if '${pair##*:}' in s.get('env', {})]
+print('yes' if steps and 'inputs.${pair%%:*}' in steps[0]['env']['${pair##*:}'] else 'no')
+")"
 done
 
 for action in 10-code-check/format 10-code-check/analyze 10-code-check/unused \

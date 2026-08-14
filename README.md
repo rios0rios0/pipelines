@@ -491,6 +491,7 @@ include:
 variables:
   DART_FATAL_INFOS: 'true'        # fail on lints, not only errors and warnings
   DART_COVERAGE_MINIMUM: '80'     # fail below this line coverage
+  DART_COVERAGE_EXCLUDE: '*.g.dart *.freezed.dart' # generated sources, out of the total
   ENABLE_ANDROID_DELIVERY: 'true' # needs an Android-SDK-capable runner
 ```
 

@@ -1,0 +1,74 @@
+# Flutter application delivered as downloadable artifacts: a web bundle and
+# Android APK/AAB.
+#
+# GitHub's `ubuntu-latest` runners already ship the Android SDK and a JDK, so the
+# Android target works out of the box -- unlike the GitLab equivalent, where the
+# runner image is the consumer's choice and cannot be assumed to carry them.
+#
+# `ipa` is not built here: it needs a `macos-latest` runner and, to be
+# installable, a signing identity and provisioning profile that belong to the
+# consuming project rather than to a shared template. Add a job with
+# `runs-on: macos-latest` and `targets: ipa` when you have them.
+on:
+  workflow_call:
+    inputs:
+      flutter_version:
+        required: false
+        type: 'string'
+        default: ''
+      build_web:
+        required: false
+        type: 'boolean'
+        default: true
+      build_android:
+        required: false
+        type: 'boolean'
+        default: true
+      android_targets:
+        required: false
+        type: 'string'
+        default: 'apk appbundle'
+        description: "APK is sideloadable for QA; App Bundle is the only format Google Play accepts for new releases."
+
+jobs:
+  dart:
+    uses: 'rios0rios0/pipelines/.github/workflows/dart.yaml@main'
+    with:
+      flutter_version: ${{ inputs.flutter_version }}
+      toolchain: 'flutter'
+
+  # fourth stage
+  delivery-release:
+    name: 'delivery > release'
+    runs-on: 'ubuntu-latest'
+    outputs:
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - id: 'release'
+        uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
+    needs: [ 'dart' ]
+    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore/bump-') || contains(github.event.head_commit.message, 'chore(bump)'))"
+
+  delivery-web:
+    name: 'delivery > delivery:web'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/dart/stages/40-delivery/build@main'
+        with:
+          flutter_version: ${{ inputs.flutter_version }}
+          toolchain: 'flutter'
+          targets: 'web'
+    needs: [ 'dart' ]
+    if: "inputs.build_web && !failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))"
+
+  delivery-android:
+    name: 'delivery > delivery:android'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/dart/stages/40-delivery/build@main'
+        with:
+          flutter_version: ${{ inputs.flutter_version }}
+          toolchain: 'flutter'
+          targets: ${{ inputs.android_targets }}
+    needs: [ 'dart' ]
+    if: "inputs.build_android && !failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))"

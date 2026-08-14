@@ -1,0 +1,40 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/35-management/abstracts.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dart/abstracts/dart.yaml'
+
+report:sonarqube:
+  extends: '.sonarqube'
+  script:
+    # Read the version from pubspec.yaml -- the single source of truth for a pub
+    # package's version, and the same field the build and publish jobs use.
+    - |
+      version=$(sed -n "s/^version:[[:space:]]*['\"]\{0,1\}\([^'\"#]*\)['\"]\{0,1\}[[:space:]]*$/\1/p" pubspec.yaml | head -n 1 | tr -d '[:space:]')
+      if [ -n "$version" ]; then
+        echo "sonar.projectVersion=$version" >> sonar-project.properties
+        echo "Updated sonar.projectVersion to $version"
+      else
+        echo "Couldn't read 'version:' from pubspec.yaml; leaving sonar.projectVersion unset."
+      fi
+    # Dart coverage is LCOV, and the two Sonar implementations spell the property
+    # differently: SonarQube Server 10.7+/Cloud ship a first-party Dart analyzer
+    # that reads `sonar.dart.lcov.reportPaths`, while the community
+    # `sonar-flutter` plugin (the only option on older servers) reads
+    # `sonar.flutter.coverage.reportPath`. Both are written because an unknown
+    # property is IGNORED by the scanner, whereas a missing one silently means
+    # zero coverage -- so writing both is free and writing one is a coin flip.
+    - |
+      if [ -f coverage/lcov.info ]; then
+        grep -q '^sonar.dart.lcov.reportPaths' sonar-project.properties 2>/dev/null \
+          || echo "sonar.dart.lcov.reportPaths=coverage/lcov.info" >> sonar-project.properties
+        grep -q '^sonar.flutter.coverage.reportPath' sonar-project.properties 2>/dev/null \
+          || echo "sonar.flutter.coverage.reportPath=coverage/lcov.info" >> sonar-project.properties
+      fi
+    - !reference [ .sonarqube, script ]
+
+report:dependency-track:
+  extends: [ '.dart', '.dependency-track' ]
+  script:
+    - mkdir -p "$PREFIX$REPORT_PATH"
+    - $SCRIPTS_DIR/global/scripts/languages/dart/cyclonedx/run.sh
+    - !reference [ .dependency-track, script ]

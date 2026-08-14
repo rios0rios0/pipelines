@@ -37,6 +37,8 @@ Comprehensive, enterprise-grade SDLC pipeline templates for **GitHub Actions**, 
 | **PHP**                | yes            | no        | no           | Composer, Docker                  |
 | **Ruby**               | yes            | no        | no           | Bundler, Docker                   |
 | **.NET/C#**            | yes            | yes       | yes          | Framework, Core, Docker           |
+| **Dart**               | yes            | yes       | yes          | pub.dev, Docker, native binary    |
+| **Flutter**            | yes            | yes       | yes          | Web, Android APK/AAB, Docker      |
 | **Terraform**          | no             | yes       | yes          | Infrastructure as Code            |
 | **Terra CLI**          | yes            | yes       | yes          | Terraform/Terragrunt wrapper      |
 
@@ -55,6 +57,9 @@ pipelines/
 │   ├── composer-docker.yaml   # PHP/Composer with Docker delivery
 │   ├── bundler-docker.yaml    # Ruby/Bundler with Docker delivery
 │   ├── dotnet-docker.yaml     # .NET with Docker delivery
+│   ├── dart-docker.yaml       # Dart with Docker delivery
+│   ├── dart-library.yaml      # Dart package published to pub.dev
+│   ├── flutter-artifacts.yaml # Flutter web bundle + Android APK/AAB
 │   └── ...
 ├── gitlab/                     # GitLab CI pipeline templates
 │   ├── golang/                # Go language pipelines
@@ -62,6 +67,7 @@ pipelines/
 │   ├── python/                # Python language pipelines
 │   ├── javascript/            # JavaScript/Node.js pipelines
 │   ├── dotnet/                # .NET language pipelines
+│   ├── dart/                  # Dart and Flutter pipelines
 │   ├── terraform/             # Terraform pipelines (raw terraform/terragrunt)
 │   ├── terra/                 # Terra CLI pipelines (terraform/terragrunt wrapper)
 │   └── global/                # Shared GitLab configurations
@@ -71,6 +77,7 @@ pipelines/
 │   ├── python/                # Python language pipelines
 │   ├── javascript/            # JavaScript/Node.js pipelines
 │   ├── dotnet/                # .NET language pipelines
+│   ├── dart/                  # Dart and Flutter pipelines
 │   ├── terraform/             # Terraform pipelines (raw terraform/terragrunt)
 │   ├── terra/                 # Terra CLI pipelines (terraform/terragrunt wrapper)
 │   └── global/                # Shared Azure DevOps templates
@@ -86,6 +93,8 @@ pipelines/
 │   │   │   └── dependency-track/ # SCA analysis
 │   │   ├── languages/         # Language-specific scripts
 │   │   │   ├── golang/        # Go scripts (test, cyclonedx, golangci-lint, init)
+│   │   │   ├── dart/          # Dart/Flutter scripts (setup, format, analyze,
+│   │   │   │                  #   test, unused, sca, cyclonedx, build, publish)
 │   │   │   └── python/        # Python scripts (cyclonedx)
 │   │   ├── deploy/            # MVP hosting providers (50-deployment stage)
 │   │   │   ├── cloudflare/    # Cloudflare Pages + Workers
@@ -107,6 +116,7 @@ pipelines/
 │   ├── java.mk                # Java/Gradle targets (lint, test)
 │   ├── javascript.mk          # JavaScript/Yarn targets (lint, test)
 │   ├── dotnet.mk              # .NET/C# targets (lint, test)
+│   ├── dart.mk                # Dart/Flutter targets (lint, test, sca, build)
 │   ├── terraform.mk           # Terraform targets (lint, test)
 │   └── terra.mk               # Terra CLI targets (lint, test)
 ├── .docs/                      # Documentation and examples
@@ -175,6 +185,10 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 | `composer-docker.yaml`       | PHP/Composer with Docker image delivery    | PHP           |
 | `bundler.yaml`               | Ruby/Bundler testing and quality checks    | Ruby          |
 | `bundler-docker.yaml`        | Ruby/Bundler with Docker image delivery    | Ruby          |
+| `dart.yaml`                  | Dart/Flutter quality, security, and tests  | Dart/Flutter  |
+| `dart-docker.yaml`           | Dart/Flutter with Docker image delivery    | Dart/Flutter  |
+| `dart-library.yaml`          | Dart package published to pub.dev          | Dart          |
+| `flutter-artifacts.yaml`     | Flutter web bundle and Android APK/AAB     | Flutter       |
 | `terra.yaml`                 | Terra CLI quality, security, and tests     | Terraform/HCL |
 
 #### Usage Example (Go with Docker)
@@ -313,6 +327,46 @@ jobs:
     uses: 'rios0rios0/pipelines/.github/workflows/npm-docker.yaml@main'
 ```
 
+#### Usage Example (Flutter with Artifact Delivery)
+
+```yaml
+name: 'CI/CD Pipeline'
+
+on:
+  push:
+    branches: [ 'main' ]
+    tags: [ '*' ]
+  pull_request:
+    branches: [ 'main' ]
+
+permissions:
+  contents: 'write'
+  checks: 'write'
+  # No `security-events: write` is needed: that permission exists for CodeQL,
+  # which has no Dart extractor and is not part of the Dart pipeline.
+
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/flutter-artifacts.yaml@main'
+    with:
+      flutter_version: '3.47.0'   # omit to track the current stable release
+```
+
+#### Usage Example (Dart Package to pub.dev)
+
+```yaml
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/dart-library.yaml@main'
+    secrets:
+      PUB_TOKEN: ${{ secrets.PUB_TOKEN }}   # only used by the tag-triggered publish job
+```
+
+The toolchain is detected from `pubspec.yaml`, so the same workflows serve a
+Flutter app and a pure Dart package. See
+[.docs/examples/github-flutter-artifacts](.docs/examples/github-flutter-artifacts)
+for a complete project.
+
 #### Usage Example (Java/Maven with Docker)
 
 ```yaml
@@ -396,6 +450,10 @@ GitLab CI templates use remote includes and are organized by language in the `gi
 | **Python**      | `pdm-docker.yaml`    | Python PDM with Docker     |
 | **JavaScript**  | `yarn-docker.yaml`   | Node.js Yarn with Docker   |
 | **.NET**        | `framework.yaml`     | .NET Framework pipeline    |
+| **Dart**        | `dart-docker.yaml`   | Dart with Docker delivery  |
+| **Dart**        | `dart-library.yaml`  | Dart package to pub.dev    |
+| **Flutter**     | `flutter-docker.yaml`| Flutter web in a container |
+| **Flutter**     | `flutter-artifacts.yaml` | Flutter web + Android  |
 | **Terraform**   | `terra.yaml`         | Terraform IaC pipeline     |
 
 #### Usage Example (Go with Docker)
@@ -423,6 +481,23 @@ include:
 variables:
   PYTHON_VERSION: "3.11"  # Optional: specify a Python version
 ```
+
+#### Usage Example (Dart / Flutter)
+
+```yaml
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dart/flutter-artifacts.yaml'
+
+variables:
+  DART_FATAL_INFOS: 'true'        # fail on lints, not only errors and warnings
+  DART_COVERAGE_MINIMUM: '80'     # fail below this line coverage
+  ENABLE_ANDROID_DELIVERY: 'true' # needs an Android-SDK-capable runner
+```
+
+No runner image with Dart preinstalled is required: the SDK is downloaded from
+Google's archive and cached in `$CI_PROJECT_DIR/.sdk`. See
+[.docs/examples/gitlab-dart-library](.docs/examples/gitlab-dart-library) for a
+complete package pipeline.
 
 #### Usage Example (Terraform -- raw terraform/terragrunt)
 
@@ -526,6 +601,10 @@ Azure DevOps templates are located in the `azure-devops/` directory and use temp
 | **Python**      | `pdm-docker.yaml`      | Python PDM with Docker            |
 | **JavaScript**  | `yarn-docker.yaml`     | Node.js Yarn with Docker          |
 | **.NET**        | `core.yaml`            | .NET Core pipeline                |
+| **Dart**        | `dart/dart-docker.yaml`  | Dart with Docker delivery       |
+| **Dart**        | `dart/dart-library.yaml` | Dart package to pub.dev         |
+| **Flutter**     | `dart/flutter-docker.yaml` | Flutter web in a container    |
+| **Flutter**     | `dart/flutter-artifacts.yaml` | Flutter web + Android      |
 | **Terraform**   | `terra.yaml`           | Infrastructure as Code pipeline   |
 | **Terra CLI**   | `terra/terra.yaml`     | Terra CLI wrapper pipeline        |
 
@@ -557,6 +636,27 @@ resources:
 stages:
   - template: 'azure-devops/golang/go-docker.yaml@pipelines'
 ```
+
+#### Usage Example (Dart / Flutter)
+
+```yaml
+resources:
+  repositories:
+    - repository: 'pipelines'
+      type: 'github'
+      name: 'rios0rios0/pipelines'
+      ref: 'refs/heads/main'
+      endpoint: 'github-service-connection'
+
+extends:
+  template: 'azure-devops/dart/flutter-artifacts.yaml@pipelines'
+  parameters:
+    ENABLE_WEB_DELIVERY: true
+    ENABLE_ANDROID_DELIVERY: true
+```
+
+Microsoft-hosted `ubuntu-latest` agents already carry the Android SDK and a JDK,
+so the Android target works without extra setup.
 
 #### Usage Example (Go with ARM Deployment)
 
@@ -730,6 +830,60 @@ Optional environment variables:
 | **golangci-lint**  | Go linting suite      | `global/scripts/languages/golang/golangci-lint/` |
 | **Go Test Runner** | Comprehensive testing | `global/scripts/languages/golang/test/`          |
 | **CycloneDX**      | SBOM generation       | `global/scripts/languages/golang/cyclonedx/`     |
+
+#### Dart / Flutter Tools
+
+| Tool             | Purpose                                                    | Script Location                              |
+|------------------|------------------------------------------------------------|----------------------------------------------|
+| **setup**        | Installs the Dart or Flutter SDK from Google's archive      | `global/scripts/languages/dart/setup/`       |
+| **format**       | `dart format` gate (`--fix` rewrites in place)             | `global/scripts/languages/dart/format/`      |
+| **analyze**      | `dart analyze` with JUnit/JSON reports and a severity gate  | `global/scripts/languages/dart/analyze/`     |
+| **test**         | Tests + coverage → JUnit, Cobertura and LCOV               | `global/scripts/languages/dart/test/`        |
+| **unused**       | Unused code and unused file detection (`dart_code_linter`)  | `global/scripts/languages/dart/unused/`      |
+| **sca**          | OSV-Scanner over `pubspec.lock` (Pub advisory database)     | `global/scripts/languages/dart/sca/`         |
+| **cyclonedx**    | SBOM generation for pub projects                            | `global/scripts/languages/dart/cyclonedx/`   |
+| **build**        | Release artifacts (APK, AAB, web, exe, …)                   | `global/scripts/languages/dart/build/`       |
+| **publish**      | pub.dev publication with validation gate                    | `global/scripts/languages/dart/publish/`     |
+
+The toolchain is detected from the project's own `pubspec.yaml` — a `flutter:
+sdk: flutter` dependency selects `flutter`, anything else selects `dart` — so
+the same nine scripts serve a Flutter app and a pure Dart package. Override with
+`DART_TOOLCHAIN=dart|flutter`.
+
+The SDK is downloaded from `storage.googleapis.com` rather than pulled as a
+Docker image, for the same reason every other tool here is installed natively:
+Docker Hub rate-limits anonymous pulls, and a large SDK image is exactly what
+trips that limit.
+
+##### Dart & Flutter Tool Coverage
+
+**Two tools in this repository's standard stack do not support Dart.** Both gaps
+are handled by a deliberate absence or substitution, not by a job that silently
+checks nothing:
+
+| Tool                       | Dart support                                                                 | What the pipeline does                                                                                  |
+|----------------------------|------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
+| **CodeQL**                 | ❌ No extractor ([dart-lang/sdk#52953](https://github.com/dart-lang/sdk/issues/52953)) | The `sast:codeql` job is **omitted** from every Dart template. `make sast` skips it with an explanation.  |
+| **Semgrep** (registry)     | ⚠️ Engine parses Dart (experimental); registry publishes **zero** Dart rules — `p/dart` is a 404 and `r/dart` returns an empty `rules: []` | The job runs. The shared runner skips the unpublished pack instead of failing, and loads the **first-party Dart ruleset** shipped at `global/scripts/tools/semgrep/rules/dart.yaml`. |
+| **OWASP Dependency-Check** | ❌ No pub analyzer                                                            | Replaced by **OSV-Scanner**, which queries the Pub advisory database directly.                            |
+| **Semgrep** (engine)       | ✅ Experimental                                                               | Runs the language-agnostic packs plus the shipped Dart rules.                                             |
+| **Trivy** (IaC + SCA)      | ✅ Parses `pubspec.lock`                                                      | Runs unchanged. Note it records SDK-provided dependencies as version `0.0.0`, which is why OSV-Scanner runs alongside it. |
+| **Gitleaks / Hadolint / ShellCheck** | ✅ Language-agnostic                                               | Run unchanged.                                                                                            |
+| **SonarQube**              | ✅ First-party Dart analyzer (Server 10.7+/Cloud); community `sonar-flutter` on older servers | Both `sonar.dart.lcov.reportPaths` and `sonar.flutter.coverage.reportPath` are written, so either implementation finds the coverage. |
+| **Dependency-Track**       | ✅ via CycloneDX                                                              | BOM generated with Trivy (`package:sbom` emits SPDX only; `cdxgen` would need a Node.js toolchain).        |
+
+The shipped Semgrep ruleset covers the Dart and Flutter issues that are both
+high-consequence and reliably expressible as a pattern — TLS verification
+bypass via `badCertificateCallback`, WebView JavaScript and file-URL access,
+shell and SQL injection through string interpolation, weak randomness for
+security-sensitive values, and secrets written to `SharedPreferences`. Style and
+correctness lints are deliberately left to `dart analyze`, which does them
+better with the project's own `analysis_options.yaml` deciding what counts.
+
+Because CodeQL is absent, `dart analyze` carries more weight here than the
+equivalent job does in other pipelines. Its gate is therefore configurable:
+`DART_FATAL_WARNINGS` (default `true`) and `DART_FATAL_INFOS` (default `false`,
+since that is where every lint lands).
 
 #### Terraform / Terra Tools
 
@@ -1001,8 +1155,13 @@ Available language files:
 | `java.mk`       | Java (Gradle)     | `./gradlew check`                     | `./gradlew test`                |
 | `javascript.mk` | JavaScript (Yarn) | `yarn lint`                           | `yarn test`                     |
 | `dotnet.mk`     | .NET/C#           | `dotnet format`                       | `dotnet test`                   |
+| `dart.mk`       | Dart / Flutter    | `dart format --fix` + `dart analyze` + unused-code scan | `dart`/`flutter test` + coverage → JUnit, Cobertura, LCOV |
 | `terraform.mk`  | Terraform         | `terraform fmt` + `validate`          | `terraform plan`                |
 | `terra.mk`      | Terra CLI         | `terra format` + git diff check       | unified `test-all` runner (`terraform test` on all modules + Terratest suite when present) |
+
+`dart.mk` adds `make sca` (OSV-Scanner over `pubspec.lock`) to `make sast`, and leaves
+`CODEQL_LANGUAGE` unset so `make sast` skips CodeQL with an explanation rather than failing —
+CodeQL has no Dart extractor. Include `common.mk` **before** `dart.mk` so that append works.
 
 The `-include` prefix means Make silently skips the includes if the repository is not cloned yet. Run `make setup` (or `curl ... | bash`) to bootstrap.
 
@@ -1014,6 +1173,12 @@ If you prefer calling scripts directly without Makefile includes:
 
 ```bash
 export SCRIPTS_DIR=$HOME/Development/github.com/rios0rios0/pipelines
+
+# Dart/Flutter: format, analyze, test with coverage, dependency scan
+$SCRIPTS_DIR/global/scripts/languages/dart/format/run.sh --fix
+$SCRIPTS_DIR/global/scripts/languages/dart/analyze/run.sh
+$SCRIPTS_DIR/global/scripts/languages/dart/test/run.sh
+$SCRIPTS_DIR/global/scripts/languages/dart/sca/run.sh
 
 # Go linting
 $SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/run.sh --fix

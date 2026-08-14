@@ -1,0 +1,64 @@
+parameters:
+  # Android artifacts need the Android SDK and a JDK. Microsoft-hosted
+  # `ubuntu-latest` agents already ship both, so this defaults to on here --
+  # unlike the GitLab template, where the runner image is the consumer's choice
+  # and cannot be assumed to carry them.
+  - name: 'ENABLE_ANDROID_DELIVERY'
+    type: 'boolean'
+    default: true
+  - name: 'ENABLE_WEB_DELIVERY'
+    type: 'boolean'
+    default: true
+  # An APK is sideloadable and useful for QA distribution; an App Bundle is the
+  # only format Google Play accepts for new releases. Both are built by default.
+  - name: 'ANDROID_BUILD_TARGETS'
+    type: 'string'
+    default: 'apk appbundle'
+
+stages:
+  - stage: 'delivery'
+    displayName: 'delivery'
+    condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
+    jobs:
+      - ${{ if eq(parameters.ENABLE_WEB_DELIVERY, true) }}:
+          - job: 'delivery_web'
+            displayName: 'delivery:web'
+            variables:
+              DART_BUILD_TARGETS: 'web'
+            steps:
+              - template: '../../abstracts/dart.yaml'
+              - script: $(Scripts.Directory)/global/scripts/languages/dart/build/run.sh
+                displayName: 'Build the Flutter web bundle'
+
+              - task: 'PublishPipelineArtifact@1'
+                inputs:
+                  artifactName: 'flutter-web'
+                  targetPath: 'build/web'
+                displayName: 'Publish the web bundle'
+
+      - ${{ if eq(parameters.ENABLE_ANDROID_DELIVERY, true) }}:
+          - job: 'delivery_android'
+            displayName: 'delivery:android'
+            variables:
+              DART_BUILD_TARGETS: '${{ parameters.ANDROID_BUILD_TARGETS }}'
+            steps:
+              - template: '../../abstracts/dart.yaml'
+
+              - task: 'JavaToolInstaller@0'
+                inputs:
+                  versionSpec: '17'
+                  jdkArchitectureOption: 'x64'
+                  jdkSourceOption: 'PreInstalled'
+                displayName: 'Use JDK 17 for the Android Gradle plugin'
+                continueOnError: true
+
+              - script: $(Scripts.Directory)/global/scripts/languages/dart/build/run.sh
+                displayName: 'Build the Android artifacts'
+
+              - task: 'PublishPipelineArtifact@1'
+                inputs:
+                  artifactName: 'flutter-android'
+                  targetPath: 'build/app/outputs'
+                displayName: 'Publish the Android artifacts'
+
+      - template: '../../../global/stages/40-delivery/release.yaml'

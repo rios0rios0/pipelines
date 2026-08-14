@@ -1,0 +1,47 @@
+# Shared setup steps for every Dart / Flutter job.
+#
+# Unlike the GitLab abstract, this one runs directly on the agent rather than in
+# a container, so there is no base image to choose: the SDK is installed by
+# `global/scripts/languages/dart/setup/run.sh` from Google's release archive,
+# and the toolchain (Dart or Flutter) is derived from the project's own
+# `pubspec.yaml`. Microsoft-hosted `ubuntu-latest` agents already carry curl,
+# git, jq, unzip, xz and python3, which is everything that install needs.
+#
+# `Agent.ToolsDirectory` persists across jobs on a self-hosted agent and is
+# wiped between jobs on a hosted one, which is exactly the caching behaviour
+# wanted here: a self-hosted pool downloads the SDK once, a hosted pool restores
+# it from the pipeline cache below.
+steps:
+  - task: 'Cache@2'
+    inputs:
+      # `pubspec.lock` keys the cache because it changes exactly when the
+      # resolved dependency set does. The SDK itself is keyed by the pinned
+      # version variables so bumping FLUTTER_VERSION invalidates it.
+      key: "dart | $(Agent.OS) | $(FLUTTER_VERSION) | $(DART_SDK_VERSION) | pubspec.lock"
+      path: "$(Pipeline.Workspace)/.dart-sdk"
+    displayName: 'Cache the Dart/Flutter SDK'
+    continueOnError: true
+
+  - task: 'Cache@2'
+    inputs:
+      key: "pub | $(Agent.OS) | pubspec.lock"
+      path: "$(Pipeline.Workspace)/.pub-cache"
+    displayName: 'Cache pub packages'
+    continueOnError: true
+
+  - template: '../../global/abstracts/scripts-repo.yaml'
+
+  - script: |
+      set -e
+      export DART_SDK_INSTALL_DIR="$(Pipeline.Workspace)/.dart-sdk"
+      export PUB_CACHE="$(Pipeline.Workspace)/.pub-cache"
+      $(Scripts.Directory)/global/scripts/languages/dart/setup/run.sh
+      # Azure Pipelines starts every `script` step in a fresh shell, so an
+      # exported PATH does not survive to the next one. `task.prependpath` and
+      # `task.setvariable` are the only channels that do, so the SDK location and
+      # the pub cache are re-published through them for every subsequent step.
+      echo "##vso[task.prependpath]$HOME/.local/bin"
+      echo "##vso[task.prependpath]$(Pipeline.Workspace)/.pub-cache/bin"
+      echo "##vso[task.setvariable variable=DART_SDK_INSTALL_DIR]$(Pipeline.Workspace)/.dart-sdk"
+      echo "##vso[task.setvariable variable=PUB_CACHE]$(Pipeline.Workspace)/.pub-cache"
+    displayName: 'Install the Dart/Flutter SDK'

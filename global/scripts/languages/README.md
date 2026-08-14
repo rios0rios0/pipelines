@@ -17,7 +17,24 @@ languages/
     checkstyle/       # Java style checking (Google style)
   python/
     cyclonedx/        # Python SBOM generation
+  dart/
+    common.sh         # shared helpers (SOURCED, not executed)
+    setup/            # Dart or Flutter SDK install from Google's archive
+    format/           # dart format gate (--fix rewrites in place)
+    analyze/          # dart analyze -> JUnit + JSON + severity gate
+    test/             # tests + coverage -> JUnit, Cobertura, LCOV
+    unused/           # unused code and unused file detection
+    sca/              # OSV-Scanner over pubspec.lock
+    cyclonedx/        # Dart SBOM generation
+    build/            # release artifacts (APK, AAB, web, exe, ...)
+    publish/          # pub.dev publication with a validation gate
 ```
+
+The Dart family picks its toolchain (`dart` vs `flutter`) from the project's own
+`pubspec.yaml`, so one set of scripts serves both. It also supports
+`DART_DRY_RUN=true`, which resolves and records every command without installing
+or executing anything -- that is what lets `make test` exercise the whole family
+offline, with no SDK and no network.
 
 ## Convention
 

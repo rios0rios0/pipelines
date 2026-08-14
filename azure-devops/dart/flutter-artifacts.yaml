@@ -1,0 +1,25 @@
+# Full pipeline for a Flutter application delivered as downloadable artifacts:
+# a web bundle and Android APK/AAB. Both targets are on by default because
+# Microsoft-hosted `ubuntu-latest` agents already carry the Android SDK and a
+# JDK; turn either off with the parameters below.
+parameters:
+  - name: 'ENABLE_WEB_DELIVERY'
+    type: 'boolean'
+    default: true
+  - name: 'ENABLE_ANDROID_DELIVERY'
+    type: 'boolean'
+    default: true
+  - name: 'ANDROID_BUILD_TARGETS'
+    type: 'string'
+    default: 'apk appbundle'
+
+stages:
+  - template: 'stages/10-code-check/dart.yaml'
+  - template: 'stages/20-security/dart.yaml'
+  - template: 'stages/30-tests/dart.yaml'
+  - template: 'stages/35-management/dart.yaml'
+  - template: 'stages/40-delivery/flutter-artifacts.yaml'
+    parameters:
+      ENABLE_WEB_DELIVERY: ${{ parameters.ENABLE_WEB_DELIVERY }}
+      ENABLE_ANDROID_DELIVERY: ${{ parameters.ENABLE_ANDROID_DELIVERY }}
+      ANDROID_BUILD_TARGETS: ${{ parameters.ANDROID_BUILD_TARGETS }}

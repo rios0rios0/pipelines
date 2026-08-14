@@ -4,12 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A CI/CD pipeline templates library providing reusable workflows for **GitHub Actions**, **GitLab CI**, and **Azure DevOps** across Go, Python, Java, JavaScript, PHP, Ruby, .NET, Terraform, and Terra CLI. This is **not a runnable application** — it provides templates and scripts consumed by other projects.
+A CI/CD pipeline templates library providing reusable workflows for **GitHub Actions**, **GitLab CI**, and **Azure DevOps** across Go, Python, Java, JavaScript, PHP, Ruby, .NET, Dart/Flutter, Terraform, and Terra CLI. This is **not a runnable application** — it provides templates and scripts consumed by other projects.
 
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers)
+make test              # Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, dart-pipeline)
 make test-go-script    # Test Go validation script only
 make test-go-integration-scope  # Test which packages the Go runner's integration phase selects only
 make test-lambda       # Test Lambda template validation only
@@ -30,6 +30,7 @@ make test-release-version-extraction  # Test release version extraction (tag ref
 make test-release-reconcile  # Test release reconciliation gap detection only
 make test-deploy-providers   # Test the MVP hosting deployment providers (Cloudflare, Vercel, Render, Netlify, Fly.io) only
 make test-memory-detection  # Test the cgroup-aware memory ceiling detection only
+make test-dart-pipeline # Test the Dart/Flutter pipeline (scripts, Semgrep rules, cross-platform wiring) only
 make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
 ```
 
@@ -53,7 +54,8 @@ All platforms follow consistent numbered stages:
 - `gitlab/<language>/` — GitLab CI templates with `stages/`, `scripts/`, `abstracts/` subdirs
 - `azure-devops/<language>/` — Azure DevOps templates, same structure as GitLab
 - `global/scripts/tools/` — Platform-agnostic security tools (codeql, gitleaks, semgrep, hadolint, shellcheck, trivy, sonarqube, dependency-track)
-- `global/scripts/languages/` — Language-specific scripts (golang, java, javascript, php, python, ruby, terraform). Most `run.sh` scripts follow shared conventions, but the Terraform helpers below are documented exceptions: they write reports directly under `build/reports/` and do not rely on the common `cleanup.sh` report-directory pattern.
+- `global/scripts/languages/` — Language-specific scripts (golang, java, javascript, php, python, ruby, dart, terraform). Most `run.sh` scripts follow shared conventions, but the Terraform helpers below are documented exceptions: they write reports directly under `build/reports/` and do not rely on the common `cleanup.sh` report-directory pattern.
+  - `dart/` — Dart and Flutter runners: `setup`, `format`, `analyze`, `test`, `unused`, `sca`, `cyclonedx`, `build`, `publish`, plus a sourced `common.sh` (not executable — it is sourced, never run). All honour `DART_DRY_RUN=true`, which resolves and records commands without installing or executing anything; that is what makes the whole family testable offline. See Dart & Flutter Support below
   - `terraform/terra-test/` — `terraform test` runner over `modules/*/tests/*.tftest.hcl` (emits JUnit + Markdown/JSON/Cobertura coverage under `build/reports/`)
   - `terraform/terratest/` — Go Terratest runner over `tests/terratest/*.go` (emits JUnit under `build/reports/`)
   - `terraform/test-all/` — unified orchestrator for the first two tiers; runs both when present, merges JUnits into `build/reports/junit-terra-all.xml`, exits `0` when neither tier has tests (stack-only repos)
@@ -84,6 +86,12 @@ GitHub Actions workflow files (`.github/workflows/`) are named by **package mana
 | PHP        | Composer      | `composer-docker.yaml` | ~~php-docker.yaml~~          |
 | Ruby       | Bundler       | `bundler-docker.yaml`  | ~~ruby-docker.yaml~~         |
 | C#         | dotnet        | `dotnet-docker.yaml` | —              |
+| Dart       | dart          | `dart-docker.yaml`   | ~~pub-docker.yaml~~ |
+| Flutter    | flutter       | `flutter-artifacts.yaml` | ~~dart-flutter.yaml~~ |
+
+Dart is the one language here with TWO toolchains sharing ONE package manager
+(`pub`), so the workflow name follows the toolchain (`dart` / `flutter`) rather
+than the package manager — the same precedent Go sets with `go.yaml`.
 
 When adding a new language or toolchain, always use the toolchain name in the workflow file.
 
@@ -129,6 +137,50 @@ Because the tools run directly on the host, the consuming CI job only needs the 
 | `cache/save` is gated on a `.owasp/.odc-complete` marker, not on `always()` alone | Saving unconditionally made one cancelled run permanent: the half-written database was published, restored, rejected by Dependency-Check, and rebuilt from zero until the timeout killed it and it saved another partial. `run.sh` clears the marker before running and writes it only after the analysis returns, so it is the one trustworthy "this database is whole" signal — a partial `odc.mv.db` is indistinguishable from a good one on disk |
 
 With no API key the runner uses NIST's gzipped JSON data feeds (`nvdDatafeedUrl`), which are not rate limited, so a keyless project still gets a usable scan; a **cold** run uses them even when a key *is* present, for the reason in the table above. `NVD_DATAFEED_URL` overrides this with a self-hosted [`vulnz`](https://github.com/jeremylong/open-vulnerability-cli) mirror. The database is pinned to `.owasp/` (both plugins require an absolute path and otherwise default it into `~/.m2` / `$GRADLE_USER_HOME`, where the pipelines were not caching it) and reused for 24h via `nvdValidForHours`. The job is capped at 45 minutes on every platform so a pathological download is bounded rather than trusted — a safety net, not the fix; the datafeed bootstrap is what keeps a cold build under it. Covered by `.github/tests/test-dependency-check.sh`, which runs the script against a stub build tool and asserts on the argv it actually produces, including both the cold (datafeed) and warm (API delta) paths.
+
+### Dart & Flutter Support
+
+One set of templates and scripts serves both toolchains. `dart_detect_toolchain`
+(in `global/scripts/languages/dart/common.sh`) reads the project's `pubspec.yaml`
+and picks `flutter` when it finds a `flutter:\n    sdk: flutter` dependency,
+`dart` otherwise; `DART_TOOLCHAIN` overrides it. The detection deliberately keys
+on that dependency rather than on a top-level `flutter:` key — a pure Dart
+package can carry the latter to declare assets without depending on Flutter at
+all, and picking the wrong CLI fails deep inside the widget-test bindings.
+
+Entry templates: `dart-docker`, `dart-library`, `flutter-docker`,
+`flutter-artifacts` on GitLab CI and Azure DevOps; `dart.yaml`,
+`dart-docker.yaml`, `dart-library.yaml`, `flutter-artifacts.yaml` on GitHub
+Actions.
+
+**Two tools in the standard stack do not support Dart.** Both gaps are handled
+by a deliberate absence or substitution rather than by a job that silently checks
+nothing; `.github/tests/test-dart-pipeline.sh` fails if either decision is
+reverted. Do not "restore consistency" with the other languages here:
+
+| Constraint | Why |
+|------------|-----|
+| **No `sast:codeql` job in any Dart template** | CodeQL ships no Dart extractor ([dart-lang/sdk#52953](https://github.com/dart-lang/sdk/issues/52953), open since 2023). `codeql database create --language=dart` is not a supported invocation, so the job could only fail. `makefiles/dart.mk` leaves `CODEQL_LANGUAGE` unset and `common.mk`'s `codeql` target skips with an explanation |
+| **Semgrep runs, but the registry contributes nothing** | The engine parses Dart (experimental, actively maintained), but the registry publishes **zero** Dart rules: `p/dart` is HTTP 404 and `r/dart` returns a literal `rules: []`. Passing an unpublished pack is FATAL to the whole invocation, so `semgrep/run.sh` now probes the registry and skips a missing pack — only an explicit 404 skips it, so a network blip cannot quietly downgrade a scan. It then loads `global/scripts/tools/semgrep/rules/<language>.yaml` if this repository ships one, which for Dart it does |
+| **OSV-Scanner replaces OWASP Dependency-Check** | Dependency-Check has no pub analyzer. OSV-Scanner queries the Pub advisory database directly and runs **alongside** `sca:trivy`, not instead of it: Trivy reads `pubspec.lock` but records SDK-provided dependencies (Flutter itself and anything resolved through it) at version `0.0.0`, leaving them unmatched against any advisory. Exit code 128 ("no packages found") is mapped to success — a lockfile with only SDK dependencies produces it, and the safest possible dependency set must not be a red job |
+| **`dart analyze`, not `flutter analyze`** | `flutter analyze` has no `--format` option at all ([flutter/flutter#95090](https://github.com/flutter/flutter/issues/95090)), so it can only be scraped. The Flutter SDK's bundled `dart` runs the same analyzer over the same `analysis_options.yaml`, which is why `common.sh` symlinks it. The analyzer's own exit code is ignored and the verdict recomputed from the parsed diagnostics, because this pipeline's gate is configurable (`DART_FATAL_WARNINGS`, `DART_FATAL_INFOS`) and the tool's all-or-nothing verdict is the wrong one to propagate |
+| **The SDK comes from `storage.googleapis.com`, never a Docker image** | Same reason every other tool here is installed natively: Docker Hub rate-limits anonymous pulls, and a large, frequently-pulled SDK image is exactly what trips it. `DART_SDK_INSTALL_DIR` relocates the unpack target because GitLab CI can only cache paths inside `$CI_PROJECT_DIR` |
+| **Coverage is converted, not consumed raw** | Dart emits LCOV and nothing else. Azure DevOps' `PublishCodeCoverageResults@2` and GitLab's coverage visualisation both need Cobertura, so `test/lcov_to_cobertura.py` converts it — standard library only, so an offline `make test` can exercise it and a Dart job needs no Python toolchain. Repeated `SF:` records for one file are MERGED, not replaced: a multi-entry-point suite emits several, and taking the last would report only that suite's hits |
+| **`dart_run` prints to stderr, never stdout** | Several callers capture the wrapped command's stdout because that stdout IS the payload (`dart test --reporter json`, `flutter test --machine`, `osv-scanner --format json`). A progress line on stdout would be interleaved into it and `tojunit`/`jq` would reject the whole document |
+| **The pub token is never on argv** | `dart pub token add --env-var PUB_TOKEN` passes the variable's NAME; pub reads the value from the environment. Argv is world-readable via `ps`, and the recorded `command.txt` is published as a job artifact. Same reasoning as `-DnvdApiKeyEnvironmentVariable` above |
+
+The shipped Semgrep ruleset (`global/scripts/tools/semgrep/rules/dart.yaml`)
+holds eight rules covering TLS verification bypass, WebView JavaScript and
+file-URL access, shell and SQL injection through interpolation, weak randomness
+for security-sensitive values, cleartext HTTP, and secrets in
+`SharedPreferences`. Two Dart-specific Semgrep mechanics are load-bearing and
+were verified against the engine rather than assumed: patterns containing
+`runInShell: true` must be QUOTED (YAML reads them as a nested mapping
+otherwise), and interpolation must be detected with `metavariable-regex` — the
+`"...$..."` string-ellipsis idiom is **not implemented for Dart**, so a rule
+written with it loads cleanly and then matches nothing. When editing that file,
+re-run `make test-dart-pipeline` with Semgrep installed; the suite asserts every
+rule still matches its vulnerable sample and none matches the safe counterpart.
 
 ### Terra Test Tiers
 
@@ -204,6 +256,10 @@ SCRIPTS_DIR ?= $(HOME)/Development/github.com/rios0rios0/pipelines
 -include $(SCRIPTS_DIR)/makefiles/common.mk    # setup, sast
 -include $(SCRIPTS_DIR)/makefiles/golang.mk     # lint, test
 ```
+
+Order matters for `dart.mk`: it APPENDS its `sca` target to `common.mk`'s `sast`
+(a prerequisite-only rule, so appending emits no "overriding recipe" warning),
+so `common.mk` must be included first.
 
 The `-include` prefix makes includes optional (no error if pipelines not cloned).
 

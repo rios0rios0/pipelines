@@ -1,0 +1,39 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dart/abstracts/dart.yaml'
+
+style:format:
+  extends: '.dart'
+  stage: 'code check (style/quality)'
+  script:
+    - $SCRIPTS_DIR/global/scripts/languages/dart/format/run.sh
+
+# `dart analyze` carries more weight in a Dart pipeline than the equivalent job
+# does elsewhere: CodeQL has no Dart extractor at all, so this is the primary
+# source of language-level correctness findings. See the runner's header for the
+# full tool-gap rationale, and `DART_FATAL_WARNINGS` / `DART_FATAL_INFOS` for
+# tuning the gate.
+quality:analyze:
+  extends: '.dart'
+  stage: 'code check (style/quality)'
+  script:
+    - $SCRIPTS_DIR/global/scripts/languages/dart/analyze/run.sh
+  artifacts:
+    when: 'always'
+    paths:
+      - "$REPORT_PATH/dart-analyze"
+    reports:
+      junit: "$REPORT_PATH/dart-analyze/junit-analyze.xml"
+
+# The Dart counterpart of `quality:vulture` (Python) and `quality:knip`
+# (JavaScript), and advisory for the same reason: whole-package reachability
+# analysis has a false-positive tail that a per-library analyzer does not.
+quality:unused-code:
+  extends: '.dart'
+  stage: 'code check (style/quality)'
+  script:
+    - $SCRIPTS_DIR/global/scripts/languages/dart/unused/run.sh
+  artifacts:
+    when: 'always'
+    paths:
+      - "$REPORT_PATH/dart-unused"
+  allow_failure: true

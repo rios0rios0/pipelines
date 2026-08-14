@@ -1,0 +1,21 @@
+# GitLab CI -- Dart package published to pub.dev.
+#
+# Validation (`dart pub publish --dry-run`) runs on every merge request and
+# default-branch build; the real publication runs only on a tag. Publishing to
+# pub.dev is irreversible, so the checks pub.dev performs at upload time have to
+# fail the merge rather than the release.
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dart/dart-library.yaml'
+
+variables:
+  # Pin the SDK for reproducible builds; omit to track the current stable.
+  DART_SDK_VERSION: 'latest'
+  # Fail the analyze job on lints too, not only on errors and warnings.
+  DART_FATAL_INFOS: 'true'
+  # Fail the test job below this line-coverage percentage.
+  DART_COVERAGE_MINIMUM: '80'
+
+# Required CI/CD variables (Settings > CI/CD > Variables):
+#   PUB_TOKEN                   masked + protected -- pub.dev credential
+#   SONAR_HOST_URL, SONAR_TOKEN masked             -- report:sonarqube
+#   DEPENDENCY_TRACK_HOST_URL, DEPENDENCY_TRACK_TOKEN masked -- report:dependency-track

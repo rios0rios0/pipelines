@@ -1,0 +1,11 @@
+# Full pipeline for a Dart package published to pub.dev (or a self-hosted pub
+# server via the PUB_HOSTED_URL variable). Validation runs on every main build;
+# publication runs only on a tag -- see the delivery template for why.
+#
+# Required variable group entries: PUB_TOKEN (secret).
+stages:
+  - template: 'stages/10-code-check/dart.yaml'
+  - template: 'stages/20-security/dart.yaml'
+  - template: 'stages/30-tests/dart.yaml'
+  - template: 'stages/35-management/dart.yaml'
+  - template: 'stages/40-delivery/dart-library.yaml'

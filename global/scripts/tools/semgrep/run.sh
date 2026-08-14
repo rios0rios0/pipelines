@@ -54,10 +54,53 @@ else
   fi
 fi
 
-# Collect optional arguments (project-provided rule exclusions and custom
-# rules) into the positional parameters so they are passed safely without
+# Collect optional arguments (rule configs, project-provided rule exclusions and
+# custom rules) into the positional parameters so they are passed safely without
 # `eval`.
 set --
+
+# semgrep_registry_pack_exists <config>
+#
+# True when the Semgrep Registry publishes the given config.
+#
+# Not every language Semgrep can PARSE has a rule pack published for it, and
+# passing one that does not exist is fatal: `--config p/dart` fails the whole
+# invocation, taking the language-agnostic packs (secrets, Dockerfile, OWASP)
+# down with it. Dart is the concrete case -- `p/dart` is a 404 and the
+# language-scoped `r/dart` returns an empty `rules: []` -- but the check is
+# written generically so the next language in the same position needs no code.
+#
+# The fail-safe direction is deliberate: only an explicit 404 skips the pack.
+# A timeout, a proxy error or any other inconclusive response keeps it, so a
+# transient network problem can never quietly downgrade a scan to fewer rules
+# while the job still reports success. If the registry really is unreachable,
+# semgrep itself says so, in its own words.
+semgrep_registry_pack_exists() {
+  _sr_code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 "https://semgrep.dev/c/$1" 2>/dev/null)"
+  [ "$_sr_code" != "404" ]
+}
+
+if [ -z "$SEMGREP_LANGUAGE" ] || [ "$SEMGREP_LANGUAGE" = "none" ]; then
+  # An empty language used to compose the meaningless config `p/`, which fails
+  # the run. Treat it as "language-agnostic packs only" instead.
+  echo "No language pack requested; running the language-agnostic rule packs only."
+elif semgrep_registry_pack_exists "p/$SEMGREP_LANGUAGE"; then
+  set -- "$@" --config "p/$SEMGREP_LANGUAGE"
+else
+  echo "WARNING: the Semgrep Registry publishes no 'p/$SEMGREP_LANGUAGE' rule pack; skipping it." >&2
+  echo "         The language-agnostic packs still run." >&2
+fi
+
+# Rules this repository ships for languages the registry does not cover. This is
+# what keeps a Dart scan from being language-agnostic-only -- see
+# `rules/dart.yaml` for why that file has to exist at all.
+if [ -n "$SEMGREP_LANGUAGE" ]; then
+  localRules="$SCRIPTS_DIR/global/scripts/tools/semgrep/rules/$SEMGREP_LANGUAGE.yaml"
+  if [ -f "$localRules" ]; then
+    echo "Adding the pipelines' own '$SEMGREP_LANGUAGE' rules: $localRules"
+    set -- "$@" --config "$localRules"
+  fi
+fi
 
 if [ -f ".semgrepexcluderules" ]; then # check if you have rules to exclude
   while IFS= read -r line || [ -n "$line" ]; do
@@ -73,7 +116,6 @@ fi
 
 semgrep \
   --metrics=off \
-  --config "p/$SEMGREP_LANGUAGE" \
   --config "p/docker" \
   --config "p/dockerfile" \
   --config "p/secrets" \

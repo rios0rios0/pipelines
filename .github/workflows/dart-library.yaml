@@ -1,0 +1,87 @@
+# Dart package published to pub.dev (or a self-hosted pub server).
+#
+# Validation runs on every default-branch build; publication runs only on a tag.
+# The split is not ceremony: publishing to pub.dev is IRREVERSIBLE -- a version
+# can be retracted but never replaced or re-uploaded -- so the checks pub.dev
+# performs at upload time have to run long before the upload.
+#
+# The caller must forward the credential explicitly, because a reusable workflow
+# does not inherit the caller's secrets:
+#
+#   jobs:
+#     pipeline:
+#       uses: 'rios0rios0/pipelines/.github/workflows/dart-library.yaml@main'
+#       secrets:
+#         PUB_TOKEN: ${{ secrets.PUB_TOKEN }}
+on:
+  workflow_call:
+    inputs:
+      flutter_version:
+        required: false
+        type: 'string'
+        default: ''
+      dart_sdk_version:
+        required: false
+        type: 'string'
+        default: 'latest'
+      toolchain:
+        required: false
+        type: 'string'
+        default: 'auto'
+      pub_hosted_url:
+        required: false
+        type: 'string'
+        default: ''
+        description: 'Self-hosted pub server URL. Defaults to https://pub.dev.'
+    secrets:
+      PUB_TOKEN:
+        required: false
+        description: 'pub.dev credential. Required for the publish job; the validation job runs without it.'
+
+jobs:
+  dart:
+    uses: 'rios0rios0/pipelines/.github/workflows/dart.yaml@main'
+    with:
+      flutter_version: ${{ inputs.flutter_version }}
+      dart_sdk_version: ${{ inputs.dart_sdk_version }}
+      toolchain: ${{ inputs.toolchain }}
+
+  # fourth stage
+  delivery-publish_validate:
+    name: 'delivery > publish:validate'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/dart/stages/40-delivery/publish@main'
+        with:
+          flutter_version: ${{ inputs.flutter_version }}
+          dart_sdk_version: ${{ inputs.dart_sdk_version }}
+          toolchain: ${{ inputs.toolchain }}
+          dry_run: 'true'
+    needs: [ 'dart' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+  delivery-release:
+    name: 'delivery > release'
+    runs-on: 'ubuntu-latest'
+    outputs:
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - id: 'release'
+        uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
+    needs: [ 'dart' ]
+    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore/bump-') || contains(github.event.head_commit.message, 'chore(bump)'))"
+
+  delivery-publish_prod:
+    name: 'delivery > publish:prod'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/dart/stages/40-delivery/publish@main'
+        with:
+          flutter_version: ${{ inputs.flutter_version }}
+          dart_sdk_version: ${{ inputs.dart_sdk_version }}
+          toolchain: ${{ inputs.toolchain }}
+          dry_run: 'false'
+          pub_token: ${{ secrets.PUB_TOKEN }}
+          pub_hosted_url: ${{ inputs.pub_hosted_url }}
+    needs: [ 'dart' ]
+    if: "startsWith(github.ref, 'refs/tags/')"

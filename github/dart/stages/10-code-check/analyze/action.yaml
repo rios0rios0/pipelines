@@ -1,0 +1,66 @@
+# `dart analyze` gate, with JUnit + JSON reports.
+#
+# This job carries more weight in a Dart pipeline than the equivalent does
+# elsewhere: CodeQL has no Dart extractor (dart-lang/sdk#52953), so the analyzer
+# is the primary source of language-level correctness findings. The severity gate
+# is configurable for that reason -- a project adopting a stricter lint set can
+# see INFO findings before it has to fix them all.
+inputs:
+  flutter_version:
+    required: false
+    default: ''
+    description: 'Pin an exact Flutter version (e.g. 3.47.0). Defaults to the current stable release.'
+  dart_sdk_version:
+    required: false
+    default: 'latest'
+    description: 'Pin an exact Dart SDK version. Only used for pure Dart projects.'
+  toolchain:
+    required: false
+    default: 'auto'
+    description: "Force the toolchain: 'dart', 'flutter', or 'auto' to detect it from pubspec.yaml."
+  fatal_warnings:
+    required: false
+    default: 'true'
+    description: 'Fail the job on WARNING-level diagnostics.'
+  fatal_infos:
+    required: false
+    default: 'false'
+    description: 'Fail the job on INFO-level diagnostics (this is where lints land).'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@v6'
+
+    - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - name: 'Cache the Dart/Flutter SDK and pub packages'
+      uses: 'actions/cache@v4'
+      with:
+        path: |
+          ~/.local/share/flutter
+          ~/.local/share/dart-sdk
+          ~/.pub-cache
+        key: "dart-${{ runner.os }}-${{ inputs.flutter_version }}-${{ inputs.dart_sdk_version }}-${{ hashFiles('**/pubspec.lock') }}"
+        restore-keys: "dart-${{ runner.os }}-${{ inputs.flutter_version }}-${{ inputs.dart_sdk_version }}-"
+
+    - name: 'Run "dart analyze"'
+      run: $SCRIPTS_DIR/global/scripts/languages/dart/analyze/run.sh
+      shell: 'bash'
+      env:
+        FLUTTER_VERSION: '${{ inputs.flutter_version }}'
+        DART_SDK_VERSION: '${{ inputs.dart_sdk_version }}'
+        DART_TOOLCHAIN: '${{ inputs.toolchain }}'
+        DART_FATAL_WARNINGS: '${{ inputs.fatal_warnings }}'
+        DART_FATAL_INFOS: '${{ inputs.fatal_infos }}'
+
+    - name: 'Upload Report'
+      uses: 'actions/upload-artifact@v7'
+      with:
+        name: 'dart-analyze'
+        path: 'build/reports/dart-analyze/'
+        if-no-files-found: 'warn'
+        overwrite: 'true'
+        retention-days: 10
+      if: always()

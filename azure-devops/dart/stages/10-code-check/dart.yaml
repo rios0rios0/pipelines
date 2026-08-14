@@ -1,0 +1,56 @@
+stages:
+  - stage: 'code_check'
+    displayName: 'code check (style/quality)'
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    jobs:
+      - template: '../../../global/stages/10-code-check/basic-checks.yaml'
+
+      - job: 'style_format'
+        displayName: 'style:format'
+        steps:
+          - template: '../../abstracts/dart.yaml'
+          - script: $(Scripts.Directory)/global/scripts/languages/dart/format/run.sh
+            displayName: 'Run "dart format" check'
+
+      # `dart analyze` carries more weight in a Dart pipeline than the
+      # equivalent job does elsewhere: CodeQL has no Dart extractor, so this is
+      # the primary source of language-level correctness findings. Gate tuning:
+      # DART_FATAL_WARNINGS (default true) and DART_FATAL_INFOS (default false).
+      - job: 'quality_analyze'
+        displayName: 'quality:analyze'
+        steps:
+          - template: '../../abstracts/dart.yaml'
+          - script: $(Scripts.Directory)/global/scripts/languages/dart/analyze/run.sh
+            displayName: 'Run "dart analyze"'
+
+          - task: 'PublishTestResults@2'
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: 'build/reports/dart-analyze/junit-analyze.xml'
+              testRunTitle: 'dart analyze'
+              failTaskOnFailedTests: false
+            displayName: 'Publish analyzer findings'
+            condition: always()
+
+          - task: 'PublishPipelineArtifact@1'
+            inputs:
+              artifactName: 'dart-analyze'
+              targetPath: 'build/reports/dart-analyze'
+            condition: always()
+
+      # Advisory, like `quality:vulture` and `quality:knip` on the other
+      # pipelines: whole-package reachability analysis has a false-positive tail
+      # that a per-library analyzer does not.
+      - job: 'quality_unused_code'
+        displayName: 'quality:unused-code'
+        steps:
+          - template: '../../abstracts/dart.yaml'
+          - script: $(Scripts.Directory)/global/scripts/languages/dart/unused/run.sh
+            displayName: 'Detect unused Dart code and files'
+
+          - task: 'PublishPipelineArtifact@1'
+            inputs:
+              artifactName: 'dart-unused'
+              targetPath: 'build/reports/dart-unused'
+            condition: always()
+        continueOnError: true

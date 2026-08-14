@@ -1,0 +1,19 @@
+# Full pipeline for a pure Dart application delivered as a container image.
+# The Docker delivery stage builds from the project's own Dockerfile, so it suits
+# a server-side Dart application (shelf, dart_frog, a compiled CLI in a container).
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-image.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/10-code-check/basic-checks.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dart/stages/10-code-check/dart.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dart/stages/20-security/dart.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dart/stages/30-tests/dart.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dart/stages/35-management/dart.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/40-delivery/docker.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/40-delivery/release.yaml'
+
+stages:
+  - 'code check (style/quality)'
+  - 'security (sca/sast)'
+  - 'tests'
+  - 'management'
+  - 'delivery'

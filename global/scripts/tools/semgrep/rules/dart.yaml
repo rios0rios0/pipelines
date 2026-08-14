@@ -1,0 +1,229 @@
+# First-party Semgrep rules for Dart and Flutter.
+#
+# WHY THIS FILE EXISTS
+# The Semgrep Registry publishes NO Dart rules. `p/dart` returns HTTP 404 and
+# the language-scoped `r/dart` returns a literal `rules: []`. Semgrep's Dart
+# PARSER works (the language is listed as experimental and has had active
+# grammar fixes through 2026), so the engine can match Dart -- there is simply
+# nothing published to match with. Without this file a Dart project's
+# `sast:semgrep` job would run only the language-agnostic packs (secrets,
+# Dockerfile, OWASP) and report zero Dart-level findings while looking green.
+#
+# That gap matters more for Dart than it would for most languages, because
+# CodeQL has no Dart extractor either (dart-lang/sdk#52953), so Semgrep is the
+# only pattern-based SAST left in the stack.
+#
+# SCOPE
+# These are the mobile/Dart issues that are both high-consequence and reliably
+# expressible as a pattern. Style and correctness lints are deliberately absent:
+# `dart analyze` already owns those and does them better, with the project's own
+# `analysis_options.yaml` deciding what counts.
+#
+# Every rule is `pattern`-based rather than `pattern-regex`-based wherever the
+# Dart parser allows it, so they match the syntax tree and not the text.
+rules:
+  - id: dart-tls-verification-disabled
+    languages: [dart]
+    severity: ERROR
+    message: >-
+      TLS certificate validation is disabled: this `badCertificateCallback`
+      accepts every certificate, which makes the connection trivially
+      interceptable by any machine-in-the-middle. This is the single most common
+      critical defect in Flutter networking code, usually added to get a
+      self-signed development certificate working and then shipped. Trust a
+      specific certificate instead (`SecurityContext.setTrustedCertificates`),
+      or scope the override to debug builds behind `kDebugMode`.
+    metadata:
+      category: security
+      cwe: 'CWE-295: Improper Certificate Validation'
+      owasp: 'A02:2021 - Cryptographic Failures'
+      references:
+        - https://api.flutter.dev/flutter/dart-io/HttpClient/badCertificateCallback.html
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: $CLIENT.badCertificateCallback = (...) => true;
+          - pattern: |
+              $CLIENT.badCertificateCallback = (...) {
+                ...
+                return true;
+              };
+
+  - id: dart-webview-javascript-unrestricted
+    languages: [dart]
+    severity: WARNING
+    message: >-
+      This WebView runs JavaScript without restriction. Combined with remote or
+      user-influenced content it exposes the app's JavaScript channels to the
+      loaded page. Keep JavaScript disabled unless the WebView needs it, and
+      when it does, restrict navigation to an allowlist of origins with a
+      `NavigationDelegate`.
+    metadata:
+      category: security
+      cwe: 'CWE-79: Improper Neutralization of Input During Web Page Generation'
+      owasp: 'A03:2021 - Injection'
+      confidence: MEDIUM
+    pattern-either:
+      - pattern: JavascriptMode.unrestricted
+      - pattern: JavaScriptMode.unrestricted
+
+  - id: dart-webview-file-access-from-urls
+    languages: [dart]
+    severity: ERROR
+    message: >-
+      Allowing file access from file URLs lets a loaded local page read other
+      files in the app sandbox through `file://` requests, turning any HTML
+      injection into local file disclosure. Leave `allowFileAccessFromFileURLs`
+      and `allowUniversalAccessFromFileURLs` disabled.
+    metadata:
+      category: security
+      cwe: 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
+      confidence: HIGH
+    # Both the bare and the receiver-qualified forms are listed. A bare
+    # `allowFileAccessFromFileURLs = true` pattern does NOT match
+    # `controller.settings.allowFileAccessFromFileURLs = true`, which is how
+    # every real `webview_flutter` call site spells it -- so the receiver-
+    # qualified variants are the ones that do the work here.
+    pattern-either:
+      - pattern: allowFileAccessFromFileURLs = true
+      - pattern: allowUniversalAccessFromFileURLs = true
+      - pattern: $X.allowFileAccessFromFileURLs = true
+      - pattern: $X.allowUniversalAccessFromFileURLs = true
+      - pattern: $X.setAllowFileAccessFromFileURLs(true)
+      - pattern: $X.setAllowUniversalAccessFromFileURLs(true)
+      - pattern: setAllowFileAccessFromFileURLs(true)
+      - pattern: setAllowUniversalAccessFromFileURLs(true)
+
+  - id: dart-insecure-random-for-secret
+    languages: [dart]
+    severity: WARNING
+    message: >-
+      `Random()` is a deterministic pseudo-random generator seeded from a
+      predictable source; a value derived from it is guessable. Use
+      `Random.secure()` for anything used as a token, nonce, salt, OTP or key.
+    metadata:
+      category: security
+      cwe: 'CWE-338: Use of Cryptographically Weak Pseudo-Random Number Generator'
+      owasp: 'A02:2021 - Cryptographic Failures'
+      confidence: MEDIUM
+    patterns:
+      # Deliberately narrowed to values whose NAME says they are security
+      # sensitive. A bare `Random()` is perfectly correct in animation, sampling
+      # and game code, and flagging every one of them would make this rule the
+      # first thing a team disables.
+      - pattern: var $NAME = Random();
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: (?i).*(token|nonce|salt|secret|otp|passw|apikey|api_key|session|csrf).*
+
+  - id: dart-shell-command-injection
+    languages: [dart]
+    severity: ERROR
+    message: >-
+      Running a command through a shell (`runInShell: true`) with an
+      interpolated string lets any shell metacharacter in the interpolated value
+      run as a command. Pass the executable and its arguments as separate list
+      elements and leave `runInShell` at its default of false, which executes
+      the binary directly with no shell to interpret.
+    metadata:
+      category: security
+      cwe: 'CWE-78: Improper Neutralization of Special Elements used in an OS Command'
+      owasp: 'A03:2021 - Injection'
+      confidence: MEDIUM
+    # Two Dart-specific mechanics are load-bearing here and in the two rules
+    # below, both verified against the engine rather than assumed:
+    #
+    #   - The patterns are QUOTED. An unquoted scalar containing
+    #     `runInShell: true` is read by YAML as a nested mapping, and the rule
+    #     file fails to load entirely.
+    #   - Interpolation is detected with `metavariable-regex`, NOT with
+    #     Semgrep's `"...$..."` string-ellipsis idiom. That idiom is not
+    #     implemented for Dart -- it parses, loads and then matches nothing, so
+    #     a rule written that way is silently dead. Binding the whole literal to
+    #     a metavariable and testing it with a regex does work; the bound text
+    #     includes the surrounding quotes.
+    patterns:
+      - pattern-either:
+          - pattern: 'Process.run($CMD, ..., runInShell: true, ...)'
+          - pattern: 'Process.runSync($CMD, ..., runInShell: true, ...)'
+          - pattern: 'Process.start($CMD, ..., runInShell: true, ...)'
+      - metavariable-regex:
+          metavariable: $CMD
+          regex: .*\$\{?[A-Za-z_]
+
+  - id: dart-sql-injection-raw-query
+    languages: [dart]
+    severity: ERROR
+    message: >-
+      This SQL statement is built by string interpolation, so any quote in the
+      interpolated value changes the statement's structure. Use `?` placeholders
+      and pass the values through the `arguments` parameter, which the driver
+      binds instead of concatenating.
+    metadata:
+      category: security
+      cwe: 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command'
+      owasp: 'A03:2021 - Injection'
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: $DB.rawQuery($SQL, ...)
+          - pattern: $DB.rawInsert($SQL, ...)
+          - pattern: $DB.rawUpdate($SQL, ...)
+          - pattern: $DB.rawDelete($SQL, ...)
+          - pattern: $DB.execute($SQL, ...)
+      # `$name` and `${expr}` are the two Dart interpolation forms. A statement
+      # built with neither is a constant string and cannot be injected into --
+      # which is what keeps the parameterised call on the next line from being
+      # flagged alongside the vulnerable one.
+      - metavariable-regex:
+          metavariable: $SQL
+          regex: .*\$\{?[A-Za-z_]
+
+  - id: dart-insecure-cleartext-url
+    languages: [dart]
+    severity: WARNING
+    message: >-
+      This request targets a cleartext `http://` URL, so the traffic and
+      anything it carries (credentials, tokens, personal data) is readable and
+      modifiable on the network path. Use `https://`. Loopback and `.local`
+      addresses are excluded from this rule.
+    metadata:
+      category: security
+      cwe: 'CWE-319: Cleartext Transmission of Sensitive Information'
+      owasp: 'A02:2021 - Cryptographic Failures'
+      confidence: MEDIUM
+    patterns:
+      - pattern: Uri.parse($URL)
+      # Loopback and `.local` are excluded because they are the addresses a
+      # device emulator and a local dev server actually use (`10.0.2.2` is the
+      # host as seen from the Android emulator), and flagging them would make
+      # this rule fire on every project's development configuration.
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '^"http://(?!localhost|127\.0\.0\.1|10\.0\.2\.2|\[::1\]|[^/]*\.local[:/"])'
+
+  - id: dart-sensitive-data-in-shared-preferences
+    languages: [dart]
+    severity: WARNING
+    message: >-
+      `SharedPreferences` is plaintext storage -- an XML file on Android and a
+      plist on iOS -- readable by anything with filesystem access to the app
+      sandbox, which includes any rooted or jailbroken device and most backup
+      extractions. Store credentials in the platform keystore instead (e.g.
+      `flutter_secure_storage`).
+    metadata:
+      category: security
+      cwe: 'CWE-922: Insecure Storage of Sensitive Information'
+      owasp: 'A04:2021 - Insecure Design'
+      confidence: MEDIUM
+    patterns:
+      - pattern-either:
+          - pattern: $PREFS.setString($KEY, ...)
+          - pattern: $PREFS.setStringList($KEY, ...)
+      # The bound metavariable text INCLUDES the surrounding quotes, so the
+      # regex is anchored on the quote rather than on the word. Writing
+      # `setString("$KEY", ...)` instead -- the intuitive spelling -- matches
+      # nothing at all in Dart.
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i)^["'].*(token|secret|passw|credential|apikey|api_key|private_key|refresh).*["']$

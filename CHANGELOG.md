@@ -16,6 +16,27 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added a complete Dart and Flutter pipeline for all three platforms (GitHub Actions, GitLab CI, Azure DevOps), covering every stage of the 5-stage model: code check, security, tests, management and delivery. The toolchain is detected from the project's own `pubspec.yaml` (a `flutter: sdk: flutter` dependency selects Flutter, anything else selects Dart), so one set of templates and scripts serves a Flutter application and a pure Dart package alike; `DART_TOOLCHAIN` overrides the detection
+- added nine Dart runners under `global/scripts/languages/dart/`: `setup` (SDK install), `format`, `analyze`, `test`, `unused`, `sca`, `cyclonedx`, `build` and `publish`, plus a sourced `common.sh` of shared helpers. All support `DART_DRY_RUN=true`, which resolves and records every command without installing or executing anything — the mechanism that lets the validation suite exercise the whole family offline with no SDK and no network
+- added a first-party Semgrep ruleset for Dart at `global/scripts/tools/semgrep/rules/dart.yaml`. **The Semgrep Registry publishes no Dart rules at all** — `p/dart` returns HTTP 404 and the language-scoped `r/dart` returns a literal `rules: []` — so without it a Dart scan would run only the language-agnostic packs while still reporting success. The eight shipped rules cover TLS verification bypass via `badCertificateCallback`, WebView JavaScript and file-URL access, shell and SQL injection through string interpolation, weak randomness for security-sensitive values, cleartext `http://` requests, and secrets written to `SharedPreferences`
+- added OSV-Scanner as the Dart dependency scanner (`sca:osv-scanner`), the counterpart of `govulncheck` for Go and `safety` for Python. It runs alongside `sca:trivy` rather than replacing it: Trivy reads `pubspec.lock` but records SDK-provided dependencies at version `0.0.0`, leaving them unmatched against any advisory, while OSV queries the Pub advisory database directly
+- added a dependency-free LCOV-to-Cobertura converter (`lcov_to_cobertura.py`, standard library only). Dart emits coverage as LCOV and nothing else, which neither Azure DevOps' `PublishCodeCoverageResults@2` nor GitLab's coverage visualisation can read
+- added a `dart analyze` machine-format report generator emitting JUnit XML and JSON with a configurable severity gate (`DART_FATAL_WARNINGS`, `DART_FATAL_INFOS`). The gate is configurable because CodeQL cannot cover Dart, which leaves the analyzer as the primary source of language-level correctness findings
+- added `makefiles/dart.mk` with `lint`, `format`, `analyze`, `test`, `unused`, `sca`, `cyclonedx`, `build` and `setup-dart` targets
+- added `.github/tests/test-dart-pipeline.sh` (166 assertions) and a `test-dart-pipeline` make target wired into the aggregate `test` target CI runs. The cases pin the four things that would otherwise fail silently: cross-platform wiring (a stage added to one platform and forgotten on the other two leaves three files that are each valid YAML on their own), toolchain dispatch (asserted on the argv each script builds, not on what the source looks like it says), the two deliberate tool-gap decisions, and that no credential ever reaches a recorded command line
+- added `.docs/examples/github-flutter-artifacts/` and `.docs/examples/gitlab-dart-library/` complete usage examples
+
+### Changed
+
+- changed `global/scripts/tools/semgrep/run.sh` to probe the Semgrep Registry before passing a language rule pack, and to load a repository-shipped ruleset from `global/scripts/tools/semgrep/rules/<language>.yaml` when one exists. Passing an unpublished pack is fatal to the whole invocation, so `--config p/dart` would have taken the language-agnostic packs (secrets, Dockerfile, OWASP) down with it. Only an explicit HTTP 404 skips the pack — a timeout or proxy error keeps it, so a transient network problem can never quietly downgrade a scan while the job still reports success. An empty or `none` language is now also accepted, where it previously composed the meaningless config `p/`
+- changed `makefiles/common.mk` so the `codeql` target skips with an explanation when `CODEQL_LANGUAGE` is unset, instead of passing an empty argument that the run script rejects with a bare usage message. The test lives in the recipe rather than in a make-level `ifeq`, because a conditional is evaluated while `common.mk` is parsed — before the language fragment that sets the variable has been included — which would have disabled CodeQL for every language
+
+### Notes
+
+- **CodeQL is deliberately absent from every Dart template.** It ships no Dart extractor ([dart-lang/sdk#52953](https://github.com/dart-lang/sdk/issues/52953), open since 2023), so a `sast:codeql` job on a Dart repository could only fail. `make sast` skips it with an explanation, and the validation suite fails if the job reappears
+
 ## [4.21.0] - 2026-08-13
 
 ### Added

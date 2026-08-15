@@ -20,6 +20,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - added a `render_service_name` input to the Render deployment action, so a caller whose service name is derived -- `api-staging` on a branch, `api-production` on a tag -- needs no per-environment secret at all. The name is a value the workflow already knows, while a service id is one more thing to store, rotate and get wrong; a stale id is also the worse failure, because it deploys the WRONG service and reports success. `render_service_id` still works and still wins when both are given. The lookup is deliberately strict: `GET /services?name=` is a **substring filter** rather than an exact lookup, so asking for `api` answers `api-staging` and `api-production` too -- every candidate is compared to the requested name exactly, and a name matching more than one service is refused with the ids listed rather than resolved to whichever sorted first. It resolves an existing service and never creates one, so a name that matches nothing fails with the two ways to fix it
 
+### Fixed
+
+- fixed `require-checks` comparing check names with `==`, which made a shared gate depend on how the caller happened to nest its jobs. GitHub composes a check's name from the calling job and the called workflow's job, so a stage published as `tests > test:all` is recorded as `default / go / tests > test:all` once it runs through a reusable workflow, and the prefix changes again whenever either job is renamed. Every required name then read as missing, and the only way to pass was to paste a prefix the caller does not control. Names now match exactly OR on a whole trailing ` / ` segment, so `tests > test:all` matches the prefixed form while `smoke-tests > test:all` still does not, and a prefixed check that failed is not rescued by the looser matching
+
 ## [4.22.0] - 2026-08-15
 
 ### Added

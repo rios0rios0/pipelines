@@ -96,8 +96,23 @@ IFS='
 '
 for REQUIRED in $REQUIRE_CHECKS_NAMES; do
   [ -z "$REQUIRED" ] && continue
+  # Exact match first, then a SUFFIX match on the ` / `-delimited path.
+  #
+  # GitHub composes a check's name from the calling job and the called workflow's
+  # job, so a stage this repository publishes as `tests > test:all` is recorded as
+  # `default / go / tests > test:all` once a consumer calls it through a reusable
+  # workflow -- and the prefix changes again if either job is renamed. Matching
+  # only on equality made this list silently unsatisfiable: every name read as
+  # missing, and the fix was to paste a prefix that is not the caller's to
+  # guarantee. That is exactly the coupling a shared gate should not have.
+  #
+  # The suffix is anchored on ` / ` so it can only match a whole trailing segment:
+  # `tests > test:all` matches `default / go / tests > test:all` and never
+  # `smoke-tests > test:all`. A caller that wants the strict form can still write
+  # the fully-qualified name, which the equality branch takes first.
   FOUND="$(jq -r --arg n "$REQUIRED" \
-    '[.[] | select(.name == $n and .conclusion == "success")] | length' "$CHECKS_FILE")"
+    '[.[] | select(.conclusion == "success")
+          | select(.name == $n or (.name | endswith(" / " + $n)))] | length' "$CHECKS_FILE")"
   if [ "$FOUND" -eq 0 ]; then
     echo "ERROR: no successful '$REQUIRED' for $REQUIRE_CHECKS_COMMIT." >&2
     MISSING=$((MISSING + 1))

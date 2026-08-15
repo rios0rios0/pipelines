@@ -1030,12 +1030,19 @@ jobs:
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/require-checks@main'
         with:
-          # the delivery job's own `needs:` list — one definition of "fit to ship"
+          # the delivery job's own `needs:` list — one definition of "fit to ship".
+          # Write the stage names as this repository publishes them: the gate matches a whole
+          # trailing ` / ` segment, so it does not matter that GitHub records a check called
+          # through a reusable workflow as `<caller job> / <callee job> / tests > test:all`.
           required_checks: |
             code-check > style:golangci-lint
             tests > test:all
       - uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/render@main'
-        with: { render_api_key: '${{ secrets.RENDER_API_KEY }}', render_service_id: '${{ secrets.RENDER_SERVICE_ID }}' }
+        # `render_service_name` names the service instead of identifying it, which suits a name
+        # derived per environment (`api-staging` / `api-production`) — no per-environment secret,
+        # and a stale name fails loudly where a stale id deploys the wrong service and reports
+        # success. `render_service_id` still works and wins when both are given.
+        with: { render_api_key: '${{ secrets.RENDER_API_KEY }}', render_service_name: 'api-staging' }
 ```
 
 **GitLab CI** — add the include and set the CI/CD variables; the job self-gates on them:

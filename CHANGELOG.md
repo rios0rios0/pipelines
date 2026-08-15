@@ -35,6 +35,9 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - changed `global/scripts/tools/semgrep/run.sh` to probe the Semgrep Registry before passing a language rule pack, and to load a repository-shipped ruleset from `global/scripts/tools/semgrep/rules/<language>.yaml` when one exists. Passing an unpublished pack is fatal to the whole invocation, so `--config p/dart` would have taken the language-agnostic packs (secrets, Dockerfile, OWASP) down with it. Only an explicit HTTP 404 skips the pack — a timeout or proxy error keeps it, so a transient network problem can never quietly downgrade a scan while the job still reports success. An empty or `none` language is now also accepted, where it previously composed the meaningless config `p/`
 - changed `makefiles/common.mk` so the `codeql` target skips with an explanation when `CODEQL_LANGUAGE` is unset, instead of passing an empty argument that the run script rejects with a bare usage message. The test lives in the recipe rather than in a make-level `ifeq`, because a conditional is evaluated while `common.mk` is parsed — before the language fragment that sets the variable has been included — which would have disabled CodeQL for every language
+- changed the java pipeline version from `17` to `25`
+- changed the golang pipeline version from `1.26.5` to `1.26.6`
+- changed the Go version to `1.26.6` and updated all module dependencies
 
 ### Notes
 

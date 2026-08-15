@@ -5,9 +5,13 @@ include:
 # Deploy to Render.
 #
 # Required CI/CD variables -- one of these two pairings (mask the secret):
-#   RENDER_API_KEY + RENDER_SERVICE_ID   (preferred: the deploy is polled to a
-#                                         terminal state, so this job fails when
-#                                         the deploy fails)
+#   RENDER_API_KEY + RENDER_SERVICE_ID     (preferred: the deploy is polled to a
+#                                           terminal state, so this job fails
+#                                           when the deploy fails)
+#   RENDER_API_KEY + RENDER_SERVICE_NAME   (same, naming the service instead of
+#                                           identifying it -- for a name derived
+#                                           per environment, which needs no
+#                                           per-environment variable at all)
 #   RENDER_DEPLOY_HOOK_URL               (fire-and-forget: Render acknowledges
 #                                         the request without reporting the
 #                                         build result, so the job cannot fail
@@ -39,4 +43,5 @@ deployment:render:
   timeout: '45 minutes'
   rules:
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $RENDER_SERVICE_ID"
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $RENDER_SERVICE_NAME"
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $RENDER_DEPLOY_HOOK_URL"

@@ -80,8 +80,15 @@ if [ -z "${RENDER_API_KEY:-}" ]; then
 fi
 
 # ----------------------------------------------------------------- API path --
-deploy_require_env "RENDER_SERVICE_ID" \
-  "The service id (starts with 'srv-'), from the service's dashboard URL."
+# Either names the service. The id is exact; the name is resolved through the API
+# below, which is what lets a caller derive it (`api-staging` / `api-production`)
+# instead of storing one more secret per environment.
+if [ -z "${RENDER_SERVICE_ID:-}" ] && [ -z "${RENDER_SERVICE_NAME:-}" ]; then
+  echo "ERROR: set RENDER_SERVICE_ID or RENDER_SERVICE_NAME." >&2
+  echo "  RENDER_SERVICE_ID   the id from the service's dashboard URL (starts with 'srv-')." >&2
+  echo "  RENDER_SERVICE_NAME the service name, resolved to an id before deploying." >&2
+  exit 1
+fi
 
 if ! command -v jq > /dev/null 2>&1; then
   echo "ERROR: jq is required to parse the Render API response but is not installed." >&2
@@ -119,6 +126,107 @@ render_api() {
 
   return $?
 }
+
+# Resolve a name to an id, when the caller gave a name instead of an id.
+#
+# `GET /v1/services?name=<name>` is a FILTER, not an exact lookup: Render matches
+# on substring, so asking for `api` also answers `api-staging` and
+# `api-production`. Every candidate is therefore compared to the requested name
+# exactly, here, rather than trusting the first element -- deploying whichever
+# service happened to sort first is the kind of mistake that looks like a
+# successful deploy.
+#
+# `type=web_service` narrows it further: a name may be reused across service
+# types in one workspace, and this action deploys a web service.
+if [ -z "${RENDER_SERVICE_ID:-}" ]; then
+  # A dry run must not call the API. Resolution is a read, but it still needs a
+  # live key and a reachable Render, which is exactly what a dry run promises not
+  # to require -- and the validation suite runs every provider this way.
+  if deploy_is_dry_run; then
+    echo "DRY RUN (no lookup performed): GET $RENDER_API_URL/services?name=$RENDER_SERVICE_NAME"
+    deploy_record "$PROVIDER" "$RENDER_SERVICE_NAME"
+    exit 0
+  fi
+
+  echo "Resolving Render service '$RENDER_SERVICE_NAME'..."
+  # `--data-urlencode` on a GET would turn it into a POST body, so the name is
+  # percent-encoded here instead. Only the characters a Render service name can
+  # legally contain need escaping, and `jq -rR @uri` does it without adding a
+  # dependency this script does not already have.
+  ENCODED_NAME=$(printf '%s' "$RENDER_SERVICE_NAME" | jq -rR @uri)
+
+  # Paginated, because the list endpoint caps a page and a workspace can hold
+  # more services than one page carries. Without this an exact match on page two
+  # is reported as "no service named ...", which sends the reader looking for a
+  # service that exists. The cursor is the last item's, per Render's own scheme.
+  RENDER_PAGE_SIZE=${RENDER_PAGE_SIZE:-100}
+  MATCHES=""
+  CURSOR=""
+  # Bounded so a server that keeps answering a full page can never spin forever:
+  # 100 pages of 100 is 10,000 services, past any real workspace.
+  PAGE=0
+  while [ "$PAGE" -lt 100 ]; do
+    PAGE=$((PAGE + 1))
+    LOOKUP_PATH="/services?name=$ENCODED_NAME&type=web_service&limit=$RENDER_PAGE_SIZE"
+    if [ -n "$CURSOR" ]; then
+      LOOKUP_PATH="$LOOKUP_PATH&cursor=$CURSOR"
+    fi
+
+    LOOKUP_RESPONSE=$(render_api "GET" "$LOOKUP_PATH")
+    if [ -z "$LOOKUP_RESPONSE" ]; then
+      echo "ERROR: the Render API returned nothing when looking up '$RENDER_SERVICE_NAME'." >&2
+      echo "Check that RENDER_API_KEY belongs to the workspace that owns the service." >&2
+      exit 1
+    fi
+
+    # The list endpoint wraps each item in `{cursor, service}`; a future shape
+    # that returns the service flat is tolerated by looking in both places.
+    #
+    # Only ids that LOOK like a Render service id are kept. An item missing `id`
+    # would otherwise reach `jq -r` as the string `null` and be deployed as
+    # `/services/null/deploys` -- a request that fails far from its cause.
+    PAGE_MATCHES=$(printf '%s' "$LOOKUP_RESPONSE" \
+      | jq -r --arg name "$RENDER_SERVICE_NAME" \
+          '[.[] | (.service // .)
+             | select(.name == $name)
+             | .id
+             | select(type == "string" and startswith("srv-"))] | .[]')
+    if [ -n "$PAGE_MATCHES" ]; then
+      MATCHES=$(printf '%s\n%s' "$MATCHES" "$PAGE_MATCHES" | grep -v '^$' | sort -u)
+    fi
+
+    PAGE_COUNT=$(printf '%s' "$LOOKUP_RESPONSE" | jq -r 'length')
+    if [ "$PAGE_COUNT" -lt "$RENDER_PAGE_SIZE" ]; then
+      break
+    fi
+    CURSOR=$(printf '%s' "$LOOKUP_RESPONSE" | jq -r '.[-1].cursor // empty')
+    if [ -z "$CURSOR" ]; then
+      # A full page with no cursor to continue from: report the cap rather than
+      # claiming the service does not exist.
+      echo "WARNING: the service list returned a full page with no cursor; results may be truncated." >&2
+      break
+    fi
+  done
+
+  MATCH_COUNT=$(printf '%s' "$MATCHES" | grep -c . || true)
+  if [ "$MATCH_COUNT" -eq 0 ]; then
+    echo "ERROR: no web service named '$RENDER_SERVICE_NAME' in this workspace." >&2
+    echo "This action deploys an existing service; it does not create one." >&2
+    echo "Create it once (dashboard or Blueprint), then re-run -- or pass RENDER_SERVICE_ID." >&2
+    exit 1
+  fi
+  if [ "$MATCH_COUNT" -gt 1 ]; then
+    echo "ERROR: '$RENDER_SERVICE_NAME' matched $MATCH_COUNT services:" >&2
+    printf '%s\n' "$MATCHES" | while IFS= read -r _match; do
+      [ -n "$_match" ] && echo "  $_match" >&2
+    done
+    echo "Refusing to guess which one to deploy; pass RENDER_SERVICE_ID." >&2
+    exit 1
+  fi
+
+  RENDER_SERVICE_ID=$MATCHES
+  echo "Resolved '$RENDER_SERVICE_NAME' to $RENDER_SERVICE_ID."
+fi
 
 if ! deploy_note_command "curl --config - # POST $RENDER_API_URL/services/$RENDER_SERVICE_ID/deploys"; then
   deploy_record "$PROVIDER" "$RENDER_SERVICE_ID"

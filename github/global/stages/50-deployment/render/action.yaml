@@ -8,7 +8,25 @@ inputs:
     required: false
     default: ''
   render_service_id:
-    description: 'Service id (starts with `srv-`), from the service dashboard URL. Required with `render_api_key`.'
+    description: |
+      Service id (starts with `srv-`), from the service dashboard URL. Give this
+      or `render_service_name` alongside `render_api_key`; the id wins when both
+      are set, because it names one service and cannot be ambiguous.
+    type: 'string'
+    required: false
+    default: ''
+  render_service_name:
+    description: |
+      Service name, as it appears in the dashboard. Resolved to an id through the
+      API before the deploy.
+
+      It exists so a caller whose service name is DERIVED -- `api-staging` on a
+      branch, `api-production` on a tag -- needs no per-environment secret at
+      all: the name is a value the workflow already knows, while an id is one
+      more thing to store, rotate and get wrong. A stale id also fails silently
+      in the worst way, by deploying the wrong service.
+
+      The lookup is exact and refuses an ambiguous match rather than guessing.
     type: 'string'
     required: false
     default: ''
@@ -52,6 +70,7 @@ runs:
       env:
         RENDER_API_KEY: '${{ inputs.render_api_key }}'
         RENDER_SERVICE_ID: '${{ inputs.render_service_id }}'
+        RENDER_SERVICE_NAME: '${{ inputs.render_service_name }}'
         RENDER_DEPLOY_HOOK_URL: '${{ inputs.render_deploy_hook_url }}'
         RENDER_POLL_TIMEOUT: '${{ inputs.poll_timeout }}'
         DEPLOY_ENVIRONMENT: '${{ inputs.environment }}'

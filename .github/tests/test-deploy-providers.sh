@@ -113,7 +113,7 @@ run_provider() {
       CLOUDFLARE_PROJECT_NAME CLOUDFLARE_OUTPUT_DIRECTORY CLOUDFLARE_BRANCH \
       CLOUDFLARE_PRODUCTION_BRANCH CLOUDFLARE_API_URL \
       NETLIFY_AUTH_TOKEN NETLIFY_SITE_ID NETLIFY_OUTPUT_DIRECTORY NETLIFY_DEPLOY_MESSAGE \
-      RENDER_API_KEY RENDER_SERVICE_ID RENDER_DEPLOY_HOOK_URL \
+      RENDER_API_KEY RENDER_SERVICE_ID RENDER_SERVICE_NAME RENDER_DEPLOY_HOOK_URL \
       FLY_API_TOKEN FLY_APP_NAME FLY_CONFIG FLY_STRATEGY \
       DEPLOY_ENVIRONMENT
     export SCRIPTS_DIR
@@ -336,7 +336,22 @@ assert_true "render: the deploy-hook path warns that it cannot fail on a bad dep
   "grep -q 'cannot fail' <<< \"\$OUT\""
 
 run_provider render RENDER_API_KEY="$SENTINEL"
-assert_true "render: an API key without a service id fails the job" "[[ $STATUS -eq 1 ]]"
+assert_true "render: an API key with neither a service id nor a name fails the job" \
+  "[[ $STATUS -eq 1 ]]"
+assert_true "render: that failure names both ways to identify the service" \
+  "grep -q 'RENDER_SERVICE_NAME' <<< \"\$OUT\""
+
+# A name is resolved through the API, which a dry run must not call: resolution
+# is a read, but it still needs a live key and a reachable Render, and every
+# provider in this suite runs under DEPLOY_DRY_RUN. Without the guard this case
+# reaches out to api.render.com with the sentinel token.
+run_provider render RENDER_API_KEY="$SENTINEL" RENDER_SERVICE_NAME=api-staging
+assert_true "render: a service name is accepted in place of an id" "[[ $STATUS -eq 0 ]]"
+assert_true "render: a dry run records the lookup instead of performing it" \
+  "grep -q 'DRY RUN (no lookup performed)' <<< \"\$OUT\""
+assert_true "render: the dry-run receipt names the service that would be resolved" \
+  "grep -q 'api-staging' <<< \"\$CMD\" || grep -q 'api-staging' <<< \"\$OUT\""
+assert_no_leak "render: the API key is never recorded while resolving a name"
 
 # Exercise `render_api` directly with curl stubbed to echo its config. A GET
 # carrying a request body is rejected outright by some servers and proxies,

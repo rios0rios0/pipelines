@@ -152,6 +152,13 @@ setup_repo() {
   cd "$work_dir"
   git config user.name "test" >/dev/null 2>&1
   git config user.email "test@test" >/dev/null 2>&1
+  # Throwaway repos must not inherit the developer's signing config. A machine with
+  # `commit.gpgsign = true` globally -- and a signer that needs an unlocked agent -- fails every
+  # commit below with `failed to write commit object`, which surfaces as `Error 128` from make and
+  # reads like a bug in the fixture rather than like the local environment. Nothing here is
+  # published, so a signature would prove nothing about anything.
+  git config commit.gpgsign false >/dev/null 2>&1
+  git config tag.gpgsign false >/dev/null 2>&1
   git checkout -b main >/dev/null 2>&1
 
   cat > CHANGELOG.md << 'CHANGELOG'

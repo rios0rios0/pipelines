@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Added
+
+- added a `render_service_name` input to the Render deployment action, so a caller whose service name is derived -- `api-staging` on a branch, `api-production` on a tag -- needs no per-environment secret at all. The name is a value the workflow already knows, while a service id is one more thing to store, rotate and get wrong; a stale id is also the worse failure, because it deploys the WRONG service and reports success. `render_service_id` still works and still wins when both are given. The lookup is deliberately strict: `GET /services?name=` is a **substring filter** rather than an exact lookup, so asking for `api` answers `api-staging` and `api-production` too -- every candidate is compared to the requested name exactly, and a name matching more than one service is refused with the ids listed rather than resolved to whichever sorted first. It resolves an existing service and never creates one, so a name that matches nothing fails with the two ways to fix it
+
 ## [4.22.0] - 2026-08-15
 
 ### Added

@@ -139,24 +139,74 @@ render_api() {
 # `type=web_service` narrows it further: a name may be reused across service
 # types in one workspace, and this action deploys a web service.
 if [ -z "${RENDER_SERVICE_ID:-}" ]; then
+  # A dry run must not call the API. Resolution is a read, but it still needs a
+  # live key and a reachable Render, which is exactly what a dry run promises not
+  # to require -- and the validation suite runs every provider this way.
+  if deploy_is_dry_run; then
+    echo "DRY RUN (no lookup performed): GET $RENDER_API_URL/services?name=$RENDER_SERVICE_NAME"
+    deploy_record "$PROVIDER" "$RENDER_SERVICE_NAME"
+    exit 0
+  fi
+
   echo "Resolving Render service '$RENDER_SERVICE_NAME'..."
   # `--data-urlencode` on a GET would turn it into a POST body, so the name is
   # percent-encoded here instead. Only the characters a Render service name can
   # legally contain need escaping, and `jq -rR @uri` does it without adding a
   # dependency this script does not already have.
   ENCODED_NAME=$(printf '%s' "$RENDER_SERVICE_NAME" | jq -rR @uri)
-  LOOKUP_RESPONSE=$(render_api "GET" "/services?name=$ENCODED_NAME&type=web_service&limit=100")
-  if [ -z "$LOOKUP_RESPONSE" ]; then
-    echo "ERROR: the Render API returned nothing when looking up '$RENDER_SERVICE_NAME'." >&2
-    echo "Check that RENDER_API_KEY belongs to the workspace that owns the service." >&2
-    exit 1
-  fi
 
-  # The list endpoint wraps each item in `{cursor, service}`; a future shape that
-  # returns the service flat is tolerated by looking in both places.
-  MATCHES=$(printf '%s' "$LOOKUP_RESPONSE" \
-    | jq -r --arg name "$RENDER_SERVICE_NAME" \
-        '[.[] | (.service // .) | select(.name == $name) | .id] | unique | .[]')
+  # Paginated, because the list endpoint caps a page and a workspace can hold
+  # more services than one page carries. Without this an exact match on page two
+  # is reported as "no service named ...", which sends the reader looking for a
+  # service that exists. The cursor is the last item's, per Render's own scheme.
+  RENDER_PAGE_SIZE=${RENDER_PAGE_SIZE:-100}
+  MATCHES=""
+  CURSOR=""
+  # Bounded so a server that keeps answering a full page can never spin forever:
+  # 100 pages of 100 is 10,000 services, past any real workspace.
+  PAGE=0
+  while [ "$PAGE" -lt 100 ]; do
+    PAGE=$((PAGE + 1))
+    LOOKUP_PATH="/services?name=$ENCODED_NAME&type=web_service&limit=$RENDER_PAGE_SIZE"
+    if [ -n "$CURSOR" ]; then
+      LOOKUP_PATH="$LOOKUP_PATH&cursor=$CURSOR"
+    fi
+
+    LOOKUP_RESPONSE=$(render_api "GET" "$LOOKUP_PATH")
+    if [ -z "$LOOKUP_RESPONSE" ]; then
+      echo "ERROR: the Render API returned nothing when looking up '$RENDER_SERVICE_NAME'." >&2
+      echo "Check that RENDER_API_KEY belongs to the workspace that owns the service." >&2
+      exit 1
+    fi
+
+    # The list endpoint wraps each item in `{cursor, service}`; a future shape
+    # that returns the service flat is tolerated by looking in both places.
+    #
+    # Only ids that LOOK like a Render service id are kept. An item missing `id`
+    # would otherwise reach `jq -r` as the string `null` and be deployed as
+    # `/services/null/deploys` -- a request that fails far from its cause.
+    PAGE_MATCHES=$(printf '%s' "$LOOKUP_RESPONSE" \
+      | jq -r --arg name "$RENDER_SERVICE_NAME" \
+          '[.[] | (.service // .)
+             | select(.name == $name)
+             | .id
+             | select(type == "string" and startswith("srv-"))] | .[]')
+    if [ -n "$PAGE_MATCHES" ]; then
+      MATCHES=$(printf '%s\n%s' "$MATCHES" "$PAGE_MATCHES" | grep -v '^$' | sort -u)
+    fi
+
+    PAGE_COUNT=$(printf '%s' "$LOOKUP_RESPONSE" | jq -r 'length')
+    if [ "$PAGE_COUNT" -lt "$RENDER_PAGE_SIZE" ]; then
+      break
+    fi
+    CURSOR=$(printf '%s' "$LOOKUP_RESPONSE" | jq -r '.[-1].cursor // empty')
+    if [ -z "$CURSOR" ]; then
+      # A full page with no cursor to continue from: report the cap rather than
+      # claiming the service does not exist.
+      echo "WARNING: the service list returned a full page with no cursor; results may be truncated." >&2
+      break
+    fi
+  done
 
   MATCH_COUNT=$(printf '%s' "$MATCHES" | grep -c . || true)
   if [ "$MATCH_COUNT" -eq 0 ]; then

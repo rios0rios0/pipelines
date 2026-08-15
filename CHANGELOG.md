@@ -46,6 +46,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed the golang pipeline version from `1.26.5` to `1.26.6`
 - changed the java pipeline version from `17` to `25`
 
+### Fixed
+
+- fixed `test-go-validation.sh` naming `/home/runner/work/pipelines/pipelines/...` in five places -- the workspace path of a GitHub-hosted runner. The suite therefore passed only there: on a self-hosted runner, in a container or on a maintainer's machine every case failed with `run.sh: not found`, which reads like the runner script is missing rather than like the path is wrong, and it made `make test` red for anyone who ran it locally. The path is derived from the script's own location now, with `SCRIPTS_DIR` still able to override it, and a missing runner reports where it looked
+- fixed the `basic-checks` fixtures inheriting the developer's commit-signing configuration. They create throwaway git repositories and commit into them, so a machine with `commit.gpgsign = true` set globally -- and a signer needing an unlocked agent -- failed every one with `failed to write commit object`, surfacing as a bare `Error 128` from make that reads like a broken fixture. Signing is now disabled in those repositories explicitly; nothing they contain is ever published, so a signature proved nothing
+
 ## [4.21.0] - 2026-08-13
 
 ### Added

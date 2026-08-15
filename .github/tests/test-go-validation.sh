@@ -3,6 +3,25 @@
 # This script creates multiple test scenarios to ensure the script works correctly
 # and reports comprehensive coverage including files without tests
 
+# Resolved from this script's own location rather than hardcoded.
+#
+# Every invocation below used to name `/home/runner/work/pipelines/pipelines/...`, the workspace
+# path of a GitHub-hosted runner. That made the suite pass only there: on a self-hosted runner, in
+# a container, or on a maintainer's machine it failed with `run.sh: not found` -- a message that
+# reads like the script is missing rather than like the path is wrong. `make test` has therefore
+# been red locally for anyone who ran it.
+#
+# POSIX `sh`, so no `BASH_SOURCE`: `$0` is the script's path and is enough, since the layout below
+# it is fixed.
+SCRIPTS_DIR="${SCRIPTS_DIR:-$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)}"
+GO_TEST_RUN="$SCRIPTS_DIR/global/scripts/languages/golang/test/run.sh"
+
+if [ ! -x "$GO_TEST_RUN" ]; then
+  echo "ERROR: the Go test runner was not found at $GO_TEST_RUN" >&2
+  echo "SCRIPTS_DIR resolved to '$SCRIPTS_DIR'; set it explicitly to override." >&2
+  exit 1
+fi
+
 echo "=== Testing Go Test Script with Comprehensive Coverage ==="
 
 # Test 1: Project with build tags and complete coverage
@@ -131,7 +150,7 @@ EOF
 
 cd "$TEST_DIR_COMPLETE"
 echo "Running comprehensive coverage test..."
-if /home/runner/work/pipelines/pipelines/global/scripts/languages/golang/test/run.sh; then
+if "$GO_TEST_RUN"; then
   echo "✓ Test 1 PASSED: Comprehensive coverage with build tags"
   echo "Verifying that untested package appears in coverage:"
   if grep -q "pkg/utils" coverage.txt; then
@@ -236,7 +255,7 @@ EOF
 
 cd "$TEST_DIR_NO_TAGS"
 echo "Running backward compatibility test with complete coverage..."
-if /home/runner/work/pipelines/pipelines/global/scripts/languages/golang/test/run.sh; then
+if "$GO_TEST_RUN"; then
   echo "✓ Test 2 PASSED: Backward compatibility with complete coverage"
   if grep -q "pkg/utils" coverage.txt; then
     echo "✓ Untested package correctly included in coverage report"
@@ -296,7 +315,7 @@ EOF
 
 cd "$TEST_DIR_NO_TESTS"
 echo "Running test with no test files (should handle gracefully)..."
-if /home/runner/work/pipelines/pipelines/global/scripts/languages/golang/test/run.sh; then
+if "$GO_TEST_RUN"; then
   echo "✓ Test 3 PASSED: No test files scenario handled gracefully"
 else
   echo "✗ Test 3 FAILED: No test files scenario"
@@ -392,7 +411,7 @@ EOF
 
 cd "$TEST_DIR_WITH_TEST_FOLDER"
 echo "Running test with test folder (should exclude test packages from coverage)..."
-if /home/runner/work/pipelines/pipelines/global/scripts/languages/golang/test/run.sh; then
+if "$GO_TEST_RUN"; then
   echo "✓ Test 4 PASSED: Test folder exclusion scenario"
   
   # Verify that test packages are NOT included in coverage
@@ -476,7 +495,7 @@ EOF
 cd "$TEST_DIR_FLAT" || exit 1
 echo "Running non-conventional layout test (should fall back to ./...)..."
 FALLBACK_LOG="/tmp/go-test-validation-flat-layout.log"
-if /home/runner/work/pipelines/pipelines/global/scripts/languages/golang/test/run.sh > "$FALLBACK_LOG" 2>&1; then
+if "$GO_TEST_RUN" > "$FALLBACK_LOG" 2>&1; then
   cat "$FALLBACK_LOG"
   echo "✓ Test 5 PASSED: Non-conventional layout handled via ./... fallback"
 

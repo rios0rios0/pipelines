@@ -46,10 +46,10 @@ stages:
 
               - task: 'JavaToolInstaller@0'
                 inputs:
-                  versionSpec: '17'
+                  versionSpec: '25'
                   jdkArchitectureOption: 'x64'
                   jdkSourceOption: 'PreInstalled'
-                displayName: 'Use JDK 17 for the Android Gradle plugin'
+                displayName: 'Use JDK 25 for the Android Gradle plugin'
                 continueOnError: true
 
               - script: $(Scripts.Directory)/global/scripts/languages/dart/build/run.sh

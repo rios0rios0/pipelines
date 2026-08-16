@@ -680,8 +680,101 @@ RC_STATUS=0
     "$RC_BIN/sh" "$REQUIRE_SH"
 ) > "$RC_DIR/out.txt" 2>&1 || RC_STATUS=$?
 RC_OUT="$(cat "$RC_DIR/out.txt")"
-assert_true "require-checks: a real run without gh fails with a named reason" \
-  "[[ $RC_STATUS -eq 1 ]] && grep -q \"'gh' is required\" <<< \"\$RC_OUT\""
+assert_true "require-checks: a real run with nothing on PATH names the missing parser" \
+  "[[ $RC_STATUS -eq 1 ]] && grep -q \"'jq' is required\" <<< \"\$RC_OUT\""
+
+# Separately, because the parser is checked before the transport and would
+# otherwise mask it: a runner that HAS jq but neither client has to be told
+# which two things would satisfy it, not just that one of them is absent.
+RC_NOTRANSPORT_BIN="$RC_DIR/no-transport-bin"
+mkdir -p "$RC_NOTRANSPORT_BIN"
+for tool in sh dirname realpath sed rm mkdir tr cat env jq; do
+  for dir in /bin /usr/bin; do
+    if [[ -x "$dir/$tool" ]]; then ln -sf "$dir/$tool" "$RC_NOTRANSPORT_BIN/$tool"; break; fi
+  done
+done
+RC_STATUS=0
+(
+  cd "$RC_DIR"
+  env -i PATH="$RC_NOTRANSPORT_BIN" HOME="$RC_DIR" \
+    REQUIRE_CHECKS_NAMES='tests > test:all' REQUIRE_CHECKS_COMMIT=abc \
+    REQUIRE_CHECKS_REPOSITORY=o/r SCRIPTS_DIR="$SCRIPTS_DIR" \
+    "$RC_NOTRANSPORT_BIN/sh" "$REQUIRE_SH"
+) > "$RC_DIR/out.txt" 2>&1 || RC_STATUS=$?
+RC_OUT="$(cat "$RC_DIR/out.txt")"
+assert_true "require-checks: jq present but no client names both transports" \
+  "[[ $RC_STATUS -eq 1 ]] && grep -q \"needs either 'gh' or 'curl'\" <<< \"\$RC_OUT\""
+
+# The gate used to REQUIRE `gh`, and that is how it failed on the first consumer
+# to run it: `gh` ships on GitHub-hosted runners and on almost no self-hosted
+# one, so a self-hosted deploy died at the very first step of its deployment,
+# after the whole pipeline had already passed, with a message about a CLI it had
+# no reason to have installed. `curl` and `jq` were already assumed by
+# `render/run.sh` in the same job, so the fallback costs nothing.
+#
+# Stubbed as the REST endpoint rather than as `gh`: what has to be proven is
+# that the OTHER transport reaches the same verdict from the shape the API
+# actually returns, which is `{"total_count":N,"check_runs":[...]}` and not the
+# line-delimited projection `gh --jq` produces.
+RC_CURL_BIN="$RC_DIR/curl-only-bin"
+mkdir -p "$RC_CURL_BIN"
+for tool in sh dirname realpath sed rm mkdir tr cat env jq printf; do
+  for dir in /bin /usr/bin; do
+    if [[ -x "$dir/$tool" ]]; then ln -sf "$dir/$tool" "$RC_CURL_BIN/$tool"; break; fi
+  done
+done
+cat > "$RC_CURL_BIN/curl" <<'STUB'
+#!/bin/sh
+cat "$CURL_STUB_FIXTURE"
+STUB
+chmod +x "$RC_CURL_BIN/curl"
+
+printf '{"total_count":2,"check_runs":[{"name":"default / go / tests > test:all","conclusion":"success"},{"name":"code-check > style:golangci-lint","conclusion":"success"}]}' \
+  > "$RC_DIR/rest-green.json"
+printf '{"total_count":2,"check_runs":[{"name":"tests > test:all","conclusion":"failure"},{"name":"code-check > style:golangci-lint","conclusion":"success"}]}' \
+  > "$RC_DIR/rest-red.json"
+
+run_require_checks_curl() {
+  local fixture="$1"
+  RC_STATUS=0
+  (
+    cd "$RC_DIR"
+    env -i PATH="$RC_CURL_BIN" HOME="$RC_DIR" \
+      CURL_STUB_FIXTURE="$RC_DIR/$fixture" GH_TOKEN=fixture-token-placeholder \
+      REQUIRE_CHECKS_NAMES="$(printf 'tests > test:all\ncode-check > style:golangci-lint')" \
+      REQUIRE_CHECKS_COMMIT=abc REQUIRE_CHECKS_REPOSITORY=o/r SCRIPTS_DIR="$SCRIPTS_DIR" \
+      "$RC_CURL_BIN/sh" "$REQUIRE_SH"
+  ) > "$RC_DIR/out.txt" 2>&1 || RC_STATUS=$?
+  RC_OUT="$(cat "$RC_DIR/out.txt")"
+}
+
+run_require_checks_curl rest-green.json
+assert_true "require-checks: the curl transport passes the gate with no gh on PATH" \
+  "[[ $RC_STATUS -eq 0 ]]"
+assert_true "require-checks: the curl transport says which transport it used" \
+  "grep -q \"through 'curl'\" <<< \"\$RC_OUT\""
+assert_true "require-checks: the curl transport still matches a prefixed check name" \
+  "grep -q 'OK: tests > test:all' <<< \"\$RC_OUT\""
+
+run_require_checks_curl rest-red.json
+assert_true "require-checks: the curl transport refuses a failed required check" \
+  "[[ $RC_STATUS -eq 1 ]]"
+
+# Without a token there is nothing to authenticate with, and the API answers 401
+# for a private repository -- which would otherwise surface as "no successful
+# check", i.e. as a commit that failed rather than as a misconfiguration.
+RC_STATUS=0
+(
+  cd "$RC_DIR"
+  env -i PATH="$RC_CURL_BIN" HOME="$RC_DIR" \
+    CURL_STUB_FIXTURE="$RC_DIR/rest-green.json" \
+    REQUIRE_CHECKS_NAMES='tests > test:all' \
+    REQUIRE_CHECKS_COMMIT=abc REQUIRE_CHECKS_REPOSITORY=o/r SCRIPTS_DIR="$SCRIPTS_DIR" \
+    "$RC_CURL_BIN/sh" "$REQUIRE_SH"
+) > "$RC_DIR/out.txt" 2>&1 || RC_STATUS=$?
+RC_OUT="$(cat "$RC_DIR/out.txt")"
+assert_true "require-checks: the curl transport names a missing token instead of reporting a red commit" \
+  "[[ $RC_STATUS -eq 1 ]] && grep -q 'no token available' <<< \"\$RC_OUT\""
 echo ""
 
 echo "================================"

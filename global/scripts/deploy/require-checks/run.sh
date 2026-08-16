@@ -57,20 +57,69 @@ fi
 # make the hermetic path depend on tools it never uses -- and fail on a runner
 # that has neither. `deploy_npm_cli` skips its own installation on a dry run for
 # the same reason.
-for _rc_tool in gh jq; do
-  if ! command -v "$_rc_tool" > /dev/null 2>&1; then
-    echo "ERROR: '$_rc_tool' is required to read check runs but is not installed." >&2
-    exit 1
-  fi
-done
-unset _rc_tool
+if ! command -v jq > /dev/null 2>&1; then
+  echo "ERROR: 'jq' is required to read check runs but is not installed." >&2
+  exit 1
+fi
+
+# `gh` is PREFERRED, not required. It ships on GitHub-hosted runners and on
+# almost no self-hosted one, and this was the only script in the deploy family
+# that needed it -- `render/run.sh` already reaches the same kind of API with
+# `curl` and `jq`, so the fallback below adds no assumption the family did not
+# already make. A consumer on a self-hosted runner otherwise fails at the FIRST
+# step of its deployment, with a message about a CLI it has no reason to have
+# installed, after the whole pipeline has already passed.
+if command -v gh > /dev/null 2>&1; then
+  RC_TRANSPORT='gh'
+elif command -v curl > /dev/null 2>&1; then
+  RC_TRANSPORT='curl'
+else
+  echo "ERROR: reading check runs needs either 'gh' or 'curl', and neither is installed." >&2
+  exit 1
+fi
 
 # `cleanup.sh` re-exports REPORT_PATH as the tool's own subdirectory, so the
 # tool name must NOT be repeated here.
 CHECKS_FILE="$REPORT_PATH/check-runs.json"
 
-if ! gh api --paginate "repos/$REQUIRE_CHECKS_REPOSITORY/commits/$REQUIRE_CHECKS_COMMIT/check-runs" \
-  --jq '.check_runs[] | {name, conclusion}' | jq -s '.' > "$CHECKS_FILE"; then
+# Both transports emit the same thing: one `{name, conclusion}` object per line,
+# which `jq -s` then collects into the array everything below reads. Keeping the
+# shapes identical is what lets the matching logic -- the part that has actually
+# been wrong before -- stay transport-agnostic and be tested once.
+rc_fetch_with_gh() {
+  gh api --paginate \
+    "repos/$REQUIRE_CHECKS_REPOSITORY/commits/$REQUIRE_CHECKS_COMMIT/check-runs" \
+    --jq '.check_runs[] | {name, conclusion}'
+}
+
+# Paginated by hand because the REST endpoint has no cursor worth following
+# here: a page shorter than the limit is the last one. Capped so a malformed
+# response cannot spin forever.
+rc_fetch_with_curl() {
+  _rc_token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+  if [ -z "$_rc_token" ]; then
+    echo "ERROR: no token available. Set GH_TOKEN (the composite action passes it)." >&2
+    return 1
+  fi
+  _rc_api="${GITHUB_API_URL:-https://api.github.com}"
+  _rc_page=1
+  while [ "$_rc_page" -le 20 ]; do
+    _rc_body="$(curl -sS -f \
+      -H 'Accept: application/vnd.github+json' \
+      -H "Authorization: Bearer $_rc_token" \
+      -H 'X-GitHub-Api-Version: 2022-11-28' \
+      "$_rc_api/repos/$REQUIRE_CHECKS_REPOSITORY/commits/$REQUIRE_CHECKS_COMMIT/check-runs?per_page=100&page=$_rc_page")" \
+      || return 1
+    printf '%s' "$_rc_body" | jq -c '.check_runs[] | {name, conclusion}'
+    _rc_count="$(printf '%s' "$_rc_body" | jq -r '.check_runs | length')"
+    [ "$_rc_count" -lt 100 ] && break
+    _rc_page=$((_rc_page + 1))
+  done
+  unset _rc_token _rc_api _rc_page _rc_body _rc_count
+}
+
+echo "Reading check runs through '$RC_TRANSPORT'."
+if ! "rc_fetch_with_$RC_TRANSPORT" | jq -s '.' > "$CHECKS_FILE"; then
   echo "ERROR: failed to read check runs for $REQUIRE_CHECKS_COMMIT." >&2
   echo "The job needs 'checks: read' permission and a token that can see this repository." >&2
   exit 1

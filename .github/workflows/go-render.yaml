@@ -1,0 +1,162 @@
+# Go, delivered as a container image and deployed to Render.
+#
+# `go-docker.yaml` plus one deployment job, in the same shape `go-docker.yaml` is `go.yaml` plus two
+# delivery jobs. A consumer that ships a Go service to Render calls this and writes no pipeline of
+# its own.
+#
+# **The deploy is a job with `needs:`, never a second workflow.** The alternative a consumer reaches
+# for is `on: workflow_run: workflows: [ '<name>' ]`, which couples two files by a DISPLAY NAME and
+# fails silently when that name changes: a `workflow_run` naming a workflow that does not exist is
+# not an error, it simply never fires. One consumer renamed its CI workflow while adopting this
+# library and went four days without deploying, with every pipeline green the whole time. A `needs:`
+# edge cannot drift, and a deploy that does not run is a skipped job rather than silence.
+#
+# The deployment itself is the same `50-deployment/render` action GitLab and Azure DevOps reach
+# through their own templates, so the behaviour is one shared script (`global/scripts/deploy/render/
+# run.sh`) on all three platforms. This file is the GitHub convenience layer over it, not a second
+# implementation of it.
+on:
+  workflow_call:
+    inputs:
+      sonar_host:
+        description: 'SonarQube/SonarCloud host URL (leave empty to skip SonarQube)'
+        required: false
+        type: string
+        default: ''
+      runs_on:
+        type: 'string'
+        required: false
+        default: '["ubuntu-latest"]'
+        description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See go.yaml.'
+      codeql_upload:
+        type: 'string'
+        required: false
+        default: 'always'
+        description: "CodeQL SARIF upload mode ('always', 'failure-only' or 'never'). See go.yaml."
+      database_image:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'Database image to run the tests against (e.g. ''postgres:18-alpine''). See go.yaml.'
+      database_url_env:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'Environment variable the composed connection URL is exported into. See go.yaml.'
+      coverage_threshold:
+        type: 'number'
+        required: false
+        default: 0
+        description: 'Minimum total coverage percentage; 0 disables the gate. See go.yaml.'
+      openapi_sync_path:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'Committed OpenAPI document to regenerate and diff. See go.yaml.'
+      openapi_sync_command:
+        type: 'string'
+        required: false
+        default: 'make swagger'
+        description: 'Command that regenerates the document named by `openapi_sync_path`.'
+      render_service_name:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Render service name, resolved to an id through the API before the deploy. Prefer this to
+          an id when the name is DERIVED per environment (`api-staging` on a branch,
+          `api-production` on a tag): the name is a value the workflow already knows, while an id
+          is one more secret to store and rotate — and a stale id is the worse failure of the two,
+          because it deploys the WRONG service and reports success. Give this or `render_service_id`.
+      render_service_id:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'Render service id (starts with `srv-`). Wins over the name when both are set.'
+      deployment_environment:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          GitHub environment the deploy runs under, which is what scopes the credentials and what
+          can restrict the refs allowed to deploy. Defaults to `production` on a tag and `staging`
+          otherwise.
+      deployment_required_checks:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Newline-separated check names that must have SUCCEEDED before deploying.
+
+          Needed for TAG builds and not much else: `go.yaml` skips lint, the suite and the whole
+          security stage on a tag — they already ran when the commit landed on the default branch —
+          so the `needs:` edge below is satisfied by a run that verified nothing. On a branch the
+          dependency is real and this can stay empty.
+
+          Write the names bare (`tests > test:all`). The gate matches a whole trailing ` / `
+          segment, so it does not matter that GitHub records them prefixed with the calling jobs.
+    secrets:
+      sonar_token:
+        required: false
+        description: 'SonarQube/SonarCloud token. See go.yaml.'
+      render_api_key:
+        required: false
+        description: |
+          Render API key. Preferred over a deploy hook: the API answers with a deploy id the job
+          polls to a terminal state, so the job's status reflects whether the deploy succeeded
+          rather than whether Render accepted the request.
+      render_deploy_hook_url:
+        required: false
+        description: |
+          Deploy hook URL. Fire-and-forget — Render answers 200 for "request accepted", so the job
+          goes green even when the build that follows fails. Use only when the key is unavailable.
+
+jobs:
+  go-docker:
+    uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'
+    with:
+      sonar_host: ${{ inputs.sonar_host }}
+      runs_on: ${{ inputs.runs_on }}
+      codeql_upload: ${{ inputs.codeql_upload }}
+      database_image: ${{ inputs.database_image }}
+      database_url_env: ${{ inputs.database_url_env }}
+      coverage_threshold: ${{ inputs.coverage_threshold }}
+      openapi_sync_path: ${{ inputs.openapi_sync_path }}
+      openapi_sync_command: ${{ inputs.openapi_sync_command }}
+    secrets:
+      sonar_token: ${{ secrets.sonar_token }}
+
+  # fifth stage
+  deployment-render:
+    name: 'deployment > render'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    # The ref picks the environment, which is what keeps two environments' credentials apart: a run
+    # not entitled to `production` cannot read its secrets, and `production` can refuse every ref
+    # that is not a tag.
+    environment: ${{ inputs.deployment_environment != '' && inputs.deployment_environment || (github.ref_type == 'tag' && 'production' || 'staging') }}
+    # Only what is used, and only read. A called workflow can never hold more than its caller
+    # grants, so requesting anything spare turns a working consumer into a permissions error --
+    # `deployments: write` is the one to resist here, since nothing in the Render path touches that
+    # API. `checks: read` IS required and is not in the restricted default set.
+    permissions:
+      contents: 'read'
+      checks: 'read'
+    steps:
+      # Skipped entirely when the caller passes nothing, so a branch deploy pays nothing for a gate
+      # whose guarantee `needs:` already carries.
+      - if: "inputs.deployment_required_checks != ''"
+        uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/require-checks@main'
+        with:
+          required_checks: '${{ inputs.deployment_required_checks }}'
+
+      - uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/render@main'
+        with:
+          render_api_key: '${{ secrets.render_api_key }}'
+          render_service_name: '${{ inputs.render_service_name }}'
+          render_service_id: '${{ inputs.render_service_id }}'
+          render_deploy_hook_url: '${{ secrets.render_deploy_hook_url }}'
+          environment: ${{ inputs.deployment_environment != '' && inputs.deployment_environment || (github.ref_type == 'tag' && 'production' || 'staging') }}
+    needs: [ 'go-docker' ]
+    # `!failure()` rather than `success()` so a skipped upstream job does not take the deploy with
+    # it, matching how `delivery-docker` gates itself one level down. A pull request never deploys.
+    if: "!failure() && github.event_name != 'pull_request' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))"

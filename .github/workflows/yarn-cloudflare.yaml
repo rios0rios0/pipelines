@@ -1,0 +1,254 @@
+# JavaScript built with Yarn and deployed to Cloudflare Pages.
+#
+# `yarn.yaml` plus one deployment job, in the same shape `yarn-docker.yaml` is `yarn.yaml` plus two
+# delivery jobs. A consumer that ships an SPA to Pages calls this and writes no pipeline of its own.
+#
+# **The deploy is a job with `needs:`, never a second workflow.** The alternative a consumer reaches
+# for is `on: workflow_run: workflows: [ '<name>' ]`, which couples two files by a DISPLAY NAME and
+# fails silently when that name changes: a `workflow_run` naming a workflow that does not exist is
+# not an error, it simply never fires. A `needs:` edge cannot drift, and a deploy that does not run
+# is a skipped job rather than silence.
+#
+# The deployment itself is the same `50-deployment/cloudflare` action GitLab and Azure DevOps reach
+# through their own templates, so the behaviour is one shared script (`global/scripts/deploy/
+# cloudflare/run.sh`) on all three platforms. This file is the GitHub convenience layer over it, not
+# a second implementation of it.
+#
+# **No `base_url` output, deliberately.** Deriving `https://<branch>.<project>.pages.dev` from the
+# two values the deploy is performed with looks like it keeps the checked address from drifting from
+# the published one, and it does not: the Pages hostname need not follow the project name. A
+# consumer that drives its deployment should name the address in a variable a human has verified
+# answers, rather than in a guess about somebody else's naming scheme.
+on:
+  workflow_call:
+    inputs:
+      sonar_host:
+        description: 'SonarQube/SonarCloud host URL (leave empty to skip SonarQube)'
+        required: false
+        type: string
+        default: ''
+      runs_on:
+        type: 'string'
+        required: false
+        default: '["ubuntu-latest"]'
+        description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See yarn.yaml.'
+      codeql_upload:
+        type: 'string'
+        required: false
+        default: 'always'
+        description: "CodeQL SARIF upload mode ('always', 'failure-only' or 'never'). See yarn.yaml."
+      build_env:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Dotenv-style lines (KEY=value, one per line) exported before the build and test steps of
+          `yarn.yaml`, AND before `build_command` in the deployment job below -- a bundler that
+          bakes an API origin in at build time needs it in both places, and splitting them is how
+          the two drift.
+
+          For values that are NOT secret. A secret passed here is not masked, because a reusable
+          workflow's inputs carry no masking from the caller; use `build_env_secrets` for those.
+      e2e_typecheck:
+        type: 'boolean'
+        required: false
+        default: false
+        description: 'Type-check the end-to-end suite too. See yarn.yaml.'
+      node_version:
+        type: 'string'
+        required: false
+        default: '20'
+        description: |
+          Node version for both `yarn.yaml` and the deployment build below.
+
+          It reaches the deploy as well on purpose: the deploy action supplies its own Node, and
+          before this input it supplied 22 unconditionally -- so a repository that pinned 20 for its
+          tests shipped a bundle built on a runtime nothing had tested it against.
+      target:
+        type: 'string'
+        required: false
+        default: 'pages'
+        description: "Cloudflare product: `pages` (static/SPA output) or `workers` (edge runtime)."
+      pages_project:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Pages project name, exactly as it appears under Workers & Pages.
+
+          Pass a VARIABLE, never a literal, and this is the one deployment name where that
+          distinction has already cost something: `wrangler pages deploy` CREATES a project that
+          does not exist, so a stale literal does not fail the run -- renaming the project in the
+          dashboard published a second copy of a whole site under the old name and reported success.
+      pages_preview_branch:
+        type: 'string'
+        required: false
+        default: 'staging'
+        description: |
+          Branch name recorded with the deployment on every ref that is not a tag. Pages maps the
+          project's production branch to the production URL and every other branch name to a preview
+          URL, so this label -- not the ref -- is what keeps a `main` build off the public address.
+      pages_production_branch:
+        type: 'string'
+        required: false
+        default: 'main'
+        description: 'Branch name recorded with the deployment on a tag, which is what publishes it.'
+      output_directory:
+        type: 'string'
+        required: false
+        default: 'dist'
+        description: 'Directory of built assets to upload.'
+      build_command:
+        type: 'string'
+        required: false
+        default: 'yarn build'
+        description: |
+          Command that produces `output_directory`, run AFTER the deploy action's own checkout --
+          which wipes the workspace, so a build placed in an earlier step is destroyed before the
+          upload. That is also what guarantees the uploaded bundle was produced from the commit
+          being deployed rather than from whatever the job started on.
+
+          Corepack is enabled and `yarn install --immutable` has already run when this starts, so
+          the default is the build script alone.
+      deployment_environment:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          GitHub environment the deploy runs under, which is what scopes the credentials and what
+          can restrict the refs allowed to deploy. Defaults to `production` on a tag and `staging`
+          otherwise.
+      deployment_required_checks:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Newline-separated check names that must have SUCCEEDED before deploying.
+
+          Needed for TAG builds and not much else: every job in `yarn.yaml` carries
+          `if: !startsWith(github.ref, 'refs/tags/')`, so a tag push skips the whole reusable
+          workflow and the `needs:` edge below is satisfied by a run that verified nothing. On a
+          branch the dependency is real and this can stay empty.
+
+          Write the names bare (`tests > test:all`). The gate matches a whole trailing ` / ` segment,
+          so it does not matter that GitHub records them prefixed with the calling jobs.
+    secrets:
+      sonar_token:
+        description: 'SonarQube authentication token'
+        required: false
+      cloudflare_api_token:
+        required: true
+        description: 'Cloudflare API token with the "Edit Cloudflare Workers" template.'
+      cloudflare_account_id:
+        required: true
+        description: 'Cloudflare account id, from the sidebar of any domain overview page.'
+      build_env_secrets:
+        required: false
+        description: |
+          Dotenv-style lines exported before `build_command`, like `build_env` but MASKED -- a
+          secret keeps its masking when it is passed into a reusable workflow as a secret, and loses
+          it when it is passed as an input.
+
+jobs:
+  yarn:
+    uses: 'rios0rios0/pipelines/.github/workflows/yarn.yaml@main'
+    with:
+      sonar_host: ${{ inputs.sonar_host }}
+      runs_on: ${{ inputs.runs_on }}
+      codeql_upload: ${{ inputs.codeql_upload }}
+      build_env: ${{ inputs.build_env }}
+      e2e_typecheck: ${{ inputs.e2e_typecheck }}
+      node_version: ${{ inputs.node_version }}
+    secrets:
+      sonar_token: ${{ secrets.sonar_token }}
+
+  # fifth stage
+  deployment-cloudflare:
+    name: 'deployment > cloudflare'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    # The ref picks the environment, which is what keeps two environments' credentials apart: a run
+    # not entitled to `production` cannot read its secrets, and `production` can refuse every ref
+    # that is not a tag.
+    environment: ${{ inputs.deployment_environment != '' && inputs.deployment_environment || (github.ref_type == 'tag' && 'production' || 'staging') }}
+    # Only what is used, and only read. A called workflow can never hold more than its caller grants,
+    # so requesting anything spare turns a working consumer into a permissions error --
+    # `deployments: write` is the one to resist here, since `wrangler` records the deployment with
+    # Cloudflare rather than with GitHub. `checks: read` IS required and is not in the restricted
+    # default set.
+    permissions:
+      contents: 'read'
+      checks: 'read'
+    env:
+      DEPLOY_ENVIRONMENT: ${{ inputs.deployment_environment != '' && inputs.deployment_environment || (github.ref_type == 'tag' && 'production' || 'staging') }}
+      PAGES_BRANCH: "${{ github.ref_type == 'tag' && inputs.pages_production_branch || inputs.pages_preview_branch }}"
+      PAGES_PROJECT: '${{ inputs.pages_project }}'
+      # Hoisted to the job because a STEP-LEVEL `if:` cannot read the `secrets` context at all --
+      # `if: secrets.x != ''` is a workflow syntax error, not a condition that evaluates to false.
+      # An `env:` entry may reference it, and `env` is readable from an `if:`.
+      BUILD_ENV_SECRETS: '${{ secrets.build_env_secrets }}'
+    steps:
+      # Skipped entirely when the caller passes nothing, so a branch deploy pays nothing for a gate
+      # whose guarantee `needs:` already carries.
+      - if: "inputs.deployment_required_checks != ''"
+        uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/require-checks@main'
+        with:
+          required_checks: '${{ inputs.deployment_required_checks }}'
+
+      # Both write to `$GITHUB_ENV`, which lives outside the workspace -- so they survive the deploy
+      # action's own checkout, and `build_command` sees them. Secrets are written LAST so a value
+      # present in both wins from the masked side rather than the logged one.
+      - if: "inputs.build_env != ''"
+        run: 'printf ''%s\n'' "$BUILD_ENV" >> "$GITHUB_ENV"'
+        shell: 'bash'
+        env:
+          BUILD_ENV: '${{ inputs.build_env }}'
+
+      - if: "env.BUILD_ENV_SECRETS != ''"
+        run: 'printf ''%s\n'' "$BUILD_ENV_SECRETS" >> "$GITHUB_ENV"'
+        shell: 'bash'
+
+      # Refused here rather than left to the deploy action, which reaches the same conclusion only
+      # after checking the repository out, installing the toolchain and running the whole build --
+      # and `wrangler` would not refuse it at all for `pages`, it would create a project named after
+      # an empty string.
+      - if: "inputs.target == 'pages'"
+        run: |
+          if [ -z "$PAGES_PROJECT" ]; then
+            echo "::error::pages_project is empty. Pass the Cloudflare Pages project name, from a repository variable rather than a literal -- 'wrangler pages deploy' CREATES a project that does not exist, so a stale name forks the site in two instead of failing."
+            exit 1
+          fi
+          echo "deploying the $DEPLOY_ENVIRONMENT environment under the $PAGES_BRANCH pages branch"
+        shell: 'bash'
+
+      - uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/cloudflare@main'
+        with:
+          cloudflare_api_token: '${{ secrets.cloudflare_api_token }}'
+          cloudflare_account_id: '${{ secrets.cloudflare_account_id }}'
+          target: '${{ inputs.target }}'
+          project_name: "${{ env.PAGES_PROJECT }}"
+          output_directory: '${{ inputs.output_directory }}'
+          branch: "${{ env.PAGES_BRANCH }}"
+          production_branch: '${{ inputs.pages_production_branch }}'
+          environment: "${{ env.DEPLOY_ENVIRONMENT }}"
+          node_version: '${{ inputs.node_version }}'
+          # Corepack is no longer bundled with Node 25+, and this action supplies its own Node
+          # rather than taking one from a `setup-node` step the caller controls -- so corepack can
+          # be neither assumed present nor assumed absent. The `command -v` guard covers both: an
+          # unconditional `npm i -g corepack` fails with EEXIST on a Node that does bundle it,
+          # because npm will not overwrite a shim it did not install. The version matches the one
+          # `yarn.yaml` pins: `0.34.7` spans Node 20 through 26, where `0.35.0` refuses Node 25 --
+          # the first version that stops bundling corepack and therefore the one most likely to
+          # need this install.
+          build_command: |
+            command -v corepack > /dev/null 2>&1 || npm i -g --ignore-scripts corepack@0.34.7
+            mkdir -p "$RUNNER_TEMP/corepack"
+            corepack enable --install-directory "$RUNNER_TEMP/corepack" yarn
+            export PATH="$RUNNER_TEMP/corepack:$PATH"
+            yarn install --immutable
+            ${{ inputs.build_command }}
+    needs: [ 'yarn' ]
+    # `!failure()` rather than `success()` so a skipped upstream job does not take the deploy with
+    # it -- on a tag every job inside `yarn.yaml` skips, and a bare `needs:` would stop production
+    # shipping altogether. A genuine CI failure on a branch still blocks. A pull request never
+    # deploys.
+    if: "!failure() && github.event_name != 'pull_request' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))"

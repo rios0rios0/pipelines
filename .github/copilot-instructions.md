@@ -351,6 +351,32 @@ Two rules govern this family and must not be relaxed:
 - **`DEPLOY_DRY_RUN=true` must stay hermetic** — no CLI install, no network. That is what lets
   `make test-deploy-providers` exercise all five offline.
 
+On GitHub Actions each provider also gets a **composed workflow**, `<toolchain>-<provider>.yaml`,
+so a consumer calls one `uses:` and writes no deployment job at all — `go-render.yaml`,
+`dart-cloudflare.yaml`, `yarn-cloudflare.yaml`, `npm-cloudflare.yaml`. See the next section for the
+rules those files follow; `make test-workflow-composition` enforces them.
+
+### Workflow Composition Standard
+
+Full rationale in [CLAUDE.md](../CLAUDE.md#workflow-composition-standard). The rules an agent is
+most likely to break, in order of how expensive the mistake was:
+
+1. **Never couple two workflows with `on: workflow_run:`.** It matches by DISPLAY NAME and naming a
+   workflow that does not exist is not an error — it never fires, silently. A consumer lost four
+   days of deployments this way with a green pipeline throughout. A deploy is a job with `needs:`.
+2. **Never hand-write a deployment job in a consumer repository.** Call the composed workflow. A
+   hand-written job has no `require-checks` gate, no shared script, no cross-platform twin, and no
+   test asserting any of it.
+3. **Name is `<toolchain>-<suffix>.yaml`**, where a deployment suffix must match a real directory
+   under `github/global/stages/50-deployment/`.
+4. **Compose, never re-declare** — `uses:` the sibling workflow rather than copying its jobs.
+5. **Job names are an API**: `delivery > <target>`, `deployment > <provider>`. Consumers pass these
+   strings to `require-checks`; renaming one renames a check for everyone downstream.
+6. **Every deployment job declares `needs:`, `environment:` and `if:`**, under a `# fifth stage`
+   comment.
+7. **Secrets are passed as secrets, not inputs** — an input loses the caller's masking. And a
+   step-level `if:` cannot read the `secrets` context at all; hoist it into a job-level `env:`.
+
 ### Platform and Language Support Matrix
 
 **Platforms:**

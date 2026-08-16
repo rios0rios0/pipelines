@@ -48,6 +48,7 @@ Comprehensive, enterprise-grade SDLC pipeline templates for **GitHub Actions**, 
 pipelines/
 ├── .github/workflows/          # GitHub Actions reusable workflows
 │   ├── go-docker.yaml         # Go with Docker delivery
+│   ├── go-render.yaml         # Go with Docker delivery + Render deployment
 │   ├── go-binary.yaml         # Go binary compilation
 │   ├── pdm-docker.yaml        # Python/PDM with Docker
 │   ├── gradle-docker.yaml     # Java/Gradle with Docker delivery
@@ -168,28 +169,43 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 |------------------------------|--------------------------------------------|---------------|
 | `go.yaml`                    | Go testing and quality checks              | Go            |
 | `go-docker.yaml`             | Go with Docker image delivery              | Go            |
+| `go-render.yaml`             | Go with Docker delivery + Render deployment | Go            |
+| `go-library.yaml`            | Go module tagged for the proxy             | Go            |
 | `go-binary.yaml`             | Go binary compilation and release          | Go            |
 | `pdm.yaml`                   | Python/PDM testing and quality checks      | Python        |
 | `pdm-docker.yaml`            | Python/PDM with Docker image delivery      | Python        |
+| `pdm-library.yaml`           | Python package published to PyPI           | Python        |
 | `gradle.yaml`                | Java/Gradle testing and quality checks     | Java          |
 | `gradle-docker.yaml`         | Java/Gradle with Docker image delivery     | Java          |
+| `gradle-library.yaml`        | Java/Gradle library published to a registry | Java         |
 | `yarn.yaml`                  | JavaScript/Yarn testing and quality checks | JavaScript    |
 | `yarn-docker.yaml`           | JavaScript/Yarn with Docker image delivery | JavaScript    |
+| `yarn-cloudflare.yaml`       | JavaScript/Yarn deployed to Cloudflare     | JavaScript    |
+| `yarn-library.yaml`          | JavaScript/Yarn package published to npm   | JavaScript    |
 | `dotnet.yaml`                | .NET testing and quality checks            | C#            |
 | `dotnet-docker.yaml`         | .NET with Docker image delivery            | C#            |
+| `dotnet-library.yaml`        | .NET package published to NuGet            | C#            |
 | `npm.yaml`                   | JavaScript/npm testing and quality checks  | JavaScript    |
 | `npm-docker.yaml`            | JavaScript/npm with Docker image delivery  | JavaScript    |
+| `npm-cloudflare.yaml`        | JavaScript/npm deployed to Cloudflare      | JavaScript    |
+| `npm-library.yaml`           | JavaScript/npm package published to npm    | JavaScript    |
 | `maven.yaml`                 | Java/Maven testing and quality checks      | Java          |
 | `maven-docker.yaml`          | Java/Maven with Docker image delivery      | Java          |
+| `maven-library.yaml`         | Java/Maven library published to a registry | Java          |
 | `composer.yaml`              | PHP/Composer testing and quality checks    | PHP           |
 | `composer-docker.yaml`       | PHP/Composer with Docker image delivery    | PHP           |
+| `composer-library.yaml`      | PHP package published to Packagist         | PHP           |
 | `bundler.yaml`               | Ruby/Bundler testing and quality checks    | Ruby          |
 | `bundler-docker.yaml`        | Ruby/Bundler with Docker image delivery    | Ruby          |
+| `bundler-library.yaml`       | Ruby gem published to RubyGems             | Ruby          |
 | `dart.yaml`                  | Dart/Flutter quality, security, and tests  | Dart/Flutter  |
 | `dart-docker.yaml`           | Dart/Flutter with Docker image delivery    | Dart/Flutter  |
+| `dart-cloudflare.yaml`       | Dart/Flutter deployed to Cloudflare        | Dart/Flutter  |
 | `dart-library.yaml`          | Dart package published to pub.dev          | Dart          |
 | `flutter-artifacts.yaml`     | Flutter web bundle and Android APK/AAB     | Flutter       |
 | `terra.yaml`                 | Terra CLI quality, security, and tests     | Terraform/HCL |
+| `release.yaml`               | Tag and GitHub Release from a bump commit  | any           |
+| `update-major-version-tag.yaml` | Moving `vN` tag for action consumers    | any           |
 
 #### Usage Example (Go with Docker)
 
@@ -443,15 +459,19 @@ GitLab CI templates use remote includes and are organized by language in the `gi
 | Language        | Template             | Purpose                    |
 |-----------------|----------------------|----------------------------|
 | **Go**          | `go-docker.yaml`     | Go with Docker delivery    |
+| **Go**          | `go-render.yaml`     | Go, Docker + Render deploy |
 | **Go**          | `go-binary.yaml`     | Go binary pipeline         |
 | **Go**          | `go-sam.yaml`        | Go with AWS SAM deployment |
 | **Java**        | `gradle-docker.yaml` | Gradle with Docker         |
 | **Java**        | `maven-docker.yaml`  | Maven with Docker          |
 | **Python**      | `pdm-docker.yaml`    | Python PDM with Docker     |
 | **JavaScript**  | `yarn-docker.yaml`   | Node.js Yarn with Docker   |
+| **JavaScript**  | `yarn-cloudflare.yaml` | Yarn + Cloudflare deploy |
+| **JavaScript**  | `npm-cloudflare.yaml` | npm + Cloudflare deploy   |
 | **.NET**        | `framework.yaml`     | .NET Framework pipeline    |
 | **Dart**        | `dart-docker.yaml`   | Dart with Docker delivery  |
 | **Dart**        | `dart-library.yaml`  | Dart package to pub.dev    |
+| **Flutter**     | `dart-cloudflare.yaml` | Flutter + Cloudflare deploy |
 | **Flutter**     | `flutter-docker.yaml`| Flutter web in a container |
 | **Flutter**     | `flutter-artifacts.yaml` | Flutter web + Android  |
 | **Terraform**   | `terra.yaml`         | Terraform IaC pipeline     |

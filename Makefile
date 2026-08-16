@@ -114,5 +114,9 @@ test-dart-pipeline:
 	@echo "Running Dart/Flutter pipeline validation..."
 	@./.github/tests/test-dart-pipeline.sh
 
-test: test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline
+test-workflow-composition:
+	@echo "Running workflow composition standard validation..."
+	@./.github/tests/test-workflow-composition.sh
+
+test: test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-lambda test-yaml-merge test-trivy-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test-workflow-composition
 	@echo "All tests completed successfully!"

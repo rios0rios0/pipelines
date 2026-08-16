@@ -242,9 +242,16 @@ jobs:
         with:
           required_checks: '${{ inputs.deployment_required_checks }}'
 
-      # Both write to `$GITHUB_ENV`, which lives outside the workspace -- so they survive the deploy
-      # action's own checkout, and `build_command` sees them. Secrets are written LAST so a value
-      # present in both wins from the masked side rather than the logged one.
+      # The three `build_env*` inputs all write to `$GITHUB_ENV`, which lives outside the workspace
+      # -- so they survive the deploy action's own checkout, and `build_command` sees them.
+      #
+      # **They are applied in this order and the LAST one wins**: `build_env`, then
+      # `build_env_vars`, then `build_env_secret_names`. That is deliberate and load-bearing for
+      # one shape in particular: a caller whose `build_env` also feeds the toolchain workflow's
+      # test and build jobs (`yarn.yaml` takes the same input) passes a PLACEHOLDER API origin
+      # there, because those jobs prove the bundle compiles and never publish it. The real,
+      # environment-scoped origin then comes from `build_env_vars` and overrides it here, where the
+      # bundle that ships is built.
       - if: "inputs.build_env != ''"
         run: 'printf ''%s\n'' "$BUILD_ENV" >> "$GITHUB_ENV"'
         shell: 'bash'

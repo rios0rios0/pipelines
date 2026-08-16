@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers)
+- `make test` - Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, workflow-composition)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-go-integration-scope` - Test which packages the Go runner's integration phase selects specifically
 - `make test-lambda` - Test Lambda template validation specifically
@@ -28,6 +28,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-release-reconcile` - Test release reconciliation gap detection specifically
 - `make test-deploy-providers` - Test the MVP hosting deployment providers (Cloudflare, Vercel, Render, Netlify, Fly.io) specifically
 - `make test-memory-detection` - Test the cgroup-aware memory ceiling detection specifically
+- `make test-workflow-composition` - Test the GitHub Actions workflow composition standard specifically
 - `bash global/scripts/shared/cleanup.sh` - Clean up build reports
 - `docker --version && make --version && go version` - Check dependencies
 
@@ -376,6 +377,10 @@ most likely to break, in order of how expensive the mistake was:
    comment.
 7. **Secrets are passed as secrets, not inputs** — an input loses the caller's masking. And a
    step-level `if:` cannot read the `secrets` context at all; hoist it into a job-level `env:`.
+8. **A `uses:` job cannot declare `environment:`**, so its `with:`/`secrets:` are evaluated with no
+   environment selected — `vars.API_URL` there is the repository-level value, usually empty, with
+   no error. Name environment-scoped variables through `build_env_vars` and pass environment-scoped
+   secrets with `secrets: inherit`.
 
 ### Platform and Language Support Matrix
 

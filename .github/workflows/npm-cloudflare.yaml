@@ -99,6 +99,25 @@ on:
           being deployed rather than from whatever the job started on.
 
           `npm ci` has already run when this starts, so the default is the build script alone.
+      build_env_vars:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          `KEY=VARIABLE_NAME` lines, resolved from the caller's repository AND environment variables
+          inside the deployment job, then exported like `build_env`.
+
+          This exists because of a constraint that has no way around it: a job that calls a
+          reusable workflow **cannot declare `environment:`** -- the key is not allowed there -- so
+          its `with:` block is evaluated with no environment selected, and `vars.API_URL` in a
+          caller resolves to the REPOSITORY-level variable rather than to staging's. Anything
+          scoped per environment therefore cannot be passed as an input at all; it has to be named
+          here and read inside the job that declares the environment.
+
+          Pass `API_URL=API_URL` to read `vars.API_URL` for the environment being deployed. A name
+          that resolves to nothing fails the step, so a variable set on one environment and
+          forgotten on the other is a named error rather than a bundle built against an empty
+          string.
       deployment_environment:
         type: 'string'
         required: false
@@ -126,10 +145,16 @@ on:
         description: 'SonarQube authentication token'
         required: false
       cloudflare_api_token:
-        required: true
-        description: 'Cloudflare API token with the "Edit Cloudflare Workers" template.'
+        required: false
+        description: |
+          Cloudflare API token with the "Edit Cloudflare Workers" template.
+
+          Not `required: true` on purpose: when the caller holds it as an ENVIRONMENT secret the
+          only way to pass it is `secrets: inherit`, and a declared-required secret the caller
+          cannot see at workflow scope fails validation before any job starts. It is checked at
+          runtime instead, with a message that names the likely cause.
       cloudflare_account_id:
-        required: true
+        required: false
         description: 'Cloudflare account id, from the sidebar of any domain overview page.'
       build_env_secrets:
         required: false
@@ -194,6 +219,62 @@ jobs:
       - if: "env.BUILD_ENV_SECRETS != ''"
         run: 'printf ''%s\n'' "$BUILD_ENV_SECRETS" >> "$GITHUB_ENV"'
         shell: 'bash'
+
+      # Environment-scoped variables, read HERE because this is the first job that has an
+      # environment to read them from -- see `build_env_vars` for why a caller cannot pass them.
+      #
+      # `toJSON(vars)` is evaluated in this job's context, so it carries the repository variables
+      # merged with the ones scoped to the environment above. python3 rather than `jq` because the
+      # rest of this library already assumes a stdlib python3 and not every self-hosted runner has
+      # `jq`.
+      - if: "inputs.build_env_vars != ''"
+        run: |
+          python3 - <<'RESOLVE'
+          import json
+          import os
+          import sys
+
+          available = json.loads(os.environ['ALL_VARS'])
+          resolved = []
+          missing = []
+          for line in os.environ['BUILD_ENV_VARS'].splitlines():
+              line = line.strip()
+              if not line:
+                  continue
+              key, _, name = line.partition('=')
+              value = available.get(name.strip())
+              if not value:
+                  missing.append(name.strip())
+                  continue
+              resolved.append('%s=%s' % (key.strip(), value))
+
+          if missing:
+              print('::error::these variables are not set for this environment: %s' % ', '.join(missing))
+              sys.exit(1)
+
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as handle:
+              handle.write('\n'.join(resolved) + '\n')
+          print('resolved %d variable(s) for the build' % len(resolved))
+          RESOLVE
+        shell: 'bash'
+        env:
+          ALL_VARS: ${{ toJSON(vars) }}
+          BUILD_ENV_VARS: '${{ inputs.build_env_vars }}'
+
+      # Refused here rather than by `wrangler`, which reports a missing token as an authentication
+      # failure against an account it could not identify. Empty almost always means the secrets are
+      # scoped to an ENVIRONMENT and the caller passed them explicitly instead of with
+      # `secrets: inherit` -- an explicitly passed `${{ secrets.X }}` is evaluated in the caller's
+      # `uses:` job, which has no environment, so it resolves to the empty string with no error.
+      - run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::cloudflare_api_token or cloudflare_account_id is empty. If they are ENVIRONMENT secrets, call this workflow with 'secrets: inherit' -- a 'uses:' job cannot declare an environment, so passing them explicitly resolves them outside one."
+            exit 1
+          fi
+        shell: 'bash'
+        env:
+          CLOUDFLARE_API_TOKEN: '${{ secrets.cloudflare_api_token }}'
+          CLOUDFLARE_ACCOUNT_ID: '${{ secrets.cloudflare_account_id }}'
 
       # Refused here rather than left to the deploy action, which reaches the same conclusion only
       # after checking the repository out, installing the toolchain and running the whole build --

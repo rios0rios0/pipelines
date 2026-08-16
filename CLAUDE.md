@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, dart-pipeline)
+make test              # Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, dart-pipeline, workflow-composition)
 make test-go-script    # Test Go validation script only
 make test-go-integration-scope  # Test which packages the Go runner's integration phase selects only
 make test-lambda       # Test Lambda template validation only
@@ -31,6 +31,7 @@ make test-release-reconcile  # Test release reconciliation gap detection only
 make test-deploy-providers   # Test the MVP hosting deployment providers (Cloudflare, Vercel, Render, Netlify, Fly.io) only
 make test-memory-detection  # Test the cgroup-aware memory ceiling detection only
 make test-dart-pipeline # Test the Dart/Flutter pipeline (scripts, Semgrep rules, cross-platform wiring) only
+make test-workflow-composition  # Test the GitHub Actions workflow composition standard only
 make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
 ```
 
@@ -159,6 +160,30 @@ the caller's masking; passed as a *secret* it keeps it. That is why the deployme
 `build_env` (an input, for an API origin) and `build_env_secrets` (a secret, same dotenv shape)
 rather than one of each name. Related: a step-level `if:` cannot read the `secrets` context at all —
 `if: secrets.x != ''` is a syntax error, so hoist the value into a job-level `env:` and test that.
+
+**A `uses:` job cannot declare `environment:`, and everything environment-scoped follows from that.**
+The key is simply not allowed on a job that calls a reusable workflow, so that job's `with:` and
+`secrets:` blocks are evaluated with **no environment selected**. A caller writing
+`with: { api_url: '${{ vars.API_URL }}' }` therefore gets the *repository-level* variable — which is
+usually unset, so the value arrives as an empty string with no error anywhere. The two consequences
+are worth memorising because neither is guessable and both fail silently:
+
+- **Environment-scoped variables cannot be passed as inputs.** Name them instead: `build_env_vars`
+  takes `KEY=VARIABLE_NAME` lines and resolves them from `toJSON(vars)` *inside* the deployment job,
+  which does declare the environment. A name that resolves to nothing fails the step.
+- **Environment-scoped secrets need `secrets: inherit` on the caller's `uses:` job.** Passing them
+  explicitly evaluates them outside the environment. `inherit` matches by name (secret names are
+  case-insensitive, so `CLOUDFLARE_API_TOKEN` satisfies `cloudflare_api_token`) and the *called*
+  job's `environment:` is what scopes them — the security property is preserved, not waived.
+
+For the same reason the credential secrets are declared `required: false` and checked at runtime:
+a `required: true` secret the caller holds only at environment scope fails workflow validation
+before any job starts, which is a worse error than a named one in the log.
+
+Do not "fix" this by moving a resolver job in front of the pipeline. A job that declares
+`environment:` and outputs the values works, but the `uses:` job then `needs:` it — so a
+`production` environment with a required reviewer blocks lint, tests and security behind an approval
+on every tag. The environment gate belongs on the deployment job alone.
 
 **When a consumer needs a deploy, the answer is a composed workflow here — not a job there.** A
 hand-written deployment job in a consumer repository gets no `require-checks` gate, no shared script,

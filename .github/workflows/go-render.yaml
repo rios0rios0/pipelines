@@ -149,6 +149,21 @@ jobs:
         with:
           required_checks: '${{ inputs.deployment_required_checks }}'
 
+      # Refused here rather than by the deploy script, whose message is about a missing key and not
+      # about why it is missing. Empty almost always means the credential is scoped to an
+      # ENVIRONMENT and the caller passed it explicitly instead of with `secrets: inherit` -- an
+      # explicitly passed `${{ secrets.X }}` is evaluated in the caller's `uses:` job, which cannot
+      # declare an environment, so it resolves to the empty string with no error anywhere.
+      - run: |
+          if [ -z "$RENDER_API_KEY" ] && [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "::error::neither render_api_key nor render_deploy_hook_url reached this job. If they are ENVIRONMENT secrets, call this workflow with 'secrets: inherit' -- a 'uses:' job cannot declare an environment, so passing them explicitly resolves them outside one."
+            exit 1
+          fi
+        shell: 'bash'
+        env:
+          RENDER_API_KEY: '${{ secrets.render_api_key }}'
+          RENDER_DEPLOY_HOOK_URL: '${{ secrets.render_deploy_hook_url }}'
+
       - uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/render@main'
         with:
           render_api_key: '${{ secrets.render_api_key }}'

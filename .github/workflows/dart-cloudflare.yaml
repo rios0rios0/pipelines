@@ -326,9 +326,18 @@ jobs:
       # the caller's secrets under their own names -- so a declared `build_env_secrets` input is
       # never populated by it.
       #
-      # `toJSON(secrets)` is confined to this one step, is written straight into `$GITHUB_ENV`
-      # without being echoed, and every value in it stays masked in the log. The job already holds
-      # the deployment credentials, so this widens nothing it did not already have.
+      # `toJSON(secrets)` is a considered exception to "only pass required secrets to this step",
+      # not an oversight -- static analysis flags it and is right to in general. Selecting the
+      # named ones in the expression is impossible: an input carries a LIST of names and the
+      # `secrets` context cannot be iterated in a workflow expression, so either every requested
+      # secret is a separate declared input (which `inherit` cannot populate, which is the whole
+      # problem) or the selection happens in the step.
+      #
+      # What bounds it: the exposure is one step, running an inline script from this repository
+      # with no third-party action in it; the values go straight into `$GITHUB_ENV` and are never
+      # echoed; every one of them stays masked in the log; and the step is skipped entirely unless
+      # the caller asked for something. The job already holds the deployment credentials, so this
+      # widens nothing it did not already have. **Do not add a `print` of a resolved value here.**
       - if: "inputs.build_env_secret_names != ''"
         run: |
           python3 - <<'RESOLVE'

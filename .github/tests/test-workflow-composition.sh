@@ -82,8 +82,9 @@ assert_empty() {
 }
 
 is_standalone() {
+  local candidate="$1"
   case " $STANDALONE " in
-    *" $1 "*) return 0 ;;
+    *" $candidate "*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -173,12 +174,14 @@ PY
 # Exact, field-wise lookups into the fact table. `grep -P` would do this in one
 # line and is a GNU extension; awk with -F'\t' behaves the same everywhere.
 fact_has() {
-  awk -F'\t' -v k="$1" -v f="$2" -v j="$3" \
+  local kind="$1" workflow="$2" job="$3"
+  awk -F'\t' -v k="$kind" -v f="$workflow" -v j="$job" \
     '$1 == k && $2 == f && $3 == j { found = 1 } END { exit !found }' "$FACTS"
 }
 
 fact_value() {
-  awk -F'\t' -v k="$1" -v f="$2" -v j="$3" \
+  local kind="$1" workflow="$2" job="$3"
+  awk -F'\t' -v k="$kind" -v f="$workflow" -v j="$job" \
     '$1 == k && $2 == f && $3 == j { print $4; exit }' "$FACTS"
 }
 
@@ -296,6 +299,9 @@ while IFS= read -r file; do
   # directory, which is what stops `<toolchain>-<madeup>.yaml` from existing.
   case "$suffix" in
     docker | library | binary) continue ;;
+    # Everything else is asserted below. Named rather than left implicit so the
+    # delivery/deployment split is readable at the point it is made.
+    *) ;;
   esac
   [[ -d "$SCRIPTS_DIR/github/global/stages/50-deployment/${suffix}" ]] \
     || NO_ACTION="${NO_ACTION}${file}: no github/global/stages/50-deployment/${suffix}/ to call"$'\n'

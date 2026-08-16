@@ -150,13 +150,18 @@ jobs:
           required_checks: '${{ inputs.deployment_required_checks }}'
 
       # Refused here rather than by the deploy script, whose message is about a missing key and not
-      # about why it is missing. Empty almost always means the credential is scoped to an
-      # ENVIRONMENT and the caller passed it explicitly instead of with `secrets: inherit` -- an
-      # explicitly passed `${{ secrets.X }}` is evaluated in the caller's `uses:` job, which cannot
-      # declare an environment, so it resolves to the empty string with no error anywhere.
+      # about why it is missing.
+      #
+      # Empty almost always means one thing: the credential is an ENVIRONMENT secret in the calling
+      # repository. Those cannot reach this workflow by any route -- not `secrets: inherit` (which
+      # only carries secrets within one organization, and this library is a different owner), not an
+      # explicit `${{ secrets.X }}` (evaluated in the caller's `uses:` job, which cannot declare an
+      # environment), and not the `environment:` on the job below, which applies for protection
+      # rules and the deployment record but brings no secrets across a repository boundary.
+      # Environment VARIABLES do cross, which is what makes this so easy to misread.
       - run: |
           if [ -z "$RENDER_API_KEY" ] && [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
-            echo "::error::neither render_api_key nor render_deploy_hook_url reached this job. If they are ENVIRONMENT secrets, call this workflow with 'secrets: inherit' -- a 'uses:' job cannot declare an environment, so passing them explicitly resolves them outside one."
+            echo "::error::neither render_api_key nor render_deploy_hook_url reached this job. Hold the key as a REPOSITORY secret and pass it explicitly. Environment-scoped secrets cannot reach a reusable workflow in another repository -- not with 'secrets: inherit', not explicitly, and not via the environment declared on this job."
             exit 1
           fi
         shell: 'bash'

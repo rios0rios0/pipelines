@@ -176,6 +176,25 @@ are worth memorising because neither is guessable and both fail silently:
   case-insensitive, so `CLOUDFLARE_API_TOKEN` satisfies `cloudflare_api_token`) and the *called*
   job's `environment:` is what scopes them — the security property is preserved, not waived.
 
+  **Semgrep's `yaml.github-actions.security.secrets-inherit` fires on it**, and a consumer running
+  the shared SAST stage will go red. Suppress it on that one line, with the reasoning, rather than
+  restructuring:
+
+  ```yaml
+  # nosemgrep: yaml.github-actions.security.secrets-inherit.secrets-inherit
+  secrets: 'inherit'
+  ```
+
+  The rule is a good default; here the alternative it implies is *worse*. Passing the credentials
+  explicitly requires them at **repository** scope, where every workflow and every job in the
+  repository can read them — including ones triggered by a pull request. An environment secret
+  resolves only for a job that declares that environment and passes its protection rules, which is
+  what keeps `production` refusing every ref that is not a tag. Three consumers were checked while
+  writing this: none of them holds a repository-scoped secret at all, by design.
+
+  Suppress it at the call site only. Do not add it to `.semgrepexcluderules`, which would turn the
+  rule off for every file including ones where it is right.
+
 For the same reason the credential secrets are declared `required: false` and checked at runtime:
 a `required: true` secret the caller holds only at environment scope fails workflow validation
 before any job starts, which is a worse error than a named one in the log.

@@ -381,10 +381,13 @@ most likely to break, in order of how expensive the mistake was:
    environment selected — `vars.API_URL` there is the repository-level value, usually empty, with
    no error. Name environment-scoped variables through `build_env_vars` and pass environment-scoped
    secrets with `secrets: inherit`.
-9. **`secrets: inherit` trips Semgrep's `secrets-inherit` rule.** Suppress it at the call site with
-   `# nosemgrep: yaml.github-actions.security.secrets-inherit.secrets-inherit` and the reasoning —
-   the alternative it implies, repository-scoped secrets passed explicitly, is a WIDER exposure.
-   Never disable the rule globally.
+9. **Environment-scoped SECRETS cannot reach a workflow in this repository — at all.** Not via
+   `secrets: inherit` (this library is a different owner from its consumers, and `inherit` only
+   works within one organization), not explicitly, not by declaring `environment:` on the called
+   job. Environment VARIABLES *do* cross, which is why `build_env_vars` works and the secret path
+   does not. Consumers must hold deploy credentials at REPOSITORY scope and pass them explicitly.
+   Verified by probe matrix: same-repo callee sees them, cross-repo callee never does, regardless
+   of whether `environment:` is a literal or an expression.
 
 ### Platform and Language Support Matrix
 

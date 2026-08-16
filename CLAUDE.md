@@ -171,33 +171,45 @@ are worth memorising because neither is guessable and both fail silently:
 - **Environment-scoped variables cannot be passed as inputs.** Name them instead: `build_env_vars`
   takes `KEY=VARIABLE_NAME` lines and resolves them from `toJSON(vars)` *inside* the deployment job,
   which does declare the environment. A name that resolves to nothing fails the step.
-- **Environment-scoped secrets need `secrets: inherit` on the caller's `uses:` job.** Passing them
-  explicitly evaluates them outside the environment. `inherit` matches by name (secret names are
-  case-insensitive, so `CLOUDFLARE_API_TOKEN` satisfies `cloudflare_api_token`) and the *called*
-  job's `environment:` is what scopes them — the security property is preserved, not waived.
+- **Environment-scoped SECRETS cannot reach a workflow in THIS repository at all.** Not with
+  `secrets: inherit`, not by passing them explicitly, not by declaring `environment:` on the called
+  job. Credentials a consumer wants this library to deploy with must be **repository-scoped** and
+  passed explicitly.
 
-  **Semgrep's `yaml.github-actions.security.secrets-inherit` fires on it**, and a consumer running
-  the shared SAST stage will go red. Suppress it on that one line, with the reasoning, rather than
-  restructuring:
+  This is the asymmetry that makes it so easy to get wrong, and it is the opposite of what the
+  GitHub documentation reads like: **environment VARIABLES do cross, environment SECRETS do not.**
+  Measured, not inferred — a probe matrix run against a real consumer's `staging` environment,
+  reading the same secret four ways:
 
-  ```yaml
-  # nosemgrep: yaml.github-actions.security.secrets-inherit.secrets-inherit
-  secrets: 'inherit'
-  ```
+  | Called workflow            | `environment:` | Environment secret |
+  |----------------------------|----------------|--------------------|
+  | same repository            | literal        | **present**        |
+  | same repository            | expression     | **present**        |
+  | **different repository**   | literal        | **empty**          |
+  | **different repository**   | expression     | **empty**          |
 
-  The rule is a good default; here the alternative it implies is *worse*. Passing the credentials
-  explicitly requires them at **repository** scope, where every workflow and every job in the
-  repository can read them — including ones triggered by a pull request. An environment secret
-  resolves only for a job that declares that environment and passes its protection rules, which is
-  what keeps `production` refusing every ref that is not a tag. Three consumers were checked while
-  writing this: none of them holds a repository-scoped secret at all, by design.
+  So the expression form is fine and the cross-repository boundary is the whole cause. GitHub's own
+  wording is *"workflows that call reusable workflows in the same organization or enterprise can use
+  the `inherit` keyword"* — this library is `rios0rios0/pipelines`, which is a different owner from
+  essentially every consumer, so `inherit` carries `github_token` and nothing else. The failure is
+  silent: the credential arrives as an empty string, the job's `environment:` still applies, a
+  deployment record is still created, and the deploy fails as a missing credential rather than as a
+  missing environment.
 
-  Suppress it at the call site only. Do not add it to `.semgrepexcluderules`, which would turn the
-  rule off for every file including ones where it is right.
+  **Do not "fix" this by suppressing Semgrep's `yaml.github-actions.security.secrets-inherit` and
+  keeping `inherit`.** An earlier revision of this section said to, and it was wrong on both counts:
+  the rule was right, and `inherit` did not work anyway. Pass the credentials explicitly — which
+  also means the rule never fires and there is nothing to suppress.
 
-For the same reason the credential secrets are declared `required: false` and checked at runtime:
-a `required: true` secret the caller holds only at environment scope fails workflow validation
-before any job starts, which is a worse error than a named one in the log.
+  What a consumer gives up by moving a credential to repository scope is real and worth stating:
+  every workflow and job in that repository can then read it, and `staging` and `production` no
+  longer hold separate values. What it does **not** give up is the ref gate — the called job still
+  declares `environment:`, so a `production` environment restricted to tags still refuses every
+  branch, and its protection rules still run.
+
+Because of that, credential secrets here are declared `required: false` and checked at runtime with
+a message naming the likely cause. A `required: true` secret a caller cannot supply fails workflow
+validation before any job starts, which is a worse error than a named one in the log.
 
 Do not "fix" this by moving a resolver job in front of the pipeline. A job that declares
 `environment:` and outputs the values works, but the `uses:` job then `needs:` it — so a

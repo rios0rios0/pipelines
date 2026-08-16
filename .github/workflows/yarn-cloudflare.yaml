@@ -134,18 +134,17 @@ on:
         required: false
         default: ''
         description: |
-          `KEY=SECRET_NAME` lines, resolved from the caller's secrets inside the deployment job and
-          exported like `build_env_secrets`, but MASKED and reachable when the secret is scoped to
-          an environment.
+          `KEY=SECRET_NAME` lines, resolved from whatever secrets reached this workflow and exported
+          like `build_env_secrets`, but MASKED.
 
-          The counterpart of `build_env_vars`, for the same reason and with one extra: a caller
-          using `secrets: inherit` -- which environment-scoped credentials require -- cannot also
-          populate `build_env_secrets`, because `inherit` passes the caller's secrets under THEIR
-          names and nothing is called `build_env_secrets`. Naming them here is the only route left.
+          For callers using `secrets: inherit`, which passes secrets under THEIR names and therefore
+          cannot populate a declared input like `build_env_secrets`. That only works inside one
+          organization; a cross-organization caller should use `build_env_secrets` instead.
 
-          Unlike `build_env_vars` an unresolvable name is NOT a failure: a value like a Sentry DSN
-          is legitimately optional, and the key is simply left unset. Use `build_env_vars` for
-          anything whose absence should stop the deploy.
+          **It cannot reach an environment-scoped secret**, because nothing can -- see
+          `build_env_vars` for the variable case, which does cross. Unlike `build_env_vars` an
+          unresolvable name is NOT a failure: a value like a Sentry DSN is legitimately optional and
+          the key is simply left unset.
       deployment_environment:
         type: 'string'
         required: false
@@ -177,10 +176,9 @@ on:
         description: |
           Cloudflare API token with the "Edit Cloudflare Workers" template.
 
-          Not `required: true` on purpose: when the caller holds it as an ENVIRONMENT secret the
-          only way to pass it is `secrets: inherit`, and a declared-required secret the caller
-          cannot see at workflow scope fails validation before any job starts. It is checked at
-          runtime instead, with a message that names the likely cause.
+          Not `required: true` on purpose: a declared-required secret a caller cannot supply fails
+          workflow validation before any job starts, which is a worse error than a named one in the
+          log. It is checked at runtime instead, with a message that names the likely cause.
       cloudflare_account_id:
         required: false
         description: 'Cloudflare account id, from the sidebar of any domain overview page.'
@@ -191,11 +189,10 @@ on:
           secret keeps its masking when it is passed into a reusable workflow as a secret, and loses
           it when it is passed as an input.
 
-          Only reachable when the caller passes secrets EXPLICITLY, which in turn only works for
-          repository-scoped ones. A caller whose credentials are environment-scoped must use
-          `secrets: inherit`, and `inherit` passes secrets under their own names -- nothing is
-          called `build_env_secrets` -- so that caller names them in `build_env_secret_names`
-          instead. Both are supported; a repository will use one or the other, not both.
+          This is the one to reach for. Its counterpart `build_env_secret_names` exists for a caller
+          using `secrets: inherit`, which passes secrets under THEIR names and so can never populate
+          a declared input -- but `inherit` only carries secrets within a single organization, and
+          this library is a different owner from most consumers. Explicit is what works.
 
 jobs:
   yarn:
@@ -303,10 +300,10 @@ jobs:
           ALL_VARS: ${{ toJSON(vars) }}
           BUILD_ENV_VARS: '${{ inputs.build_env_vars }}'
 
-      # Environment-scoped SECRETS, resolved here for the same reason as the variables above, plus
-      # one: `secrets: inherit` is what makes an environment secret reachable at all, and it passes
-      # the caller's secrets under their own names -- so a declared `build_env_secrets` input is
-      # never populated by it.
+      # Secrets named rather than declared, for callers using `secrets: inherit` -- which passes the
+      # caller's secrets under THEIR own names, so a declared `build_env_secrets` input is never
+      # populated by it. This reaches repository and organization secrets only; an ENVIRONMENT
+      # secret cannot cross a repository boundary by any route, unlike the variables above.
       #
       # `toJSON(secrets)` is a considered exception to "only pass required secrets to this step",
       # not an oversight -- static analysis flags it and is right to in general. Selecting the
@@ -353,13 +350,18 @@ jobs:
           BUILD_ENV_SECRET_NAMES: '${{ inputs.build_env_secret_names }}'
 
       # Refused here rather than by `wrangler`, which reports a missing token as an authentication
-      # failure against an account it could not identify. Empty almost always means the secrets are
-      # scoped to an ENVIRONMENT and the caller passed them explicitly instead of with
-      # `secrets: inherit` -- an explicitly passed `${{ secrets.X }}` is evaluated in the caller's
-      # `uses:` job, which has no environment, so it resolves to the empty string with no error.
+      # failure against an account it could not identify.
+      #
+      # Empty almost always means one thing: the credentials are ENVIRONMENT secrets in the calling
+      # repository. Those cannot reach this workflow by any route -- not `secrets: inherit` (which
+      # only carries secrets within one organization, and this library is a different owner), not an
+      # explicit `${{ secrets.X }}` (evaluated in the caller's `uses:` job, which cannot declare an
+      # environment), and not the `environment:` on the job below, which applies for protection
+      # rules and the deployment record but brings no secrets across a repository boundary.
+      # Environment VARIABLES do cross, which is what makes this so easy to misread.
       - run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "::error::cloudflare_api_token or cloudflare_account_id is empty. If they are ENVIRONMENT secrets, call this workflow with 'secrets: inherit' -- a 'uses:' job cannot declare an environment, so passing them explicitly resolves them outside one."
+            echo "::error::cloudflare_api_token or cloudflare_account_id is empty. Hold them as REPOSITORY secrets and pass them explicitly. Environment-scoped secrets cannot reach a reusable workflow in another repository -- not with 'secrets: inherit', not explicitly, and not via the environment declared on the deployment job."
             exit 1
           fi
         shell: 'bash'

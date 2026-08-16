@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers)
+- `make test` - Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, workflow-composition)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-go-integration-scope` - Test which packages the Go runner's integration phase selects specifically
 - `make test-lambda` - Test Lambda template validation specifically
@@ -28,6 +28,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-release-reconcile` - Test release reconciliation gap detection specifically
 - `make test-deploy-providers` - Test the MVP hosting deployment providers (Cloudflare, Vercel, Render, Netlify, Fly.io) specifically
 - `make test-memory-detection` - Test the cgroup-aware memory ceiling detection specifically
+- `make test-workflow-composition` - Test the GitHub Actions workflow composition standard specifically
 - `bash global/scripts/shared/cleanup.sh` - Clean up build reports
 - `docker --version && make --version && go version` - Check dependencies
 
@@ -350,6 +351,36 @@ Two rules govern this family and must not be relaxed:
   command line is recorded into `command.txt`, which is published as a job artifact.
 - **`DEPLOY_DRY_RUN=true` must stay hermetic** — no CLI install, no network. That is what lets
   `make test-deploy-providers` exercise all five offline.
+
+On GitHub Actions each provider also gets a **composed workflow**, `<toolchain>-<provider>.yaml`,
+so a consumer calls one `uses:` and writes no deployment job at all — `go-render.yaml`,
+`dart-cloudflare.yaml`, `yarn-cloudflare.yaml`, `npm-cloudflare.yaml`. See the next section for the
+rules those files follow; `make test-workflow-composition` enforces them.
+
+### Workflow Composition Standard
+
+Full rationale in [CLAUDE.md](../CLAUDE.md#workflow-composition-standard). The rules an agent is
+most likely to break, in order of how expensive the mistake was:
+
+1. **Never couple two workflows with `on: workflow_run:`.** It matches by DISPLAY NAME and naming a
+   workflow that does not exist is not an error — it never fires, silently. A consumer lost four
+   days of deployments this way with a green pipeline throughout. A deploy is a job with `needs:`.
+2. **Never hand-write a deployment job in a consumer repository.** Call the composed workflow. A
+   hand-written job has no `require-checks` gate, no shared script, no cross-platform twin, and no
+   test asserting any of it.
+3. **Name is `<toolchain>-<suffix>.yaml`**, where a deployment suffix must match a real directory
+   under `github/global/stages/50-deployment/`.
+4. **Compose, never re-declare** — `uses:` the sibling workflow rather than copying its jobs.
+5. **Job names are an API**: `delivery > <target>`, `deployment > <provider>`. Consumers pass these
+   strings to `require-checks`; renaming one renames a check for everyone downstream.
+6. **Every deployment job declares `needs:`, `environment:` and `if:`**, under a `# fifth stage`
+   comment.
+7. **Secrets are passed as secrets, not inputs** — an input loses the caller's masking. And a
+   step-level `if:` cannot read the `secrets` context at all; hoist it into a job-level `env:`.
+8. **A `uses:` job cannot declare `environment:`**, so its `with:`/`secrets:` are evaluated with no
+   environment selected — `vars.API_URL` there is the repository-level value, usually empty, with
+   no error. Name environment-scoped variables through `build_env_vars` and pass environment-scoped
+   secrets with `secrets: inherit`.
 
 ### Platform and Language Support Matrix
 

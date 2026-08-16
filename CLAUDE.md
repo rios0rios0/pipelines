@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, dart-pipeline)
+make test              # Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, dart-pipeline, workflow-composition)
 make test-go-script    # Test Go validation script only
 make test-go-integration-scope  # Test which packages the Go runner's integration phase selects only
 make test-lambda       # Test Lambda template validation only
@@ -31,6 +31,7 @@ make test-release-reconcile  # Test release reconciliation gap detection only
 make test-deploy-providers   # Test the MVP hosting deployment providers (Cloudflare, Vercel, Render, Netlify, Fly.io) only
 make test-memory-detection  # Test the cgroup-aware memory ceiling detection only
 make test-dart-pipeline # Test the Dart/Flutter pipeline (scripts, Semgrep rules, cross-platform wiring) only
+make test-workflow-composition  # Test the GitHub Actions workflow composition standard only
 make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
 ```
 
@@ -94,6 +95,101 @@ Dart is the one language here with TWO toolchains sharing ONE package manager
 than the package manager — the same precedent Go sets with `go.yaml`.
 
 When adding a new language or toolchain, always use the toolchain name in the workflow file.
+
+### Workflow Composition Standard
+
+**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), nine
+assertions, every one of them proven to fire against a deliberate violation.** Read this section
+before writing anything under `.github/workflows/`, and before writing a pipeline in a repository
+that consumes this one.
+
+A workflow file name is `<toolchain>[-<suffix>].yaml`, and the suffix names **what the file adds**
+to the base of the same toolchain:
+
+| Shape                        | Adds                                              | Example              |
+|------------------------------|---------------------------------------------------|----------------------|
+| `<toolchain>.yaml`           | stages 10–35: code check, security, tests, SBOM   | `go.yaml`            |
+| `<toolchain>-docker.yaml`    | fourth stage — release + container image          | `go-docker.yaml`     |
+| `<toolchain>-library.yaml`   | fourth stage — package published to a registry    | `npm-library.yaml`   |
+| `<toolchain>-binary.yaml`    | fourth stage — compiled artifacts                 | `go-binary.yaml`     |
+| `<toolchain>-<provider>.yaml`| **fifth stage — deployment to that provider**     | `go-render.yaml`     |
+
+A deployment suffix must name a directory that exists under
+`github/global/stages/50-deployment/` — `cloudflare`, `vercel`, `render`, `netlify`, `flyio`. That
+is what stops a plausible-looking `go-heroku.yaml` from being added for a provider nothing
+implements.
+
+**Compose, never re-declare.** A composed workflow `uses:` the sibling it builds on and adds jobs;
+it does not copy its jobs. `go-render.yaml` calls `go-docker.yaml`, which calls `go.yaml` — three
+files, each adding one stage, none repeating another. Copying instead of calling drifts one input at
+a time, and every drift reads to the next person like a deliberate difference.
+
+**A deploy is a job with `needs:`, never a second workflow.** This is the rule the whole standard
+exists for. The shape a consumer reaches for instead is:
+
+```yaml
+# NEVER DO THIS
+on:
+  workflow_run:
+    workflows: [ 'CI/CD Pipeline' ]   # matched by DISPLAY NAME
+    types: [ 'completed' ]
+```
+
+`workflow_run` couples two files by the *display name* of the other one, and naming a workflow that
+does not exist **is not an error** — it simply never fires. A consumer renamed its CI workflow while
+adopting this library and went four days without deploying, with every pipeline green the whole
+time, because nothing anywhere reports "the workflow you are waiting on has no such name". A
+`needs:` edge is structural: it cannot drift, and a deploy that does not run is a visible skipped
+job rather than silence.
+
+Every deployment job therefore declares, and the test asserts, all four of:
+
+- **`needs:`** — the edge that replaces `workflow_run`.
+- **`environment:`** — what scopes the credentials, so a run not entitled to `production` cannot
+  read its secrets and `production` can refuse every ref that is not a tag.
+- **`if:`** — without one, a pull request deploys.
+- a preceding **`# fifth stage`** comment, matching the `# fourth stage` comments the delivery jobs
+  already carry.
+
+**Job names are an API, not a label.** `delivery > <target>` and `deployment > <provider>` are the
+strings consumers pass to `require-checks`, because GitHub composes a check's name from the calling
+job and the called workflow's job. Renaming a job renames a check for everyone downstream.
+
+**Secrets reach a build as secrets.** A value passed into a reusable workflow as an *input* loses
+the caller's masking; passed as a *secret* it keeps it. That is why the deployment workflows take
+`build_env` (an input, for an API origin) and `build_env_secrets` (a secret, same dotenv shape)
+rather than one of each name. Related: a step-level `if:` cannot read the `secrets` context at all —
+`if: secrets.x != ''` is a syntax error, so hoist the value into a job-level `env:` and test that.
+
+**A `uses:` job cannot declare `environment:`, and everything environment-scoped follows from that.**
+The key is simply not allowed on a job that calls a reusable workflow, so that job's `with:` and
+`secrets:` blocks are evaluated with **no environment selected**. A caller writing
+`with: { api_url: '${{ vars.API_URL }}' }` therefore gets the *repository-level* variable — which is
+usually unset, so the value arrives as an empty string with no error anywhere. The two consequences
+are worth memorising because neither is guessable and both fail silently:
+
+- **Environment-scoped variables cannot be passed as inputs.** Name them instead: `build_env_vars`
+  takes `KEY=VARIABLE_NAME` lines and resolves them from `toJSON(vars)` *inside* the deployment job,
+  which does declare the environment. A name that resolves to nothing fails the step.
+- **Environment-scoped secrets need `secrets: inherit` on the caller's `uses:` job.** Passing them
+  explicitly evaluates them outside the environment. `inherit` matches by name (secret names are
+  case-insensitive, so `CLOUDFLARE_API_TOKEN` satisfies `cloudflare_api_token`) and the *called*
+  job's `environment:` is what scopes them — the security property is preserved, not waived.
+
+For the same reason the credential secrets are declared `required: false` and checked at runtime:
+a `required: true` secret the caller holds only at environment scope fails workflow validation
+before any job starts, which is a worse error than a named one in the log.
+
+Do not "fix" this by moving a resolver job in front of the pipeline. A job that declares
+`environment:` and outputs the values works, but the `uses:` job then `needs:` it — so a
+`production` environment with a required reviewer blocks lint, tests and security behind an approval
+on every tag. The environment gate belongs on the deployment job alone.
+
+**When a consumer needs a deploy, the answer is a composed workflow here — not a job there.** A
+hand-written deployment job in a consumer repository gets no `require-checks` gate, no shared script,
+and no cross-platform equivalent, and it is invisible to every assertion above. If the provider is
+missing, add it under `global/scripts/deploy/` and wire it on all three platforms; if only the
+GitHub convenience layer is missing, add the `<toolchain>-<provider>.yaml`.
 
 ### How Platforms Consume Templates
 

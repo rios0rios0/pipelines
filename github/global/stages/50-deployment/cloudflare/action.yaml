@@ -51,6 +51,19 @@ inputs:
     type: 'string'
     required: false
     default: ''
+  node_version:
+    description: |
+      Node version installed for `wrangler` and for `build_command`. The default
+      is what this action supplied unconditionally before the input existed, so
+      leaving it alone changes nothing.
+
+      Worth setting whenever `build_command` builds a JavaScript project: the
+      version here is the one the DEPLOYED bundle is built with, and a caller
+      that pins a different one for its tests otherwise ships a bundle produced
+      on a runtime nothing tested it against.
+    type: 'string'
+    required: false
+    default: '22'
   dry_run:
     description: 'Resolve and record the deploy command without performing it.'
     type: 'string'
@@ -69,7 +82,7 @@ runs:
     - name: 'Setup Node.js'
       uses: 'actions/setup-node@v6'
       with:
-        node-version: '22'
+        node-version: '${{ inputs.node_version }}'
 
     - name: 'Build'
       shell: 'bash'

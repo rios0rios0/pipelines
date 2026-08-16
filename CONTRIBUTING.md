@@ -25,9 +25,14 @@ development practices, refer to the **[Development Guide](https://github.com/rio
    make test-go-script
    ```
 6. Validate across platforms (GitHub Actions, GitLab CI, Azure DevOps) when modifying templates
-7. Update `CHANGELOG.md` under `[Unreleased]`
-8. Commit following the [commit conventions](https://github.com/rios0rios0/guide/wiki/Life-Cycle/Git-Flow)
-9. Open a pull request against `main`
+7. For anything under `.github/workflows/`, read the
+   [Workflow Composition Standard](CLAUDE.md#workflow-composition-standard) first and run:
+   ```bash
+   make test-workflow-composition
+   ```
+8. Update `CHANGELOG.md` under `[Unreleased]`
+9. Commit following the [commit conventions](https://github.com/rios0rios0/guide/wiki/Life-Cycle/Git-Flow)
+10. Open a pull request against `main`
 
 ## Testing Changes in a Real Repository
 

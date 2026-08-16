@@ -1,0 +1,429 @@
+# Dart or Flutter web output deployed to Cloudflare Pages.
+#
+# `dart.yaml` plus one deployment job, in the same shape `dart-docker.yaml` is `dart.yaml` plus two
+# delivery jobs. A consumer that ships a Flutter web app to Pages calls this and writes no pipeline
+# of its own.
+#
+# **The deploy is a job with `needs:`, never a second workflow.** The alternative a consumer reaches
+# for is `on: workflow_run: workflows: [ '<name>' ]`, which couples two files by a DISPLAY NAME and
+# fails silently when that name changes: a `workflow_run` naming a workflow that does not exist is
+# not an error, it simply never fires. A `needs:` edge cannot drift, and a deploy that does not run
+# is a skipped job rather than silence.
+#
+# The deployment itself is the same `50-deployment/cloudflare` action GitLab and Azure DevOps reach
+# through their own templates, so the behaviour is one shared script (`global/scripts/deploy/
+# cloudflare/run.sh`) on all three platforms. This file is the GitHub convenience layer over it, not
+# a second implementation of it.
+#
+# **No `base_url` output, deliberately.** Deriving `https://<branch>.<project>.pages.dev` from the
+# two values the deploy is performed with looks like it keeps the checked address from drifting from
+# the published one, and it does not: the Pages hostname need not follow the project name. One
+# consumer's live site was `staging.app-flutter-czv.pages.dev` while its project variable read
+# `app-flutter`, so the derivation produced a 404 and the smoke check failed at "never answered" --
+# which reads like a deployment flake rather than a misconfiguration, and is why a blank page shipped
+# unnoticed. A consumer that drives its deployment should name the address in a variable a human has
+# verified answers.
+on:
+  workflow_call:
+    inputs:
+      flutter_version:
+        required: false
+        type: 'string'
+        default: ''
+      dart_sdk_version:
+        required: false
+        type: 'string'
+        default: 'latest'
+      toolchain:
+        required: false
+        type: 'string'
+        default: 'auto'
+      runs_on:
+        type: 'string'
+        required: false
+        default: '["ubuntu-latest"]'
+        description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See dart.yaml.'
+      fatal_infos:
+        type: 'boolean'
+        required: false
+        default: false
+        description: 'Treat analyzer infos as failures. See dart.yaml.'
+      test_args:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'Extra arguments appended to the test command. See dart.yaml.'
+      coverage_minimum:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'Minimum line coverage percentage; empty disables the gate. See dart.yaml.'
+      coverage_exclude:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'fnmatch patterns excluded from coverage. See dart.yaml.'
+      enable_sbom:
+        type: 'boolean'
+        required: false
+        default: true
+        description: 'Generate a CycloneDX SBOM. See dart.yaml.'
+      target:
+        type: 'string'
+        required: false
+        default: 'pages'
+        description: "Cloudflare product: `pages` (static/SPA output) or `workers` (edge runtime)."
+      pages_project:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Pages project name, exactly as it appears under Workers & Pages.
+
+          Pass a VARIABLE, never a literal, and this is the one deployment name where that
+          distinction has already cost something: `wrangler pages deploy` CREATES a project that
+          does not exist, so a stale literal does not fail the run -- renaming the project in the
+          dashboard published a second copy of a whole site under the old name and reported success.
+      pages_preview_branch:
+        type: 'string'
+        required: false
+        default: 'staging'
+        description: |
+          Branch name recorded with the deployment on every ref that is not a tag. Pages maps the
+          project's production branch to the production URL and every other branch name to a preview
+          URL, so this label -- not the ref -- is what keeps a `main` build off the public address.
+      pages_production_branch:
+        type: 'string'
+        required: false
+        default: 'main'
+        description: 'Branch name recorded with the deployment on a tag, which is what publishes it.'
+      output_directory:
+        type: 'string'
+        required: false
+        default: 'build/web'
+        description: 'Directory of built assets to upload. `flutter build web` writes `build/web`.'
+      build_command:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Command that produces `output_directory`, run AFTER the deploy action's own checkout --
+          which wipes the workspace, so a build placed in an earlier step is destroyed before the
+          upload. That is also what guarantees the uploaded bundle was produced from the commit
+          being deployed rather than from whatever the job started on.
+
+          The Dart/Flutter SDK is already installed and on `PATH` when this runs; the workflow
+          sources the same `dart_ensure_sdk` the rest of the Dart family uses, so nothing here needs
+          to install a toolchain or pin a second version alongside `flutter_version`.
+      build_env:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Dotenv-style lines (KEY=value, one per line) exported before `build_command`.
+
+          For values that are NOT secret -- an API origin, an environment name. A secret passed here
+          is not masked, because a reusable workflow's inputs carry no masking from the caller; use
+          `build_env_secrets` for those.
+      build_env_vars:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          `KEY=VARIABLE_NAME` lines, resolved from the caller's repository AND environment variables
+          inside the deployment job, then exported like `build_env`.
+
+          This exists because of a constraint that has no way around it: a job that calls a
+          reusable workflow **cannot declare `environment:`** -- the key is not allowed there -- so
+          its `with:` block is evaluated with no environment selected, and `vars.API_URL` in a
+          caller resolves to the REPOSITORY-level variable rather than to staging's. Anything
+          scoped per environment therefore cannot be passed as an input at all; it has to be named
+          here and read inside the job that declares the environment.
+
+          Pass `API_URL=API_URL` to read `vars.API_URL` for the environment being deployed. A name
+          that resolves to nothing fails the step, so a variable set on one environment and
+          forgotten on the other is a named error rather than a bundle built against an empty
+          string.
+      build_env_secret_names:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          `KEY=SECRET_NAME` lines, resolved from the caller's secrets inside the deployment job and
+          exported like `build_env_secrets`, but MASKED and reachable when the secret is scoped to
+          an environment.
+
+          The counterpart of `build_env_vars`, for the same reason and with one extra: a caller
+          using `secrets: inherit` -- which environment-scoped credentials require -- cannot also
+          populate `build_env_secrets`, because `inherit` passes the caller's secrets under THEIR
+          names and nothing is called `build_env_secrets`. Naming them here is the only route left.
+
+          Unlike `build_env_vars` an unresolvable name is NOT a failure: a value like a Sentry DSN
+          is legitimately optional, and the key is simply left unset. Use `build_env_vars` for
+          anything whose absence should stop the deploy.
+      deployment_environment:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          GitHub environment the deploy runs under, which is what scopes the credentials and what
+          can restrict the refs allowed to deploy. Defaults to `production` on a tag and `staging`
+          otherwise.
+      deployment_required_checks:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Newline-separated check names that must have SUCCEEDED before deploying.
+
+          Needed for TAG builds and not much else: every job in `dart.yaml` carries
+          `if: !startsWith(github.ref, 'refs/tags/')`, so a tag push skips the whole reusable
+          workflow and the `needs:` edge below is satisfied by a run that verified nothing. On a
+          branch the dependency is real and this can stay empty.
+
+          Write the names bare (`tests > test:all`). The gate matches a whole trailing ` / ` segment,
+          so it does not matter that GitHub records them prefixed with the calling jobs.
+    secrets:
+      cloudflare_api_token:
+        required: false
+        description: |
+          Cloudflare API token with the "Edit Cloudflare Workers" template.
+
+          Not `required: true` on purpose: when the caller holds it as an ENVIRONMENT secret the
+          only way to pass it is `secrets: inherit`, and a declared-required secret the caller
+          cannot see at workflow scope fails validation before any job starts. It is checked at
+          runtime instead, with a message that names the likely cause.
+      cloudflare_account_id:
+        required: false
+        description: 'Cloudflare account id, from the sidebar of any domain overview page.'
+      build_env_secrets:
+        required: false
+        description: |
+          Dotenv-style lines exported before `build_command`, like `build_env` but MASKED -- a
+          secret keeps its masking when it is passed into a reusable workflow as a secret, and loses
+          it when it is passed as an input.
+
+          Only reachable when the caller passes secrets EXPLICITLY, which in turn only works for
+          repository-scoped ones. A caller whose credentials are environment-scoped must use
+          `secrets: inherit`, and `inherit` passes secrets under their own names -- nothing is
+          called `build_env_secrets` -- so that caller names them in `build_env_secret_names`
+          instead. Both are supported; a repository will use one or the other, not both.
+
+jobs:
+  dart:
+    uses: 'rios0rios0/pipelines/.github/workflows/dart.yaml@main'
+    with:
+      flutter_version: ${{ inputs.flutter_version }}
+      dart_sdk_version: ${{ inputs.dart_sdk_version }}
+      toolchain: ${{ inputs.toolchain }}
+      runs_on: ${{ inputs.runs_on }}
+      fatal_infos: ${{ inputs.fatal_infos }}
+      test_args: ${{ inputs.test_args }}
+      coverage_minimum: ${{ inputs.coverage_minimum }}
+      coverage_exclude: ${{ inputs.coverage_exclude }}
+      enable_sbom: ${{ inputs.enable_sbom }}
+
+  # fifth stage
+  deployment-cloudflare:
+    name: 'deployment > cloudflare'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    # The ref picks the environment, which is what keeps two environments' credentials apart: a run
+    # not entitled to `production` cannot read its secrets, and `production` can refuse every ref
+    # that is not a tag.
+    environment: ${{ inputs.deployment_environment != '' && inputs.deployment_environment || (github.ref_type == 'tag' && 'production' || 'staging') }}
+    # Only what is used, and only read. A called workflow can never hold more than its caller grants,
+    # so requesting anything spare turns a working consumer into a permissions error --
+    # `deployments: write` is the one to resist here, since `wrangler` records the deployment with
+    # Cloudflare rather than with GitHub. `checks: read` IS required and is not in the restricted
+    # default set.
+    permissions:
+      contents: 'read'
+      checks: 'read'
+    env:
+      DEPLOY_ENVIRONMENT: ${{ inputs.deployment_environment != '' && inputs.deployment_environment || (github.ref_type == 'tag' && 'production' || 'staging') }}
+      PAGES_BRANCH: "${{ github.ref_type == 'tag' && inputs.pages_production_branch || inputs.pages_preview_branch }}"
+      PAGES_PROJECT: '${{ inputs.pages_project }}'
+      # Read by `dart_ensure_sdk` below, so the SDK the deploy builds with is the one the tests ran
+      # against rather than whatever `stable` resolves to on the day of the deploy.
+      FLUTTER_VERSION: '${{ inputs.flutter_version }}'
+      DART_SDK_VERSION: '${{ inputs.dart_sdk_version }}'
+      DART_TOOLCHAIN: '${{ inputs.toolchain }}'
+      # Hoisted to the job because a STEP-LEVEL `if:` cannot read the `secrets` context at all --
+      # `if: secrets.x != ''` is a workflow syntax error, not a condition that evaluates to false.
+      # An `env:` entry may reference it, and `env` is readable from an `if:`.
+      BUILD_ENV_SECRETS: '${{ secrets.build_env_secrets }}'
+    steps:
+      # Skipped entirely when the caller passes nothing, so a branch deploy pays nothing for a gate
+      # whose guarantee `needs:` already carries.
+      - if: "inputs.deployment_required_checks != ''"
+        uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/require-checks@main'
+        with:
+          required_checks: '${{ inputs.deployment_required_checks }}'
+
+      # The three `build_env*` inputs all write to `$GITHUB_ENV`, which lives outside the workspace
+      # -- so they survive the deploy action's own checkout, and `build_command` sees them.
+      #
+      # **They are applied in this order and the LAST one wins**: `build_env`, then
+      # `build_env_vars`, then `build_env_secret_names`. That is deliberate and load-bearing for
+      # one shape in particular: a caller whose `build_env` also feeds the toolchain workflow's
+      # test and build jobs (`yarn.yaml` takes the same input) passes a PLACEHOLDER API origin
+      # there, because those jobs prove the bundle compiles and never publish it. The real,
+      # environment-scoped origin then comes from `build_env_vars` and overrides it here, where the
+      # bundle that ships is built.
+      - if: "inputs.build_env != ''"
+        run: 'printf ''%s\n'' "$BUILD_ENV" >> "$GITHUB_ENV"'
+        shell: 'bash'
+        env:
+          BUILD_ENV: '${{ inputs.build_env }}'
+
+      - if: "env.BUILD_ENV_SECRETS != ''"
+        run: 'printf ''%s\n'' "$BUILD_ENV_SECRETS" >> "$GITHUB_ENV"'
+        shell: 'bash'
+
+      # Environment-scoped variables, read HERE because this is the first job that has an
+      # environment to read them from -- see `build_env_vars` for why a caller cannot pass them.
+      #
+      # `toJSON(vars)` is evaluated in this job's context, so it carries the repository variables
+      # merged with the ones scoped to the environment above. python3 rather than `jq` because the
+      # rest of this library already assumes a stdlib python3 and not every self-hosted runner has
+      # `jq`.
+      - if: "inputs.build_env_vars != ''"
+        run: |
+          python3 - <<'RESOLVE'
+          import json
+          import os
+          import sys
+
+          available = json.loads(os.environ['ALL_VARS'])
+          resolved = []
+          missing = []
+          for line in os.environ['BUILD_ENV_VARS'].splitlines():
+              line = line.strip()
+              if not line:
+                  continue
+              key, _, name = line.partition('=')
+              value = available.get(name.strip())
+              if not value:
+                  missing.append(name.strip())
+                  continue
+              resolved.append('%s=%s' % (key.strip(), value))
+
+          if missing:
+              print('::error::these variables are not set for this environment: %s' % ', '.join(missing))
+              sys.exit(1)
+
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as handle:
+              handle.write('\n'.join(resolved) + '\n')
+          print('resolved %d variable(s) for the build' % len(resolved))
+          RESOLVE
+        shell: 'bash'
+        env:
+          ALL_VARS: ${{ toJSON(vars) }}
+          BUILD_ENV_VARS: '${{ inputs.build_env_vars }}'
+
+      # Environment-scoped SECRETS, resolved here for the same reason as the variables above, plus
+      # one: `secrets: inherit` is what makes an environment secret reachable at all, and it passes
+      # the caller's secrets under their own names -- so a declared `build_env_secrets` input is
+      # never populated by it.
+      #
+      # `toJSON(secrets)` is a considered exception to "only pass required secrets to this step",
+      # not an oversight -- static analysis flags it and is right to in general. Selecting the
+      # named ones in the expression is impossible: an input carries a LIST of names and the
+      # `secrets` context cannot be iterated in a workflow expression, so either every requested
+      # secret is a separate declared input (which `inherit` cannot populate, which is the whole
+      # problem) or the selection happens in the step.
+      #
+      # What bounds it: the exposure is one step, running an inline script from this repository
+      # with no third-party action in it; the values go straight into `$GITHUB_ENV` and are never
+      # echoed; every one of them stays masked in the log; and the step is skipped entirely unless
+      # the caller asked for something. The job already holds the deployment credentials, so this
+      # widens nothing it did not already have. **Do not add a `print` of a resolved value here.**
+      - if: "inputs.build_env_secret_names != ''"
+        run: |
+          python3 - <<'RESOLVE'
+          import json
+          import os
+
+          available = json.loads(os.environ['ALL_SECRETS'])
+          resolved = []
+          skipped = []
+          for line in os.environ['BUILD_ENV_SECRET_NAMES'].splitlines():
+              line = line.strip()
+              if not line:
+                  continue
+              key, _, name = line.partition('=')
+              value = available.get(name.strip())
+              if not value:
+                  skipped.append(key.strip())
+                  continue
+              resolved.append('%s=%s' % (key.strip(), value))
+
+          if resolved:
+              with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as handle:
+                  handle.write('\n'.join(resolved) + '\n')
+          print('resolved %d secret(s) for the build' % len(resolved))
+          if skipped:
+              print('left unset (not present for this environment): %s' % ', '.join(skipped))
+          RESOLVE
+        shell: 'bash'
+        env:
+          ALL_SECRETS: ${{ toJSON(secrets) }}
+          BUILD_ENV_SECRET_NAMES: '${{ inputs.build_env_secret_names }}'
+
+      # Refused here rather than by `wrangler`, which reports a missing token as an authentication
+      # failure against an account it could not identify. Empty almost always means the secrets are
+      # scoped to an ENVIRONMENT and the caller passed them explicitly instead of with
+      # `secrets: inherit` -- an explicitly passed `${{ secrets.X }}` is evaluated in the caller's
+      # `uses:` job, which has no environment, so it resolves to the empty string with no error.
+      - run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::cloudflare_api_token or cloudflare_account_id is empty. If they are ENVIRONMENT secrets, call this workflow with 'secrets: inherit' -- a 'uses:' job cannot declare an environment, so passing them explicitly resolves them outside one."
+            exit 1
+          fi
+        shell: 'bash'
+        env:
+          CLOUDFLARE_API_TOKEN: '${{ secrets.cloudflare_api_token }}'
+          CLOUDFLARE_ACCOUNT_ID: '${{ secrets.cloudflare_account_id }}'
+
+      # Refused here rather than left to the deploy action, which reaches the same conclusion only
+      # after checking the repository out, installing the toolchain and running the whole build --
+      # and `wrangler` would not refuse it at all for `pages`, it would create a project named after
+      # an empty string.
+      - if: "inputs.target == 'pages'"
+        run: |
+          if [ -z "$PAGES_PROJECT" ]; then
+            echo "::error::pages_project is empty. Pass the Cloudflare Pages project name, from a repository variable rather than a literal -- 'wrangler pages deploy' CREATES a project that does not exist, so a stale name forks the site in two instead of failing."
+            exit 1
+          fi
+          echo "deploying the $DEPLOY_ENVIRONMENT environment under the $PAGES_BRANCH pages branch"
+        shell: 'bash'
+
+      - uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/cloudflare@main'
+        with:
+          cloudflare_api_token: '${{ secrets.cloudflare_api_token }}'
+          cloudflare_account_id: '${{ secrets.cloudflare_account_id }}'
+          target: '${{ inputs.target }}'
+          project_name: "${{ env.PAGES_PROJECT }}"
+          output_directory: '${{ inputs.output_directory }}'
+          branch: "${{ env.PAGES_BRANCH }}"
+          production_branch: '${{ inputs.pages_production_branch }}'
+          environment: "${{ env.DEPLOY_ENVIRONMENT }}"
+          # The SDK is installed IN-PROCESS rather than by a `setup-*` action in an earlier step,
+          # for two reasons that both come from this action checking the repository out itself.
+          # First, that checkout wipes the workspace, so anything an earlier step built is gone --
+          # only the tool cache and `$GITHUB_PATH` survive it. Second, `dart_ensure_sdk` exports
+          # `PATH` into its own shell and never writes `$GITHUB_PATH`, so it has to run in the same
+          # shell as the build; `build_command` is one `run:` block, which is exactly that shell.
+          #
+          # Sourcing the family's own `common.sh` rather than a third-party action is what keeps ONE
+          # answer to "which SDK": the same resolution the format, analyze and test jobs used.
+          build_command: |
+            . "$SCRIPTS_DIR/global/scripts/languages/dart/common.sh"
+            dart_ensure_sdk
+            ${{ inputs.build_command }}
+    needs: [ 'dart' ]
+    # `!failure()` rather than `success()` so a skipped upstream job does not take the deploy with
+    # it -- on a tag every job inside `dart.yaml` skips, and a bare `needs:` would stop production
+    # shipping altogether. A genuine CI failure on a branch still blocks. A pull request never
+    # deploys.
+    if: "!failure() && github.event_name != 'pull_request' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))"

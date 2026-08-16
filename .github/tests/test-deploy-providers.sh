@@ -589,6 +589,31 @@ assert_true "require-checks: a GitHub Actions composite action exists" \
 run_require_checks green.json
 assert_true "require-checks: every required check green passes the gate" "[[ $RC_STATUS -eq 0 ]]"
 
+# The reason this gate silently stopped working for one consumer: GitHub composes
+# a check's name from the calling job and the called workflow's job, so a stage
+# published as `tests > test:all` is RECORDED as `default / go / tests > test:all`
+# once it runs through a reusable workflow -- and the prefix changes again if
+# either job is renamed. Matching only on equality made every required name read
+# as missing, and the deploy could not be made to pass without pasting a prefix
+# that is not the caller's to guarantee.
+printf '{"name":"default / go / tests > test:all","conclusion":"success"}\n{"name":"default / go / code-check > style:golangci-lint","conclusion":"success"}\n' > "$RC_DIR/prefixed.json"
+run_require_checks prefixed.json
+assert_true "require-checks: a bare name matches a check GitHub prefixed with its caller" \
+  "[[ $RC_STATUS -eq 0 ]]"
+
+# The suffix is anchored on ' / ', so it matches a whole trailing segment and not
+# any name that merely ends with the same characters.
+printf '{"name":"smoke-tests > test:all","conclusion":"success"}\n{"name":"default / go / code-check > style:golangci-lint","conclusion":"success"}\n' > "$RC_DIR/lookalike.json"
+run_require_checks lookalike.json
+assert_true "require-checks: a name ending in the same text but not a whole segment does not match" \
+  "[[ $RC_STATUS -eq 1 ]]"
+
+# A prefixed check that FAILED must not be rescued by the looser matching.
+printf '{"name":"default / go / tests > test:all","conclusion":"failure"}\n{"name":"default / go / code-check > style:golangci-lint","conclusion":"success"}\n' > "$RC_DIR/prefixedfail.json"
+run_require_checks prefixedfail.json
+assert_true "require-checks: a failed prefixed check still fails the gate" \
+  "[[ $RC_STATUS -eq 1 ]]"
+
 # The regression this gate is most likely to grow: every workflow attaches its
 # runs to the same commit, so a keep-alive ping or a previous failed deploy must
 # not block the deploy -- the second of those would make the gate permanently

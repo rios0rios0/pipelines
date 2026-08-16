@@ -381,6 +381,10 @@ most likely to break, in order of how expensive the mistake was:
    environment selected — `vars.API_URL` there is the repository-level value, usually empty, with
    no error. Name environment-scoped variables through `build_env_vars` and pass environment-scoped
    secrets with `secrets: inherit`.
+9. **`secrets: inherit` trips Semgrep's `secrets-inherit` rule.** Suppress it at the call site with
+   `# nosemgrep: yaml.github-actions.security.secrets-inherit.secrets-inherit` and the reasoning —
+   the alternative it implies, repository-scoped secrets passed explicitly, is a WIDER exposure.
+   Never disable the rule globally.
 
 ### Platform and Language Support Matrix
 

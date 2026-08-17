@@ -21,10 +21,10 @@
 #     - template: '.ci/stages/40-delivery/terra.yaml'
 
 parameters:
-  # Steps injected before the Terraform SAST scanners (`sast:trivy`,
-  # `sast:semgrep`) run. Consumers with private Terraform modules pass the
-  # setup steps that configure SSH so the scanner's Terraform parser can
-  # resolve `source = "git@..."` references.
+  # Steps injected before the Terraform SAST scanner (`sast:semgrep`) runs.
+  # Consumers with private Terraform modules pass the setup steps that
+  # configure SSH so the scanner's Terraform parser can resolve
+  # `source = "git@..."` references.
   - name: 'PRE_STEPS'
     type: 'stepList'
     default: []

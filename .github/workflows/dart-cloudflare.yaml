@@ -63,11 +63,6 @@ on:
         required: false
         default: ''
         description: 'fnmatch patterns excluded from coverage. See dart.yaml.'
-      enable_sbom:
-        type: 'boolean'
-        required: false
-        default: true
-        description: 'Generate a CycloneDX SBOM. See dart.yaml.'
       target:
         type: 'string'
         required: false
@@ -218,7 +213,6 @@ jobs:
       test_args: ${{ inputs.test_args }}
       coverage_minimum: ${{ inputs.coverage_minimum }}
       coverage_exclude: ${{ inputs.coverage_exclude }}
-      enable_sbom: ${{ inputs.enable_sbom }}
 
   # fifth stage
   deployment-cloudflare:

@@ -74,11 +74,6 @@ on:
           generator that emits one string literal per line moves the total by tens of points
           without saying anything about whether the project is tested -- a floor a code generator
           can move is not measuring what it was put there to protect.
-      enable_sbom:
-        required: false
-        type: 'boolean'
-        default: true
-        description: 'Generate a CycloneDX SBOM and publish it as a job artifact.'
 
 # `ubuntu-latest` carries `curl`, `unzip`, `xz-utils`, `git`, `python3` and `jq`; a bare
 # self-hosted runner selected through `runs_on` carries none of them and must be provisioned
@@ -164,24 +159,6 @@ jobs:
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
-  security-sast_trivy:
-    name: 'security > sast:trivy'
-    runs-on: ${{ fromJSON(inputs.runs_on) }}
-    steps:
-      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy@main'
-    needs: [ 'code_check-style_format', 'code_check-quality_analyze', 'code_check-quality_unused_code' ]
-    continue-on-error: true
-    if: "!startsWith(github.ref, 'refs/tags/')"
-
-  security-sca_trivy:
-    name: 'security > sca:trivy'
-    runs-on: ${{ fromJSON(inputs.runs_on) }}
-    steps:
-      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy-sca@main'
-    needs: [ 'code_check-style_format', 'code_check-quality_analyze', 'code_check-quality_unused_code' ]
-    continue-on-error: true
-    if: "!startsWith(github.ref, 'refs/tags/')"
-
   security-sca_osv_scanner:
     name: 'security > sca:osv-scanner'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
@@ -209,28 +186,17 @@ jobs:
           test_args: ${{ inputs.test_args }}
           coverage_minimum: ${{ inputs.coverage_minimum }}
           coverage_exclude: ${{ inputs.coverage_exclude }}
-    needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_osv_scanner' ]
+    needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_osv_scanner' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 
-  # fourth stage
-  # The BOM is published as a job artifact rather than pushed to a server: unlike
-  # the GitLab and Azure DevOps templates, this workflow has no Dependency-Track
-  # credentials to assume. A consumer that runs Dependency-Track can download
-  # `bom.json` and upload it, or call the composite action directly with its own
-  # credentials.
-  management-report_sbom:
-    name: 'management > report:sbom'
-    runs-on: ${{ fromJSON(inputs.runs_on) }}
-    steps:
-      - uses: 'rios0rios0/pipelines/github/dart/stages/35-management/cyclonedx@main'
-        with:
-          flutter_version: ${{ inputs.flutter_version }}
-          dart_sdk_version: ${{ inputs.dart_sdk_version }}
-          toolchain: ${{ inputs.toolchain }}
-    needs: [ 'tests-test_all' ]
-    continue-on-error: true
-    if: "inputs.enable_sbom && !startsWith(github.ref, 'refs/tags/')"
+  # NOTE: there is no `management > report:sbom` job. Dependency-Track ingests
+  # CycloneDX, and pub has no native CycloneDX generator -- `package:sbom` emits
+  # SPDX, and `cdxgen` would drag a whole Node.js toolchain into a Dart job --
+  # so the BOM was produced by `trivy fs --format cyclonedx`. Trivy has been
+  # removed from this repository, so the job (and its `enable_sbom` input) was
+  # removed rather than left calling an action that no longer exists.
+  # `sca:osv-scanner` still covers the vulnerability scanning.
 
 
 # 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations

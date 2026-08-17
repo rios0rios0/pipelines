@@ -4,14 +4,10 @@ set -e
 # Dependency vulnerability scanning for pub packages, via OSV-Scanner.
 #
 # This is the Dart member of the family that already holds `govulncheck` (Go),
-# `safety` (Python) and OWASP Dependency-Check (Java): a language-native SCA
-# that runs ALONGSIDE the shared `sca:trivy` job rather than instead of it.
-# Two sources is the point. Trivy does read `pubspec.lock`, but its own
-# documentation records a real gap for this ecosystem -- Dart pins SDK-provided
-# dependencies (Flutter itself, and anything resolved through it) at version
-# `0.0.0`, and Trivy takes that literally, so those components are effectively
-# unmatched against any advisory. OSV queries the Pub advisory database that the
-# Dart team publishes into OSV.dev directly.
+# `safety` (Python) and OWASP Dependency-Check (Java): the language-native SCA
+# for pub. OSV queries the Pub advisory database that the Dart team publishes
+# into OSV.dev directly. It is the ONLY dependency scanner Dart has here --
+# OWASP Dependency-Check ships no pub analyzer.
 #
 # OSV-Scanner is fetched as a self-contained release binary from the project's
 # GitHub releases -- the same install shape as gitleaks, hadolint and shellcheck,
@@ -112,7 +108,7 @@ else
   echo "OSV-Scanner reported vulnerable dependencies:"
   # Render the findings back into the log. Without this the job goes red having
   # named not one package, and the only way to learn what broke is to download
-  # the artifact -- the same reasoning as the Trivy SCA runner's table render.
+  # the artifact.
   if command -v jq > /dev/null 2>&1 && jq -e . "$REPORT_FILE" > /dev/null 2>&1; then
     jq -r '
       .results[]?.packages[]? as $p

@@ -21,7 +21,8 @@
 #               language-agnostic packs only.
 #
 # Everything else applies to Dart unchanged: Gitleaks and Hadolint are
-# language-agnostic, and Trivy parses `pubspec.lock` natively.
+# language-agnostic. `sca:osv-scanner` below is the ONLY dependency scanner
+# Dart has here, since OWASP Dependency-Check ships no pub analyzer.
 variables:
   SEMGREP_LANG: 'dart'
 
@@ -29,15 +30,11 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/semgrep.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/gitleaks.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/hadolint.yaml'
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/trivy.yaml'
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/trivy-sca.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dart/abstracts/dart.yaml'
 
-# The Dart member of the `sca:govulncheck` / `sca:safety` family: a language
-# native scanner running ALONGSIDE `sca:trivy`, not instead of it. Trivy does
-# read `pubspec.lock`, but it records SDK-provided dependencies (Flutter itself
-# and anything resolved through it) at version `0.0.0`, so those components go
-# effectively unmatched. OSV queries the Pub advisory database directly.
+# The Dart member of the `sca:govulncheck` / `sca:safety` family, and the only
+# dependency scanner in this template: OSV queries the Pub advisory database
+# directly.
 sca:osv-scanner:
   extends: '.dart'
   stage: 'security (sca/sast)'

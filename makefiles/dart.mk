@@ -5,7 +5,7 @@
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #   -include $(SCRIPTS_DIR)/makefiles/dart.mk
 #
-# Targets provided: lint, analyze, test, unused, sca, cyclonedx, build, setup-dart
+# Targets provided: lint, analyze, test, unused, sca, build, setup-dart
 #
 # CODEQL_LANGUAGE IS DELIBERATELY NOT SET, and `common.mk`'s `sast` target is
 # narrowed below because of it. CodeQL has no Dart extractor at all
@@ -16,8 +16,7 @@
 #
 # The `sca` target is the Dart counterpart of `make safety` (Python) and
 # `govulncheck` (Go): it runs OSV-Scanner over `pubspec.lock` against the Pub
-# advisory database, which covers the SDK-provided dependencies Trivy records as
-# version `0.0.0` and therefore cannot match.
+# advisory database.
 #
 # Prerequisites: none. The Dart or Flutter SDK is installed on demand from
 # Google's release archive, and the toolchain is chosen from your pubspec.yaml.
@@ -26,7 +25,7 @@ SEMGREP_LANGUAGE ?= dart
 export PREFIX ?= .
 export REPORT_PATH ?= ./reports
 
-.PHONY: setup-dart lint format analyze test unused sca cyclonedx build sast
+.PHONY: setup-dart lint format analyze test unused sca build sast
 
 setup-dart:
 	@$(SCRIPTS_DIR)/global/scripts/languages/dart/setup/run.sh
@@ -53,9 +52,6 @@ unused:
 
 sca:
 	@$(SCRIPTS_DIR)/global/scripts/languages/dart/sca/run.sh
-
-cyclonedx:
-	@$(SCRIPTS_DIR)/global/scripts/languages/dart/cyclonedx/run.sh
 
 build:
 	@$(SCRIPTS_DIR)/global/scripts/languages/dart/build/run.sh

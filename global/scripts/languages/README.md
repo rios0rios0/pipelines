@@ -42,4 +42,4 @@ offline, with no SDK and no network.
 - Configuration files stored here serve as **defaults**. If the consuming project has its own configuration file, the script either merges it (golangci-lint) or skips generation (goreleaser).
 - These tools are invoked by CI pipelines and by local Makefiles.
 
-For **language-agnostic** tools (e.g., CodeQL, Semgrep, Gitleaks, Trivy), see [`../tools/`](../tools/).
+For **language-agnostic** tools (e.g., CodeQL, Semgrep, Gitleaks, Hadolint), see [`../tools/`](../tools/).

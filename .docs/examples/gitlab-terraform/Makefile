@@ -8,7 +8,7 @@ plan:
 apply:
 	terraform apply -auto-approve
 
-# -- Pipeline targets (lint, test, sast, secrets, hadolint, trivy, semgrep, security, setup) --
+# -- Pipeline targets (lint, test, sast, secrets, hadolint, semgrep, security, setup) --
 
 -include $(SCRIPTS_DIR)/makefiles/terraform.mk
 -include $(SCRIPTS_DIR)/makefiles/common.mk

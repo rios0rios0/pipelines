@@ -16,6 +16,15 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING CHANGE:** removed Trivy from every platform, script, Makefile target and document in this repository, following the report that the tool was compromised and exfiltrated data. Deleted `global/scripts/tools/trivy/` (`run.sh`, `run-sca.sh`, and the fleet-wide `.trivyignore`), the `sast:trivy` and `sca:trivy` jobs on all three platforms (`{gitlab,azure-devops}/global/stages/20-security/trivy{,-sca}.yaml` and `github/global/stages/20-security/trivy{,-sca}/`), the `trivy` target from `makefiles/common.mk` (and from `sast`), and `make test-trivy-merge` with its `.github/tests/test-trivy-merge.sh`. **Consumers must remove any `sast:trivy` / `sca:trivy` entry from a `require-checks` list**, or the gate waits forever on a job that no longer runs. A project `.trivyignore` is now inert and can be deleted
+- **BREAKING CHANGE:** removed SBOM generation for Terraform and Dart, because `trivy filesystem --format cyclonedx` was its only implementation and neither ecosystem has a native replacement — Terraform has no other CycloneDX generator that reads `.terraform.lock.hcl` provider pins and module `source =` references, and for pub `package:sbom` emits SPDX while `cdxgen` would pull a whole Node.js toolchain into a Dart job. Deleted `global/scripts/languages/{terraform,dart}/cyclonedx/`, the `report:dependency-track` job from the Terraform (Azure DevOps) and Dart (all three platforms) `35-management` stages, the `management > report:sbom` job and its `enable_sbom` input from `dart.yaml` / `dart-cloudflare.yaml`, and the `cyclonedx` target from `makefiles/dart.mk`. Go and Python SBOMs are unaffected — they use `cyclonedx-gomod` and `cyclonedx-py`. Every removal site carries a comment stating why the job is absent, so it is not restored by accident
+
+### Changed
+
+- changed the SCA coverage statement across `README.md`, `CLAUDE.md` and `.github/copilot-instructions.md` to match what actually runs now that the all-languages `sca:trivy` job is gone: Go keeps `govulncheck`, Python `safety`, Java OWASP Dependency-Check, JavaScript `yarn npm audit` / `npm audit`, PHP `composer audit`, Ruby `bundler-audit` and Dart OSV-Scanner — while **.NET, Helm, Logstash and Terraform are left with no dependency scanner**, and no language retains an IaC misconfiguration scanner. The Dart documentation moves from "two tools in the standard stack do not support Dart" to three, since Dependency-Track joins CodeQL and OWASP Dependency-Check as unreachable for pub
+
 ## [4.23.0] - 2026-08-16
 
 ### Added

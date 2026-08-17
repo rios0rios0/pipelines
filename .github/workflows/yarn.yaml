@@ -169,24 +169,6 @@ jobs:
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
-  security-sast_trivy:
-    name: 'security > sast:trivy'
-    runs-on: ${{ fromJSON(inputs.runs_on) }}
-    steps:
-      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy@main'
-    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
-    continue-on-error: true
-    if: "!startsWith(github.ref, 'refs/tags/')"
-
-  security-sca_trivy:
-    name: 'security > sca:trivy'
-    runs-on: ${{ fromJSON(inputs.runs_on) }}
-    steps:
-      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/trivy-sca@main'
-    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
-    continue-on-error: true
-    if: "!startsWith(github.ref, 'refs/tags/')"
-
   security-sca_yarn_audit:
     name: 'security > sca:yarn-audit'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
@@ -277,7 +259,7 @@ jobs:
           name: 'coverage-report'
           path: 'coverage/'
           retention-days: 30
-    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_yarn_audit' ]
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_yarn_audit' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   tests-test_build:
@@ -312,7 +294,7 @@ jobs:
           yarn install --immutable
           yarn build
         shell: 'bash'
-    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_trivy', 'security-sca_trivy', 'security-sca_yarn_audit' ]
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_yarn_audit' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 
@@ -322,7 +304,7 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     container:
       image: 'sonarsource/sonar-scanner-cli:6.2.1'
-    needs: ['tests-test_all']
+    needs: [ 'tests-test_all' ]
     if: "inputs.sonar_host != '' && !startsWith(github.ref, 'refs/tags/')"
     continue-on-error: true
     steps:

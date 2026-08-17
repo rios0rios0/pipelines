@@ -191,7 +191,7 @@ echo ""
 echo "--- 1. Scripts exist, are executable, and declare POSIX sh ---"
 # ---------------------------------------------------------------------------
 
-for script in setup format analyze test unused sca cyclonedx build publish; do
+for script in setup format analyze test unused sca build publish; do
   assert_true "$script/run.sh exists" "[[ -f '$DART_DIR/$script/run.sh' ]]"
   assert_true "$script/run.sh is executable" "[[ -x '$DART_DIR/$script/run.sh' ]]"
   assert_true "$script/run.sh declares '#!/usr/bin/env sh'" \
@@ -844,7 +844,7 @@ print('yes' if steps and 'inputs.${pair%%:*}' in steps[0]['env']['${pair##*:}'] 
 done
 
 for action in 10-code-check/format 10-code-check/analyze 10-code-check/unused \
-              20-security/osv-scanner 30-tests/all 35-management/cyclonedx \
+              20-security/osv-scanner 30-tests/all \
               40-delivery/build 40-delivery/publish; do
   assert_true "GitHub: the $action composite action exists" \
     "[[ -f '$SCRIPTS_DIR/github/dart/stages/$action/action.yaml' ]]"
@@ -882,12 +882,12 @@ for runner in format analyze unused test sca build publish; do
   done
 done
 
-# The SBOM generator is reached on all three, though GitHub publishes the BOM as
-# an artifact rather than pushing it to a Dependency-Track it has no credentials
-# for.
+# No SBOM generator is asserted: pub has no native CycloneDX generator, so the
+# BOM was produced by Trivy, which has been removed from this repository. The
+# assertion below is the inverse -- nothing may reference the deleted runner.
 for platform in gitlab/dart azure-devops/dart github/dart; do
-  assert_true "$platform references the cyclonedx runner" \
-    "grep -rq 'languages/dart/cyclonedx/run.sh' '$SCRIPTS_DIR/$platform'"
+  assert_true "$platform does NOT reference the removed cyclonedx runner" \
+    "! grep -rq 'languages/dart/cyclonedx/run.sh' '$SCRIPTS_DIR/$platform'"
 done
 
 # ---------------------------------------------------------------------------

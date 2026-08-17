@@ -90,12 +90,11 @@ pipelines/
 │   │   │   ├── hadolint/      # Dockerfile linting
 │   │   │   ├── semgrep/       # Static analysis
 │   │   │   ├── sonarqube/     # Code quality
-│   │   │   ├── trivy/         # IaC misconfiguration scanning
 │   │   │   └── dependency-track/ # SCA analysis
 │   │   ├── languages/         # Language-specific scripts
 │   │   │   ├── golang/        # Go scripts (test, cyclonedx, golangci-lint, init)
 │   │   │   ├── dart/          # Dart/Flutter scripts (setup, format, analyze,
-│   │   │   │                  #   test, unused, sca, cyclonedx, build, publish)
+│   │   │   │                  #   test, unused, sca, build, publish)
 │   │   │   └── python/        # Python scripts (cyclonedx)
 │   │   ├── deploy/            # MVP hosting providers (50-deployment stage)
 │   │   │   ├── cloudflare/    # Cloudflare Pages + Workers
@@ -787,13 +786,11 @@ Create these variable groups in Azure DevOps Library:
 | **CodeQL**           | SAST security scanning        | `global/scripts/tools/codeql/`           | Auto-configured       |
 | **Semgrep**          | Static analysis               | `global/scripts/tools/semgrep/`          | Auto-configured       |
 | **Hadolint**         | Dockerfile linting            | `global/scripts/tools/hadolint/`         | `.hadolint.yaml`      |
-| **Trivy IaC**        | IaC misconfiguration scanning | `global/scripts/tools/trivy/run.sh`      | `.trivyignore` (global + project, merged) |
 
 #### SCA (Software Composition Analysis)
 
 | Tool                       | Purpose                           | Languages  | Script / Integration                           |
 |----------------------------|-----------------------------------|------------|------------------------------------------------|
-| **Trivy SCA**              | Dependency vulnerability scanning | All        | `global/scripts/tools/trivy/run-sca.sh`        |
 | **govulncheck**            | Go vulnerability scanning         | Go         | `global/scripts/languages/golang/govulncheck/` |
 | **Safety**                 | Python dependency scanning        | Python     | `pdm run safety-scan`                          |
 | **OWASP Dependency-Check** | Java dependency scanning          | Java       | `global/scripts/languages/java/dependency-check/` |
@@ -862,13 +859,12 @@ Optional environment variables:
 | **test**         | Tests + coverage → JUnit, Cobertura and LCOV               | `global/scripts/languages/dart/test/`        |
 | **unused**       | Unused code and unused file detection (`dart_code_linter`)  | `global/scripts/languages/dart/unused/`      |
 | **sca**          | OSV-Scanner over `pubspec.lock` (Pub advisory database)     | `global/scripts/languages/dart/sca/`         |
-| **cyclonedx**    | SBOM generation for pub projects                            | `global/scripts/languages/dart/cyclonedx/`   |
 | **build**        | Release artifacts (APK, AAB, web, exe, …)                   | `global/scripts/languages/dart/build/`       |
 | **publish**      | pub.dev publication with validation gate                    | `global/scripts/languages/dart/publish/`     |
 
 The toolchain is detected from the project's own `pubspec.yaml` — a `flutter:
 sdk: flutter` dependency selects `flutter`, anything else selects `dart` — so
-the same nine scripts serve a Flutter app and a pure Dart package. Override with
+the same eight scripts serve a Flutter app and a pure Dart package. Override with
 `DART_TOOLCHAIN=dart|flutter`.
 
 The SDK is downloaded from `storage.googleapis.com` rather than pulled as a
@@ -878,9 +874,9 @@ trips that limit.
 
 ##### Dart & Flutter Tool Coverage
 
-**Two tools in this repository's standard stack do not support Dart.** Both gaps
-are handled by a deliberate absence or substitution, not by a job that silently
-checks nothing:
+**Three tools in this repository's standard stack do not support Dart.** Each
+gap is handled by a deliberate absence or substitution, not by a job that
+silently checks nothing:
 
 | Tool                       | Dart support                                                                 | What the pipeline does                                                                                  |
 |----------------------------|------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
@@ -888,10 +884,9 @@ checks nothing:
 | **Semgrep** (registry)     | ⚠️ Engine parses Dart (experimental); registry publishes **zero** Dart rules — `p/dart` is a 404 and `r/dart` returns an empty `rules: []` | The job runs. The shared runner skips the unpublished pack instead of failing, and loads the **first-party Dart ruleset** shipped at `global/scripts/tools/semgrep/rules/dart.yaml`. |
 | **OWASP Dependency-Check** | ❌ No pub analyzer                                                            | Replaced by **OSV-Scanner**, which queries the Pub advisory database directly.                            |
 | **Semgrep** (engine)       | ✅ Experimental                                                               | Runs the language-agnostic packs plus the shipped Dart rules.                                             |
-| **Trivy** (IaC + SCA)      | ✅ Parses `pubspec.lock`                                                      | Runs unchanged. Note it records SDK-provided dependencies as version `0.0.0`, which is why OSV-Scanner runs alongside it. |
 | **Gitleaks / Hadolint / ShellCheck** | ✅ Language-agnostic                                               | Run unchanged.                                                                                            |
 | **SonarQube**              | ✅ First-party Dart analyzer (Server 10.7+/Cloud); community `sonar-flutter` on older servers | Both `sonar.dart.lcov.reportPaths` and `sonar.flutter.coverage.reportPath` are written, so either implementation finds the coverage. |
-| **Dependency-Track**       | ✅ via CycloneDX                                                              | BOM generated with Trivy (`package:sbom` emits SPDX only; `cdxgen` would need a Node.js toolchain).        |
+| **Dependency-Track**       | ❌ No BOM generator                                                           | **No SBOM job.** pub has no native CycloneDX generator (`package:sbom` emits SPDX only; `cdxgen` would need a Node.js toolchain), and the Trivy-backed generator was removed with Trivy. |
 
 The shipped Semgrep ruleset covers the Dart and Flutter issues that are both
 high-consequence and reliably expressible as a pattern — TLS verification
@@ -914,7 +909,6 @@ since that is where every lint lands).
 | **tftest-gen**   | Smoke-test generator for single-module repos         | `global/scripts/languages/terraform/tftest-gen/`      |
 | **terra-test**   | `terraform test` runner over module test suites      | `global/scripts/languages/terraform/terra-test/`      |
 | **validate**     | `terraform validate` over root modules (opt-in)      | `global/scripts/languages/terraform/validate/`        |
-| **CycloneDX**    | SBOM generation for Terraform projects               | `global/scripts/languages/terraform/cyclonedx/`       |
 
 #### MVP Hosting Providers
 
@@ -966,7 +960,7 @@ Only `python3` is required (no Terraform binary). The `--fix` rewriter is round-
 make setup      # Clone/update pipelines repo
 make lint       # Run golangci-lint
 make test       # Run Go tests with coverage
-make security   # Run all security tools (CodeQL, Gitleaks, Hadolint, Trivy, Semgrep)
+make security   # Run all security tools (CodeQL, Gitleaks, Hadolint, Semgrep)
 ```
 
 #### Configure Go Linting Globally
@@ -1218,7 +1212,6 @@ $SCRIPTS_DIR/global/scripts/languages/golang/test/run.sh
 $SCRIPTS_DIR/global/scripts/tools/gitleaks/run.sh
 $SCRIPTS_DIR/global/scripts/tools/codeql/run.sh go
 $SCRIPTS_DIR/global/scripts/tools/hadolint/run.sh
-$SCRIPTS_DIR/global/scripts/tools/trivy/run.sh
 $SCRIPTS_DIR/global/scripts/tools/semgrep/run.sh
 ```
 
@@ -1311,11 +1304,6 @@ Two mechanisms guard against this:
 
 - **Cause:** No Dockerfiles found in the project
 - **Solution:** This is expected for projects without Dockerfiles; Hadolint auto-skips gracefully
-
-**Issue: Trivy IaC scan finds false positives**
-
-- **Cause:** Trivy flags misconfigurations in Terraform, Kubernetes, or Dockerfiles
-- **Solution:** Add entries to `.trivyignore` in the project root to suppress known false positives. The project file is **merged with** (appended to) the always-applied global ignore in `global/scripts/tools/trivy/.trivyignore` — put fleet-wide, well-understood false positives there so every project inherits them
 
 #### Platform-Specific Issues
 

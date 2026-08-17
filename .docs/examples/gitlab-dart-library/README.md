@@ -26,7 +26,7 @@ curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh |
 
 make lint       # dart format --fix, dart analyze, unused-code scan
 make test       # dart test with coverage -> JUnit + Cobertura + LCOV
-make sast       # Semgrep, Trivy, Hadolint, ShellCheck, Gitleaks, OSV-Scanner
+make sast       # Semgrep, Hadolint, ShellCheck, Gitleaks, OSV-Scanner
 make cyclonedx  # CycloneDX SBOM at build/reports/bom.json
 ```
 

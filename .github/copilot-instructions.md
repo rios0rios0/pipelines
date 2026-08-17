@@ -7,12 +7,11 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, workflow-composition)
+- `make test` - Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, workflow-composition)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-go-integration-scope` - Test which packages the Go runner's integration phase selects specifically
 - `make test-lambda` - Test Lambda template validation specifically
 - `make test-yaml-merge` - Test YAML merge validation specifically
-- `make test-trivy-merge` - Test Trivy global+project `.trivyignore` merge specifically
 - `make test-sonarqube` - Test SonarQube auto-derivation specifically
 - `make test-release-tag-idempotency` - Test release tag idempotency specifically
 - `make test-tftest-gen` - Test tftest-gen generator specifically
@@ -37,8 +36,8 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - **GitLab CI:** Include `gitlab/golang/go-docker.yaml`, `gitlab/terraform/terra.yaml` from this repo
 - **Azure DevOps:** Template `azure-devops/golang/go-docker.yaml@pipelines`
 
-**SAST Tools:** Gitleaks, CodeQL, Semgrep, Hadolint, ShellCheck, Trivy IaC
-**SCA Tools:** Trivy SCA (all languages), govulncheck (Go), Safety (Python), OWASP Dependency-Check (Java), yarn npm audit (JavaScript/Yarn), npm audit (JavaScript/npm), Composer Audit (PHP), bundler-audit (Ruby)
+**SAST Tools:** Gitleaks, CodeQL, Semgrep, Hadolint, ShellCheck
+**SCA Tools:** govulncheck (Go), Safety (Python), OWASP Dependency-Check (Java), yarn npm audit (JavaScript/Yarn), npm audit (JavaScript/npm), Composer Audit (PHP), bundler-audit (Ruby), OSV-Scanner (Dart)
 **Quality Tools:** SonarQube, Dependency Track
 **Performance:** Security scans 2-10min, Container builds 5-30min
 **Architecture:** 5-stage pipeline (Code Check [lint + basic-checks] → Security → Tests → Management → Delivery)
@@ -106,7 +105,6 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ### Scripts That Require Environment Variables
 - **codeql/run.sh** - Requires language argument (e.g., go, python, java, javascript, csharp)
 - **hadolint/run.sh** - Auto-discovers Dockerfiles, skips gracefully if none found
-- **trivy/run.sh** - Scans IaC misconfigurations (Terraform, Kubernetes, Dockerfiles)
 - **dependency-track/run.sh** - Requires `DEPENDENCY_TRACK_TOKEN` and `DEPENDENCY_TRACK_HOST_URL`
 - **sonarqube/run.sh** - Requires `sonar-scanner` installed and SonarQube environment
 - **semgrep/run.sh** - May run for 10+ minutes, installs Semgrep from PyPI into a virtualenv
@@ -125,13 +123,11 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 | **Semgrep**   | Static analysis               | `global/scripts/tools/semgrep/`     | Auto-configured  |
 | **Hadolint**  | Dockerfile linting            | `global/scripts/tools/hadolint/`    | `.hadolint.yaml` |
 | **ShellCheck** | Shell script linting          | `global/scripts/tools/shellcheck/`  | Auto-configured  |
-| **Trivy IaC** | IaC misconfiguration scanning | `global/scripts/tools/trivy/run.sh` | `.trivyignore` (global in `global/scripts/tools/trivy/.trivyignore`, always applied; project's own appended) |
 
 #### SCA Tools
 
 | Tool                       | Purpose                           | Languages  | Script / Integration                           |
 |----------------------------|-----------------------------------|------------|------------------------------------------------|
-| **Trivy SCA**              | Dependency vulnerability scanning | All        | `global/scripts/tools/trivy/run-sca.sh`        |
 | **govulncheck**            | Go vulnerability scanning         | Go         | `global/scripts/languages/golang/govulncheck/` |
 | **Safety**                 | Python dependency scanning        | Python     | `pdm run safety-scan`                          |
 | **OWASP Dependency-Check** | Java dependency scanning          | Java       | `global/scripts/languages/java/dependency-check/` |
@@ -177,15 +173,15 @@ One set of scripts serves both toolchains: `dart_detect_toolchain` reads the pro
 | **test**         | Tests + coverage → JUnit, Cobertura, LCOV                   | `global/scripts/languages/dart/test/run.sh`      |
 | **unused**       | Unused code and unused file detection                        | `global/scripts/languages/dart/unused/run.sh`    |
 | **sca**          | OSV-Scanner over `pubspec.lock`                              | `global/scripts/languages/dart/sca/run.sh`       |
-| **cyclonedx**    | SBOM generation for pub projects                             | `global/scripts/languages/dart/cyclonedx/run.sh` |
 | **build**        | Release artifacts (APK, AAB, web, exe, …)                    | `global/scripts/languages/dart/build/run.sh`     |
 | **publish**      | pub.dev publication with a validation gate                   | `global/scripts/languages/dart/publish/run.sh`   |
 
-**Two tools in the standard stack do not support Dart, and both gaps are handled deliberately — do not "restore consistency" with the other languages:**
+**Three tools in the standard stack do not support Dart, and each gap is handled deliberately — do not "restore consistency" with the other languages:**
 
 - **CodeQL is omitted from every Dart template.** It ships no Dart extractor ([dart-lang/sdk#52953](https://github.com/dart-lang/sdk/issues/52953)); a `sast:codeql` job could only fail. `makefiles/dart.mk` leaves `CODEQL_LANGUAGE` unset and `common.mk` skips the target with an explanation.
 - **The Semgrep Registry publishes no Dart rules** (`p/dart` is HTTP 404, `r/dart` returns an empty `rules: []`). `semgrep/run.sh` probes the registry and skips a missing pack — passing one is fatal to the whole invocation — then loads this repository's own ruleset from `global/scripts/tools/semgrep/rules/dart.yaml`.
-- **OWASP Dependency-Check has no pub analyzer**, so OSV-Scanner covers Dart SCA alongside `sca:trivy` (Trivy reads `pubspec.lock` but records SDK-provided dependencies at version `0.0.0`, leaving them unmatched).
+- **OWASP Dependency-Check has no pub analyzer**, so OSV-Scanner is the only Dart SCA — it queries the Pub advisory database directly.
+- **pub has no native CycloneDX generator** (`package:sbom` emits SPDX; `cdxgen` needs a Node.js toolchain), so there is **no SBOM job for Dart**. The BOM used to come from Trivy, which has been removed from this repository.
 
 `.github/tests/test-dart-pipeline.sh` fails if any of these decisions is reverted.
 
@@ -280,7 +276,6 @@ pipelines/
 │   │   │   ├── hadolint/      # Dockerfile linting
 │   │   │   ├── semgrep/       # Static analysis
 │   │   │   ├── sonarqube/     # Code quality
-│   │   │   ├── trivy/         # IaC misconfiguration scanning
 │   │   │   └── dependency-track/ # SCA analysis
 │   │   ├── languages/         # Language-specific scripts
 │   │   │   ├── golang/        # Go scripts (test, cyclonedx, golangci-lint, goreleaser, govulncheck, cross-compile, init)
@@ -306,7 +301,7 @@ pipelines/
 │   │   ├── mssql-tools18.latest/ # Microsoft SQL Server tools
 │   │   └── tor-proxy.latest/  # Network proxy tools
 ├── makefiles/                  # Includable Makefile fragments for local usage
-│   ├── common.mk              # Security tools (sast, secrets, hadolint, trivy, semgrep)
+│   ├── common.mk              # Security tools (sast, secrets, hadolint, semgrep)
 │   ├── golang.mk              # Go-specific targets (lint, test)
 │   ├── python.mk              # Python/PDM targets (lint, test)
 │   ├── java.mk                # Java/Gradle targets (lint, test)
@@ -697,9 +692,6 @@ $SCRIPTS_DIR/global/scripts/tools/codeql/run.sh go
 # Run Dockerfile linting
 $SCRIPTS_DIR/global/scripts/tools/hadolint/run.sh
 
-# Run IaC misconfiguration scanning
-$SCRIPTS_DIR/global/scripts/tools/trivy/run.sh
-
 # Run static analysis (can take 10+ minutes)
 $SCRIPTS_DIR/global/scripts/tools/semgrep/run.sh
 ```
@@ -742,7 +734,7 @@ docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/
 
 ### Test Suite Usage
 ```bash
-# Run all validation tests (Go, Lambda, YAML merge, Trivy merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile)
+# Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile)
 make test
 
 # Run individual test suites
@@ -750,7 +742,6 @@ make test-go-script
 make test-go-integration-scope
 make test-lambda
 make test-yaml-merge
-make test-trivy-merge
 make test-sonarqube
 make test-release-tag-idempotency
 make test-tftest-gen

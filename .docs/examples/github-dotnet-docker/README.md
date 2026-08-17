@@ -31,6 +31,6 @@ make security   # Run all security tools at once
 ## What the Pipeline Does
 
 1. **Code Check** -- dotnet format verification
-2. **Security** -- CodeQL, Semgrep, Gitleaks, Hadolint, Trivy
+2. **Security** -- CodeQL, Semgrep, Gitleaks, Hadolint
 3. **Tests** -- dotnet test with code coverage
 4. **Delivery** -- Docker image build and push to `ghcr.io`

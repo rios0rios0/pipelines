@@ -22,10 +22,6 @@ stages:
 
       - template: '../../../global/stages/20-security/hadolint.yaml'
 
-      - template: '../../../global/stages/20-security/trivy.yaml'
-
-      - template: '../../../global/stages/20-security/trivy-sca.yaml'
-
       - job: 'sca_yarn_audit'
         displayName: 'sca:yarn-audit'
         steps:

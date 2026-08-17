@@ -33,7 +33,7 @@ make security   # Run all security tools at once
 ## What the Pipeline Does
 
 1. **Code Check** -- golangci-lint
-2. **Security** -- CodeQL, Semgrep, Gitleaks, Hadolint, Trivy
+2. **Security** -- CodeQL, Semgrep, Gitleaks, Hadolint
 3. **Tests** -- Go test with coverage reporting
 4. **Management** -- SonarQube, Dependency Track, CycloneDX SBOM
 5. **Delivery** -- Docker image build and push

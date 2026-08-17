@@ -32,9 +32,10 @@ report:sonarqube:
       fi
     - !reference [ .sonarqube, script ]
 
-report:dependency-track:
-  extends: [ '.dart', '.dependency-track' ]
-  script:
-    - mkdir -p "$PREFIX$REPORT_PATH"
-    - $SCRIPTS_DIR/global/scripts/languages/dart/cyclonedx/run.sh
-    - !reference [ .dependency-track, script ]
+# NOTE: there is no `report:dependency-track` job for Dart. Dependency-Track
+# ingests CycloneDX, and pub has no native CycloneDX generator -- `package:sbom`
+# emits SPDX, and `cdxgen` would drag a whole Node.js toolchain into a Dart job
+# -- so the BOM was produced by `trivy fs --format cyclonedx`. Trivy has been
+# removed from this repository, so the job was removed rather than left calling
+# a script that no longer exists. `sca:osv-scanner` still covers the
+# vulnerability scanning; only the BOM upload is gone.

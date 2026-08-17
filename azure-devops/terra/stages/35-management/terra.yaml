@@ -10,32 +10,10 @@ stages:
           # found` and turns the job yellow. Skip it.
           DOWNLOAD_COVERAGE_ARTIFACT: false
 
-      - job: 'report_dependency_track'
-        displayName: 'report:dependency-track'
-        variables:
-          REPORT_PATH: 'build/reports'
-        steps:
-          - template: '../../../global/abstracts/scripts-repo.yaml'
-
-          # Generate a CycloneDX BOM for the Terraform project via
-          # `trivy fs --format cyclonedx`. Captures provider pins from
-          # `.terraform.lock.hcl` and module source references. Writes to
-          # `$(REPORT_PATH)/bom.json` so the upload script below finds it.
-          - script: $(Scripts.Directory)/global/scripts/languages/terraform/cyclonedx/run.sh
-            displayName: 'Generate CycloneDX BOM'
-
-          - script: $(Scripts.Directory)/global/scripts/tools/dependency-track/run.sh
-            displayName: 'Upload BOM to Dependency-Track'
-            # Azure Pipelines does NOT auto-expose secret variables to the
-            # script's environment — the value of `$(DEPENDENCY_TRACK_TOKEN)`
-            # is substituted at task-parse time, but the shell's
-            # `$DEPENDENCY_TRACK_TOKEN` only exists if explicitly mapped
-            # here. Without this block, `run.sh` would send
-            # `X-Api-Key: ` (empty) and DT would reject every upload with
-            # `HTTP 401`. `DEPENDENCY_TRACK_HOST_URL` is mapped alongside
-            # for symmetry, even though non-secret variables are already
-            # auto-exposed.
-            env:
-              DEPENDENCY_TRACK_TOKEN: $(DEPENDENCY_TRACK_TOKEN)
-              DEPENDENCY_TRACK_HOST_URL: $(DEPENDENCY_TRACK_HOST_URL)
-        continueOnError: true
+      # NOTE: there is no `report:dependency-track` job for Terraform.
+      # Dependency-Track ingests CycloneDX, and the BOM here was produced by
+      # `trivy fs --format cyclonedx` — the only CycloneDX generator that reads
+      # `.terraform.lock.hcl` provider pins and module `source =` references.
+      # Trivy has been removed from this repository, and no replacement
+      # Terraform BOM generator has been wired yet, so the job was removed
+      # rather than left calling a script that no longer exists.

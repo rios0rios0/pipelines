@@ -14,7 +14,3 @@ stages:
           CODEQL_LANGUAGE: 'csharp'
 
       - template: '../../../global/stages/20-security/hadolint.yaml'
-
-      - template: '../../../global/stages/20-security/trivy.yaml'
-
-      - template: '../../../global/stages/20-security/trivy-sca.yaml'

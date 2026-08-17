@@ -12,12 +12,11 @@ This directory contains **language-agnostic** security and quality tools used ac
 | `hadolint/`         | Dockerfile linting and best practices                              |
 | `semgrep/`          | Pattern-based static analysis (OWASP, secrets, best practices)     |
 | `sonarqube/`        | Code quality and security analysis                                 |
-| `trivy/`            | Infrastructure-as-Code misconfiguration and vulnerability scanning |
 
 ## Convention
 
 - Each tool directory contains a `run.sh` entry point.
-- Configuration files (e.g., `.gitleaks.toml`, `.hadolint.yaml`, `.trivyignore`) are stored alongside the script.
+- Configuration files (e.g., `.gitleaks.toml`, `.hadolint.yaml`) are stored alongside the script.
 - These tools are invoked by CI pipelines (GitHub Actions, GitLab CI, Azure DevOps) and by local Makefiles.
 
 For **language-specific** tools (e.g., golangci-lint, checkstyle, goreleaser), see [`../languages/`](../languages/).

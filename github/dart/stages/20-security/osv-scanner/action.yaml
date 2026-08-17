@@ -1,11 +1,9 @@
 # Pub dependency vulnerability scanning via OSV-Scanner.
 #
-# The Dart member of the `govulncheck` / `safety` / Dependency-Check family: a
-# language-native SCA running ALONGSIDE the shared `sca:trivy` job, not instead
-# of it. Trivy does read `pubspec.lock`, but it records SDK-provided dependencies
-# (Flutter itself and anything resolved through it) at version `0.0.0`, leaving
-# those components unmatched against any advisory. OSV queries the Pub advisory
-# database the Dart team publishes into OSV.dev directly.
+# The Dart member of the `govulncheck` / `safety` / Dependency-Check family,
+# and the only dependency scanner Dart has here -- OWASP Dependency-Check ships
+# no pub analyzer. OSV queries the Pub advisory database the Dart team publishes
+# into OSV.dev directly.
 inputs:
   flutter_version:
     required: false

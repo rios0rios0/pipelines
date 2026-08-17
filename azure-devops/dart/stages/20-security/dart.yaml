@@ -16,8 +16,9 @@
 #               ruleset this repository ships at
 #               `global/scripts/tools/semgrep/rules/dart.yaml`.
 #
-# Gitleaks and Hadolint are language-agnostic, and Trivy parses `pubspec.lock`
-# natively, so those apply to Dart unchanged.
+# Gitleaks and Hadolint are language-agnostic, so those apply to Dart
+# unchanged. `sca:osv-scanner` below is the ONLY dependency scanner Dart has
+# here, since OWASP Dependency-Check ships no pub analyzer.
 stages:
   - stage: 'security'
     displayName: 'security (sca/sast)'
@@ -31,14 +32,9 @@ stages:
 
       - template: '../../../global/stages/20-security/hadolint.yaml'
 
-      - template: '../../../global/stages/20-security/trivy.yaml'
-
-      - template: '../../../global/stages/20-security/trivy-sca.yaml'
-
-      # The Dart member of the `sca:govulncheck` / `sca:safety` family, running
-      # ALONGSIDE `sca:trivy` rather than instead of it: Trivy records SDK
-      # provided dependencies at version `0.0.0`, leaving them unmatched against
-      # any advisory, while OSV queries the Pub advisory database directly.
+      # The Dart member of the `sca:govulncheck` / `sca:safety` family, and the
+      # only dependency scanner in this template: OSV queries the Pub advisory
+      # database directly.
       - job: 'sca_osv_scanner'
         displayName: 'sca:osv-scanner'
         steps:

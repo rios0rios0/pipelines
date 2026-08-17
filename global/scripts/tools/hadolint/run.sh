@@ -53,8 +53,7 @@ fi
 # (exit 127) at the lint call below. The install is now hardened: the lookup
 # and the download are retried with backoff, the resolved version is validated
 # non-empty (falling back to a pinned version otherwise), and the binary is
-# verified to actually run before linting. Mirrors the Trivy install-retry
-# idiom in `global/scripts/tools/trivy/run.sh`.
+# verified to actually run before linting.
 # Self-update an already-installed Hadolint on persistent agents so long-lived
 # hosts stay current for CVE fixes. Resolves the latest tag via the
 # `releases/latest` redirect (not API-rate-limited). Fail-safe: any uncertainty

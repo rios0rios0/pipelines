@@ -7,25 +7,11 @@ stages:
         parameters:
           COVERAGE_ARTIFACT_TARGET_PATH: "$(Build.SourcesDirectory)/build/reports"
 
-      - job: 'report_dependency_track'
-        displayName: 'report:dependency-track'
-        variables:
-          REPORT_PATH: 'build/reports'
-        steps:
-          # $(Scripts.Directory) is defined by the template below.
-          - template: '../../abstracts/dart.yaml'
-
-          - script: $(Scripts.Directory)/global/scripts/languages/dart/cyclonedx/run.sh
-            displayName: 'Generate the CycloneDX BOM'
-
-          - script: $(Scripts.Directory)/global/scripts/tools/dependency-track/run.sh
-            displayName: 'Upload the BOM to Dependency-Track'
-            # Explicit mapping so the secret `$(DEPENDENCY_TRACK_TOKEN)` reaches
-            # the shell as `$DEPENDENCY_TRACK_TOKEN`. Azure Pipelines gates
-            # secret variables from the process environment; without this block
-            # the script sends an empty `X-Api-Key` header and DT returns
-            # `HTTP 401`.
-            env:
-              DEPENDENCY_TRACK_TOKEN: $(DEPENDENCY_TRACK_TOKEN)
-              DEPENDENCY_TRACK_HOST_URL: $(DEPENDENCY_TRACK_HOST_URL)
-        continueOnError: true
+      # NOTE: there is no `report:dependency-track` job for Dart.
+      # Dependency-Track ingests CycloneDX, and pub has no native CycloneDX
+      # generator — `package:sbom` emits SPDX, and `cdxgen` would drag a whole
+      # Node.js toolchain into a Dart job — so the BOM was produced by
+      # `trivy fs --format cyclonedx`. Trivy has been removed from this
+      # repository, so the job was removed rather than left calling a script
+      # that no longer exists. `sca:osv-scanner` still covers the
+      # vulnerability scanning; only the BOM upload is gone.

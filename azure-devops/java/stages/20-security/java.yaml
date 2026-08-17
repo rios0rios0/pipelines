@@ -15,10 +15,6 @@ stages:
 
         - template: '../../../global/stages/20-security/hadolint.yaml'
 
-        - template: '../../../global/stages/20-security/trivy.yaml'
-
-        - template: '../../../global/stages/20-security/trivy-sca.yaml'
-
         - job: 'sca_dependency_check'
           displayName: 'sca:dependency-check'
           # Building the CVE database is the only slow path left, and it is bounded rather than

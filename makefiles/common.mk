@@ -4,11 +4,11 @@
 #   SCRIPTS_DIR ?= $(HOME)/Development/github.com/rios0rios0/pipelines
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #
-# Targets provided: setup codeql semgrep trivy hadolint shellcheck gitleaks sast
+# Targets provided: setup codeql semgrep hadolint shellcheck gitleaks sast
 # Requires: SCRIPTS_DIR to be set. SEMGREP_LANGUAGE and CODEQL_LANGUAGE should be set by a language
 #           .mk file (e.g. golang.mk) or manually before including this file.
 
-.PHONY: setup codeql semgrep trivy hadolint shellcheck gitleaks sast
+.PHONY: setup codeql semgrep hadolint shellcheck gitleaks sast
 
 setup:
 	@curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
@@ -36,9 +36,6 @@ codeql:
 semgrep:
 	-@$(SCRIPTS_DIR)/global/scripts/tools/semgrep/run.sh "$(SEMGREP_LANGUAGE)"
 
-trivy:
-	-@$(SCRIPTS_DIR)/global/scripts/tools/trivy/run.sh
-
 hadolint:
 	-@$(SCRIPTS_DIR)/global/scripts/tools/hadolint/run.sh
 
@@ -48,4 +45,4 @@ shellcheck:
 gitleaks:
 	-@$(SCRIPTS_DIR)/global/scripts/tools/gitleaks/run.sh
 
-sast: codeql semgrep trivy hadolint shellcheck gitleaks
+sast: codeql semgrep hadolint shellcheck gitleaks

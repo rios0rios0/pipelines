@@ -1,7 +1,7 @@
 parameters:
   # Steps injected before each stage that needs to resolve private
-  # Terraform sources -- the `20-security` SAST scanners (Semgrep, Trivy)
-  # which parse `*.tf` files, and the `30-test` smoke (`test:smoke`) and
+  # Terraform sources -- the `20-security` SAST scanner (Semgrep)
+  # which parses `*.tf` files, and the `30-test` smoke (`test:smoke`) and
   # apply-time (`test:e2e`) jobs which run `terraform init`.
   #
   # Required for any module whose `*.tf` files reference private-git

@@ -26,7 +26,7 @@ curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh |
 # Then use the Makefile targets
 make lint       # dart format --fix, dart analyze, unused-code scan
 make test       # flutter test with coverage -> JUnit + Cobertura + LCOV
-make sast       # Semgrep, Trivy, Hadolint, ShellCheck, Gitleaks, OSV-Scanner
+make sast       # Semgrep, Hadolint, ShellCheck, Gitleaks, OSV-Scanner
 make sca        # OSV-Scanner over pubspec.lock only
 make build      # flutter build apk (override with DART_BUILD_TARGETS)
 ```
@@ -34,7 +34,7 @@ make build      # flutter build apk (override with DART_BUILD_TARGETS)
 ## What the Pipeline Does
 
 1. **Code Check** -- `dart format`, `dart analyze`, unused-code/files scan
-2. **Security** -- Semgrep, Gitleaks, Hadolint, Trivy (IaC + SCA), OSV-Scanner
+2. **Security** -- Semgrep, Gitleaks, Hadolint, OSV-Scanner
 3. **Tests** -- `flutter test` with coverage, published as JUnit + Cobertura
 4. **Management** -- CycloneDX SBOM published as a job artifact
 5. **Delivery** -- web bundle and Android APK/AAB as downloadable artifacts

@@ -31,5 +31,5 @@ make security   # Run all security tools at once
 ## What the Pipeline Does
 
 1. **Code Check** -- terraform fmt, TFLint
-2. **Security** -- Semgrep, Gitleaks, Hadolint, Trivy
+2. **Security** -- Semgrep, Gitleaks, Hadolint
 3. **Management** -- SonarQube, Dependency Track

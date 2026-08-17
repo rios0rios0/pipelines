@@ -15,10 +15,15 @@ fileName="$(pwd)/$REPORT_PATH/debride.txt"
 # is the form `gem install -v` takes.
 DEBRIDE_NAME="${DEBRIDE_SPEC%%:*}"
 DEBRIDE_GEM_VERSION="${DEBRIDE_SPEC##*:}"
-if ! command -v debride > /dev/null 2>&1; then
-  echo "Installing $DEBRIDE_NAME $DEBRIDE_GEM_VERSION..."
-  gem install --user-install -n "$HOME/.local/bin" "$DEBRIDE_NAME" -v "$DEBRIDE_GEM_VERSION" --no-document --quiet
-fi
+
+# Installed UNCONDITIONALLY, not only when `debride` is missing. On a
+# persistent runner an existing debride of any version would otherwise keep
+# running, so the pin would name a version the analysis never used. `gem
+# install -v <exact>` is idempotent -- RubyGems no-ops when that exact version
+# is already present -- so this costs nothing on a warm runner and is what
+# actually enforces the pin on a drifted one.
+echo "Installing $DEBRIDE_NAME $DEBRIDE_GEM_VERSION..."
+gem install --user-install -n "$HOME/.local/bin" "$DEBRIDE_NAME" -v "$DEBRIDE_GEM_VERSION" --no-document --quiet
 
 echo "Running debride unused code analysis..."
 debride . > "$fileName" 2>&1 || EXIT_CODE=$?

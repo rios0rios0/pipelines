@@ -57,12 +57,32 @@ echo "Installing dependencies..."
 # `go install` actually drops the binaries.
 GOBIN_DIR="$(go env GOBIN)"
 [ -n "$GOBIN_DIR" ] || GOBIN_DIR="$(go env GOPATH)/bin"
-# PINNED. These three shape the test report and the coverage number the
-# quality gate reads, so `@latest` meant the measurement could move without the
-# measured code moving.
-[ -x "$GOBIN_DIR/gotestsum" ] || go install "gotest.tools/gotestsum@$GOTESTSUM_VERSION"
-[ -x "$GOBIN_DIR/gocovmerge" ] || go install "github.com/wadey/gocovmerge@$GOCOVMERGE_VERSION"
-[ -x "$GOBIN_DIR/gocover-cobertura" ] || go install "github.com/boumenot/gocover-cobertura@$GOCOVER_COBERTURA_VERSION"
+
+# PINNED. These three shape the test report and the coverage number the quality
+# gate reads, so `@latest` meant the measurement could move without the measured
+# code moving.
+#
+# The presence check is a VERSION STAMP rather than `[ -x <binary> ]`, because
+# the restored cache is what defeats a per-binary existence test: the GitHub
+# cache key (`...-test-tools-v1`) does not include these versions, so a cache
+# populated before a version bump still contains the old binaries, `[ -x ]`
+# finds them, and the bump never takes effect. Two of these tools also expose no
+# `--version` flag, so the installed versions cannot be read back from the
+# binaries themselves. Writing what was installed next to them keeps the cache
+# useful (no reinstall when it already matches) while making a bump actually
+# reinstall.
+GO_TOOLS_STAMP="$GOBIN_DIR/.pipelines-test-tool-versions"
+GO_TOOLS_WANTED="gotestsum=$GOTESTSUM_VERSION gocovmerge=$GOCOVMERGE_VERSION gocover-cobertura=$GOCOVER_COBERTURA_VERSION"
+
+if [ "$(cat "$GO_TOOLS_STAMP" 2>/dev/null)" != "$GO_TOOLS_WANTED" ] \
+  || [ ! -x "$GOBIN_DIR/gotestsum" ] \
+  || [ ! -x "$GOBIN_DIR/gocovmerge" ] \
+  || [ ! -x "$GOBIN_DIR/gocover-cobertura" ]; then
+  go install "gotest.tools/gotestsum@$GOTESTSUM_VERSION"
+  go install "github.com/wadey/gocovmerge@$GOCOVMERGE_VERSION"
+  go install "github.com/boumenot/gocover-cobertura@$GOCOVER_COBERTURA_VERSION"
+  printf '%s\n' "$GO_TOOLS_WANTED" > "$GO_TOOLS_STAMP"
+fi
 
 echo ""
 echo "=========================================="
@@ -72,7 +92,7 @@ echo "=========================================="
 unit_start_time=$(date +%s)
 
 # shellcheck disable=SC2086
-"$(go env GOPATH)"/bin/gotestsum \
+"$GOBIN_DIR"/gotestsum \
   --format pkgname \
   --junitfile junit-unit.xml \
   -- -tags test,unit \
@@ -187,7 +207,7 @@ else
   # narrowed one, so the denominator of the coverage ratio is identical to what
   # it was before this narrowing existed.
   # shellcheck disable=SC2086
-  "$(go env GOPATH)"/bin/gotestsum \
+  "$GOBIN_DIR"/gotestsum \
     --format pkgname \
     --junitfile junit-integration.xml \
     -- -p 1 -tags integration \
@@ -218,7 +238,7 @@ echo "=========================================="
 reports_start_time=$(date +%s)
 
 # Try to merge coverage files with gocovmerge, fallback if it fails due to overlap merge issues
-if ! "$(go env GOPATH)"/bin/gocovmerge unit_coverage.txt integration_coverage.txt > coverage.txt 2>/dev/null; then
+if ! "$GOBIN_DIR"/gocovmerge unit_coverage.txt integration_coverage.txt > coverage.txt 2>/dev/null; then
   echo "⚠ gocovmerge failed due to overlapping coverage blocks - using fallback strategy"
   
   # Fallback: Merge coverage files by summing coverage counts for overlapping blocks
@@ -298,7 +318,7 @@ extract_testsuites() {
 } > junit.xml
 
 go tool cover -func coverage.txt
-"$(go env GOPATH)"/bin/gocover-cobertura < coverage.txt > cobertura.xml
+"$GOBIN_DIR"/gocover-cobertura < coverage.txt > cobertura.xml
 
 reports_end_time=$(date +%s)
 reports_duration=$((reports_end_time - reports_start_time))

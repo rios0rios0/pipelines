@@ -15,7 +15,14 @@ fileName="$(pwd)/$REPORT_PATH/govulncheck.json"
 # deciding whether this code is vulnerable changed without a diff -- and
 # `go.sum` verification proved only that the bytes matched whatever version the
 # proxy picked, which is integrity without identity.
-GOVULNCHECK_BIN="$(go env GOPATH)/bin/govulncheck"
+# `go install` writes to `GOBIN` when that is set and only falls back to
+# `GOPATH/bin`. Hard-coding `GOPATH/bin` meant that on a runner with `GOBIN`
+# configured the install landed somewhere this script never looked -- so it
+# either failed outright or silently kept using an older binary left in
+# `GOPATH/bin`, which is the pin quietly not applying.
+GOBIN_DIR="$(go env GOBIN)"
+[ -n "$GOBIN_DIR" ] || GOBIN_DIR="$(go env GOPATH)/bin"
+GOVULNCHECK_BIN="$GOBIN_DIR/govulncheck"
 if [ ! -f "$GOVULNCHECK_BIN" ]; then
   echo "Installing govulncheck $GOVULNCHECK_VERSION..."
   go install "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION"

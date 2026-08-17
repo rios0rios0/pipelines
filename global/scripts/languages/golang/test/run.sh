@@ -206,11 +206,18 @@ else
   # `-coverpkg` deliberately stays the FULL directory set rather than the
   # narrowed one, so the denominator of the coverage ratio is identical to what
   # it was before this narrowing existed.
+  #
+  # GO_TEST_INTEGRATION_PARALLEL controls how many test binaries `go test`
+  # runs concurrently in this phase (`-p`). The default stays 1 because most
+  # consumers' integration suites assume exclusive access to shared fixtures
+  # (an embedded PostgreSQL on a fixed port, for one); a consumer whose
+  # fixtures allocate per-instance resources can raise it from its own
+  # pipeline variables to cut the phase's wall time.
   # shellcheck disable=SC2086
   "$GOBIN_DIR"/gotestsum \
     --format pkgname \
     --junitfile junit-integration.xml \
-    -- -p 1 -tags integration \
+    -- -p "${GO_TEST_INTEGRATION_PARALLEL:-1}" -tags integration \
     -coverpkg="$(echo $directories | tr ' ' ',')" \
     -covermode=count \
     -coverprofile=integration_coverage.txt \

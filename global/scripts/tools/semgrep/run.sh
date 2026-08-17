@@ -37,7 +37,7 @@ if ! command -v semgrep > /dev/null 2>&1; then
   fi
   echo "Installing $SEMGREP_SPEC..."
   python3 -m venv "$SEMGREP_VENV"
-  "$SEMGREP_VENV/bin/pip" install --quiet --disable-pip-version-check "$SEMGREP_SPEC"
+  "$SEMGREP_VENV/bin/pip" install --quiet --disable-pip-version-check --only-binary :all: "$SEMGREP_SPEC"
   ln -sf "$SEMGREP_VENV/bin/semgrep" "$HOME/.local/bin/semgrep"
 fi
 

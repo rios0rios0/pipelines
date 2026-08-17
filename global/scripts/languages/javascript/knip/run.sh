@@ -15,7 +15,7 @@ fileName="$(pwd)/$REPORT_PATH/knip.json"
 # gates the build on what it considers unused, and that changes between
 # releases, so an unchanged repository could go red overnight.
 echo "Running knip unused exports/files analysis ($KNIP_SPEC)..."
-npx --yes "$KNIP_SPEC" --reporter json > "$fileName" 2>&1 || EXIT_CODE=$?
+npm_config_ignore_scripts=true npx --yes "$KNIP_SPEC" --reporter json > "$fileName" 2>&1 || EXIT_CODE=$?
 
 echo "knip analysis complete. Results written to: $fileName"
 exit "${EXIT_CODE:-0}"

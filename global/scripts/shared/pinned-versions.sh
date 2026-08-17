@@ -171,7 +171,15 @@ GO_JUNIT_REPORT_VERSION="${GO_JUNIT_REPORT_VERSION:-${GO_JUNIT_REPORT_PINNED_VER
 CYCLONEDX_GOMOD_PINNED_VERSION="v1.10.0"
 CYCLONEDX_GOMOD_VERSION="${CYCLONEDX_GOMOD_VERSION:-${CYCLONEDX_GOMOD_PINNED_VERSION}}"
 
-# Python and Ruby tools installed from their language registries. Each is the
+# Python and Ruby tools installed from their language registries.
+#
+# The pip call sites all pass `--only-binary :all:`. Installing from a source
+# distribution executes that package's `setup.py` AS PART OF THE INSTALL, so an
+# sdist is arbitrary code execution on the runner before the tool has even been
+# invoked -- the same class of exposure as an npm `postinstall`. Every pin below
+# was checked to resolve binary-only INCLUDING its full transitive tree, so the
+# flag costs nothing today; if a future bump cannot resolve, that is a signal
+# worth reading rather than a flag worth dropping. Each is the
 # version `latest` resolved to when this pin was taken, so pinning changed no
 # behaviour on the day it landed -- it only stopped the behaviour changing
 # underneath a consumer afterwards.

@@ -20,7 +20,7 @@ runs:
 
     - name: 'Install PDM and dependencies'
       run: |
-        python -m pip install "pdm==2.28.1"
+        python -m pip install --only-binary :all: "pdm==2.28.1"
         pdm install -v
       shell: 'bash'
 

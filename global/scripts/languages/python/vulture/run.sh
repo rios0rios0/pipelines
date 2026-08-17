@@ -18,7 +18,7 @@ fileName="$(pwd)/$REPORT_PATH/vulture.txt"
 # an exact version is idempotent, which is why the update branch is now gone
 # rather than replaced.
 echo "Installing $VULTURE_SPEC..."
-python -m pip install --user --quiet "$VULTURE_SPEC"
+python -m pip install --user --quiet --only-binary :all: "$VULTURE_SPEC"
 
 # Include a project-level whitelist if present to suppress known false positives
 whitelistArgs=""

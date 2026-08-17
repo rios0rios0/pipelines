@@ -19,60 +19,47 @@ GITLAB_CONFIG_PATH="$SCRIPTS_DIR/global/scripts/tools/gitleaks/.gitleaks.toml"
 # being pulled as a Docker image -- Docker Hub now enforces an anonymous pull
 # rate limit, which made every uncached CI run risk a `toomanyrequests`
 # failure. This mirrors the shellcheck/hadolint installation pattern.
-# Self-update an already-installed Gitleaks on persistent agents so long-lived
-# hosts stay current for CVE fixes instead of pinning whatever was first
-# installed. Resolves the latest tag via the `releases/latest` redirect (not
-# API-rate-limited), matching the resolver below. Fail-safe: any uncertainty --
-# a lookup blip, or an unparseable installed version such as a source build
-# whose `gitleaks version` prints no number -- returns "no update", so it never
-# forces a needless re-download or breaks the run.
-gitleaks_update_available() {
-  _gl_latest=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/gitleaks/gitleaks/releases/latest 2>/dev/null | sed 's#.*/tag/v\{0,1\}##')
+#
+# The version is PINNED and the download is CHECKSUM-VERIFIED. This script
+# previously resolved `releases/latest` at run time and executed whatever came
+# back, unverified: the version that scanned a given commit was therefore
+# whatever upstream had published that morning, a re-run could reach a
+# different verdict on identical code, and anyone able to answer the request --
+# upstream, their CDN, or a proxy on the runner's egress path -- chose the
+# bytes that then ran with the job's token in scope. `GITLEAKS_VERSION`
+# overrides the pin for an operator responding to an upstream CVE ahead of a
+# release here; the matching digest must be supplied with it.
+. "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/verify-download.sh"
+
+# Replace an installed Gitleaks whose version differs from the pin, in either
+# direction. The old check only ever upgraded towards `latest`, so a persistent
+# agent that had drifted ahead of the pin kept its own version and quietly
+# scanned with rules this repository never chose.
+gitleaks_matches_pin() {
   _gl_current=$(gitleaks version 2>/dev/null | sed 's/^v//')
-  case "$_gl_latest" in [0-9]*.[0-9]*) ;; *) return 1 ;; esac
-  case "$_gl_current" in [0-9]*.[0-9]*) ;; *) return 1 ;; esac
-  [ "$_gl_latest" != "$_gl_current" ]
+  [ "$_gl_current" = "${GITLEAKS_VERSION#v}" ]
 }
 
-if ! command -v gitleaks > /dev/null 2>&1 || gitleaks_update_available; then
-  echo "Downloading Gitleaks..."
-
-  # Resolve the latest version robustly. An unauthenticated `api.github.com`
-  # call is rate limited to 60 requests/hour per IP, and on shared
-  # GitHub-hosted runner IPs it intermittently returns HTTP 403 -- which left
-  # GITLEAKS_VERSION empty. Because this script runs under POSIX `sh` (no
-  # `set -e`), that empty value used to sail through a malformed download URL
-  # and a failed extraction, surfacing only as a cryptic `gitleaks: not found`
-  # at the first `gitleaks detect` below. Prefer the authenticated API when a
-  # token is present (5000 requests/hour), then fall back to the github.com
-  # `releases/latest` redirect, which is not API-rate-limited and needs no
-  # token (works the same on GitHub Actions, GitLab CI, and Azure DevOps).
-  GITHUB_API_TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
-  GITLEAKS_VERSION=""
-  if [ -n "$GITHUB_API_TOKEN" ]; then
-    GITLEAKS_VERSION=$(curl -fsSL -H "Authorization: Bearer $GITHUB_API_TOKEN" https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
-  fi
-  if [ -z "$GITLEAKS_VERSION" ]; then
-    GITLEAKS_VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/gitleaks/gitleaks/releases/latest | sed 's#.*/tag/##')
-  fi
-  if [ -z "$GITLEAKS_VERSION" ]; then
-    echo "ERROR: could not resolve the latest Gitleaks version (GitHub rate limit, outage, or network failure)." >&2
-    exit 1
-  fi
-
+if ! command -v gitleaks > /dev/null 2>&1 || ! gitleaks_matches_pin; then
   ARCH=$(uname -m)
   case "$ARCH" in
-    x86_64)        GITLEAKS_ARCH="x64" ;;
-    aarch64|arm64) GITLEAKS_ARCH="arm64" ;;
-    armv7l)        GITLEAKS_ARCH="armv7" ;;
+    x86_64)        GITLEAKS_ARCH="x64";   GITLEAKS_DIGEST_ARCH="X64" ;;
+    aarch64|arm64) GITLEAKS_ARCH="arm64"; GITLEAKS_DIGEST_ARCH="ARM64" ;;
+    armv7l)        GITLEAKS_ARCH="armv7"; GITLEAKS_DIGEST_ARCH="ARMV7" ;;
     *)
       echo "Unsupported architecture: $ARCH" >&2
       exit 1
       ;;
   esac
 
-  if ! curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/$GITLEAKS_VERSION/gitleaks_${GITLEAKS_VERSION#v}_linux_${GITLEAKS_ARCH}.tar.gz" -o /tmp/gitleaks.tar.gz; then
-    echo "ERROR: failed to download Gitleaks $GITLEAKS_VERSION (linux/$GITLEAKS_ARCH)." >&2
+  GITLEAKS_SHA256=$(pinned_digest GITLEAKS "$GITLEAKS_DIGEST_ARCH") || exit 1
+
+  echo "Installing Gitleaks $GITLEAKS_VERSION (linux/$GITLEAKS_ARCH)..."
+  if ! download_verified \
+    "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION#v}/gitleaks_${GITLEAKS_VERSION#v}_linux_${GITLEAKS_ARCH}.tar.gz" \
+    /tmp/gitleaks.tar.gz \
+    "$GITLEAKS_SHA256"; then
     exit 1
   fi
   # Guard extraction and permission-setting explicitly. Without `set -e` a

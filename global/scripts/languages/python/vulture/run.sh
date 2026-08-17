@@ -5,20 +5,20 @@ if [ -z "$SCRIPTS_DIR" ]; then
   export SCRIPTS_DIR
 fi
 TOOL_NAME="vulture" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
 
 fileName="$(pwd)/$REPORT_PATH/vulture.txt"
 
-# Install vulture if not already available
-if ! command -v vulture > /dev/null 2>&1; then
-  echo "Installing vulture..."
-  python -m pip install --user vulture --quiet
-else
-  # Already present (persistent agent): self-update so long-lived hosts stay
-  # current for CVE fixes instead of pinning whatever was first installed. pip
-  # only downloads when a newer release exists, so this is a no-op otherwise.
-  echo "Updating vulture..."
-  python -m pip install --user --upgrade vulture --quiet
-fi
+# Install vulture at the PINNED version.
+#
+# The unpinned install resolved to whatever PyPI served, and the "self-update"
+# branch actively pulled the newest release on every run of a persistent agent.
+# Vulture reports dead code, and each release changes what it considers dead, so
+# an unchanged repository could pass one day and fail the next. `pip install` of
+# an exact version is idempotent, which is why the update branch is now gone
+# rather than replaced.
+echo "Installing $VULTURE_SPEC..."
+python -m pip install --user --quiet "$VULTURE_SPEC"
 
 # Include a project-level whitelist if present to suppress known false positives
 whitelistArgs=""

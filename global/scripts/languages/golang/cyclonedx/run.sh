@@ -11,13 +11,17 @@ fi
 # keeps the resulting module cache out of $TMPDIR, where its read-only entries
 # cannot be deleted again.
 . "$SCRIPTS_DIR/global/scripts/shared/go-modcache.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
 resolve_go_paths
 
 # TODO: this should not be needed since it's covered by the parent YAML file that calls this shell script
 BOM_PATH="$PREFIX$REPORT_PATH" && mkdir -p "$BOM_PATH"
 
-echo "Installing CycloneDX Go Module..."
-go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
+# PINNED. This generates the SBOM that the 35-management stage uploads to
+# Dependency-Track, so an unpinned generator meant the inventory's shape and
+# completeness could change without any change to the dependencies it describes.
+echo "Installing CycloneDX Go Module $CYCLONEDX_GOMOD_VERSION..."
+go install "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@$CYCLONEDX_GOMOD_VERSION"
 
 if [ -d "pkg" ]; then
   echo "Found 'pkg' directory, using 'cyclonedx-gomod mod' command..."

@@ -32,6 +32,11 @@
 #    source looks like it says -- the same technique `test-deploy-providers.sh`
 #    and `test-dependency-check.sh` already use.
 
+# The integrity-checked downloader, used for both SDK archives below. Sourced
+# here rather than in each `run.sh` because `common.sh` is the one file every
+# Dart script already loads.
+. "$SCRIPTS_DIR/global/scripts/shared/verify-download.sh"
+
 # dart_is_truthy <value>
 #
 # Case-insensitive boolean test. Azure DevOps stringifies a `boolean` template
@@ -240,8 +245,23 @@ dart_install_dart_sdk() {
   else
     _dd_url="https://storage.googleapis.com/dart-archive/channels/$_dd_channel/release/$_dd_version/sdk/dartsdk-linux-$_dd_arch-release.zip"
     echo "Downloading the Dart SDK ($_dd_channel/$_dd_version/$_dd_arch)..."
-    if ! curl -fsSL --show-error "$_dd_url" -o /tmp/dartsdk.zip; then
-      echo "ERROR: could not download the Dart SDK from $_dd_url" >&2
+    # Verified against the `.sha256sum` Google publishes beside every archive,
+    # rather than against a digest committed here.
+    #
+    # The distinction matters and is worth stating plainly: which Dart SDK a
+    # project builds with is the CONSUMER's choice (`DART_SDK_CHANNEL`,
+    # `DART_SDK_VERSION`, and `latest` by default), so this repository cannot
+    # know the version in advance and cannot commit its digest. That makes this
+    # weaker than the pinned tools -- a compromised publisher would serve a
+    # matching checksum too. It is still a real gain over the nothing that was
+    # checked before: it catches a truncated or corrupted transfer, a cache
+    # serving the wrong bytes, and any tamper that cannot also rewrite a second
+    # HTTPS request. A consumer wanting the strong guarantee pins
+    # `DART_SDK_VERSION` and verifies the SDK out of band.
+    if ! download_verified_against_manifest \
+      "$_dd_url" /tmp/dartsdk.zip "$_dd_url.sha256sum" \
+      "dartsdk-linux-$_dd_arch-release.zip"; then
+      echo "ERROR: could not install the Dart SDK from $_dd_url" >&2
       echo "Check DART_SDK_CHANNEL ('stable', 'beta' or 'dev') and DART_SDK_VERSION." >&2
       exit 1
     fi
@@ -320,6 +340,46 @@ dart_resolve_flutter_archive() {
   return 0
 }
 
+# dart_flutter_archive_sha256 <channel> <archive-path>
+#
+# Echo the SHA-256 `releases_linux.json` publishes for a given archive, or
+# nothing when it publishes none.
+#
+# The manifest carries a `sha256` beside every release, which is what makes the
+# Flutter SDK download verifiable at all -- the version is the consumer's to
+# choose (`FLUTTER_VERSION`, or "current on this channel"), so no digest for it
+# can be committed here. Echoing empty rather than failing is deliberate: an
+# older manifest entry may carry no `sha256`, and a missing digest must degrade
+# to a warned, unverified download rather than break a Flutter build outright.
+#
+# Needs `jq`, exactly like the resolver above. When `FLUTTER_VERSION` is pinned
+# the resolver never reads the manifest, so `jq` may legitimately be absent --
+# hence the quiet return instead of the resolver's hard error.
+dart_flutter_archive_sha256() {
+  _dfs_channel="$1"
+  _dfs_archive="$2"
+
+  if ! command -v jq > /dev/null 2>&1; then
+    return 0
+  fi
+
+  _dfs_manifest="$(mktemp)"
+  if ! curl -fsSL --proto '=https' --proto-redir '=https' \
+    "https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json" \
+    -o "$_dfs_manifest" 2>/dev/null; then
+    rm -f "$_dfs_manifest"
+    return 0
+  fi
+
+  jq -r --arg archive "$_dfs_archive" '
+    [ .releases[] | select(.archive == $archive) ] | first | .sha256 // empty
+  ' "$_dfs_manifest" 2>/dev/null
+
+  rm -f "$_dfs_manifest"
+  unset _dfs_channel _dfs_archive _dfs_manifest
+  return 0
+}
+
 # dart_install_flutter_sdk
 #
 # Install the Flutter SDK under `~/.local/share/flutter` and symlink both
@@ -341,9 +401,22 @@ dart_install_flutter_sdk() {
     _dfi_archive="$(dart_resolve_flutter_archive "$_dfi_channel")" || exit 1
     _dfi_url="https://storage.googleapis.com/flutter_infra_release/releases/$_dfi_archive"
     echo "Downloading the Flutter SDK ($_dfi_archive)..."
-    if ! curl -fsSL --show-error "$_dfi_url" -o /tmp/flutter-sdk.tar.xz; then
-      echo "ERROR: could not download the Flutter SDK from $_dfi_url" >&2
-      exit 1
+    # `releases_linux.json` carries a `sha256` for every release, and
+    # `dart_resolve_flutter_archive` has already fetched and parsed that file to
+    # find the archive path -- so the digest is read from the same document,
+    # with no second request. Same trade-off as the Dart SDK above: the version
+    # is the consumer's to choose, so this verifies transport and storage
+    # integrity rather than publisher identity.
+    _dfi_sha="$(dart_flutter_archive_sha256 "$_dfi_channel" "$_dfi_archive")"
+    if [ -n "$_dfi_sha" ]; then
+      if ! download_verified "$_dfi_url" /tmp/flutter-sdk.tar.xz "$_dfi_sha"; then
+        exit 1
+      fi
+    else
+      echo "WARNING: no sha256 published for '$_dfi_archive'; downloading without verification." >&2
+      if ! download_verified "$_dfi_url" /tmp/flutter-sdk.tar.xz "SKIP"; then
+        exit 1
+      fi
     fi
     # The archive contains a top-level `flutter/` directory.
     rm -rf "$_dfi_root"

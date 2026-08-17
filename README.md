@@ -136,25 +136,33 @@ Each platform follows a consistent **5-stage pipeline architecture**:
 
 ## Installation
 
-### Quick Installation
-
-```bash
-curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
-```
-
-You can override the installation location with the `PIPELINES_HOME` environment variable:
-
-```bash
-PIPELINES_HOME=/opt/pipelines curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
-```
-
-### Manual Installation
+### Recommended
 
 ```bash
 mkdir -p $HOME/Development/github.com/rios0rios0
 cd $HOME/Development/github.com/rios0rios0
 git clone https://github.com/rios0rios0/pipelines.git
 ```
+
+`make setup` does exactly this and is safe to re-run -- it clones on the first
+call and fast-forwards afterwards. Override the location with `PIPELINES_HOME`:
+
+```bash
+make setup PIPELINES_HOME=/opt/pipelines
+```
+
+### The `clone.sh` one-liner
+
+```bash
+curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
+```
+
+`clone.sh` still exists and does the same two `git` commands, but nothing in
+this repository uses it any more and it is no longer the recommended path.
+Piping a remote script into a shell executes whatever that URL returns at that
+moment, from a branch, unpinned and unverified, with your user's privileges --
+the same pattern the SAST stage here flags in consumers' pipelines, and it is
+not worth making an exception for it just because the script is ours.
 
 ## Platform Usage
 
@@ -773,6 +781,73 @@ Create these variable groups in Azure DevOps Library:
 **Note:** For AWS deployments, it is recommended to use Azure DevOps AWS Service Connection instead of storing credentials in variable groups. Configure the service connection in Azure DevOps Project Settings > Service Connections.
 
 ![Azure DevOps Example](.docs/azure-devops-golang.png)
+
+## Supply-Chain Pinning
+
+Everything these pipelines execute is pinned to something immutable, and every
+downloaded binary is checksum-verified before it runs. This is enforced by
+`make test-supply-chain`, so it stays true rather than being true once.
+
+| What | Pinned to | Where |
+|------|-----------|-------|
+| Third-party GitHub Actions | 40-character commit SHA, with the version in a trailing `# vX.Y.Z` comment | every `uses:` outside `rios0rios0/pipelines` |
+| Container images | `tag@sha256:<digest>` | every `image:` and every Dockerfile `FROM` |
+| Downloaded binaries | exact version **and** a committed SHA-256 | `global/scripts/shared/pinned-versions.sh` |
+| `go install` / `pip` / `gem` / `npx` packages | exact version | `pinned-versions.sh`, mirrored inline where a template has no `SCRIPTS_DIR` |
+
+### Bumping a pinned tool
+
+1. Change the `*_PINNED_VERSION` value in `global/scripts/shared/pinned-versions.sh`.
+2. Replace every `*_SHA256_*` for that tool, taken from the upstream checksum
+   manifest. Never carry an old digest forward.
+3. Run `make test-supply-chain`.
+
+Every version is also overridable from the environment, so an operator can
+respond to an upstream CVE without waiting for a release here:
+
+```bash
+GITLEAKS_VERSION=8.31.0 GITLEAKS_SHA256_OVERRIDE=<digest> make gitleaks
+```
+
+Overriding the version **without** a digest is accepted but prints a warning and
+skips verification -- a committed digest describes one exact build, so reusing
+it against a different version would fail every time and read like an attack.
+
+### Pinning this repository (consumers)
+
+Pin the entry point, and the scripts follow it. Before, a consumer pinning the
+workflow still executed scripts from `main`; the `scripts-repo` abstracts now
+check out the ref the caller resolved.
+
+```yaml
+# GitHub Actions -- a release tag, or a commit SHA for full immutability
+uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@4.23.0'
+```
+
+```yaml
+# GitLab CI
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/4.23.0/gitlab/golang/go-docker.yaml'
+variables:
+  PIPELINES_REF: '4.23.0'   # pins the shared scripts too
+```
+
+```yaml
+# Azure DevOps
+resources:
+  repositories:
+    - repository: 'pipelines'
+      type: 'github'
+      name: 'rios0rios0/pipelines'
+      ref: 'refs/tags/4.23.0'   # without this, Azure resolves the DEFAULT BRANCH
+      endpoint: 'YOUR_GITHUB_SERVICE_CONNECTION'
+variables:
+  PIPELINES_REF: '4.23.0'   # pins the shared scripts too
+```
+
+`@vN` (e.g. `@v4`) tracks the major and keeps receiving patches automatically --
+weaker than a tag, far better than a branch. Every example under
+`.docs/examples/` is pinned and shows the shape for its platform.
 
 ## Available Tools & Scripts
 

@@ -5,6 +5,7 @@ if [ -z "$SCRIPTS_DIR" ]; then
   export SCRIPTS_DIR
 fi
 TOOL_NAME="semgrep" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
 
 SEMGREP_LANGUAGE="$1" # it takes the first param as the main language
 fileName="$REPORT_PATH/semgrep.json"
@@ -34,25 +35,18 @@ if ! command -v semgrep > /dev/null 2>&1; then
     echo "ERROR: Semgrep requires Python 3 (it has no standalone binary release). Install python3 and re-run." >&2
     exit 1
   fi
-  echo "Downloading Semgrep..."
+  echo "Installing $SEMGREP_SPEC..."
   python3 -m venv "$SEMGREP_VENV"
-  "$SEMGREP_VENV/bin/pip" install --quiet --disable-pip-version-check semgrep
+  "$SEMGREP_VENV/bin/pip" install --quiet --disable-pip-version-check "$SEMGREP_SPEC"
   ln -sf "$SEMGREP_VENV/bin/semgrep" "$HOME/.local/bin/semgrep"
-else
-  # Already present (persistent agent): self-update so long-lived hosts stay
-  # current for CVE fixes. Upgrade our own venv if it survived; otherwise fall
-  # back to upgrading the on-PATH install in place -- best effort, since a
-  # system-managed Python may refuse under PEP 668, keeping the installed
-  # version. pip only downloads a newer release when one exists.
-  echo "Updating Semgrep..."
-  if [ -x "$SEMGREP_VENV/bin/pip" ]; then
-    "$SEMGREP_VENV/bin/pip" install --quiet --disable-pip-version-check --upgrade semgrep
-    ln -sf "$SEMGREP_VENV/bin/semgrep" "$HOME/.local/bin/semgrep"
-  elif command -v python3 > /dev/null 2>&1; then
-    python3 -m pip install --quiet --disable-pip-version-check --upgrade semgrep 2>/dev/null \
-      || echo "WARN: could not auto-update Semgrep (externally-managed Python?); using the installed version." >&2
-  fi
 fi
+
+# PINNED, and the "self-update to latest on every run" branch is gone with it.
+# Semgrep is a gating SAST tool: each release adds and retunes rules, so an
+# unpinned engine meant an unchanged commit could pass a scan on Monday and fail
+# it on Tuesday, with nothing in the repository to explain the difference and no
+# way to reproduce the earlier verdict. Bumping `SEMGREP_SPEC` makes that a
+# reviewed change with a diff, which is what a rule change deserves.
 
 # Collect optional arguments (rule configs, project-provided rule exclusions and
 # custom rules) into the positional parameters so they are passed safely without

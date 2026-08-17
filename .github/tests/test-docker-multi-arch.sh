@@ -86,24 +86,35 @@ assert_yq \
   '.inputs.platforms.required' \
   'false'
 
+# Matched by action path + a 40-hex commit SHA rather than by `@v3`: every
+# third-party action in this repository is pinned to an immutable commit, so an
+# equality test against a moving tag would fail on the pin rather than on the
+# thing it is meant to guard. The version each SHA corresponds to is carried in
+# a trailing `# vX.Y.Z` comment, which yq strips -- so the assertions that need
+# the version (the build-push major floor below) read the file as text instead.
 assert_true \
   "'docker/setup-qemu-action' step must be present so RUN steps in arm64 builds can exec foreign-arch binaries via binfmt" \
-  "yq -e '.runs.steps[] | select(.uses == \"docker/setup-qemu-action@v3\")' '$ACTION_FILE' >/dev/null"
+  "yq -e '.runs.steps[] | select(.uses | test(\"^docker/setup-qemu-action@[0-9a-f]{40}\$\"))' '$ACTION_FILE' >/dev/null"
 
 assert_true \
   "'docker/setup-buildx-action' step must be present — the default Docker builder silently ignores 'platforms:' and emits a single-arch manifest" \
-  "yq -e '.runs.steps[] | select(.uses == \"docker/setup-buildx-action@v3\")' '$ACTION_FILE' >/dev/null"
+  "yq -e '.runs.steps[] | select(.uses | test(\"^docker/setup-buildx-action@[0-9a-f]{40}\$\"))' '$ACTION_FILE' >/dev/null"
 
 assert_yq \
   "'platforms' must be wired into the 'docker/build-push-action' step's 'with:' so the input actually reaches the build" \
   '(.runs.steps[] | select(.uses | test("^docker/build-push-action"))).with.platforms' \
   '${{ inputs.platforms }}'
 
-# Given the dependency on the build-push-action, also pin the action major
-# so a future bump that drops multi-arch support has to surface here.
+# Given the dependency on the build-push-action, also hold the action major
+# so a future bump that drops multi-arch support has to surface here. Read as
+# TEXT, not through yq: the ref is an immutable commit SHA that carries no
+# version, and the `# vX.Y.Z` comment that does carry it is a YAML comment yq
+# discards. Asserting both halves on one line keeps the pin and the major floor
+# coupled -- a bump that rewrites the SHA but forgets the comment fails here,
+# rather than quietly deleting the only remaining record of which version runs.
 assert_true \
-  "'docker/build-push-action' must be at least v6 (multi-arch via buildx is stable from v6 onwards)" \
-  "yq -e '.runs.steps[] | select(.uses | test(\"^docker/build-push-action@v([6-9]|[1-9][0-9]+)$\"))' '$ACTION_FILE' >/dev/null"
+  "'docker/build-push-action' must be SHA-pinned and at least v6 (multi-arch via buildx is stable from v6 onwards)" \
+  "grep -qE \"uses: 'docker/build-push-action@[0-9a-f]{40}' # v([6-9]|[1-9][0-9]+)\\.\" '$ACTION_FILE'"
 
 echo ""
 echo "=== Results ==="

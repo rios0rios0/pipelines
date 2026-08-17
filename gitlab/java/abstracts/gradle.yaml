@@ -1,5 +1,5 @@
 .gradle:
-  image: 'gradle:8.7.0-jdk21-alpine'
+  image: 'gradle:8.7.0-jdk21-alpine@sha256:d6ea1c746d8365fae41c70d5812c28c8fca88c905b69d5f9da57ad4cc0218ab1'
   cache: # relative to the project directory ($CI_PROJECT_DIR)
     key: "$CI_JOB_NAME"
     when: 'always'

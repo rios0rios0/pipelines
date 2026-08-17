@@ -2,7 +2,7 @@ TAG := latest
 ROOT := global/containers
 CONTAINER_REGISTRY = ghcr.io/rios0rios0/pipelines
 
-.PHONY: login setup-buildx build-and-push test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test
+.PHONY: login setup-buildx build-and-push test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test-workflow-composition test-supply-chain test
 
 login:
 	docker login $(CONTAINER_REGISTRY)
@@ -114,5 +114,9 @@ test-workflow-composition:
 	@echo "Running workflow composition standard validation..."
 	@./.github/tests/test-workflow-composition.sh
 
-test: test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test-workflow-composition
+test-supply-chain:
+	@echo "Running supply-chain pinning validation..."
+	@./.github/tests/test-supply-chain.sh
+
+test: test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test-workflow-composition test-supply-chain
 	@echo "All tests completed successfully!"

@@ -163,17 +163,53 @@ if [ -n "$GOLANGCI_LINT_MERGE_ONLY" ]; then
   exit 0
 fi
 
-GOLANGCI_LINT_VERSION="v2.12.2"
+# The version was already pinned; the INSTALL was not. `wget -O- | sh` handed
+# the runner -- holding the repository token -- to whatever bytes
+# golangci-lint.run returned at that moment, and nothing verified either the
+# installer script or the archive it went on to fetch. The release tarball is
+# downloaded and checksum-verified directly instead, which is the same shape
+# gitleaks, hadolint and shellcheck already use and removes the vendor's
+# install script from the trust path entirely.
+. "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/verify-download.sh"
 
 GOLANGCI_LINT=""
 if command -v golangci-lint > /dev/null 2>&1; then
   DETECTED_VERSION=$(golangci-lint version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-  if [ "$DETECTED_VERSION" = "${GOLANGCI_LINT_VERSION#v}" ]; then
+  if [ "$DETECTED_VERSION" = "$GOLANGCI_LINT_VERSION" ]; then
     GOLANGCI_LINT="golangci-lint"
   fi
 fi
 if [ -z "$GOLANGCI_LINT" ]; then
-  wget -O- -nv https://golangci-lint.run/install.sh | sh -s -- -b ./bin "${GOLANGCI_LINT_VERSION}"
+  case "$(uname -m)" in
+    x86_64)        GOLANGCI_ARCH="amd64"; GOLANGCI_DIGEST_ARCH="AMD64" ;;
+    aarch64|arm64) GOLANGCI_ARCH="arm64"; GOLANGCI_DIGEST_ARCH="ARM64" ;;
+    *)
+      echo "ERROR: unsupported architecture for golangci-lint: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+
+  GOLANGCI_SHA256=$(pinned_digest GOLANGCI_LINT "$GOLANGCI_DIGEST_ARCH") || exit 1
+  GOLANGCI_DIR="golangci-lint-${GOLANGCI_LINT_VERSION}-linux-${GOLANGCI_ARCH}"
+
+  echo "Installing golangci-lint v$GOLANGCI_LINT_VERSION (linux/$GOLANGCI_ARCH)..."
+  if ! download_verified \
+    "https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_LINT_VERSION}/${GOLANGCI_DIR}.tar.gz" \
+    /tmp/golangci-lint.tar.gz \
+    "$GOLANGCI_SHA256"; then
+    exit 1
+  fi
+
+  mkdir -p ./bin
+  if ! tar -xzf /tmp/golangci-lint.tar.gz -C /tmp; then
+    echo "ERROR: failed to extract golangci-lint from /tmp/golangci-lint.tar.gz." >&2
+    rm -f /tmp/golangci-lint.tar.gz
+    exit 1
+  fi
+  mv "/tmp/${GOLANGCI_DIR}/golangci-lint" ./bin/golangci-lint
+  chmod +x ./bin/golangci-lint
+  rm -rf /tmp/golangci-lint.tar.gz "/tmp/${GOLANGCI_DIR}"
   GOLANGCI_LINT="./bin/golangci-lint"
 fi
 

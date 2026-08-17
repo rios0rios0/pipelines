@@ -11,11 +11,25 @@ TOOL_NAME="proguard" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
 
 fileName="$(pwd)/$REPORT_PATH/proguard-usage.txt"
 
-PROGUARD_VERSION="${PROGUARD_VERSION:-7.6.1}"
+# The version was already pinned; the download was not verified. ProGuard runs
+# as a JVM process over the project's own bytecode, so an unverified archive is
+# arbitrary code execution on the build agent. Guardsquare publishes no checksum
+# manifest, so the digest in `pinned-versions.sh` was computed from the
+# published artifact.
+. "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/verify-download.sh"
+
 PROGUARD_DIR="/tmp/proguard-$PROGUARD_VERSION"
 if [ ! -d "$PROGUARD_DIR" ]; then
+  PROGUARD_SHA256=$(pinned_digest PROGUARD "") || exit 1
+
   echo "Installing ProGuard $PROGUARD_VERSION..."
-  wget -q "https://github.com/Guardsquare/proguard/releases/download/v$PROGUARD_VERSION/proguard-$PROGUARD_VERSION.tar.gz" -O /tmp/proguard.tar.gz
+  if ! download_verified \
+    "https://github.com/Guardsquare/proguard/releases/download/v$PROGUARD_VERSION/proguard-$PROGUARD_VERSION.tar.gz" \
+    /tmp/proguard.tar.gz \
+    "$PROGUARD_SHA256"; then
+    exit 1
+  fi
   tar xzf /tmp/proguard.tar.gz -C /tmp
   rm /tmp/proguard.tar.gz
 fi

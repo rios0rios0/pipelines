@@ -42,7 +42,7 @@ if deploy_is_truthy "${VERCEL_COMMERCIAL:-false}" \
   echo "WARN: Pro. Set VERCEL_PLAN=pro once the account is upgraded to silence this." >&2
 fi
 
-deploy_npm_cli "vercel" "vercel"
+deploy_npm_cli "vercel" "$VERCEL_CLI_SPEC"
 
 # `--yes` skips every confirmation prompt; `--prod` targets the production
 # alias. A preview deployment (the default) is what a pull request wants, so

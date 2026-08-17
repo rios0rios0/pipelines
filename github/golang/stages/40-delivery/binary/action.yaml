@@ -32,7 +32,7 @@ runs:
   using: 'composite'
   steps:
     - name: 'Checkout code'
-      uses: 'actions/checkout@v6'
+      uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
       with:
         fetch-depth: 0
 
@@ -41,13 +41,13 @@ runs:
       shell: 'bash'
 
     - name: 'Setup Go'
-      uses: 'actions/setup-go@v6'
+      uses: 'actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16' # v6.5.0
       with:
         go-version-file: 'go.mod'
         cache-dependency-path: 'go.sum'
 
     - name: 'Setup Zig'
-      uses: 'mlugg/setup-zig@v2'
+      uses: 'mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29' # v2.2.1
 
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 
@@ -77,13 +77,13 @@ runs:
     - name: 'Import GPG key'
       id: 'import_gpg'
       if: "inputs.gpg_sign == 'true'"
-      uses: 'crazy-max/ghaction-import-gpg@v7'
+      uses: 'crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd' # v7.0.0
       with:
         gpg_private_key: "${{ inputs.gpg_private_key }}"
         passphrase: "${{ inputs.gpg_passphrase }}"
 
     - name: 'Run GoReleaser'
-      uses: 'goreleaser/goreleaser-action@v7'
+      uses: 'goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94' # v7.2.3
       with:
         distribution: 'goreleaser'
         version: '~> v2'

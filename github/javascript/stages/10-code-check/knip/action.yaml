@@ -8,7 +8,7 @@ runs:
   using: 'composite'
   steps:
     - name: 'Checkout code'
-      uses: 'actions/checkout@v6'
+      uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
 
     # Node 25 dropped the bundled Corepack, so `corepack enable` is a command-not-found there.
     # Installed only when genuinely absent: on the versions that still bundle it npm refuses to
@@ -30,7 +30,7 @@ runs:
       shell: 'bash'
 
     - name: 'Setup Node.js'
-      uses: 'actions/setup-node@v6'
+      uses: 'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38' # v6.5.0
       with:
         node-version: '20'
         cache: '${{ inputs.package_manager }}'
@@ -51,7 +51,7 @@ runs:
       shell: 'bash'
 
     - name: 'Upload Report'
-      uses: 'actions/upload-artifact@v7'
+      uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # v7.0.1
       with:
         name: 'knip'
         path: 'build/reports/knip/'

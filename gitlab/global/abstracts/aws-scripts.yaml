@@ -1,7 +1,19 @@
 .aws-assume-role:
   script:
-    - curl -o /usr/local/bin/stoml -LO "https://github.com/freshautomations/stoml/releases/latest/download/stoml_linux_amd64"
-        && chmod +x /usr/local/bin/stoml && stoml --version
+    # Pinned and checksum-verified. `releases/latest/download/...` fetched an
+    # unverified binary and made it executable in the job that then assumes an
+    # AWS deployment role, so whoever could answer that request chose the
+    # program that reads the pipeline's role configuration. Verified inline
+    # rather than through the shared helper because this abstract does not pull
+    # the scripts repo, and adding that dependency to an AWS credential helper
+    # is a bigger change than the two lines it would save. stoml publishes no
+    # checksum manifest; this digest was computed from the published artifact
+    # and is kept in step with global/scripts/shared/pinned-versions.sh.
+    - 'STOML_VERSION="0.7.1"'
+    - 'STOML_SHA256="8420ad10d39ca568234186be89a60f8a8ece29bc2a91b4c8ad2e00ef73b626de"'
+    - 'curl -fsSL --proto "=https" --proto-redir "=https" "https://github.com/freshautomations/stoml/releases/download/v${STOML_VERSION}/stoml_linux_amd64" -o /usr/local/bin/stoml'
+    - 'echo "${STOML_SHA256}  /usr/local/bin/stoml" | sha256sum -c - || { rm -f /usr/local/bin/stoml; echo "ERROR - stoml checksum mismatch, refusing to run it" >&2; exit 1; }'
+    - 'chmod +x /usr/local/bin/stoml && stoml --version'
     - export PIPELINE_EXECUTION_ROLE=`stoml .aws-sam/pipeline/pipelineconfig.toml $CI_ENVIRONMENT_SLUG.pipeline_bootstrap.parameters.pipeline_execution_role`
     - cred=$(aws sts assume-role --role-arn "$PIPELINE_EXECUTION_ROLE"
         --role-session-name "$CI_JOB_NAME_SLUG"

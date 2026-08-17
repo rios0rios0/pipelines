@@ -1,11 +1,36 @@
 include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
 
+# Checks out the shared `global/scripts/` tree that every job below runs, and
+# exports its location as `SCRIPTS_DIR`.
+#
+# The clone used to take no ref at all, so it always landed on whatever the
+# default branch held at that moment. That made the pin a consumer thought they
+# had illusory: the `include: remote:` URLs above name a ref for the TEMPLATE,
+# but the SCRIPTS those templates execute came from `main` regardless. Setting
+# `PIPELINES_REF` in the project's CI/CD variables (to a tag such as `4.23.0`,
+# or to a commit SHA) now pins the scripts too.
+#
+# The default is still `main`, so nothing changes for a consumer who has not
+# opted in.
 .scripts-repo:
+  variables:
+    PIPELINES_REF: 'main'
+    PIPELINES_REPO: 'https://github.com/rios0rios0/pipelines.git'
   before_script:
     - export SCRIPTS_DIR="$(mktemp -d)/pipelines"
-    - export SCRIPTS_REPO="https://github.com/rios0rios0/pipelines.git"
-    - git clone --depth 1 "$SCRIPTS_REPO" "$SCRIPTS_DIR"
+    # `git init` + `git fetch <ref>` rather than `git clone --branch <ref>`:
+    # `--branch` accepts a branch or a tag but rejects a raw commit SHA, and a
+    # SHA is the only form of this value that is genuinely immutable. This
+    # shape accepts all three.
+    - mkdir -p "$SCRIPTS_DIR"
+    - git init --quiet "$SCRIPTS_DIR"
+    - git -C "$SCRIPTS_DIR" remote add origin "$PIPELINES_REPO"
+    - git -C "$SCRIPTS_DIR" fetch --quiet --depth 1 --no-tags origin "$PIPELINES_REF"
+    - git -C "$SCRIPTS_DIR" checkout --quiet FETCH_HEAD
+    # A ref is a label and a label can be moved; the commit is what ran. Print
+    # it so a job log alone answers "which scripts did this execute?".
+    - echo "Checked out pipelines@$PIPELINES_REF ($(git -C "$SCRIPTS_DIR" rev-parse HEAD))"
   rules:
     - if: "$CI_MERGE_REQUEST_IID"
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"

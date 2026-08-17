@@ -1,5 +1,5 @@
 .maven:
-  image: 'maven:3.8-jdk-11-slim'
+  image: 'maven:3.8-jdk-11-slim@sha256:2cb7c73ba2fd0f7ae64cfabd99180030ec85841a1197b4ae821d21836cb0aa3b'
   cache: # relative to the project directory ($CI_PROJECT_DIR)
     key: "$CI_JOB_NAME"
     paths:

@@ -7,33 +7,45 @@ steps:
   - script: |
       set -uo pipefail
 
-      # Retried because both halves of this install are flaky from a shared CI
-      # egress IP: the release lookup is an unauthenticated GitHub API call
-      # subject to the 60-requests-per-hour anonymous limit, and the asset
-      # download itself can drop mid-transfer.
+      # Kept in step with global/scripts/shared/pinned-versions.sh. Declared
+      # inline because this abstract runs before any scripts-repo checkout, so
+      # there is no $(Scripts.Directory) to source the manifest from yet.
+      TERRAGRUNT_VERSION="1.1.3"
+      TERRAGRUNT_SHA256="d5da6a66741f4ee752aa3b502b57e47fd6d5c178942861b2507f14f083e7606e"
+
+      # Retried because the asset download can still drop mid-transfer from a
+      # shared CI egress IP. The release LOOKUP that used to be retried
+      # alongside it is gone -- the version is pinned, so there is no
+      # unauthenticated GitHub API call left to be throttled.
       #
       # Previously neither the lookup nor the download was checked, so a
       # throttled response left `url` empty, `curl` wrote no usable binary, and
       # `chmod +x` handed the resulting text file to the shell -- surfacing as
       # `./terragrunt: line 1016: syntax error: unexpected end of file`, which
-      # says nothing about the real cause. Each attempt now has to produce a
-      # working `terragrunt --version` before it counts as success.
+      # says nothing about the real cause. Each attempt now has to match the
+      # committed checksum AND produce a working `terragrunt --version` before
+      # it counts as success.
       attempts=3
 
       for attempt in $(seq 1 "$attempts"); do
         echo "Installing Terragrunt (attempt ${attempt}/${attempts})..."
 
-        # The trailing quote in the pattern pins the match to the raw binary:
-        # upstream also ships `terragrunt_linux_amd64.tar.gz` and `.zip`, and an
-        # unanchored match expands to three URLs against a single `-o`.
-        # `head -1` keeps that guarantee even if the asset list changes again.
-        url=$(curl -sS "https://api.github.com/repos/gruntwork-io/terragrunt/releases/latest" \
-          | grep "browser_download_url.*terragrunt_linux_amd64\"" | cut -d '"' -f 4 | head -1)
+        # PINNED and CHECKSUM-VERIFIED. This resolved `releases/latest` through
+        # the GitHub API on every run, so the Terragrunt that plans and applies
+        # this project's infrastructure was whichever version upstream had
+        # published that morning -- a moving target in the one job that holds
+        # cloud credentials -- and the binary it fetched was never verified.
+        # Fixing the version also removes the reason the URL had to be scraped
+        # out of an API response at all, which is what the deleted comment
+        # about matching `terragrunt_linux_amd64` against three assets was
+        # working around.
+        url="https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/terragrunt_linux_amd64"
 
-        if [ -z "$url" ]; then
-          echo "Attempt ${attempt}: could not resolve a download URL (API throttled or response changed)." >&2
-        elif ! curl -fsSL -o terragrunt "$url"; then
+        if ! curl -fsSL --proto '=https' --proto-redir '=https' -o terragrunt "$url"; then
           echo "Attempt ${attempt}: download failed from ${url}" >&2
+        elif ! echo "${TERRAGRUNT_SHA256}  terragrunt" | sha256sum -c -; then
+          echo "Attempt ${attempt}: CHECKSUM MISMATCH for ${url} -- refusing to run it." >&2
+          rm -f terragrunt
         else
           chmod +x terragrunt
           if ./terragrunt --version; then

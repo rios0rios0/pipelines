@@ -15,6 +15,6 @@ steps:
     displayName: 'Use Python 3.14'
 
   - script: |
-      python -m pip install pdm
+      python -m pip install "pdm==2.28.1"
       pdm install
     displayName: 'Install PDM + Dependencies'

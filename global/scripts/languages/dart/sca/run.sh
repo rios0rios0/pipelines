@@ -55,10 +55,24 @@ if ! command -v osv-scanner > /dev/null 2>&1; then
   if dart_is_dry_run; then
     echo "DRY RUN: skipping the OSV-Scanner download."
   else
-    OSV_URL="https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_$OSV_ARCH"
-    echo "Downloading OSV-Scanner (linux/$OSV_ARCH)..."
-    if ! curl -fsSL --show-error "$OSV_URL" -o /tmp/osv-scanner; then
-      echo "ERROR: could not download OSV-Scanner from $OSV_URL" >&2
+    # PINNED and CHECKSUM-VERIFIED. `releases/latest/download/...` meant the
+    # only dependency scanner Dart has here changed version without a diff,
+    # so a lockfile could pass one day and fail the next on advisories that
+    # were already public -- with nothing recording which scanner had run.
+    . "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
+    . "$SCRIPTS_DIR/global/scripts/shared/verify-download.sh"
+
+    case "$OSV_ARCH" in
+      amd64) OSV_DIGEST_ARCH="AMD64" ;;
+      arm64) OSV_DIGEST_ARCH="ARM64" ;;
+    esac
+    OSV_SHA256=$(pinned_digest OSV_SCANNER "$OSV_DIGEST_ARCH") || exit 1
+
+    echo "Installing OSV-Scanner v$OSV_SCANNER_VERSION (linux/$OSV_ARCH)..."
+    if ! download_verified \
+      "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_$OSV_ARCH" \
+      /tmp/osv-scanner \
+      "$OSV_SHA256"; then
       exit 1
     fi
     chmod +x /tmp/osv-scanner

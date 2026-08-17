@@ -110,7 +110,12 @@ workflows_dir = sys.argv[1]
 JOB_KEY = re.compile(r'^  ([A-Za-z0-9_-]+):\s*$')
 STAGE_COMMENT = re.compile(r'^  # (\w+) stage\s*$')
 # `uses:` may sit at the job level (a called workflow) or inside a step.
-USES = re.compile(r"^\s*-?\s*uses:\s*'?([^'\s]+)'?\s*$")
+# Third-party actions are pinned to a full commit SHA with the human-readable
+# version carried in a trailing `# vX.Y.Z` comment, so the ref must be captured
+# WITHOUT anchoring at end-of-line. Anchoring there silently dropped every
+# pinned `uses:` from the fact table, which would make Tests 3, 6 and 7 pass by
+# having nothing left to check rather than by the invariant holding.
+USES = re.compile(r"^\s*-?\s*uses:\s*'?([^'\s]+?)'?(?:\s+#.*)?\s*$")
 NAME = re.compile(r"^    name:\s*'?([^']*)'?\s*$")
 JOB_KEYS = ('needs', 'environment', 'permissions', 'if')
 AT_JOB_LEVEL = {key: re.compile(r'^    ' + key + r':') for key in JOB_KEYS}

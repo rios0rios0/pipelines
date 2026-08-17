@@ -29,7 +29,8 @@ stages:
         steps:
           - template: '../../abstracts/go.yaml'
           - script: |
-              go install golang.org/x/vuln/cmd/govulncheck@latest
+              # Pinned; see global/scripts/shared/pinned-versions.sh.
+              go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
               "$(go env GOPATH)/bin/govulncheck" ./...
             displayName: 'Run govulncheck'
         continueOnError: true

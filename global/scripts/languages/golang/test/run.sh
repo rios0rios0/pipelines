@@ -14,6 +14,7 @@ if [ -z "$SCRIPTS_DIR" ]; then
   SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
   export SCRIPTS_DIR
 fi
+. "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
 
 # Resolves GOPATH (GitLab CI/CD just supports cache in the project directory) and
 # keeps the resulting module cache out of $TMPDIR, where its read-only entries
@@ -56,9 +57,12 @@ echo "Installing dependencies..."
 # `go install` actually drops the binaries.
 GOBIN_DIR="$(go env GOBIN)"
 [ -n "$GOBIN_DIR" ] || GOBIN_DIR="$(go env GOPATH)/bin"
-[ -x "$GOBIN_DIR/gotestsum" ] || go install gotest.tools/gotestsum@latest
-[ -x "$GOBIN_DIR/gocovmerge" ] || go install github.com/wadey/gocovmerge@latest
-[ -x "$GOBIN_DIR/gocover-cobertura" ] || go install github.com/boumenot/gocover-cobertura@latest
+# PINNED. These three shape the test report and the coverage number the
+# quality gate reads, so `@latest` meant the measurement could move without the
+# measured code moving.
+[ -x "$GOBIN_DIR/gotestsum" ] || go install "gotest.tools/gotestsum@$GOTESTSUM_VERSION"
+[ -x "$GOBIN_DIR/gocovmerge" ] || go install "github.com/wadey/gocovmerge@$GOCOVMERGE_VERSION"
+[ -x "$GOBIN_DIR/gocover-cobertura" ] || go install "github.com/boumenot/gocover-cobertura@$GOCOVER_COBERTURA_VERSION"
 
 echo ""
 echo "=========================================="

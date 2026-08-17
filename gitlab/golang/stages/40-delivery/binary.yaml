@@ -3,18 +3,39 @@ variables:
 
 delivery:qa:
   stage: 'delivery'
-  image: 'golang:latest'
+  image: 'golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36'
   script:
     - |
       set -eux
       apt-get update && apt-get install -y musl-tools
 
-      # Install goreleaser
-      curl -sL "https://github.com/goreleaser/goreleaser/releases/download/v${GORELEASER_VERSION}/goreleaser_${GORELEASER_VERSION}_amd64.deb" -o /tmp/goreleaser.deb
+      # Both downloads below are now verified before anything runs them, via
+      # the shared helper the tool installers use.
+      . "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
+      . "$SCRIPTS_DIR/global/scripts/shared/verify-download.sh"
+
+      # Install goreleaser. The version was already pinned; the package was not
+      # verified, and `dpkg -i` installs as root and runs the package's
+      # maintainer scripts, so an unverified .deb is root-level code execution
+      # on the build agent.
+      download_verified \
+        "https://github.com/goreleaser/goreleaser/releases/download/v${GORELEASER_VERSION}/goreleaser_${GORELEASER_VERSION}_amd64.deb" \
+        /tmp/goreleaser.deb \
+        "$GORELEASER_SHA256_AMD64_DEB"
       dpkg -i /tmp/goreleaser.deb
 
-      # Load repository secure files
-      curl --silent "https://gitlab.com/gitlab-org/incubation-engineering/mobile-devops/download-secure-files/-/raw/main/installer" | bash
+      # Load repository secure files.
+      #
+      # This fetched GitLab's installer from the `main` BRANCH and piped it
+      # straight into bash -- in the job that holds this project's signing
+      # secure files. It is pinned to a release tag and checksum-verified, then
+      # executed from disk, so the bytes that run are the bytes that were
+      # reviewed.
+      download_verified \
+        "https://gitlab.com/gitlab-org/incubation-engineering/mobile-devops/download-secure-files/-/raw/${SECURE_FILES_INSTALLER_VERSION}/installer" \
+        /tmp/secure-files-installer \
+        "$SECURE_FILES_INSTALLER_SHA256"
+      bash /tmp/secure-files-installer
 
       # Prepare GoReleaser config (skips if project already has one)
       "$SCRIPTS_DIR/global/scripts/languages/golang/goreleaser/prepare.sh" \

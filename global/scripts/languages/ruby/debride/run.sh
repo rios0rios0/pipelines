@@ -5,18 +5,19 @@ if [ -z "$SCRIPTS_DIR" ]; then
   export SCRIPTS_DIR
 fi
 TOOL_NAME="debride" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
 
 fileName="$(pwd)/$REPORT_PATH/debride.txt"
 
+# PINNED. Same reasoning as vulture: an unpinned `gem install` plus a
+# `gem update` on every run meant the dead-code verdict for a given commit
+# depended on the day it was computed. `DEBRIDE_SPEC` is `name:version`, which
+# is the form `gem install -v` takes.
+DEBRIDE_NAME="${DEBRIDE_SPEC%%:*}"
+DEBRIDE_GEM_VERSION="${DEBRIDE_SPEC##*:}"
 if ! command -v debride > /dev/null 2>&1; then
-  echo "Installing debride..."
-  gem install --user-install -n "$HOME/.local/bin" debride --no-document --quiet
-else
-  # Already present (persistent agent): self-update so long-lived hosts stay
-  # current for CVE fixes. `gem update` only fetches a newer release when one
-  # exists, so this is a no-op otherwise.
-  echo "Updating debride..."
-  gem update --user-install debride --no-document --quiet
+  echo "Installing $DEBRIDE_NAME $DEBRIDE_GEM_VERSION..."
+  gem install --user-install -n "$HOME/.local/bin" "$DEBRIDE_NAME" -v "$DEBRIDE_GEM_VERSION" --no-document --quiet
 fi
 
 echo "Running debride unused code analysis..."

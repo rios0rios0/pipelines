@@ -2,8 +2,12 @@
 # Terraform and Terragrunt. After installation, `terra install` pulls the
 # correct versions of both tools automatically.
 steps:
+  # `scripts-repo` is what puts $(Scripts.Directory) in scope for the installer
+  # below, which replaces the vendor's `curl ... | sh` one-liner.
+  - template: '../../global/abstracts/scripts-repo.yaml'
+
   - script: |
-      curl -fsSL https://raw.githubusercontent.com/rios0rios0/terra/main/install.sh | sh
+      $(Scripts.Directory)/global/scripts/languages/terraform/terra/install.sh
       terra install
       terra version
     displayName: 'Install terra CLI + dependencies'

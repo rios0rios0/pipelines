@@ -43,7 +43,8 @@ stages:
         steps:
           - template: '../../abstracts/pdm-python3.14.yaml'
           - script: |
-              pip install vulture --quiet
+              # Pinned; see global/scripts/shared/pinned-versions.sh.
+              pip install "vulture==2.16" --quiet
               vulture . --min-confidence 80 --exclude .venv
             displayName: 'Run Vulture dead code detection'
         continueOnError: true

@@ -1,5 +1,5 @@
 .npm:
-  image: 'node:16.14.0-bullseye'
+  image: 'node:16.14.0-bullseye@sha256:56a3030a46e1956a8c12725235210db2ef76c18ab5dcdaf3eab3a3fc80b447ee'
   cache: # relative to the project directory ($CI_PROJECT_DIR)
     key: "$CI_JOB_NAME"
     paths:

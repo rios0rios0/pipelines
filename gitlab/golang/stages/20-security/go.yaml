@@ -13,6 +13,7 @@ sca:govulncheck:
   extends: '.go'
   stage: 'security (sca/sast)'
   script:
-    - go install golang.org/x/vuln/cmd/govulncheck@latest
+    # Pinned; kept in step with global/scripts/shared/pinned-versions.sh.
+    - go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
     - govulncheck ./...
   allow_failure: true

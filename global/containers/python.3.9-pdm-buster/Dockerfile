@@ -1,5 +1,5 @@
 # TODO: needs to be reviewed to use alpine
-FROM python:3.9-slim-buster
+FROM python:3.9-slim-buster@sha256:320a7a4250aba4249f458872adecf92eea88dc6abd2d76dc5c0f01cac9b53990
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   libglib2.0-dev \

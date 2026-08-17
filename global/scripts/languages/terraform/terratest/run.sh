@@ -7,6 +7,7 @@ if [ -z "${SCRIPTS_DIR:-}" ]; then
   SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
   export SCRIPTS_DIR
 fi
+. "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
 
 # Runs the consumer's Terratest Go suite and publishes the results as
 # JUnit XML. Complements the `terra-test` runner (native `terraform test`
@@ -57,15 +58,11 @@ mkdir -p "${REPORT_PATH}"
 GOBIN="$(go env GOPATH)/bin"
 export PATH="${GOBIN}:${PATH}"
 
+# PINNED, which also removes the "re-resolve @latest on every run" branch: an
+# exact version is idempotent, so there is nothing to re-resolve.
 if ! command -v go-junit-report > /dev/null 2>&1; then
-  echo "Installing go-junit-report..."
-  go install github.com/jstemmer/go-junit-report/v2@latest
-else
-  # Already present (persistent agent): re-resolve @latest so long-lived hosts
-  # stay current. `go install` reuses the module cache and only rebuilds when
-  # @latest advances, so this is cheap when already up to date.
-  echo "Updating go-junit-report..."
-  go install github.com/jstemmer/go-junit-report/v2@latest
+  echo "Installing go-junit-report $GO_JUNIT_REPORT_VERSION..."
+  go install "github.com/jstemmer/go-junit-report/v2@$GO_JUNIT_REPORT_VERSION"
 fi
 
 echo "Running terratest suite in ${TESTS_DIR}/..."

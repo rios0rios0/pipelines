@@ -1,9 +1,9 @@
-FROM golang:1.19.0-alpine3.16 AS health_builder
+FROM golang:1.19.0-alpine3.16@sha256:0eb08c89ab1b0c638a9fe2780f7ae3ab18f6ecda2c76b908e09eb8073912045d AS health_builder
 
 COPY health src/health
 RUN cd src/health && go build -o /go/health -ldflags="-w -s"
 
-FROM caddy:2.7.4-builder-alpine AS caddy_builder
+FROM caddy:2.7.4-builder-alpine@sha256:ec3ac7eee8b4635cb9336eb4cb201684d2cd54f6fe3bcbb61469e1114188f461 AS caddy_builder
 
 RUN xcaddy build \
 	--with github.com/mholt/caddy-l4

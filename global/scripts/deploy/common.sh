@@ -20,6 +20,13 @@
 # `-DnvdApiKeyEnvironmentVariable` in the Dependency-Check runner
 # (GHSA-qqhq-8r2c-c3f5): pass the NAME, never the VALUE.
 
+# Pinned tool versions and the integrity-checked downloader, sourced once here
+# so every provider script gets them from the single `common.sh` it already
+# sources. Doing it per-provider would be five chances to forget one, and the
+# provider that forgot would look identical to the ones that did not.
+. "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/verify-download.sh"
+
 # deploy_require_env <VAR_NAME> <hint>
 #
 # Fail with an actionable message when a required credential or identifier is
@@ -49,10 +56,22 @@ deploy_require_env() {
 # is already on `PATH` via the `cleanup.sh` preamble every one of these scripts
 # sources.
 #
-# The version is deliberately NOT pinned. These are deploy-time clients that
-# talk to a hosted API the vendor versions on their side; pinning them here
-# would freeze every consumer on whatever was current when this file was last
-# touched and break them the day the vendor retires that client's API version.
+# The package argument is a full npm SPEC (`vercel@59`), not a bare name.
+#
+# These were previously installed unversioned, which resolved to `latest` on
+# every run: the client holding the production deploy credential was chosen by
+# whatever npm had published that morning, and a deploy could not say which
+# client shipped it. The counter-argument for leaving them floating is real --
+# these talk to a hosted API the vendor versions on their side, and freezing an
+# exact build would break every consumer the day the vendor retires that API
+# version -- so the pin is to the MAJOR this repository has verified. npm still
+# resolves the newest release inside it, and `pinned-versions.sh` documents how
+# a consumer needing a byte-exact client sets an exact version instead.
+#
+# `--ignore-scripts` is the other half. `npm install` runs arbitrary
+# `postinstall` scripts from the package AND its whole transitive tree, as the
+# CI user, with the deploy token already in the environment -- the standard
+# npm-supply-chain execution path. None of these three CLIs needs one to work.
 deploy_npm_cli() {
   _dn_binary="$1"
   _dn_package="$2"
@@ -77,7 +96,7 @@ deploy_npm_cli() {
   fi
 
   echo "Installing $_dn_package..."
-  if ! npm install --global --no-fund --no-audit --prefix "$HOME/.local" "$_dn_package"; then
+  if ! npm install --global --no-fund --no-audit --ignore-scripts --prefix "$HOME/.local" "$_dn_package"; then
     echo "ERROR: failed to install '$_dn_package' via npm." >&2
     exit 1
   fi

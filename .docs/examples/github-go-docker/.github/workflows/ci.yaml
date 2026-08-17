@@ -14,4 +14,10 @@ permissions:
 
 jobs:
   pipeline:
-    uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'
+    # Pinned to a release tag rather than '@main'. A branch is a moving
+    # target: '@main' means every pipeline run executes whatever this
+    # library happened to merge that morning, including changes nobody here
+    # reviewed. Bump this deliberately. For maximum immutability pin the
+    # 40-character commit SHA instead; '@v4' tracks the major and still
+    # receives patches automatically.
+    uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@4.23.0'

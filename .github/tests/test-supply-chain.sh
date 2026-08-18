@@ -216,24 +216,58 @@ MISSING_PINNED="$(
 assert_empty "every overridable version has a pinned constant to compare against" "$MISSING_PINNED"
 
 # Any script that downloads an executable must route through the verifier.
-# `grep -l` on the file, not on a resolved pipeline, so a new installer that
-# forgets the helper fails here rather than in a consumer's job.
-# Matched on the URL ALONE, not on `curl ... <url>` on one line. The helper
-# takes the URL as an argument, so in every converted installer the URL and the
-# call sit on different lines -- a same-line pattern would therefore stop
-# matching the moment a script was fixed, and stop matching again if someone
-# later replaced the helper with a bare `curl` split across lines. The helper
-# and the manifest are excluded because they define the contract rather than
-# consume it.
+#
+# Checked PER URL, not per file. This was a `grep -q download_verified` over the
+# whole file, which meant ONE verified download anywhere cleared every other
+# download in it -- and that is not hypothetical: golangci-lint/run.sh fetched
+# golangci-lint through the helper on one line and `yq` through a bare `curl` a
+# hundred lines above, and this assertion reported the file as compliant for as
+# long as both were true. A per-file answer cannot express "this file has two
+# downloads and one of them is unverified".
+#
+# Matched on the URL line and a small window ABOVE it, not on `curl ... <url>`
+# on one line: the helper takes the URL as an argument, so in every converted
+# installer the call and the URL sit on different lines.
+#
+# Two shapes are accepted besides the canonical call, because both appear here
+# and neither is a hole:
+#   - a URL assigned to a variable that is later passed to `download_verified`
+#     (dart/common.sh resolves the Flutter archive name first, then downloads it
+#     ten lines further on, so no fixed window would cover it);
+#   - a `.json` document, which is PARSED and never executed -- the Flutter
+#     release manifest is fetched to find out which archive to verify against.
+#
+# The helper and the manifest are excluded because they define the contract
+# rather than consume it.
+URL_RE='https://[^ "'"'"']*/(releases|download)/'
 UNVERIFIED_DOWNLOADS="$(
-  for f in $(grep -rlE "https://[^ \"']*/(releases|download)/" \
+  for f in $(grep -rlE "$URL_RE" \
       --include='*.sh' global/scripts 2>/dev/null \
       | grep -v 'shared/verify-download.sh' \
       | grep -v 'shared/pinned-versions.sh'); do
-    grep -q 'download_verified' "$f" || echo "$f: reaches a release artifact without download_verified"
+    awk -v file="$f" -v urlre="$URL_RE" '
+      { line[NR] = $0 }
+      END {
+        for (i = 1; i <= NR; i++) {
+          if (line[i] !~ urlre) continue
+          if (line[i] ~ /\.json"?[[:space:]]*\\?[[:space:]]*$/) continue
+          ok = 0
+          start = (i > 3) ? i - 3 : 1
+          for (j = start; j <= i; j++) if (line[j] ~ /download_verified/) ok = 1
+          if (!ok && line[i] ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=/) {
+            v = line[i]
+            sub(/^[[:space:]]*/, "", v)
+            sub(/=.*$/, "", v)
+            for (j = 1; j <= NR; j++)
+              if (line[j] ~ ("download_verified.*[$][{]?" v)) ok = 1
+          }
+          if (!ok)
+            printf "%s:%d: release artifact fetched without download_verified\n", file, i
+        }
+      }' "$f"
   done
 )"
-assert_empty "every script fetching a release artifact uses download_verified" "$UNVERIFIED_DOWNLOADS"
+assert_empty "every release-artifact download routes through download_verified" "$UNVERIFIED_DOWNLOADS"
 echo ""
 
 # ---------------------------------------------------------------------------

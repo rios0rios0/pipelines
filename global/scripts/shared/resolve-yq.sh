@@ -31,10 +31,9 @@
 # workstation, for a reason that looks nothing like the real cause. A second
 # copy of this logic is how the discrepancy would come back.
 
-# Overridable so an operator can respond to an upstream issue without waiting
-# for a release here. The digest that pairs with it is the subject of a
-# follow-up change; see the note on `download_verified` below.
-YQ_VERSION="${YQ_VERSION:-v4.47.1}"
+# `YQ_VERSION` and its digests come from pinned-versions.sh, which the caller
+# sources before this file. Declared there rather than here so one manifest
+# still answers "what version of everything does this repository install".
 
 # yq_is_mikefarah <command>
 #
@@ -80,18 +79,18 @@ resolve_yq() {
     *) _ry_arch='amd64' ;;
   esac
 
-  # `SKIP` is deliberate and TEMPORARY, and it is the honest encoding of what
-  # this download has always done: it was previously a bare `curl` inside
-  # run.sh, verified against nothing. Routing it through the shared helper does
-  # not make it verified -- it makes the gap ANNOUNCE ITSELF on every use
-  # instead of hiding in a second downloader nobody had cause to read. The
-  # follow-up change adds `YQ_PINNED_VERSION` and the per-arch digests to
-  # pinned-versions.sh and replaces `SKIP` with `$(pinned_digest YQ ...)`.
+  # The release asset is named for the OS/arch pair, and so is the digest that
+  # describes it -- `pinned_digest` is asked for the same `LINUX_AMD64` string
+  # the URL is built from, so the two cannot drift apart. A `return 1` here is
+  # the "no committed digest for this architecture" path, which must fail
+  # rather than fall back to an unverified download.
+  _ry_sha="$(pinned_digest YQ "$(printf '%s_%s' "$_ry_os" "$_ry_arch" | tr '[:lower:]' '[:upper:]')")" || return 1
+
   if ! download_verified \
-    "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_${_ry_os}_${_ry_arch}" \
+    "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_${_ry_os}_${_ry_arch}" \
     "$_ry_dir/yq" \
-    "SKIP"; then
-    echo "resolve_yq: could not download mikefarah/yq ${YQ_VERSION} for ${_ry_os}/${_ry_arch}" >&2
+    "$_ry_sha"; then
+    echo "resolve_yq: could not install mikefarah/yq v${YQ_VERSION} for ${_ry_os}/${_ry_arch}" >&2
     return 1
   fi
 

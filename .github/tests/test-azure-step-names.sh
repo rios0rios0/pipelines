@@ -74,22 +74,49 @@ AZ = os.path.join(ROOT, "azure-devops")
 SCRIPTS_REPO = os.path.join(AZ, "global/abstracts/scripts-repo.yaml")
 
 cache = {}
+PARSE_ERRORS = []
+MISSING_INCLUDES = []
 
 
-def load(path):
-    if path not in cache:
-        try:
-            with open(path, encoding="utf-8") as fh:
-                cache[path] = yaml.safe_load(fh)
-        except Exception:
-            cache[path] = None
+def load(path, referenced_from=None):
+    """Parse a template, RECORDING failures instead of swallowing them.
+
+    Returning None quietly on a parse error would make this whole test
+    self-defeating: a malformed template or an include pointing at nothing
+    expands to no jobs, so every assertion below finds nothing to complain
+    about and the suite goes green PRECISELY WHEN IT HAS STOPPED LOOKING.
+    That is the same silent-pass shape this test exists to prevent, so a file
+    that cannot be read is a finding rather than a skip.
+
+    `referenced_from` is set when the path came from a `template:` include, so
+    a missing file can be reported against the file that references it -- the
+    only place a human can fix it.
+    """
+    if path in cache:
+        return cache[path]
+    cache[path] = None                       # also guards include cycles
+    if not os.path.exists(path):
+        if referenced_from is not None:
+            MISSING_INCLUDES.append((referenced_from, path))
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            cache[path] = yaml.safe_load(fh)
+    except Exception as exc:
+        PARSE_ERRORS.append((path, " ".join(str(exc).split())))
     return cache[path]
 
 
 def resolve(ref, base):
-    # `path@repo` names another repository resource, which cannot be expanded
-    # from here; the path half is still the right thing to resolve locally.
-    ref = str(ref).split("@", 1)[0]
+    """Resolve a `template:` reference to a local path, or None.
+
+    `path@repo` names a template in ANOTHER repository resource. This
+    repository cannot expand those and must not report them as missing
+    includes either, so they resolve to None and are skipped.
+    """
+    ref = str(ref)
+    if "@" in ref:
+        return None
     return os.path.normpath(os.path.join(os.path.dirname(base), ref))
 
 
@@ -161,10 +188,12 @@ def expand(steps, base, chain):
         template = step.get("template")
         if template:
             path = resolve(template, base)
+            if path is None:           # a template in another repository resource
+                continue
             yield "tpl", path
             if path in chain:          # a cycle would otherwise recurse forever
                 continue
-            doc = load(path)
+            doc = load(path, referenced_from=base)
             if isinstance(doc, dict) and "steps" in doc:
                 for item in expand(doc["steps"], path, chain | {path}):
                     yield item
@@ -199,7 +228,9 @@ def collect(node, base, out):
                         })
                     elif "template" in entry:
                         path = resolve(entry["template"], base)
-                        doc = load(path)
+                        if path is None:
+                            continue
+                        doc = load(path, referenced_from=base)
                         if doc is not None:
                             collect(doc, path, out)
             else:
@@ -228,10 +259,40 @@ for job in out:
         continue
     seen.add(key)
     print(json.dumps(job, sort_keys=True))
+
+for path, detail in PARSE_ERRORS:
+    print(json.dumps({"error": "unparseable",
+                      "file": os.path.relpath(path, ROOT),
+                      "detail": detail}, sort_keys=True))
+for referrer, path in MISSING_INCLUDES:
+    print(json.dumps({"error": "missing include",
+                      "file": os.path.relpath(referrer, ROOT),
+                      "detail": os.path.relpath(path, ROOT)}, sort_keys=True))
 PY
 )"
 
-echo "1. Step names are unique within every expanded job"
+# Reported FIRST because it invalidates the two below: a template that does not
+# parse, or an include that points at nothing, expands to no jobs -- so the
+# assertions that follow would find nothing wrong and pass for the worst
+# possible reason. This suite exists because nothing else can see these
+# defects, which is exactly why it must not go quietly blind itself.
+echo "1. Every Azure template parses and every include resolves"
+UNREADABLE="$(
+  echo "$EXPANSION" | /usr/bin/env python3 -c '
+import json, sys
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    record = json.loads(line)
+    if "error" in record:
+        print("%s: %s (%s)" % (record["file"], record["error"], record["detail"]))
+'
+)"
+assert_empty "every template parses and every referenced include exists" "$UNREADABLE"
+echo ""
+
+echo "2. Step names are unique within every expanded job"
 DUPLICATE_NAMES="$(
   echo "$EXPANSION" | /usr/bin/env python3 -c '
 import json, sys
@@ -240,6 +301,8 @@ for line in sys.stdin:
     if not line:
         continue
     job = json.loads(line)
+    if "error" in job:
+        continue
     for name, count in sorted(job["duplicates"].items()):
         print("%s: job %s declares the step name %r %d times"
               % (job["file"], job["job"], name, count))
@@ -248,7 +311,7 @@ for line in sys.stdin:
 assert_empty "no job declares the same step name twice" "$DUPLICATE_NAMES"
 echo ""
 
-echo "2. Every job using \$(Scripts.Directory) checks the scripts out"
+echo "3. Every job using \$(Scripts.Directory) checks the scripts out"
 # The opposite failure, and the reason the duplicate is so tempting to add: a
 # job that references $(Scripts.Directory) without including `scripts-repo`
 # gets an EMPTY string, so the command becomes `/global/scripts/...` and the
@@ -264,6 +327,8 @@ for line in sys.stdin:
     if not line:
         continue
     job = json.loads(line)
+    if "error" in job:
+        continue
     if job["uses_scripts_dir"] and not job["has_scripts_repo"]:
         print("%s: job %s uses $(Scripts.Directory) but never includes scripts-repo"
               % (job["file"], job["job"]))

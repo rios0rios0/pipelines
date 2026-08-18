@@ -6,10 +6,15 @@ parameters:
     default: 'Replace Environment Variables'
 
 steps:
+  # `FILE` reaches `sed` through `env:` and is quoted at the call site. It was
+  # interpolated into the script text, so a path containing a space produced two
+  # arguments and one containing a shell metacharacter produced a command.
   - script: |
       for var in $(compgen -e); do
         value=$(eval echo \$$var)
         escaped_value=$(printf '%s\n' "$value" | sed 's:[\/&]:\\&:g')
-        sed -i "s/\${$var}/$escaped_value/g" ${{ parameters.FILE }}
+        sed -i "s/\${$var}/$escaped_value/g" "$TARGET_FILE"
       done
     displayName: "${{ parameters.DISPLAY_NAME }}"
+    env:
+      TARGET_FILE: ${{ parameters.FILE }}

@@ -67,7 +67,7 @@ stages:
                     set -e
 
                     # Validate LAMBDA_FUNCTION_NAME is provided for ZIP deployment
-                    if [ -z "${{ parameters.LAMBDA_FUNCTION_NAME }}" ]; then
+                    if [ -z "$LAMBDA_FUNCTION_NAME" ]; then
                       echo "ERROR: LAMBDA_FUNCTION_NAME is required for ZIP deployment"
                       exit 1
                     fi
@@ -75,32 +75,32 @@ stages:
                     echo "Deploying Lambda function via AWS CLI..."
 
                     # Check if function exists
-                    if aws lambda get-function --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} --region $(AWS_REGION) 2>/dev/null; then
-                      echo "Updating existing Lambda function: ${{ parameters.LAMBDA_FUNCTION_NAME }}"
+                    if aws lambda get-function --function-name $LAMBDA_FUNCTION_NAME --region $AWS_REGION_NAME 2>/dev/null; then
+                      echo "Updating existing Lambda function: $LAMBDA_FUNCTION_NAME"
                       aws lambda update-function-code \
-                        --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
-                        --zip-file fileb://$(Build.SourcesDirectory)/lambda-function.zip \
-                        --region $(AWS_REGION)
+                        --function-name $LAMBDA_FUNCTION_NAME \
+                        --zip-file fileb://$BUILD_SOURCES_DIRECTORY/lambda-function.zip \
+                        --region $AWS_REGION_NAME
 
                       # Update configuration if environment variables are provided
-                      if [ -n "${{ parameters.LAMBDA_ENV_VARS }}" ]; then
+                      if [ -n "$LAMBDA_ENV_VARS" ]; then
                         aws lambda update-function-configuration \
-                          --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
-                          --timeout ${{ parameters.LAMBDA_TIMEOUT }} \
-                          --memory-size ${{ parameters.LAMBDA_MEMORY_SIZE }} \
-                          --environment "Variables={${{ parameters.LAMBDA_ENV_VARS }}}" \
-                          --region $(AWS_REGION)
+                          --function-name $LAMBDA_FUNCTION_NAME \
+                          --timeout $LAMBDA_TIMEOUT \
+                          --memory-size $LAMBDA_MEMORY_SIZE \
+                          --environment "Variables={$LAMBDA_ENV_VARS}" \
+                          --region $AWS_REGION_NAME
                       else
                         aws lambda update-function-configuration \
-                          --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
-                          --timeout ${{ parameters.LAMBDA_TIMEOUT }} \
-                          --memory-size ${{ parameters.LAMBDA_MEMORY_SIZE }} \
-                          --region $(AWS_REGION)
+                          --function-name $LAMBDA_FUNCTION_NAME \
+                          --timeout $LAMBDA_TIMEOUT \
+                          --memory-size $LAMBDA_MEMORY_SIZE \
+                          --region $AWS_REGION_NAME
                       fi
                     else
                       # Only create if CREATE_IF_MISSING is true
-                      if [ "${{ parameters.CREATE_IF_MISSING }}" = "true" ]; then
-                        echo "Creating new Lambda function: ${{ parameters.LAMBDA_FUNCTION_NAME }}"
+                      if [ "$PARAM_CREATE_IF_MISSING" = "true" ]; then
+                        echo "Creating new Lambda function: $LAMBDA_FUNCTION_NAME"
 
                         # Note: Creating a Lambda function requires IAM role ARN
                         # This should be provided via environment variables or parameters
@@ -109,36 +109,50 @@ stages:
                           exit 1
                         fi
 
-                        if [ -n "${{ parameters.LAMBDA_ENV_VARS }}" ]; then
+                        if [ -n "$LAMBDA_ENV_VARS" ]; then
                           aws lambda create-function \
-                            --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
-                            --runtime ${{ parameters.LAMBDA_RUNTIME }} \
-                            --handler ${{ parameters.LAMBDA_HANDLER }} \
+                            --function-name $LAMBDA_FUNCTION_NAME \
+                            --runtime $LAMBDA_RUNTIME \
+                            --handler $LAMBDA_HANDLER \
                             --role "$LAMBDA_ROLE_ARN" \
-                            --zip-file fileb://$(Build.SourcesDirectory)/lambda-function.zip \
-                            --timeout ${{ parameters.LAMBDA_TIMEOUT }} \
-                            --memory-size ${{ parameters.LAMBDA_MEMORY_SIZE }} \
-                            --environment "Variables={${{ parameters.LAMBDA_ENV_VARS }}}" \
-                            --region $(AWS_REGION)
+                            --zip-file fileb://$BUILD_SOURCES_DIRECTORY/lambda-function.zip \
+                            --timeout $LAMBDA_TIMEOUT \
+                            --memory-size $LAMBDA_MEMORY_SIZE \
+                            --environment "Variables={$LAMBDA_ENV_VARS}" \
+                            --region $AWS_REGION_NAME
                         else
                           aws lambda create-function \
-                            --function-name ${{ parameters.LAMBDA_FUNCTION_NAME }} \
-                            --runtime ${{ parameters.LAMBDA_RUNTIME }} \
-                            --handler ${{ parameters.LAMBDA_HANDLER }} \
+                            --function-name $LAMBDA_FUNCTION_NAME \
+                            --runtime $LAMBDA_RUNTIME \
+                            --handler $LAMBDA_HANDLER \
                             --role "$LAMBDA_ROLE_ARN" \
-                            --zip-file fileb://$(Build.SourcesDirectory)/lambda-function.zip \
-                            --timeout ${{ parameters.LAMBDA_TIMEOUT }} \
-                            --memory-size ${{ parameters.LAMBDA_MEMORY_SIZE }} \
-                            --region $(AWS_REGION)
+                            --zip-file fileb://$BUILD_SOURCES_DIRECTORY/lambda-function.zip \
+                            --timeout $LAMBDA_TIMEOUT \
+                            --memory-size $LAMBDA_MEMORY_SIZE \
+                            --region $AWS_REGION_NAME
                         fi
                       else
-                        echo "ERROR: Lambda function ${{ parameters.LAMBDA_FUNCTION_NAME }} does not exist and CREATE_IF_MISSING is false"
+                        echo "ERROR: Lambda function $LAMBDA_FUNCTION_NAME does not exist and CREATE_IF_MISSING is false"
                         exit 1
                       fi
                     fi
 
                     echo "Lambda function deployed successfully"
 
+            # Every parameter and predefined variable this script reads arrives through
+            # `env:`. `${{ }}` is substituted into the YAML before the agent runs it, so a
+            # value carrying a quote used to close an `aws` argument and append a command --
+            # on the very step that holds this pipeline's AWS credentials.
+            env:
+              LAMBDA_FUNCTION_NAME: ${{ parameters.LAMBDA_FUNCTION_NAME }}
+              LAMBDA_ENV_VARS: ${{ parameters.LAMBDA_ENV_VARS }}
+              LAMBDA_TIMEOUT: ${{ parameters.LAMBDA_TIMEOUT }}
+              LAMBDA_MEMORY_SIZE: ${{ parameters.LAMBDA_MEMORY_SIZE }}
+              PARAM_CREATE_IF_MISSING: ${{ parameters.CREATE_IF_MISSING }}
+              LAMBDA_RUNTIME: ${{ parameters.LAMBDA_RUNTIME }}
+              LAMBDA_HANDLER: ${{ parameters.LAMBDA_HANDLER }}
+              AWS_REGION_NAME: $(AWS_REGION)
+              BUILD_SOURCES_DIRECTORY: $(Build.SourcesDirectory)
           - script: |
               set -e
 
@@ -237,11 +251,11 @@ stages:
 
                     # Build sam deploy command
                     SAM_DEPLOY_CMD="sam deploy \
-                      --template-file $(Build.SourcesDirectory)/packaged.yaml \
-                      --config-env ${{ parameters.SAM_CONFIG_ENV }} \
+                      --template-file $BUILD_SOURCES_DIRECTORY/packaged.yaml \
+                      --config-env $PARAM_SAM_CONFIG_ENV \
                       --stack-name $(STACK_NAME) \
                       --no-confirm-changeset \
-                      --region $(AWS_REGION)"
+                      --region $AWS_REGION_NAME"
 
                     # Add parameter overrides if they exist
                     if [ -n "$(PARAMETER_OVERRIDES)" ]; then
@@ -250,6 +264,14 @@ stages:
 
                     eval $SAM_DEPLOY_CMD
 
+            # Every parameter and predefined variable this script reads arrives through
+            # `env:`. `${{ }}` is substituted into the YAML before the agent runs it, so a
+            # value carrying a quote used to close an `aws` argument and append a command --
+            # on the very step that holds this pipeline's AWS credentials.
+            env:
+              PARAM_SAM_CONFIG_ENV: ${{ parameters.SAM_CONFIG_ENV }}
+              BUILD_SOURCES_DIRECTORY: $(Build.SourcesDirectory)
+              AWS_REGION_NAME: $(AWS_REGION)
           - script: |
               set -e
 

@@ -47,9 +47,22 @@ runs:
         # the published port to loopback keeps the database off every other interface, since
         # the default `0.0.0.0` would put an instance with well-known credentials on the
         # network the runner sits in.
+        # Generated per run rather than a literal. The old hard-coded value was
+        # only ever reachable on loopback, so this is not a leaked credential --
+        # but a well-known password is still a well-known password, and every
+        # secret scanner reads one in a template as a finding it cannot tell
+        # apart from a real one. A random value costs nothing here because
+        # nothing outside this step ever needs to know it.
+        db_password="$(openssl rand -hex 24 2>/dev/null \
+          || head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+        if [ -z "$db_password" ]; then
+          echo '::error::could not generate a password for the test database'
+          exit 1
+        fi
+
         docker run --detach --name 'pipelines-test-db' \
           --env POSTGRES_USER='pipelines' \
-          --env POSTGRES_PASSWORD='pipelines' \
+          --env POSTGRES_PASSWORD="$db_password" \
           --env POSTGRES_DB='pipelines_test' \
           --publish '127.0.0.1::5432' \
           --health-cmd 'pg_isready -U pipelines' \
@@ -83,7 +96,7 @@ runs:
         # literal `://<something>:<something>@` shape, and an interpolated user:password@ still
         # reads as that shape even though it holds no credential. A format string does not.
         url="$(printf 'postgres://%s:%s@%s:%s/%s?sslmode=disable' \
-          'pipelines' 'pipelines' '127.0.0.1' "$host_port" 'pipelines_test')"
+          'pipelines' "$db_password" '127.0.0.1' "$host_port" 'pipelines_test')"
         echo "${{ inputs.database_url_env }}=${url}" >> "$GITHUB_ENV"
 
     - name: 'Setup Go'

@@ -69,18 +69,26 @@ stages:
               echo "Building Go Lambda function..."
               export CGO_ENABLED=0
               export GOOS=linux
-              export GOARCH=${{ parameters.GOARCH }}
-              export BUILD_FLAGS="${{ parameters.BUILD_FLAGS }}"
+              export GOARCH="$LAMBDA_GOARCH"
+              export BUILD_FLAGS="$LAMBDA_BUILD_FLAGS"
 
-              mkdir -p $(LAMBDA_ARTIFACT_DIR)
+              mkdir -p "$LAMBDA_ARTIFACT_DIR"
 
-              # Build the Lambda handler
-              go build $BUILD_FLAGS -o $(LAMBDA_ARTIFACT_DIR)/${{ parameters.LAMBDA_HANDLER }} .
+              # Build the Lambda handler. `$BUILD_FLAGS` is deliberately
+              # unquoted -- it holds several argv words that must split.
+              go build $BUILD_FLAGS -o "$LAMBDA_ARTIFACT_DIR/$LAMBDA_HANDLER_NAME" .
 
               echo "Lambda binary built successfully"
-              ls -lah $(LAMBDA_ARTIFACT_DIR)/
+              ls -lah "$LAMBDA_ARTIFACT_DIR/"
             displayName: 'Build Go Lambda Function'
             condition: ne(variables['DEPLOY_STRATEGY'], 'sam')
+            # Parameters reach the script through `env:` rather than being
+            # substituted into its text by `${{ }}` before the agent runs it.
+            env:
+              LAMBDA_GOARCH: ${{ parameters.GOARCH }}
+              LAMBDA_BUILD_FLAGS: ${{ parameters.BUILD_FLAGS }}
+              LAMBDA_HANDLER_NAME: ${{ parameters.LAMBDA_HANDLER }}
+              LAMBDA_ARTIFACT_DIR: $(LAMBDA_ARTIFACT_DIR)
 
           - task: 'AWSShellScript@1'
             displayName: 'Build and Package with AWS SAM (AWS Service Connection)'
@@ -97,14 +105,14 @@ stages:
                 sam build
 
                 echo "Packaging with AWS SAM..."
-                SAM_PACKAGE_ARGS="--output-template-file packaged.yaml --region $(AWS_REGION)"
-                RESOLVE_S3=$(echo "${{ parameters.RESOLVE_S3 }}" | tr '[:upper:]' '[:lower:]')
+                SAM_PACKAGE_ARGS="--output-template-file packaged.yaml --region $AWS_REGION_NAME"
+                RESOLVE_S3=$(echo "$SAM_RESOLVE_S3" | tr '[:upper:]' '[:lower:]')
                 echo "RESOLVE_S3 (normalized): '$RESOLVE_S3'"
 
-                if [ -n "${{ parameters.S3_BUCKET }}" ]; then
-                  SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-bucket ${{ parameters.S3_BUCKET }}"
-                  if [ -n "${{ parameters.S3_KEY_PREFIX }}" ]; then
-                    SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-prefix ${{ parameters.S3_KEY_PREFIX }}"
+                if [ -n "$SAM_S3_BUCKET" ]; then
+                  SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-bucket $SAM_S3_BUCKET"
+                  if [ -n "$SAM_S3_KEY_PREFIX" ]; then
+                    SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-prefix $SAM_S3_KEY_PREFIX"
                   fi
                   sam package $SAM_PACKAGE_ARGS
                 elif [ "$RESOLVE_S3" = "true" ]; then
@@ -113,6 +121,14 @@ stages:
                   echo "ERROR: Provide S3_BUCKET or set RESOLVE_S3=true to enable --resolve-s3"
                   exit 1
                 fi
+            # Same reasoning as the sibling step below: parameters arrive as
+            # data through `env:` rather than being substituted into
+            # `inlineScript` before the task runs.
+            env:
+              AWS_REGION_NAME: $(AWS_REGION)
+              SAM_RESOLVE_S3: ${{ parameters.RESOLVE_S3 }}
+              SAM_S3_BUCKET: ${{ parameters.S3_BUCKET }}
+              SAM_S3_KEY_PREFIX: ${{ parameters.S3_KEY_PREFIX }}
 
           - script: |
               set -e
@@ -128,14 +144,14 @@ stages:
               sam build
 
               echo "Packaging with AWS SAM..."
-              SAM_PACKAGE_ARGS="--output-template-file packaged.yaml --region $(AWS_REGION)"
-              RESOLVE_S3=$(echo "${{ parameters.RESOLVE_S3 }}" | tr '[:upper:]' '[:lower:]')
+              SAM_PACKAGE_ARGS="--output-template-file packaged.yaml --region $AWS_REGION_NAME"
+              RESOLVE_S3=$(echo "$SAM_RESOLVE_S3" | tr '[:upper:]' '[:lower:]')
               echo "RESOLVE_S3 (normalized): '$RESOLVE_S3'"
 
-              if [ -n "${{ parameters.S3_BUCKET }}" ]; then
-                SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-bucket ${{ parameters.S3_BUCKET }}"
-                if [ -n "${{ parameters.S3_KEY_PREFIX }}" ]; then
-                  SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-prefix ${{ parameters.S3_KEY_PREFIX }}"
+              if [ -n "$SAM_S3_BUCKET" ]; then
+                SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-bucket $SAM_S3_BUCKET"
+                if [ -n "$SAM_S3_KEY_PREFIX" ]; then
+                  SAM_PACKAGE_ARGS="$SAM_PACKAGE_ARGS --s3-prefix $SAM_S3_KEY_PREFIX"
                 fi
                 sam package $SAM_PACKAGE_ARGS
               elif [ "$RESOLVE_S3" = "true" ]; then
@@ -146,6 +162,11 @@ stages:
               fi
             displayName: 'Build and Package with AWS SAM'
             condition: and(eq(variables['DEPLOY_STRATEGY'], 'sam'), eq(variables['AWS_SERVICE_CONNECTION'], ''))
+            env:
+              AWS_REGION_NAME: $(AWS_REGION)
+              SAM_RESOLVE_S3: ${{ parameters.RESOLVE_S3 }}
+              SAM_S3_BUCKET: ${{ parameters.S3_BUCKET }}
+              SAM_S3_KEY_PREFIX: ${{ parameters.S3_KEY_PREFIX }}
 
           - task: 'ArchiveFiles@2'
             inputs:

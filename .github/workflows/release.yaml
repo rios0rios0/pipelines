@@ -16,13 +16,19 @@ on:
         default: false
         description: 'Maintain a floating `vN` tag pointing at the latest release. Only for repos consumed as `uses: owner/repo/...@vN`.'
 
-permissions:
-  contents: 'write'
-
+# Declared per JOB rather than once at workflow level. A workflow-level grant
+# hands `contents: write` to every job in the file, including any future one
+# that only needs to read -- and the token is in scope for every step and every
+# action those jobs run. Both jobs here genuinely need it (one creates the
+# release, the other force-moves the major tag), so the effective permission is
+# unchanged today; what changes is that adding a third job no longer grants it
+# write access by default.
 jobs:
   delivery-release:
     name: 'delivery > release'
     runs-on: 'ubuntu-latest'
+    permissions:
+      contents: 'write'
     if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore/bump-') || contains(github.event.head_commit.message, 'chore(bump)'))"
     outputs:
       tag_name: '${{ steps.release.outputs.tag_name }}'
@@ -38,6 +44,13 @@ jobs:
   update-major-tag:
     name: 'delivery > update major version tag'
     needs: 'delivery-release'
+    # `permissions:` IS allowed on a job that calls a reusable workflow (unlike
+    # `environment:`), and it is required here: a called workflow's own
+    # permissions can only narrow what the caller granted, so without this the
+    # `contents: write` that `update-major-version-tag.yaml` declares would
+    # have nothing to narrow.
+    permissions:
+      contents: 'write'
     # A floating `vN` tag only means something for repos consumed as
     # `uses: owner/repo/...@vN` — actions and reusable workflows. Every other
     # consumer pins a branch or an exact SemVer tag, so the tag is dead weight

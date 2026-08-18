@@ -33,8 +33,13 @@ jobs:
       # pipeline already pays for: Netlify's free tier is a 300 credit/month
       # pool and its compute is billed at 10 credits per GB-hour.
       - ${{ if ne(parameters.BUILD_COMMAND, '') }}:
-          - script: ${{ parameters.BUILD_COMMAND }}
+          # The hook's VALUE is shell, supplied by the consumer's pipeline. Through
+          # `env:` the shell expands it at run time instead of Azure substituting it
+          # into the YAML before the agent sees it -- same fix as the other stages.
+          - bash: 'eval "$PIPELINES_HOOK"'
             displayName: 'Build'
+            env:
+              PIPELINES_HOOK: ${{ parameters.BUILD_COMMAND }}
 
       - script: $(Scripts.Directory)/global/scripts/deploy/netlify/run.sh
         displayName: 'Deploy to Netlify'

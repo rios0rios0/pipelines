@@ -309,7 +309,7 @@ dart_resolve_flutter_archive() {
   fi
 
   _df_manifest="$(mktemp)"
-  if ! curl -fsSL --show-error \
+  if ! curl -fsSL --show-error --proto '=https' --proto-redir '=https' \
     "https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json" \
     -o "$_df_manifest"; then
     echo "ERROR: could not download the Flutter release manifest." >&2

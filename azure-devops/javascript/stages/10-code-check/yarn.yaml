@@ -35,9 +35,18 @@ stages:
         steps:
           - template: '../../abstracts/corepack-node20.18.3-no-cache.yaml'
 
-          - script: ${{ parameters.RUN_BEFORE_CODE_CHECK }}
+          # The hook's VALUE is shell, supplied by the consumer's pipeline. Passing it
+          # through `env:` and running it with `eval` keeps it DATA at template-expansion
+          # time: Azure substitutes `${{ }}` into the YAML before the agent ever sees it,
+          # so a value containing a newline or a quote used to be able to terminate this
+          # step and append steps of its own. Through `env:` the shell only expands it at
+          # run time, which is the same fix already applied to `pipelines_ref` in
+          # .github/workflows/terra.yaml.
+          - bash: 'eval "$PIPELINES_HOOK"'
             displayName: 'Before code check'
             workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+            env:
+              PIPELINES_HOOK: ${{ parameters.RUN_BEFORE_CODE_CHECK }}
 
           - script: |
               if [ -f yarn.lock ]; then
@@ -56,7 +65,16 @@ stages:
             displayName: 'Run Knip unused code detection'
             workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
 
-          - script: ${{ parameters.RUN_AFTER_CODE_CHECK }}
+          # The hook's VALUE is shell, supplied by the consumer's pipeline. Passing it
+          # through `env:` and running it with `eval` keeps it DATA at template-expansion
+          # time: Azure substitutes `${{ }}` into the YAML before the agent ever sees it,
+          # so a value containing a newline or a quote used to be able to terminate this
+          # step and append steps of its own. Through `env:` the shell only expands it at
+          # run time, which is the same fix already applied to `pipelines_ref` in
+          # .github/workflows/terra.yaml.
+          - bash: 'eval "$PIPELINES_HOOK"'
             displayName: 'After code check'
             workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+            env:
+              PIPELINES_HOOK: ${{ parameters.RUN_AFTER_CODE_CHECK }}
         continueOnError: true

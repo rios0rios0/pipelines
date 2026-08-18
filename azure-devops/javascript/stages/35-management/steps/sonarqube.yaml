@@ -36,9 +36,18 @@ steps:
       displayName: 'Download LCOV Coverage File'
       continueOnError: true
 
-  - script: ${{ parameters.RUN_BEFORE_MANAGEMENT }}
+  # The hook's VALUE is shell, supplied by the consumer's pipeline. Passing it
+  # through `env:` and running it with `eval` keeps it DATA at template-expansion
+  # time: Azure substitutes `${{ }}` into the YAML before the agent ever sees it,
+  # so a value containing a newline or a quote used to be able to terminate this
+  # step and append steps of its own. Through `env:` the shell only expands it at
+  # run time, which is the same fix already applied to `pipelines_ref` in
+  # .github/workflows/terra.yaml.
+  - bash: 'eval "$PIPELINES_HOOK"'
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
     displayName: 'Run Before'
+    env:
+      PIPELINES_HOOK: ${{ parameters.RUN_BEFORE_MANAGEMENT }}
 
   - script: yarn sonar
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
@@ -51,6 +60,15 @@ steps:
       SONAR_TOKEN: $(SONAR_TOKEN)
       SONAR_HOST_URL: $(SONAR_HOST_URL)
 
-  - script: ${{ parameters.RUN_AFTER_MANAGEMENT }}
+  # The hook's VALUE is shell, supplied by the consumer's pipeline. Passing it
+  # through `env:` and running it with `eval` keeps it DATA at template-expansion
+  # time: Azure substitutes `${{ }}` into the YAML before the agent ever sees it,
+  # so a value containing a newline or a quote used to be able to terminate this
+  # step and append steps of its own. Through `env:` the shell only expands it at
+  # run time, which is the same fix already applied to `pipelines_ref` in
+  # .github/workflows/terra.yaml.
+  - bash: 'eval "$PIPELINES_HOOK"'
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
     displayName: 'Run After'
+    env:
+      PIPELINES_HOOK: ${{ parameters.RUN_AFTER_MANAGEMENT }}

@@ -17,7 +17,11 @@ jobs:
       - ${{ each step in parameters.PRE_STEPS }}:
           - ${{ step }}
 
-      - script: $(Scripts.Directory)/global/scripts/tools/semgrep/run.sh "${{ parameters.SEMGREP_LANGUAGE }}" # it takes the first param as the main language
+      # Passed through `env:` rather than interpolated into the script text --
+      # see the note in the sibling codeql.yaml.
+      - script: $(Scripts.Directory)/global/scripts/tools/semgrep/run.sh "$SEMGREP_LANGUAGE" # it takes the first param as the main language
+        env:
+          SEMGREP_LANGUAGE: ${{ parameters.SEMGREP_LANGUAGE }}
         continueOnError: true
 
       - task: 'PublishPipelineArtifact@1'

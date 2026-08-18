@@ -6,7 +6,7 @@ parameters:
 steps:
   - script: |
       #!/bin/bash
-      ARM_TEMPLATE="${{ parameters.armTemplateFile }}"
+      ARM_TEMPLATE="$ARM_TEMPLATE_FILE"
       PARAMS_FILE="azuredeploy.parameters.json"  # This will be returned
 
       # Extract parameter names from ARM template
@@ -50,3 +50,8 @@ steps:
       echo "Upload successful!"
     name: generateParams
     displayName: "Generate ARM Parameters File"
+    # Passed as data rather than interpolated into the script text: `${{ }}` is
+    # substituted into the YAML before the agent runs it, so the template file
+    # name became script.
+    env:
+      ARM_TEMPLATE_FILE: ${{ parameters.armTemplateFile }}

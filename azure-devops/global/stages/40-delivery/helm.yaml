@@ -15,7 +15,12 @@ steps:
       scriptType: 'bash'
       scriptLocation: 'inlineScript'
       inlineScript: |
-        az acr login --name ${{ parameters.HELM_REGISTRY_SERVER }}
+        az acr login --name "$HELM_REGISTRY_SERVER"
+    # Passed as data rather than interpolated into `inlineScript`. Azure
+    # substitutes `${{ }}` into the YAML before the task runs, so the registry
+    # name was script; through `env:` the shell expands it at run time.
+    env:
+      HELM_REGISTRY_SERVER: ${{ parameters.HELM_REGISTRY_SERVER }}
 
   - task: HelmInstaller@1
     displayName: 'Install Helm'
@@ -25,8 +30,8 @@ steps:
   - bash: |
       set -euo pipefail
 
-      CHART_DIR="${{ parameters.CHART_DIRECTORY }}"
-      REGISTRY="oci://${{ parameters.HELM_REGISTRY_SERVER }}/charts"
+      CHART_DIR="$CHART_DIRECTORY"
+      REGISTRY="oci://$HELM_REGISTRY_SERVER/charts"
 
       package_and_push() {
         local version="$1"
@@ -51,13 +56,25 @@ steps:
         rm -f "$chart_archive"
       }
 
-      SHORT_SHA=$(echo "$(Build.SourceVersion)" | cut -c1-7)
+      SHORT_SHA=$(echo "$BUILD_SOURCE_VERSION" | cut -c1-7)
 
-      if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
-        RAW_TAG="$(Build.SourceBranchName)"
+      if [[ "$BUILD_SOURCE_BRANCH" == refs/tags/* ]]; then
+        RAW_TAG="$BUILD_SOURCE_BRANCH_NAME"
         CHART_VERSION="${RAW_TAG#v}"
         package_and_push "$CHART_VERSION"
       else
         package_and_push "0.0.0-${SHORT_SHA}"
       fi
     displayName: 'Package and Push Helm Chart'
+    # Every parameter and predefined variable this script reads arrives through
+    # `env:`. `$(Build.SourceBranchName)` is the one that matters most: it is a
+    # branch name, so anyone able to open a pull request chooses it, and it used
+    # to be substituted into the script text before the agent ran it. The
+    # existing SemVer check on `$version` guards the chart version, not the
+    # shell.
+    env:
+      CHART_DIRECTORY: ${{ parameters.CHART_DIRECTORY }}
+      HELM_REGISTRY_SERVER: ${{ parameters.HELM_REGISTRY_SERVER }}
+      BUILD_SOURCE_VERSION: $(Build.SourceVersion)
+      BUILD_SOURCE_BRANCH: $(Build.SourceBranch)
+      BUILD_SOURCE_BRANCH_NAME: $(Build.SourceBranchName)

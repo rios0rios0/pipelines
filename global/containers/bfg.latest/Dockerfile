@@ -6,7 +6,7 @@ ENV WORK_DIR /code
 
 VOLUME ["${WORK_DIR}"]
 
-RUN wget --quiet --output-document=/bfg.jar https://repo1.maven.org/maven2/com/madgag/bfg/${BFG_VERSION}/bfg-${BFG_VERSION}.jar
+RUN wget --quiet --https-only --output-document=/bfg.jar https://repo1.maven.org/maven2/com/madgag/bfg/${BFG_VERSION}/bfg-${BFG_VERSION}.jar
 
 RUN echo "#!/usr/bin/env sh" > /usr/bin/bfg \
     && echo "set -e" >> /usr/bin/bfg \

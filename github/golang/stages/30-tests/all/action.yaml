@@ -15,6 +15,18 @@ inputs:
     description: 'Minimum total coverage percentage; the step fails below it. 0 disables the gate.'
     required: false
     default: '0'
+  integration_parallel:
+    description: |
+      How many integration test binaries `go test` runs concurrently (its `-p` flag). The default
+      1 keeps the phase serial, which is what a suite sharing one fixture (an embedded PostgreSQL
+      on a fixed port, for one) requires. Raise it only when the fixtures allocate per-instance
+      resources.
+
+      Declared as an INPUT rather than read from the environment because a workflow that `uses:`
+      a reusable workflow cannot pass arbitrary environment variables into it -- only `inputs` and
+      `secrets` cross that boundary, so an `env:` at the call site would silently never arrive.
+    required: false
+    default: '1'
 
 runs:
   using: 'composite'
@@ -147,6 +159,8 @@ runs:
 
     - run: $SCRIPTS_DIR/global/scripts/languages/golang/test/run.sh
       shell: 'bash'
+      env:
+        GO_TEST_INTEGRATION_PARALLEL: '${{ inputs.integration_parallel }}'
 
     # The test runner prints coverage but never fails on it, so without this the number can
     # drift down one merge at a time and nothing notices.

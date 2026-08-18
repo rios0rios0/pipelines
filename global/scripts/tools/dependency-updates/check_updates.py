@@ -313,7 +313,11 @@ def image_digest(reference: str) -> str:
 # --------------------------------------------------------------------------- #
 # Discovery
 # --------------------------------------------------------------------------- #
-SKIP_DIRS = {".git", "node_modules", "build", ".terraform"}
+# `.pipelines` is where the workflow checks THIS repository out when scanning
+# somebody else's. Without it, a consumer's report would list this library's
+# pins as if they were the consumer's own -- and on this repository's own
+# scheduled run the same pin would be counted twice.
+SKIP_DIRS = {".git", "node_modules", "build", ".terraform", ".pipelines"}
 
 UPSTREAM = re.compile(r"^#\s*upstream:\s*(?P<kind>[a-z-]+)\s+(?P<coord>\S+)(?P<opts>.*)$")
 PIN = re.compile(r'^(?P<name>[A-Z0-9_]+)_PINNED_VERSION="(?P<value>[^"]*)"')

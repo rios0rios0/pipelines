@@ -49,11 +49,45 @@ jobs:
 
       # The checker itself lives in THIS repository, and under `workflow_call`
       # the checkout above is the CONSUMER's repository -- so running
-      # `./global/scripts/...` from the workspace would look for the script in
-      # a repository that has no reason to contain it. `scripts-repo` fetches
-      # the scripts separately and exports `SCRIPTS_DIR`, which is how every
-      # other workflow here reaches a shared runner.
-      - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+      # `./global/scripts/...` from the workspace would look for the script in a
+      # repository that has no reason to contain it.
+      #
+      # Fetched with `actions/checkout` against an explicit `repository:` rather
+      # than through the `scripts-repo` abstract, following the same pattern
+      # `terra.yaml` already uses. Two reasons, and the second is the one that
+      # decided it:
+      #
+      #   1. The ref follows `job.workflow_ref`, so a consumer calling this
+      #      workflow `@4.23.0` gets the scripts from that tag. The abstract
+      #      resolves `github.action_ref`, which for a same-repository `@main`
+      #      reference is always `main` -- the pin would not reach the scripts.
+      #   2. `uses: rios0rios0/pipelines/...@main` is flagged by SonarCloud
+      #      (`githubactions:S7637`) and simultaneously REQUIRED to be `@main`
+      #      by test-workflow-composition.sh Test 7. Those two rules contradict
+      #      each other, and this shape has neither problem: there is no
+      #      internal `uses:` here at all, only a SHA-pinned third-party action.
+      - name: 'Resolve pipelines ref'
+        id: 'pipelines-ref'
+        shell: 'bash'
+        env:
+          # Through `env:` rather than interpolated into `run:`, which would let
+          # a crafted ref inject shell at YAML-parse time.
+          JOB_WORKFLOW_REF: '${{ job.workflow_ref }}'
+        run: |
+          # `job.workflow_ref` is the ref of the workflow file defining this job
+          # -- this repository's -- while `github.*` belongs to the CALLER.
+          # `GITHUB_WORKFLOW_REF` is the fallback for GitHub Enterprise Server,
+          # where the `job` context is unavailable.
+          ref="${JOB_WORKFLOW_REF:-${GITHUB_WORKFLOW_REF}}"
+          ref="${ref##*@}"
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+
+      - name: 'Checkout pipelines repo for the checker'
+        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+        with:
+          repository: 'rios0rios0/pipelines'
+          ref: '${{ steps.pipelines-ref.outputs.ref }}'
+          path: '.pipelines'
 
       - name: 'Check for dependency updates'
         id: 'check'
@@ -83,7 +117,7 @@ jobs:
           # published and summarised even when -- especially when -- the check
           # fails, which is the whole reason this job exists.
           status=0
-          "$SCRIPTS_DIR/global/scripts/tools/dependency-updates/run.sh" \
+          "$GITHUB_WORKSPACE/.pipelines/global/scripts/tools/dependency-updates/run.sh" \
             --repo-dir "$GITHUB_WORKSPACE" $args || status=$?
           echo "status=${status}" >> "$GITHUB_OUTPUT"
 

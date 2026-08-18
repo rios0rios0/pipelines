@@ -317,6 +317,24 @@ OUT="$(python3 "$CHECKER" --repo-dir "$CONSUMER" --report "consumer-out" \
 set -e
 assert_eq "and still fails when the consumer's pins are stale" "1" "$STATUS"
 assert_contains "naming the consumer's own action" "$OUT" "someorg/someaction"
+
+# The workflow checks THIS repository out into `.pipelines` inside the scanned
+# workspace, so that directory must be invisible to the scan -- otherwise a
+# consumer's report lists this library's pins as if they were theirs, and this
+# repository's own scheduled run counts every pin twice.
+mkdir -p "$CONSUMER/.pipelines/.github/workflows"
+cat > "$CONSUMER/.pipelines/.github/workflows/library.yaml" <<'EOS'
+jobs:
+  build:
+    steps:
+      - uses: 'libraryorg/libraryaction@2222222222222222222222222222222222222222' # v9.9.9
+EOS
+set +e
+OUT="$(python3 "$CHECKER" --repo-dir "$CONSUMER" --report "consumer-out" \
+  --fixture "$CURRENT_FIXTURE" 2>&1)"; STATUS=$?
+set -e
+assert_not_contains "a nested .pipelines checkout is not scanned" "$OUT" "libraryorg/libraryaction"
+assert_contains "and the consumer's own pins are still the only ones counted" "$OUT" "Checking 2 pinned dependencies"
 echo ""
 
 echo "=========================================="

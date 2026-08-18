@@ -26,64 +26,17 @@ die() {
   exit 1
 }
 
-# Fetches $1 into $2 over HTTPS only -- including redirects, which is the point: the release URL
-# redirects to GitHub's asset host, and the file being fetched is about to be marked executable,
-# so a redirect walked down to plain HTTP would hand execution to whatever answered. `curl` is
-# preferred but not assumed; a runner carrying only one of the two is common, and a self-hosted
-# runner may carry neither, which is why the caller reports the failure instead of continuing.
-download() {
-  if command -v curl > /dev/null 2>&1; then
-    curl --proto '=https' --proto-redir '=https' --tlsv1.2 \
-      --location --fail --silent --show-error --output "$2" "$1"
-  elif command -v wget > /dev/null 2>&1; then
-    wget --https-only -O "$2" -nv "$1"
-  else
-    echo 'neither curl nor wget is available' >&2
-    return 127
-  fi
-}
+# The shared helpers are sourced here rather than just before the golangci-lint install below,
+# because the config merge runs FIRST and `resolve_yq` needs `download_verified`.
+. "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/verify-download.sh"
 
-# `yq` is two unrelated programs sharing a name: this script needs mikefarah/yq (Go, `yq eval
-# '<expression>' <file>`), while many distributions and `pip` ship kislyuk/yq (a jq wrapper that
-# reads the expression as a filename and rejects `eval` outright). Accepting whichever one is on
-# PATH is how a project's `.golangci.yml` silently stopped being applied: every merge below used
-# to end in `2>/dev/null || true`, so the wrong `yq` produced empty output instead of an error,
-# the repository's `enable`, `disable` and `linters-settings` were all dropped, and the run
-# carried on against the shared default alone. The symptom is a wall of findings for linters the
-# project had deliberately disabled or retuned -- with nothing anywhere saying the config was
-# ignored. Resolve the right binary up front, exactly as golangci-lint itself is resolved below.
-YQ_VERSION="v4.47.1"
-
-case "$(uname -s)" in
-  Darwin) YQ_OS='darwin' ;;
-  *) YQ_OS='linux' ;;
-esac
-case "$(uname -m)" in
-  aarch64 | arm64) YQ_ARCH='arm64' ;;
-  *) YQ_ARCH='amd64' ;;
-esac
+# Resolving which of the two programs named `yq` is on this machine is a problem shared with
+# the test suite that covers this script, so it lives in one place instead of two. See the
+# comment at the top of that file for what accepting the wrong one silently did to a run.
+. "$SCRIPTS_DIR/global/scripts/shared/resolve-yq.sh"
 
 YQ=""
-
-# Called only from the branch that has a config to merge. A repository without `.golangci.yml`
-# copies the shared default verbatim and never reads `$YQ`, so resolving it there would add a
-# network dependency -- and a way for the run to fail -- to the one case that needs neither.
-resolve_yq() {
-  # mikefarah/yq prints its own repository URL in the version banner; kislyuk/yq prints a bare
-  # `yq <version>`. Matching the URL is what separates them, since both answer `--version`.
-  if command -v yq > /dev/null 2>&1 && yq --version 2>&1 | grep -q 'mikefarah'; then
-    YQ="yq"
-    return 0
-  fi
-  mkdir -p ./bin
-  download \
-    "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_${YQ_OS}_${YQ_ARCH}" \
-    ./bin/yq \
-    || die "could not download mikefarah/yq ${YQ_VERSION} for ${YQ_OS}/${YQ_ARCH}"
-  chmod +x ./bin/yq || die 'could not make the downloaded yq executable'
-  YQ="./bin/yq"
-  return 0
-}
 
 mergedYamlFile="merged.yml"
 defaultYamlFile="$SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/.golangci.yml"
@@ -92,7 +45,11 @@ if [ -f ".golangci.yml" ]; then
   # Start with the default config
   cp "$defaultYamlFile" "$mergedYamlFile"
 
-  resolve_yq
+  # Called only from the branch that has a config to merge. A repository without
+  # `.golangci.yml` copies the shared default verbatim and never reads `$YQ`, so resolving it
+  # there would add a network dependency -- and a way for the run to fail -- to the one case
+  # that needs neither.
+  resolve_yq || die "could not obtain mikefarah/yq ${YQ_VERSION}"
 
   # Collect enabled linters from repo config and add new ones in a single operation
   repo_enabled=$("$YQ" eval '.linters.enable[]?' ".golangci.yml") \
@@ -170,8 +127,6 @@ fi
 # downloaded and checksum-verified directly instead, which is the same shape
 # gitleaks, hadolint and shellcheck already use and removes the vendor's
 # install script from the trust path entirely.
-. "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
-. "$SCRIPTS_DIR/global/scripts/shared/verify-download.sh"
 
 GOLANGCI_LINT=""
 if command -v golangci-lint > /dev/null 2>&1; then

@@ -32,6 +32,8 @@ make test-memory-detection  # Test the cgroup-aware memory ceiling detection onl
 make test-dart-pipeline # Test the Dart/Flutter pipeline (scripts, Semgrep rules, cross-platform wiring) only
 make test-workflow-composition  # Test the GitHub Actions workflow composition standard only
 make test-supply-chain # Test the supply-chain pinning contract (actions, images, binaries, packages) only
+make test-dependency-updates  # Test the dependency-update checker only
+make check-dependency-updates # Report which pinned dependencies have a newer release (network)
 make test-azure-step-names  # Test Azure DevOps step-name uniqueness across expanded templates only
 make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
 ```
@@ -129,6 +131,36 @@ Two consumer-facing consequences worth knowing: the examples under `.docs/exampl
 release tag on all three platforms (an example that tracks a branch teaches every consumer the exposure),
 and Azure DevOps resolves the repository's DEFAULT BRANCH when a `resources.repositories` entry gives no
 `ref:` — which is why every Azure example now sets one.
+
+### Keeping the Pins Current
+
+Pinning is only half a policy. A pin stops a dependency moving without a
+decision; it does not tell anyone when to make one, and a pin never announces
+that it is three CVEs behind. `global/scripts/tools/dependency-updates/` is the
+other half, and `.github/workflows/dependency-updates.yaml` runs it **twice a
+week** (Mon/Thu 06:00 UTC) and **fails the build** when anything is stale.
+
+| Surface | Question asked | Discovered from |
+|---------|----------------|-----------------|
+| Actions | is there a newer release for `owner/repo`? | `uses: '…@<sha>' # vX.Y.Z` in every YAML |
+| Images | does the pinned tag still resolve to this digest? | `image:` and Dockerfile `FROM` |
+| Binaries / packages | is there a newer version upstream? | `# upstream:` annotations in `pinned-versions.sh` |
+| Inline copies | do the two copies of a version still agree? | a fixed list of templates with no `SCRIPTS_DIR` |
+
+Five decisions shape it; do not "simplify" any of them away:
+
+| Decision | Why |
+|----------|-----|
+| **Images are checked by DIGEST, not by tag** | `python:3.13-slim` is rebuilt with patched system packages under the SAME tag, so "is there a newer tag" misses every security rebuild. "Does this tag still resolve to the bytes we pinned" catches all of them. Moving `3.13` → `3.14` is a decision, not an update, so no newest-tag search is attempted |
+| **A failed lookup exits 2 and is never "up to date"** | ~40 of the lookups hit `api.github.com`, which allows 60 requests/hour unauthenticated. Treating a 403 as "current" would turn the whole check into a green light that inspected nothing — worse than not running it |
+| **A pin with no `# upstream:` annotation FAILS** | Otherwise coverage shrinks one forgotten annotation at a time while the job stays green. The annotation lives next to the pin so adding one without the other is visible in review |
+| **`track=<major>` exists for deliberately-held pins** | GoReleaser is on 1.x because 2.x is a breaking config change. Without it the check would report that migration as an update on every run, forever, until somebody muted the job |
+| **It fails the build; it does not open a PR** | An automated bump would have to re-resolve a commit SHA, re-fetch a checksum from an upstream manifest and re-resolve an image digest before it could even be correct, and a wrong one of those is a supply-chain change nobody reviewed. A red build with a diff-ready list keeps the decision with a person |
+
+`.dependency-updates.json` (`{"ignore": ["glob", …]}`) silences a reference. It
+is empty by default and is meant for genuinely ROLLING tags such as
+`alpine:edge`, which is rebuilt almost daily — a check that is always red stops
+being read.
 
 ### Workflow Composition Standard
 

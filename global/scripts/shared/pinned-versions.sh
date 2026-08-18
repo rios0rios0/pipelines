@@ -29,12 +29,37 @@
 # published artifact where it does not (ShellCheck, stoml and ProGuard publish
 # none).
 #
+# THE `# upstream:` ANNOTATIONS
+#
+# Every pin below carries one, and it is what lets
+# `global/scripts/tools/dependency-updates/` tell you when the pin is stale --
+# pinning stops a dependency moving without a decision, and the annotation is
+# how the decision gets prompted. The shape is:
+#
+#   # upstream: <kind> <coordinate> [track=<major>]
+#
+#   kind         one of github-release, github-tag, gitlab-tag, pypi, npm,
+#                rubygems, goproxy
+#   coordinate   owner/repo, a project path, or a package/module name
+#   track=<n>    only report releases INSIDE major <n>. Used where a pin is
+#                deliberately held back: GoReleaser is on 1.x because 2.x is a
+#                breaking configuration change, so reporting 2.x every run would
+#                be reporting a migration as an update until somebody muted the
+#                check.
+#
+# A pin with NO annotation is reported as untracked and fails the check, rather
+# than being skipped quietly -- otherwise coverage shrinks one forgotten
+# annotation at a time while the job stays green.
+#
 # HOW TO BUMP A TOOL
 #
 #   1. Change the *_VERSION value.
 #   2. Replace every *_SHA256_* value for that tool. Take them from the
 #      upstream checksum manifest; do not carry an old digest forward.
 #   3. Run `make test-supply-chain`, which re-asserts the shape of every entry.
+#
+# `make check-dependency-updates` reports which of them currently have a newer
+# release; the scheduled `dependency-updates.yaml` workflow runs it twice a week.
 #
 # Each version is overridable from the environment so an operator can respond to
 # an upstream CVE without waiting for a release here. Overriding the version
@@ -44,12 +69,14 @@
 
 # --- Security tooling (20-security stage) ------------------------------------
 
+# upstream: github-release gitleaks/gitleaks
 GITLEAKS_PINNED_VERSION="8.30.1"
 GITLEAKS_VERSION="${GITLEAKS_VERSION:-${GITLEAKS_PINNED_VERSION}}"
 GITLEAKS_SHA256_X64="551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
 GITLEAKS_SHA256_ARM64="e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080"
 GITLEAKS_SHA256_ARMV7="8d39f0d94ba0d774b2282187656fb039a2d82893ec1fd6be7d7121aae759a57d"
 
+# upstream: github-release koalaman/shellcheck
 SHELLCHECK_PINNED_VERSION="0.11.0"
 SHELLCHECK_VERSION="${SHELLCHECK_VERSION:-${SHELLCHECK_PINNED_VERSION}}"
 SHELLCHECK_SHA256_X86_64="8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
@@ -62,6 +89,7 @@ SHELLCHECK_SHA256_ARMV6HF="8afc50b302d5feeac9381ea114d563f0150d061520042b254d6eb
 # release 404ed on the real latest and silently fell back to its hard-coded
 # v2.14.0 -- a pin nobody chose, reached through a failure nobody saw. Pinning
 # the version fixes the asset name along with it.
+# upstream: github-release hadolint/hadolint
 HADOLINT_PINNED_VERSION="2.15.1"
 HADOLINT_VERSION="${HADOLINT_VERSION:-${HADOLINT_PINNED_VERSION}}"
 HADOLINT_SHA256_X86_64="c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507"
@@ -70,10 +98,12 @@ HADOLINT_SHA256_ARM64="f6198ef8090f404dbb771abfee086eb8c48ac177f30da7fd3510aca35
 # The CodeQL CLI ships as one ~1 GB bundle. `releases/latest/download/...` was a
 # double moving target: a new bundle every few weeks AND no way to state which
 # one a given scan used.
+# upstream: github-release github/codeql-action
 CODEQL_BUNDLE_PINNED_VERSION="codeql-bundle-v2.26.3"
 CODEQL_BUNDLE_VERSION="${CODEQL_BUNDLE_VERSION:-${CODEQL_BUNDLE_PINNED_VERSION}}"
 CODEQL_BUNDLE_SHA256_LINUX64="77e5be1b550d66662e600e795b6cf2ea1729e853e3dc79e02594f767039d2a29"
 
+# upstream: github-release google/osv-scanner
 OSV_SCANNER_PINNED_VERSION="2.5.1"
 OSV_SCANNER_VERSION="${OSV_SCANNER_VERSION:-${OSV_SCANNER_PINNED_VERSION}}"
 OSV_SCANNER_SHA256_AMD64="f9f25499a2c8cc367b3af45df2ea7eeca7fbccceab9c35079968f4b3652194be"
@@ -81,11 +111,13 @@ OSV_SCANNER_SHA256_ARM64="3d0f5aa5a6baa8eb32bcef247388e149ef6030a6634ccae6fa0d62
 
 # --- Language tooling --------------------------------------------------------
 
+# upstream: github-release golangci/golangci-lint
 GOLANGCI_LINT_PINNED_VERSION="2.12.2"
 GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-${GOLANGCI_LINT_PINNED_VERSION}}"
 GOLANGCI_LINT_SHA256_AMD64="8df580d2670fed8fa984aac0507099af8df275e665215f5c7a2ae3943893a553"
 GOLANGCI_LINT_SHA256_ARM64="44cd40a8c76c86755375adfeea52cfd3533cb43d7bd647771e0ae065e166df3a"
 
+# upstream: github-release Guardsquare/proguard
 PROGUARD_PINNED_VERSION="7.6.1"
 PROGUARD_VERSION="${PROGUARD_VERSION:-${PROGUARD_PINNED_VERSION}}"
 PROGUARD_SHA256="672ef62a3154474a6172cbfde9a2f09da1642a17a80e1c7b79a6cc58953fbe06"
@@ -93,17 +125,20 @@ PROGUARD_SHA256="672ef62a3154474a6172cbfde9a2f09da1642a17a80e1c7b79a6cc58953fbe0
 # GoReleaser is deliberately held at 1.x: the v2 release is a breaking
 # configuration change, so bumping it is a migration for every consumer, not a
 # version bump. Pinning it here does not decide that migration either way.
+# upstream: github-release goreleaser/goreleaser track=1
 GORELEASER_PINNED_VERSION="1.21.2"
 GORELEASER_VERSION="${GORELEASER_VERSION:-${GORELEASER_PINNED_VERSION}}"
 GORELEASER_SHA256_AMD64_DEB="9b63d670dab507f2b21e811812805f051b720cb781c2b4c3f3c1d656be05c1a6"
 
 # --- Terraform / Terragrunt tooling ------------------------------------------
 
+# upstream: github-release terraform-linters/tflint
 TFLINT_PINNED_VERSION="0.64.0"
 TFLINT_VERSION="${TFLINT_VERSION:-${TFLINT_PINNED_VERSION}}"
 TFLINT_SHA256_AMD64="cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537"
 TFLINT_SHA256_ARM64="560da89aacf59389d4eb029730dd5b109b7288096c32f2726a0d9e783a5ea8eb"
 
+# upstream: github-release gruntwork-io/terragrunt
 TERRAGRUNT_PINNED_VERSION="1.1.3"
 TERRAGRUNT_VERSION="${TERRAGRUNT_VERSION:-${TERRAGRUNT_PINNED_VERSION}}"
 TERRAGRUNT_SHA256_AMD64="d5da6a66741f4ee752aa3b502b57e47fd6d5c178942861b2507f14f083e7606e"
@@ -113,6 +148,7 @@ TERRAGRUNT_SHA256_ARM64="5e9b388402ab7075e907e8d8511662e2a828008129746e4e5e23de0
 # the templates fetched `install.sh` from the `main` BRANCH and piped it into a
 # shell, so a bad commit on that branch reached every consumer's runner
 # immediately, with no release and no review gate in between.
+# upstream: github-release rios0rios0/terra
 TERRA_PINNED_VERSION="1.17.9"
 TERRA_VERSION="${TERRA_VERSION:-${TERRA_PINNED_VERSION}}"
 TERRA_SHA256_AMD64="747b2dc190f68e91fed837f9a67a78530315489f2deef11a50d87531fb5e674c"
@@ -120,6 +156,7 @@ TERRA_SHA256_ARM64="363796d502d110e642576bb37beb918976df63ac537930afed02cc84e112
 
 # --- Deployment tooling (50-deployment stage) --------------------------------
 
+# upstream: github-release superfly/flyctl
 FLYCTL_PINNED_VERSION="0.4.84"
 FLYCTL_VERSION="${FLYCTL_VERSION:-${FLYCTL_PINNED_VERSION}}"
 FLYCTL_SHA256_X86_64="5faeeb6806b939540619518be530ad4cf9de090eff1e0e44795e3f09c113b5ce"
@@ -140,6 +177,7 @@ FLYCTL_SHA256_ARM64="677bfad02ea7e44e0c7ef6d0666babc6daa3d468ce97b44d2451d60e97b
 # SHA-256 lives in the column named by `checksums_hashes_order` -- the file
 # carries 31 hashes per asset and no header, so reading the wrong column yields
 # a plausible-looking digest that matches nothing.
+# upstream: github-release mikefarah/yq
 YQ_PINNED_VERSION="4.47.1"
 YQ_VERSION="${YQ_VERSION:-${YQ_PINNED_VERSION}}"
 YQ_SHA256_LINUX_AMD64="0fb28c6680193c41b364193d0c0fc4a03177aecde51cfc04d506b1517158c2fb"
@@ -154,8 +192,11 @@ YQ_SHA256_DARWIN_ARM64="99aae3a7c9ddfe76bb339f0e7acd8224324b6527436fb6a5d890079b
 # breaking every consumer at once -- but it does mean an unpinned patch. A
 # consumer needing a byte-exact client sets the *_CLI_SPEC variable to an exact
 # version.
+# upstream: npm wrangler
 WRANGLER_CLI_SPEC="${WRANGLER_CLI_SPEC:-wrangler@4}"
+# upstream: npm vercel
 VERCEL_CLI_SPEC="${VERCEL_CLI_SPEC:-vercel@59}"
+# upstream: npm netlify-cli
 NETLIFY_CLI_SPEC="${NETLIFY_CLI_SPEC:-netlify-cli@27}"
 
 # --- Miscellaneous -----------------------------------------------------------
@@ -163,6 +204,7 @@ NETLIFY_CLI_SPEC="${NETLIFY_CLI_SPEC:-netlify-cli@27}"
 # GitLab's own secure-files installer, used by the GitLab Go binary delivery
 # job. It was fetched from the `main` branch and piped into bash inside the job
 # that holds the project's signing material.
+# upstream: gitlab-tag gitlab-org/incubation-engineering/mobile-devops/download-secure-files
 SECURE_FILES_INSTALLER_PINNED_VERSION="v0.1.16"
 SECURE_FILES_INSTALLER_VERSION="${SECURE_FILES_INSTALLER_VERSION:-${SECURE_FILES_INSTALLER_PINNED_VERSION}}"
 SECURE_FILES_INSTALLER_SHA256="735418e1b52e6bc9c211383fb86f91ccc898f87ca4b575832737a84ec8d83a5f"
@@ -170,6 +212,7 @@ SECURE_FILES_INSTALLER_SHA256="735418e1b52e6bc9c211383fb86f91ccc898f87ca4b575832
 
 # stoml publishes no checksum manifest and no linux/arm64 build; the digest
 # below was computed from the published amd64 artifact.
+# upstream: github-release freshautomations/stoml
 STOML_PINNED_VERSION="0.7.1"
 STOML_VERSION="${STOML_VERSION:-${STOML_PINNED_VERSION}}"
 STOML_SHA256_AMD64="8420ad10d39ca568234186be89a60f8a8ece29bc2a91b4c8ad2e00ef73b626de"
@@ -178,18 +221,24 @@ STOML_SHA256_AMD64="8420ad10d39ca568234186be89a60f8a8ece29bc2a91b4c8ad2e00ef73b6
 # which means the module proxy chose the version and `go.sum` verification only
 # ever proved the bytes matched whatever version it chose -- integrity without
 # identity.
+# upstream: goproxy golang.org/x/vuln
 GOVULNCHECK_PINNED_VERSION="v1.7.0"
 GOVULNCHECK_VERSION="${GOVULNCHECK_VERSION:-${GOVULNCHECK_PINNED_VERSION}}"
+# upstream: goproxy gotest.tools/gotestsum
 GOTESTSUM_PINNED_VERSION="v1.13.0"
 GOTESTSUM_VERSION="${GOTESTSUM_VERSION:-${GOTESTSUM_PINNED_VERSION}}"
 # gocovmerge has never cut a tagged release; the module proxy's canonical
 # identifier for it is this pseudo-version, which is as immutable as a tag.
+# upstream: goproxy github.com/wadey/gocovmerge
 GOCOVMERGE_PINNED_VERSION="v0.0.0-20160331181800-b5bfa59ec0ad"
 GOCOVMERGE_VERSION="${GOCOVMERGE_VERSION:-${GOCOVMERGE_PINNED_VERSION}}"
+# upstream: goproxy github.com/boumenot/gocover-cobertura
 GOCOVER_COBERTURA_PINNED_VERSION="v1.5.0"
 GOCOVER_COBERTURA_VERSION="${GOCOVER_COBERTURA_VERSION:-${GOCOVER_COBERTURA_PINNED_VERSION}}"
+# upstream: goproxy github.com/jstemmer/go-junit-report/v2
 GO_JUNIT_REPORT_PINNED_VERSION="v2.1.0"
 GO_JUNIT_REPORT_VERSION="${GO_JUNIT_REPORT_VERSION:-${GO_JUNIT_REPORT_PINNED_VERSION}}"
+# upstream: goproxy github.com/CycloneDX/cyclonedx-gomod
 CYCLONEDX_GOMOD_PINNED_VERSION="v1.10.0"
 CYCLONEDX_GOMOD_VERSION="${CYCLONEDX_GOMOD_VERSION:-${CYCLONEDX_GOMOD_PINNED_VERSION}}"
 
@@ -205,9 +254,15 @@ CYCLONEDX_GOMOD_VERSION="${CYCLONEDX_GOMOD_VERSION:-${CYCLONEDX_GOMOD_PINNED_VER
 # version `latest` resolved to when this pin was taken, so pinning changed no
 # behaviour on the day it landed -- it only stopped the behaviour changing
 # underneath a consumer afterwards.
+# upstream: pypi pdm
 PDM_SPEC="${PDM_SPEC:-pdm==2.28.1}"
+# upstream: pypi vulture
 VULTURE_SPEC="${VULTURE_SPEC:-vulture==2.16}"
+# upstream: pypi semgrep
 SEMGREP_SPEC="${SEMGREP_SPEC:-semgrep==1.173.0}"
+# upstream: rubygems bundler-audit
 BUNDLER_AUDIT_SPEC="${BUNDLER_AUDIT_SPEC:-bundler-audit:0.9.3}"
+# upstream: rubygems debride
 DEBRIDE_SPEC="${DEBRIDE_SPEC:-debride:1.15.2}"
+# upstream: npm knip
 KNIP_SPEC="${KNIP_SPEC:-knip@6.32.2}"

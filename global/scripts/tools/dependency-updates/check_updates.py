@@ -645,6 +645,28 @@ def render_markdown(results: list[dict], unannotated: list[dict], inline: list[d
     return "\n".join(lines)
 
 
+def within_workdir(raw: str, purpose: str) -> Path:
+    """Resolve a command-line path and require it to stay inside the working tree.
+
+    Both paths this validates come from argv -- `--report` and `--fixture` --
+    and both are written to or read from, so "wherever you point me" is the
+    wrong contract for a CI tool. Every runner in this repository writes under
+    `build/reports` relative to the job's working directory, which is what
+    `cleanup.sh` hands over, so confining them costs nothing real and makes a
+    traversal (`--report ../../etc`) fail here rather than somewhere surprising.
+
+    Resolved with `realpath` first so a symlink cannot be used to step outside
+    after the check.
+    """
+    base = Path(os.path.realpath(os.getcwd()))
+    resolved = Path(os.path.realpath(raw))
+    if resolved != base and base not in resolved.parents:
+        raise SystemExit(
+            "refusing to use '%s' for %s: it resolves outside the working directory '%s'"
+            % (raw, purpose, base))
+    return resolved
+
+
 def report_path(report_dir: Path, filename: str) -> Path:
     """Join a report file name onto the report directory, refusing to escape it.
 
@@ -669,7 +691,7 @@ def read_fixture(raw: str) -> dict:
     opened rather than after: a directory or a dangling path should say so here,
     not surface as an opaque IsADirectoryError three frames down.
     """
-    path = Path(os.path.realpath(raw))
+    path = within_workdir(raw, "the offline fixture")
     if not path.is_file():
         raise SystemExit("fixture file not found: %s" % raw)
     return json.loads(path.read_text(encoding="utf-8"))
@@ -723,7 +745,7 @@ def main(argv: list[str]) -> int:
     # inspected repository whenever the two differed. The directory itself may
     # be absolute and is deliberately not confined; the file names appended to
     # it are.
-    report_dir = Path(os.path.realpath(args.report))
+    report_dir = within_workdir(args.report, "the report directory")
     report_dir.mkdir(parents=True, exist_ok=True)
     payload = {
         "checked": len(results),

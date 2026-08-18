@@ -53,6 +53,11 @@ assert_not_contains() {
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+# The checker confines `--report` and `--fixture` to the working directory, so
+# the suite runs from inside its sandbox and addresses both relatively. That is
+# also how the tool is really used: `cleanup.sh` hands it `build/reports/...`
+# relative to wherever the job runs.
+cd "$WORK"
 
 # --------------------------------------------------------------------------- #
 # A miniature repository with one pin of every shape the checker understands.
@@ -99,7 +104,7 @@ EOS
 }
 
 # Fixture where every upstream matches what is pinned.
-CURRENT_FIXTURE="$WORK/current.json"
+CURRENT_FIXTURE="current.json"
 cat > "$CURRENT_FIXTURE" <<'EOS'
 {
   "github-release:example/binary": "v1.2.3",
@@ -117,7 +122,7 @@ build_repo "$REPO"
 
 run_checker() {
   local fixture="$1"; shift
-  python3 "$CHECKER" --repo-dir "$REPO" --report "$WORK/out" --fixture "$fixture" "$@" 2>&1
+  python3 "$CHECKER" --repo-dir "$REPO" --report "out" --fixture "$fixture" "$@" 2>&1
 }
 
 echo "=========================================="
@@ -146,7 +151,7 @@ echo ""
 # --------------------------------------------------------------------------- #
 echo "2. Each kind of staleness is detected, and fails the run"
 # --------------------------------------------------------------------------- #
-STALE_FIXTURE="$WORK/stale.json"
+STALE_FIXTURE="stale.json"
 python3 - "$CURRENT_FIXTURE" "$STALE_FIXTURE" <<'EOS'
 import json, sys
 data = json.load(open(sys.argv[1]))
@@ -193,9 +198,9 @@ echo ""
 echo "4. A lookup that cannot be completed never reads as 'up to date'"
 # --------------------------------------------------------------------------- #
 sed -i '/UNTRACKED/d' "$REPO/global/scripts/shared/pinned-versions.sh"
-echo '{}' > "$WORK/empty.json"
+echo '{}' > empty.json
 set +e
-OUT="$(run_checker "$WORK/empty.json")"; STATUS=$?
+OUT="$(run_checker "empty.json")"; STATUS=$?
 set -e
 assert_eq "an unresolvable upstream exits 2, not 0" "2" "$STATUS"
 assert_contains "and refuses to claim a clean result" "$OUT" "refusing to report a clean result"
@@ -217,16 +222,16 @@ echo "6. Reports are written in both machine and human form"
 set +e
 run_checker "$STALE_FIXTURE" > /dev/null 2>&1
 set -e
-if [[ -f "$WORK/out/dependency-updates.json" ]]; then pass "a JSON report is written"
+if [[ -f "out/dependency-updates.json" ]]; then pass "a JSON report is written"
 else fail "a JSON report is written"; fi
-if [[ -f "$WORK/out/dependency-updates.md" ]]; then pass "a Markdown report is written"
+if [[ -f "out/dependency-updates.md" ]]; then pass "a Markdown report is written"
 else fail "a Markdown report is written"; fi
-if python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$WORK/out/dependency-updates.json" 2>/dev/null; then
+if python3 -c "import json,sys; json.load(open(sys.argv[1]))" "out/dependency-updates.json" 2>/dev/null; then
   pass "the JSON report parses"
 else
   fail "the JSON report parses"
 fi
-MD="$(cat "$WORK/out/dependency-updates.md")"
+MD="$(cat "out/dependency-updates.md")"
 assert_contains "the Markdown says how to apply a binary bump" "$MD" "_PINNED_VERSION"
 assert_contains "the Markdown says how to apply an action bump" "$MD" "commit SHA"
 echo ""
@@ -257,13 +262,13 @@ echo "8. The real repository is wired up and fully annotated"
 # lookup error under an empty fixture, which is exactly what makes it a
 # coverage assertion: the count is the number of pins being tracked.
 set +e
-REAL="$(python3 "$CHECKER" --repo-dir "$SCRIPTS_DIR" --report "$WORK/real" --fixture "$WORK/empty.json" 2>&1)"
+REAL="$(python3 "$CHECKER" --repo-dir "$SCRIPTS_DIR" --report "real" --fixture "empty.json" 2>&1)"
 set -e
 assert_not_contains "every pin in this repo carries an upstream annotation" "$REAL" "no '# upstream:' annotation"
 assert_not_contains "no inline copy has drifted from the manifest" "$REAL" "DRIFT"
 DISCOVERED="$(python3 -c "
 import json
-print(len(json.load(open('$WORK/real/dependency-updates.json'))['errors']))
+print(len(json.load(open('real/dependency-updates.json'))['errors']))
 ")"
 if [[ "$DISCOVERED" -ge 60 ]]; then
   pass "discovers the repository's pins (found $DISCOVERED)"

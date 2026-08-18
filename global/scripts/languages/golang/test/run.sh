@@ -211,8 +211,17 @@ else
   # runs concurrently in this phase (`-p`). The default stays 1 because most
   # consumers' integration suites assume exclusive access to shared fixtures
   # (an embedded PostgreSQL on a fixed port, for one); a consumer whose
-  # fixtures allocate per-instance resources can raise it from its own
-  # pipeline variables to cut the phase's wall time.
+  # fixtures allocate per-instance resources can raise it to cut the phase's
+  # wall time.
+  #
+  # It is read from the environment of the job that runs this script. On
+  # GitLab CI and Azure DevOps a pipeline variable IS that environment, so
+  # setting one is enough. On GitHub Actions it is NOT: a workflow that
+  # `uses:` a reusable workflow cannot pass arbitrary environment variables
+  # into it -- only `inputs` and `secrets` cross that boundary -- so an `env:`
+  # at the call site would silently never arrive. The GitHub path therefore
+  # threads an `integration_parallel` INPUT through `go.yaml` into the test
+  # action, which maps it onto this variable.
   # shellcheck disable=SC2086
   "$GOBIN_DIR"/gotestsum \
     --format pkgname \

@@ -31,6 +31,11 @@ on:
         required: false
         default: 0
         description: 'Minimum total coverage percentage; 0 disables the gate. See go.yaml.'
+      integration_parallel:
+        type: 'number'
+        required: false
+        default: 1
+        description: 'How many integration test binaries run concurrently (`go test -p`). See go.yaml.'
       openapi_sync_path:
         type: 'string'
         required: false
@@ -56,6 +61,7 @@ jobs:
       database_image: ${{ inputs.database_image }}
       database_url_env: ${{ inputs.database_url_env }}
       coverage_threshold: ${{ inputs.coverage_threshold }}
+      integration_parallel: ${{ inputs.integration_parallel }}
       openapi_sync_path: ${{ inputs.openapi_sync_path }}
       openapi_sync_command: ${{ inputs.openapi_sync_command }}
     secrets:

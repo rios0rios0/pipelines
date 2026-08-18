@@ -220,10 +220,13 @@ echo "TEST 7: the GitHub NVD cache is written even when the job dies"
 # The old job used the all-in-one actions/cache, whose save runs in a post-job step that is skipped on
 # cancellation. The 5h45m run was cancelled, so nothing was ever cached, so the next run started cold
 # again -- the loop this splits apart.
+# Matched by action path + a 40-hex commit SHA: the actions are pinned to an
+# immutable commit, so grepping for `@v4` would fail on the pin rather than on
+# the split-cache contract these two assertions exist to hold.
 assert_true "restores with actions/cache/restore" \
-  "grep -q 'actions/cache/restore@v4' '$ACTION'"
+  "grep -qE 'actions/cache/restore@[0-9a-f]{40}' '$ACTION'"
 assert_true "saves with an explicit actions/cache/save step" \
-  "grep -q 'actions/cache/save@v4' '$ACTION'"
+  "grep -qE 'actions/cache/save@[0-9a-f]{40}' '$ACTION'"
 # The save still runs under always() -- a post-job step would be skipped on cancellation -- but it is
 # now gated on the database being complete. Saving unconditionally is what made a single cancelled run
 # permanent: the partial database was published, restored by the next run, rejected by

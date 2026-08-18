@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, workflow-composition)
+- `make test` - Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, workflow-composition, supply-chain)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-go-integration-scope` - Test which packages the Go runner's integration phase selects specifically
 - `make test-lambda` - Test Lambda template validation specifically
@@ -28,6 +28,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-deploy-providers` - Test the MVP hosting deployment providers (Cloudflare, Vercel, Render, Netlify, Fly.io) specifically
 - `make test-memory-detection` - Test the cgroup-aware memory ceiling detection specifically
 - `make test-workflow-composition` - Test the GitHub Actions workflow composition standard specifically
+- `make test-supply-chain` - Test the supply-chain pinning contract (actions, images, binaries, packages) specifically
 - `bash global/scripts/shared/cleanup.sh` - Clean up build reports
 - `docker --version && make --version && go version` - Check dependencies
 
@@ -42,13 +43,33 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 **Performance:** Security scans 2-10min, Container builds 5-30min
 **Architecture:** 5-stage pipeline (Code Check [lint + basic-checks] → Security → Tests → Management → Delivery)
 
+## Supply-Chain Pinning (non-negotiable)
+
+Everything the pipelines execute is pinned, and `make test-supply-chain` fails the build if it is not:
+
+- **GitHub Actions** — full 40-character commit SHA plus a trailing `# vX.Y.Z` comment. Never a bare tag.
+  The one exception is `rios0rios0/pipelines/...@main`, which is a same-repository reference and is
+  separately REQUIRED to stay `@main` by `test-workflow-composition.sh`.
+- **Container images** — `tag@sha256:<digest>`, in both `image:` keys and Dockerfile `FROM` lines.
+- **Downloaded binaries** — add the version and SHA-256 to `global/scripts/shared/pinned-versions.sh` and
+  fetch through `download_verified` from `verify-download.sh`. Never `curl | sh`, and never an unverified
+  `curl`/`wget` of a release artifact.
+- **Packages** — `go install …@<version>`, `pip install "pkg==<version>"`, `gem install pkg -v <version>`,
+  `npx --yes pkg@<version>`. Never `@latest` and never a bare package name.
+
+To bump a tool: change its `*_PINNED_VERSION`, replace every `*_SHA256_*` from the upstream checksum
+manifest (never carry an old digest forward), and run `make test-supply-chain`.
+
 ## Working Effectively
 
 ### Bootstrap and Setup
-- **Using the clone script (recommended, idempotent -- clones or pulls):**
+- **Using `make setup` (recommended, idempotent -- clones or fast-forwards):**
   ```bash
-  curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
+  make setup
   ```
+  It runs `git` directly. It used to pipe `clone.sh` from a branch into `bash`, which executed whatever
+  that URL returned at that moment with the developer's own privileges -- the pattern this repository's
+  SAST stage flags in consumers' pipelines.
 
 - **Manual clone:**
   ```bash

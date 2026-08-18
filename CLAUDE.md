@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, dart-pipeline, workflow-composition)
+make test              # Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, dart-pipeline, workflow-composition, supply-chain)
 make test-go-script    # Test Go validation script only
 make test-go-integration-scope  # Test which packages the Go runner's integration phase selects only
 make test-lambda       # Test Lambda template validation only
@@ -31,6 +31,7 @@ make test-deploy-providers   # Test the MVP hosting deployment providers (Cloudf
 make test-memory-detection  # Test the cgroup-aware memory ceiling detection only
 make test-dart-pipeline # Test the Dart/Flutter pipeline (scripts, Semgrep rules, cross-platform wiring) only
 make test-workflow-composition  # Test the GitHub Actions workflow composition standard only
+make test-supply-chain # Test the supply-chain pinning contract (actions, images, binaries, packages) only
 make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
 ```
 
@@ -62,10 +63,11 @@ All platforms follow consistent numbered stages:
   - `terraform/structural/` — third tier runner for `tests/structural.sh` (repo-convention assertions the consumer owns); emits `build/reports/junit-structural.xml` (empty-but-valid on skip). Runs on its own parallel job (`test:structural`) instead of through `test-all` because the shell tier is offline and deps-free and shouldn't block on the heavier tiers
   - `terraform/validate/` — fourth tier runner: `terraform init -backend=false` + `terraform validate` over every root module under `VALIDATE_ROOTS` (default `stacks`); emits `build/reports/junit-validate.xml` (empty-but-valid on skip). The only tier that RESOLVES references — the other three parse — so it is the only one that can see `Reference to undeclared module` / `Unsupported argument` in a root module. Runs on its own **opt-in** parallel job (`test:validate`), off by default because unlike its siblings it needs the network for provider downloads and, for private module sources, credentials
   - `terraform/tftest-gen/` — generator that emits `tests/smoke.tftest.hcl` for single-module repos; parses `variables.tf` + `main.tf` / `providers.tf` and emits `mock_provider` blocks plus validation-rejection runs
+  - `terraform/tflint/install.sh` and `terraform/terra/install.sh` — pinned, checksum-verified installers that replaced the vendors' `curl … | sh` one-liners on all three platforms
   - `terraform/order-check/` — checks (and with `--fix` rewrites) the file-ordering standard across `environments/**/root.hcl`, `stacks/*/{variables,providers,outputs}.tf`, and `**/providers.tf`, and additionally reports **dead terragrunt inputs** (an `inputs = {}` key with no matching `variable` in the target stack — reported only, never auto-deleted); emits `build/reports/junit-order-check.xml`. Runs as the `order-check` / `style:order-check` job in the `10-code-check` stage. Stdlib-only `python3`; the `--fix` rewriter is round-trip-safe (parses to exact substrings, then only permutes). See Terraform Ordering Standard below
   - `terraform/var-catalog/` — stdlib-only `python3` generator that keeps ONE canonical body per shared `variable` in a per-repo `.terraform-var-catalog.hcl` and writes the subset each stack actually uses into `stacks/<stack>/variables-shared.tf` (the same generic-script/repo-data split as `order-check`). Output is **committed**, not emitted by a Terragrunt `generate` block, because the order-check dead-input scan, the `terraform validate` tier, and AST-based tests all read `stacks/**/*.tf` from the source tree without invoking Terragrunt. It writes a sibling file rather than appending to `variables.tf` (so generated content is exempt from the `// SET ON` marker rule yet still seen by the dead-input glob) and **never overwrites a hand-written declaration** — a stack that already declares a catalogued name keeps its body and is reported. `run.sh --check` is the CI gate (fails if the committed output is stale); `--report` prints changes without writing
 - `global/scripts/deploy/` — MVP hosting providers for the `50-deployment` stage: `cloudflare/` (Pages + Workers via `wrangler`), `vercel/`, `render/` (REST API, no CLI exists), `netlify/`, `flyio/`. Each is wired identically on all three platforms; `common.sh` is sourced, not executed, and holds the shared helpers. See MVP Hosting Providers below
-- `global/scripts/shared/` — Shared utilities (cleanup.sh, rebase-check.sh, changelog-check.sh, reconcile-releases.sh, terraform-provider-mirror.sh). `terraform-provider-mirror.sh` is sourced by the `terra-test` and `validate` tiers: it points `terraform init` at provider stores this machine already populated (`TF_PROVIDER_MIRROR_DIR`, `TERRA_PROVIDER_CACHE_DIR`, the terra CLI's `~/.cache/terra/providers`, then the tier's own `TF_PLUGIN_CACHE_DIR`) via a `filesystem_mirror`, so a mirrored provider costs no registry query and no github.com checksum fetch. Falls back to the origin registry per directory, so a cold machine still works and pays one fetch per provider version instead of one per directory. `TF_PROVIDER_MIRROR=off` disables it
+- `global/scripts/shared/` — Shared utilities (cleanup.sh, rebase-check.sh, changelog-check.sh, reconcile-releases.sh, terraform-provider-mirror.sh, **pinned-versions.sh**, **verify-download.sh**). The last two are sourced, never executed, and are the supply-chain contract: `pinned-versions.sh` is the single source of truth for every third-party binary version and its SHA-256, and `verify-download.sh` is the only sanctioned way to fetch one — see Supply-Chain Pinning below. `terraform-provider-mirror.sh` is sourced by the `terra-test` and `validate` tiers: it points `terraform init` at provider stores this machine already populated (`TF_PROVIDER_MIRROR_DIR`, `TERRA_PROVIDER_CACHE_DIR`, the terra CLI's `~/.cache/terra/providers`, then the tier's own `TF_PLUGIN_CACHE_DIR`) via a `filesystem_mirror`, so a mirrored provider costs no registry query and no github.com checksum fetch. Falls back to the origin registry per directory, so a cold machine still works and pays one fetch per provider version instead of one per directory. `TF_PROVIDER_MIRROR=off` disables it
 - `global/containers/` — Docker image definitions for CI environments
 - `makefiles/` — Includable `.mk` fragments for downstream projects (`common.mk`, `golang.mk`, `python.mk`, etc.)
 - `.docs/examples/` — Complete per-platform usage examples
@@ -93,6 +95,39 @@ Dart is the one language here with TWO toolchains sharing ONE package manager
 than the package manager — the same precedent Go sets with `go.yaml`.
 
 When adding a new language or toolchain, always use the toolchain name in the workflow file.
+
+### Supply-Chain Pinning
+
+**Enforced by `.github/tests/test-supply-chain.sh` (`make test-supply-chain`), 23 assertions, every one of
+them proven to fire against a deliberate violation.** Read this before adding an action, an image, or
+anything that downloads a binary.
+
+| What | Pinned to | Enforced by |
+|------|-----------|-------------|
+| Third-party GitHub Actions | 40-character commit SHA + trailing `# vX.Y.Z` comment | assertions 1-2 |
+| Container images (`image:`, `FROM`) | `tag@sha256:<digest>` | assertions 3-4 |
+| Downloaded binaries | exact version **and** a committed SHA-256 | assertions 6-12 |
+| `go install` / `pip` / `gem` / `npx` | exact version | assertions 15-18 |
+
+`global/scripts/shared/pinned-versions.sh` holds every version and digest; `verify-download.sh` is the
+only sanctioned way to fetch a binary, and it DELETES an artifact whose checksum does not match rather
+than merely reporting it — a later step that only tests for existence would otherwise install the thing
+just rejected.
+
+Five constraints shape this family; do not "simplify" any of them away:
+
+| Constraint | Why |
+|------------|-----|
+| **A pinned version and its digest move together** | A committed digest describes ONE build. `pinned_digest` compares `<TOOL>_VERSION` against `<TOOL>_PINNED_VERSION` and refuses to reuse the digest when they differ — verifying new bytes against an old digest fails every time and reads like an attack. An override without `<TOOL>_SHA256_OVERRIDE` warns loudly and skips verification rather than failing the job, because responding to an upstream CVE must not require a release here |
+| **Same-repository `@main` references are deliberate** | `rios0rios0/pipelines/...@main` shares this repository's trust boundary, `test-workflow-composition.sh` Test 7 REQUIRES it, and pinning it is a chicken-and-egg — the SHA cannot exist before the commit that needs it. The supply-chain test excludes them explicitly, so the two suites cannot contradict each other |
+| **The `scripts-repo` abstracts must honour an explicit ref** | They cloned the default branch with no ref, so a consumer pinning `@4.23.0` got the workflow from the tag and every SCRIPT from `main`. Pinning the entry point while the payload floats is worse than not pinning: it reads as covered. GitHub follows `github.action_ref`; GitLab and Azure take `PIPELINES_REF`. All three use `git init` + `git fetch <ref>`, NOT `git clone --branch`, because `--branch` rejects a raw commit SHA — the only genuinely immutable form |
+| **The tools no longer self-update** | Several installers re-resolved `releases/latest` on every run of a persistent agent, justified as staying current for CVE fixes. It also meant a linter or scanner's verdict on unchanged code could change overnight, and the earlier verdict could not be reproduced. An exact version is idempotent, so those branches were deleted rather than rewritten |
+| **The test strips comments before matching** | This repository documents the patterns it forbids at length, so a check that bans `npx --yes knip` is otherwise failed by the comment explaining why. `drop_comments` handles it; `yaml_files` must pass `"$@"` through to `find`, because a swallowed `-print0` made three assertions pass without examining a single file |
+
+Two consumer-facing consequences worth knowing: the examples under `.docs/examples/` are pinned to a
+release tag on all three platforms (an example that tracks a branch teaches every consumer the exposure),
+and Azure DevOps resolves the repository's DEFAULT BRANCH when a `resources.repositories` entry gives no
+`ref:` — which is why every Azure example now sets one.
 
 ### Workflow Composition Standard
 

@@ -1,5 +1,5 @@
 .sdk:
-  image: 'mcr.microsoft.com/dotnet/sdk:8.0'
+  image: 'mcr.microsoft.com/dotnet/sdk:8.0@sha256:306301580fcaa5b445180e759db59309979002d1000669cb4cf58a567d0014bc'
   cache: # relative to the project directory ($CI_PROJECT_DIR)
     key: "$CI_JOB_NAME"
     paths:

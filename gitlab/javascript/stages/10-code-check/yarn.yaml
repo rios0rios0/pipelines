@@ -28,7 +28,9 @@ quality:knip:
   before_script:
   script:
     - !reference [ .style:eslint, before_script ]
-    - npx --yes knip
+    # Pinned; `npx --yes knip` executes the newest published knip on every
+    # run. See global/scripts/shared/pinned-versions.sh.
+    - 'npm_config_ignore_scripts=true npx --yes knip@6.32.2'
     - !reference [ .style:eslint, after_script ]
   cache:
     paths: !reference [ .style:eslint, cache, paths ]

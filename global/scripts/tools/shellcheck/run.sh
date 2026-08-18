@@ -22,47 +22,56 @@ if [ -z "$SCRIPT_LIST" ]; then
   exit 0
 fi
 
-# Install ShellCheck if not already available
-# Self-update an already-installed ShellCheck on persistent agents so long-lived
-# hosts stay current for CVE fixes. Resolves the latest tag via the
-# `releases/latest` redirect (not API-rate-limited). Fail-safe: any uncertainty
-# (lookup blip or unparseable version) returns "no update", so it never forces a
-# needless re-download or breaks the run.
-shellcheck_update_available() {
-  _sc_latest=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/koalaman/shellcheck/releases/latest 2>/dev/null | sed 's#.*/tag/v\{0,1\}##')
+# Install ShellCheck if not already available.
+#
+# The version is PINNED and the archive is CHECKSUM-VERIFIED. This previously
+# resolved `releases/latest` at run time and unpacked the result unverified,
+# which made the linting standard applied to a commit depend on the day it ran:
+# a new ShellCheck release adds checks, so an unchanged script could pass in the
+# morning and fail in the afternoon with nothing in the diff to explain it.
+# ShellCheck publishes no checksum manifest, so the digests in
+# `pinned-versions.sh` were computed from the published artifacts.
+. "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/verify-download.sh"
+
+shellcheck_matches_pin() {
   _sc_current=$(shellcheck --version 2>/dev/null | awk '/^version:/{print $2}')
-  case "$_sc_latest" in [0-9]*.[0-9]*) ;; *) return 1 ;; esac
-  case "$_sc_current" in [0-9]*.[0-9]*) ;; *) return 1 ;; esac
-  [ "$_sc_latest" != "$_sc_current" ]
+  [ "$_sc_current" = "$SHELLCHECK_VERSION" ]
 }
 
-if ! command -v shellcheck > /dev/null 2>&1 || shellcheck_update_available; then
-  echo "Downloading ShellCheck..."
-  # Resolve the latest tag via the releases/latest redirect (not API-rate-limited),
-  # matching shellcheck_update_available above. Keep the leading `v` — the release
-  # asset and extract dir are named `shellcheck-vX.Y.Z...`.
-  SHELLCHECK_VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/koalaman/shellcheck/releases/latest | sed 's#.*/tag/##')
-  if [ -z "$SHELLCHECK_VERSION" ]; then
-    echo "ERROR: could not resolve the latest ShellCheck version (GitHub outage or network failure)." >&2
-    exit 1
-  fi
-
+if ! command -v shellcheck > /dev/null 2>&1 || ! shellcheck_matches_pin; then
   ARCH=$(uname -m)
   case "$ARCH" in
-    x86_64)  ARCH="x86_64" ;;
-    aarch64) ARCH="aarch64" ;;
-    armv6l)  ARCH="armv6hf" ;;
+    x86_64)  ARCH="x86_64";  SHELLCHECK_DIGEST_ARCH="X86_64" ;;
+    aarch64) ARCH="aarch64"; SHELLCHECK_DIGEST_ARCH="AARCH64" ;;
+    armv6l)  ARCH="armv6hf"; SHELLCHECK_DIGEST_ARCH="ARMV6HF" ;;
     *)
       echo "Unsupported architecture: $ARCH" >&2
       exit 1
       ;;
   esac
 
-  curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/$SHELLCHECK_VERSION/shellcheck-$SHELLCHECK_VERSION.linux.$ARCH.tar.xz" -o /tmp/shellcheck.tar.xz
-  tar -xJf /tmp/shellcheck.tar.xz -C /tmp
-  mv "/tmp/shellcheck-$SHELLCHECK_VERSION/shellcheck" /tmp/shellcheck
+  SHELLCHECK_SHA256=$(pinned_digest SHELLCHECK "$SHELLCHECK_DIGEST_ARCH") || exit 1
+
+  # The release asset and the directory inside it both carry a leading `v`,
+  # which the pinned version deliberately does not -- so it is added here once
+  # rather than being carried through every comparison above.
+  echo "Installing ShellCheck v$SHELLCHECK_VERSION (linux/$ARCH)..."
+  if ! download_verified \
+    "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.$ARCH.tar.xz" \
+    /tmp/shellcheck.tar.xz \
+    "$SHELLCHECK_SHA256"; then
+    exit 1
+  fi
+
+  if ! tar -xJf /tmp/shellcheck.tar.xz -C /tmp; then
+    echo "ERROR: failed to extract ShellCheck from /tmp/shellcheck.tar.xz." >&2
+    rm -f /tmp/shellcheck.tar.xz
+    exit 1
+  fi
+  mv "/tmp/shellcheck-v${SHELLCHECK_VERSION}/shellcheck" /tmp/shellcheck
   chmod +x /tmp/shellcheck
-  rm -rf /tmp/shellcheck.tar.xz "/tmp/shellcheck-$SHELLCHECK_VERSION"
+  rm -rf /tmp/shellcheck.tar.xz "/tmp/shellcheck-v${SHELLCHECK_VERSION}"
   # Move the downloaded binary into the user's ~/.local/bin (on PATH via the
   # shared preamble) so nothing is installed to a root-owned location.
   mv /tmp/shellcheck "$HOME/.local/bin/shellcheck"

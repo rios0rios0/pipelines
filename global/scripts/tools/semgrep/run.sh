@@ -5,6 +5,7 @@ if [ -z "$SCRIPTS_DIR" ]; then
   export SCRIPTS_DIR
 fi
 TOOL_NAME="semgrep" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
 
 SEMGREP_LANGUAGE="$1" # it takes the first param as the main language
 fileName="$REPORT_PATH/semgrep.json"
@@ -29,30 +30,45 @@ fi
 # ~/.local/bin (on PATH via the shared preamble) -- no root, and it persists so
 # an already-present install is upgraded rather than reinstalled each run.
 SEMGREP_VENV="$HOME/.local/share/semgrep-venv"
-if ! command -v semgrep > /dev/null 2>&1; then
+
+# Install when Semgrep is ABSENT **or when the version on PATH is not the
+# pinned one**. Testing only for absence is not enough on a persistent or
+# self-hosted runner: whatever Semgrep happened to be installed there first
+# would keep running, so `SEMGREP_SPEC` would name a version the scan never
+# used and the pin would be decorative. Reinstalling into our own venv and
+# re-pointing the symlink is what makes the pin real -- `$HOME/.local/bin` is
+# prepended to PATH by the shared preamble, so our copy wins over a
+# system-wide one.
+SEMGREP_PINNED_VERSION="${SEMGREP_SPEC##*==}"
+
+semgrep_matches_pin() {
+  _sg_current=$(semgrep --version 2>/dev/null | head -1 | tr -d '[:space:]')
+  [ "$_sg_current" = "$SEMGREP_PINNED_VERSION" ]
+}
+
+if ! command -v semgrep > /dev/null 2>&1 || ! semgrep_matches_pin; then
   if ! command -v python3 > /dev/null 2>&1; then
     echo "ERROR: Semgrep requires Python 3 (it has no standalone binary release). Install python3 and re-run." >&2
     exit 1
   fi
-  echo "Downloading Semgrep..."
-  python3 -m venv "$SEMGREP_VENV"
-  "$SEMGREP_VENV/bin/pip" install --quiet --disable-pip-version-check semgrep
+  echo "Installing $SEMGREP_SPEC..."
+  [ -x "$SEMGREP_VENV/bin/pip" ] || python3 -m venv "$SEMGREP_VENV"
+  "$SEMGREP_VENV/bin/pip" install --quiet --disable-pip-version-check --only-binary :all: "$SEMGREP_SPEC"
   ln -sf "$SEMGREP_VENV/bin/semgrep" "$HOME/.local/bin/semgrep"
-else
-  # Already present (persistent agent): self-update so long-lived hosts stay
-  # current for CVE fixes. Upgrade our own venv if it survived; otherwise fall
-  # back to upgrading the on-PATH install in place -- best effort, since a
-  # system-managed Python may refuse under PEP 668, keeping the installed
-  # version. pip only downloads a newer release when one exists.
-  echo "Updating Semgrep..."
-  if [ -x "$SEMGREP_VENV/bin/pip" ]; then
-    "$SEMGREP_VENV/bin/pip" install --quiet --disable-pip-version-check --upgrade semgrep
-    ln -sf "$SEMGREP_VENV/bin/semgrep" "$HOME/.local/bin/semgrep"
-  elif command -v python3 > /dev/null 2>&1; then
-    python3 -m pip install --quiet --disable-pip-version-check --upgrade semgrep 2>/dev/null \
-      || echo "WARN: could not auto-update Semgrep (externally-managed Python?); using the installed version." >&2
+
+  if ! semgrep_matches_pin; then
+    echo "ERROR: Semgrep on PATH is not the pinned $SEMGREP_PINNED_VERSION after installation." >&2
+    echo "       Another Semgrep earlier on PATH is shadowing $HOME/.local/bin/semgrep." >&2
+    exit 1
   fi
 fi
+
+# PINNED, and the "self-update to latest on every run" branch is gone with it.
+# Semgrep is a gating SAST tool: each release adds and retunes rules, so an
+# unpinned engine meant an unchanged commit could pass a scan on Monday and fail
+# it on Tuesday, with nothing in the repository to explain the difference and no
+# way to reproduce the earlier verdict. Bumping `SEMGREP_SPEC` makes that a
+# reviewed change with a diff, which is what a rule change deserves.
 
 # Collect optional arguments (rule configs, project-provided rule exclusions and
 # custom rules) into the positional parameters so they are passed safely without

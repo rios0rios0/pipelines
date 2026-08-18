@@ -45,16 +45,44 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - name: 'Checkout code'
-        uses: 'actions/checkout@v6'
+        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
 
       - name: 'Setup Go'
-        uses: 'actions/setup-go@v6'
+        uses: 'actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16' # v6.5.0
         with:
           go-version: '1.24'
 
+      # Same `job.workflow_ref` derivation the test jobs below use and for the
+      # same reason: the shared scripts must come from the ref the consumer
+      # pinned this workflow at, not from whatever `main` holds right now.
+      # `inputs.pipelines_ref` overrides it. Passed through `env:` rather than
+      # interpolated into `run:` -- see the long note on the test job for the
+      # script-injection reasoning.
+      - name: 'Resolve pipelines ref'
+        id: 'pipelines-ref'
+        shell: 'bash'
+        env:
+          PIPELINES_REF: ${{ inputs.pipelines_ref }}
+          JOB_WORKFLOW_REF: ${{ job.workflow_ref }}
+        run: |
+          if [ -n "${PIPELINES_REF}" ]; then
+            ref="${PIPELINES_REF}"
+          else
+            ref="${JOB_WORKFLOW_REF:-${GITHUB_WORKFLOW_REF}}"
+            ref="${ref##*@}"
+          fi
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+
+      - name: 'Checkout pipelines repo for shared scripts'
+        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+        with:
+          repository: 'rios0rios0/pipelines'
+          ref: ${{ steps.pipelines-ref.outputs.ref }}
+          path: '.pipelines'
+
       - name: 'Install terra CLI'
         run: |
-          curl -fsSL https://raw.githubusercontent.com/rios0rios0/terra/main/install.sh | sh
+          "$GITHUB_WORKSPACE/.pipelines/global/scripts/languages/terraform/terra/install.sh"
           terra install
         shell: 'bash'
 
@@ -70,10 +98,38 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - name: 'Checkout code'
-        uses: 'actions/checkout@v6'
+        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
 
-      - name: 'Install TFLint (if not already present)'
-        run: command -v tflint > /dev/null 2>&1 || curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+      # Same `job.workflow_ref` derivation the test jobs below use and for the
+      # same reason: the shared scripts must come from the ref the consumer
+      # pinned this workflow at, not from whatever `main` holds right now.
+      # `inputs.pipelines_ref` overrides it. Passed through `env:` rather than
+      # interpolated into `run:` -- see the long note on the test job for the
+      # script-injection reasoning.
+      - name: 'Resolve pipelines ref'
+        id: 'pipelines-ref'
+        shell: 'bash'
+        env:
+          PIPELINES_REF: ${{ inputs.pipelines_ref }}
+          JOB_WORKFLOW_REF: ${{ job.workflow_ref }}
+        run: |
+          if [ -n "${PIPELINES_REF}" ]; then
+            ref="${PIPELINES_REF}"
+          else
+            ref="${JOB_WORKFLOW_REF:-${GITHUB_WORKFLOW_REF}}"
+            ref="${ref##*@}"
+          fi
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+
+      - name: 'Checkout pipelines repo for shared scripts'
+        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+        with:
+          repository: 'rios0rios0/pipelines'
+          ref: ${{ steps.pipelines-ref.outputs.ref }}
+          path: '.pipelines'
+
+      - name: 'Install TFLint (pinned, checksum-verified)'
+        run: '"$GITHUB_WORKSPACE/.pipelines/global/scripts/languages/terraform/tflint/install.sh"'
         shell: 'bash'
 
       - name: 'Run TFLint'
@@ -95,7 +151,7 @@ jobs:
       REPORT_PATH: 'build/reports'
     steps:
       - name: 'Checkout code'
-        uses: 'actions/checkout@v6'
+        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
 
       # Pass `inputs.pipelines_ref` via `env:` (not `${{ }}` in `run:`) to
       # avoid script injection, then resolve the ref this reusable workflow
@@ -117,7 +173,7 @@ jobs:
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 
       - name: 'Checkout pipelines repo for shared scripts'
-        uses: 'actions/checkout@v6'
+        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
         with:
           repository: 'rios0rios0/pipelines'
           ref: ${{ steps.pipelines-ref.outputs.ref }}
@@ -131,7 +187,7 @@ jobs:
 
       - name: 'Publish order-check results'
         if: 'always()'
-        uses: 'actions/upload-artifact@v7'
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # v7.0.1
         with:
           name: 'order-check'
           path: "${{ env.REPORT_PATH }}/junit-order-check.xml"
@@ -195,7 +251,7 @@ jobs:
       REPORT_PATH: 'build/reports'
     steps:
       - name: 'Checkout code'
-        uses: 'actions/checkout@v6'
+        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
 
       # Mirror the `go-version-file: 'go.mod'` pattern used by every
       # `github/golang/stages/**/action.yaml` in this repo: derive the Go
@@ -219,21 +275,16 @@ jobs:
 
       - name: 'Setup Go (from terratest go.mod)'
         if: "steps.terratest-gomod.outputs.path != ''"
-        uses: 'actions/setup-go@v6'
+        uses: 'actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16' # v6.5.0
         with:
           go-version-file: ${{ steps.terratest-gomod.outputs.path }}
 
       - name: 'Setup Go (fallback when no terratest go.mod)'
         if: "steps.terratest-gomod.outputs.path == ''"
-        uses: 'actions/setup-go@v6'
+        uses: 'actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16' # v6.5.0
         with:
           go-version: '1.24'
 
-      - name: 'Install terra CLI'
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/rios0rios0/terra/main/install.sh | sh
-          terra install
-        shell: 'bash'
 
       # Derive the pipelines ref from the reusable workflow's own invocation
       # ref so the shared scripts stay in sync with the workflow. When the
@@ -284,11 +335,20 @@ jobs:
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 
       - name: 'Checkout pipelines repo for shared scripts'
-        uses: 'actions/checkout@v6'
+        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
         with:
           repository: 'rios0rios0/pipelines'
           ref: ${{ steps.pipelines-ref.outputs.ref }}
           path: '.pipelines'
+
+      # Moved to AFTER the pipelines checkout: the installer that replaces the
+      # vendor's `curl ... | sh` one-liner lives in this repository, so it does
+      # not exist until the checkout above has run.
+      - name: 'Install terra CLI'
+        run: |
+          "$GITHUB_WORKSPACE/.pipelines/global/scripts/languages/terraform/terra/install.sh"
+          terra install
+        shell: 'bash'
 
       - name: 'Run Terraform tests (terra-test + terratest)'
         run: |
@@ -298,7 +358,7 @@ jobs:
 
       - name: 'Publish test results'
         if: 'always()'
-        uses: 'actions/upload-artifact@v7'
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # v7.0.1
         with:
           name: 'terra-coverage'
           path: "${{ env.REPORT_PATH }}"
@@ -325,7 +385,7 @@ jobs:
       VALIDATE_ROOTS: ${{ inputs.validate_roots }}
     steps:
       - name: 'Checkout code'
-        uses: 'actions/checkout@v6'
+        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
 
       # Terraform itself — the structural tier is deps-free, this one
       # cannot be. HashiCorp's action rather than the terra CLI installer
@@ -366,7 +426,7 @@ jobs:
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 
       - name: 'Checkout pipelines repo for shared scripts'
-        uses: 'actions/checkout@v6'
+        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
         with:
           repository: 'rios0rios0/pipelines'
           ref: ${{ steps.pipelines-ref.outputs.ref }}
@@ -392,7 +452,7 @@ jobs:
 
       - name: 'Publish validate JUnit'
         if: 'always()'
-        uses: 'actions/upload-artifact@v7'
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # v7.0.1
         with:
           name: 'validate-results'
           path: "${{ env.REPORT_PATH }}/junit-validate.xml"
@@ -415,7 +475,7 @@ jobs:
       REPORT_PATH: 'build/reports'
     steps:
       - name: 'Checkout code'
-        uses: 'actions/checkout@v6'
+        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
 
       # Pass `inputs.pipelines_ref` via the step's `env:` mapping rather
       # than interpolating `${{ }}` directly into the `run:` script. The
@@ -441,7 +501,7 @@ jobs:
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 
       - name: 'Checkout pipelines repo for shared scripts'
-        uses: 'actions/checkout@v6'
+        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
         with:
           repository: 'rios0rios0/pipelines'
           ref: ${{ steps.pipelines-ref.outputs.ref }}
@@ -455,7 +515,7 @@ jobs:
 
       - name: 'Publish structural JUnit'
         if: 'always()'
-        uses: 'actions/upload-artifact@v7'
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # v7.0.1
         with:
           name: 'structural-results'
           path: "${{ env.REPORT_PATH }}/junit-structural.xml"

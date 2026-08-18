@@ -14,4 +14,10 @@ permissions:
 
 jobs:
   pipeline:
-    uses: 'rios0rios0/pipelines/.github/workflows/dotnet-docker.yaml@main'
+    # Pinned to a full commit SHA, with the release it corresponds to in the
+    # trailing comment -- the same form this library uses for every
+    # third-party action it consumes. A branch ('@main') means every run
+    # executes whatever was merged that morning; a tag is better but is still
+    # a label the publisher can move, and only the SHA names the bytes.
+    # '@4.23.0' or '@v4' are readable alternatives if you accept that.
+    uses: 'rios0rios0/pipelines/.github/workflows/dotnet-docker.yaml@1d6da2555acf159773e642c57bcd97ff07d637e2' # 4.23.0

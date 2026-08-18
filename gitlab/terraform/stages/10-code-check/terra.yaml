@@ -12,7 +12,7 @@ style:tflint:
   extends: '.terra'
   stage: 'code check (style/quality)'
   script:
-    - command -v tflint > /dev/null 2>&1 || wget -qO- https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | sh
+    - "$SCRIPTS_DIR/global/scripts/languages/terraform/tflint/install.sh"
     - tflint --chdir . --recursive
 
 # Enforces the team's file-ordering standard (dependency/inputs in root.hcl,
@@ -22,7 +22,7 @@ style:tflint:
 # Run 'order-check/run.sh --fix' locally to auto-sort.
 order:check:
   extends: '.scripts-repo'
-  image: 'python:3-alpine'
+  image: 'python:3.13-alpine@sha256:540c7d91f98ff6880174c40e99067bf5941eb54d818a7a5e094d188b196a934d'
   stage: 'code check (style/quality)'
   variables:
     REPORT_PATH: 'build/reports'

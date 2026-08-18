@@ -14,7 +14,7 @@ include:
 #     CLOUDFLARE_BRANCH, which labels the deployment being uploaded.
 deployment:cloudflare:
   extends: '.scripts-repo'
-  image: 'node:22-alpine'
+  image: 'node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32'
   stage: 'deployment'
   environment:
     name: 'production'

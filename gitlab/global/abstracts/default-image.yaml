@@ -1,2 +1,2 @@
 default:
-  image: 'docker:24.0.3' # this needs to be always a "docker:x.y" image
+  image: 'docker:24.0.3@sha256:8c39dc84d3a2cf61545c50689140f0cb29a672b8bccac1a5ebce12b402c9b32f' # this needs to be always a "docker:x.y" image

@@ -26,10 +26,10 @@ runs:
     # Checkout has to precede the cache restore: it cleans the workspace, which would take the
     # restored CVE database with it.
     - name: 'Checkout code'
-      uses: 'actions/checkout@v6'
+      uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
 
     - name: 'Setup Java'
-      uses: 'actions/setup-java@v5'
+      uses: 'actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961' # v5.7.0
       with:
         distribution: 'temurin'
         java-version: ${{ inputs.java_version }}
@@ -56,7 +56,7 @@ runs:
     # restores from is the one written by the default branch.
     - name: 'Restore NVD database'
       id: 'restore_nvd'
-      uses: 'actions/cache/restore@v4'
+      uses: 'actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830' # v4.3.0
       with:
         path: '.owasp'
         key: "owasp-nvd-${{ runner.os }}-${{ steps.date.outputs.date }}"
@@ -90,14 +90,14 @@ runs:
     # the next run restored it, Dependency-Check rejected it and restarted the full ~350k-record
     # download, ran out of time, and saved a fresh partial -- a loop the cache could never escape.
     - name: 'Save NVD database'
-      uses: 'actions/cache/save@v4'
+      uses: 'actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830' # v4.3.0
       with:
         path: '.owasp'
         key: "owasp-nvd-${{ runner.os }}-${{ steps.date.outputs.date }}"
       if: "always() && steps.odc_complete.outputs.complete == 'true' && steps.restore_nvd.outputs.cache-hit != 'true'"
 
     - name: 'Upload Report'
-      uses: 'actions/upload-artifact@v7'
+      uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # v7.0.1
       with:
         name: 'dependency-check'
         path: 'build/reports/dependency-check/'

@@ -18,6 +18,10 @@ resources:
     - repository: 'pipelines'
       type: 'github'
       name: 'rios0rios0/pipelines'
+      # Without an explicit 'ref', Azure DevOps resolves the repository's
+      # DEFAULT BRANCH -- so every run picks up whatever this library merged
+      # that morning. Bump this deliberately; a commit SHA also works here.
+      ref: 'refs/tags/4.23.0'
       endpoint: 'YOUR_GITHUB_SERVICE_CONNECTION'
 
 stages:

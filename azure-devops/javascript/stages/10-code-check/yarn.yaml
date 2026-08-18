@@ -50,7 +50,9 @@ stages:
             displayName: 'Install dependencies'
             workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
 
-          - script: npx --yes knip
+          # Pinned; `npx --yes knip` executes the newest published knip on
+          # every run. See global/scripts/shared/pinned-versions.sh.
+          - script: 'npm_config_ignore_scripts=true npx --yes knip@6.32.2'
             displayName: 'Run Knip unused code detection'
             workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
 

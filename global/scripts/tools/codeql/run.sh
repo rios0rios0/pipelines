@@ -105,9 +105,23 @@ if ! command -v codeql > /dev/null 2>&1; then
       ;;
   esac
 
-  echo "Downloading CodeQL CLI bundle..."
-  CODEQL_BUNDLE_URL="https://github.com/github/codeql-action/releases/latest/download/codeql-bundle-linux64.tar.gz"
-  curl -fsSL "$CODEQL_BUNDLE_URL" -o /tmp/codeql-bundle.tar.gz
+  # The bundle is PINNED and CHECKSUM-VERIFIED. `releases/latest/download/...`
+  # was a double moving target: a new ~1 GB bundle lands every few weeks, so the
+  # query pack that decided whether a commit was vulnerable changed underneath
+  # the pipeline, and nothing recorded which one had run -- a SARIF report could
+  # not be reproduced or even attributed to a CodeQL version after the fact.
+  . "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
+  . "$SCRIPTS_DIR/global/scripts/shared/verify-download.sh"
+
+  CODEQL_SHA256=$(pinned_digest CODEQL_BUNDLE LINUX64) || exit 1
+
+  echo "Installing CodeQL CLI bundle $CODEQL_BUNDLE_VERSION..."
+  if ! download_verified \
+    "https://github.com/github/codeql-action/releases/download/${CODEQL_BUNDLE_VERSION}/codeql-bundle-linux64.tar.gz" \
+    /tmp/codeql-bundle.tar.gz \
+    "$CODEQL_SHA256"; then
+    exit 1
+  fi
   mkdir -p "$HOME/.local/share"
   tar -xzf /tmp/codeql-bundle.tar.gz -C "$HOME/.local/share"
   # Symlink the CodeQL launcher into the user's ~/.local/bin (on PATH via the

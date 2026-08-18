@@ -48,7 +48,7 @@ runs:
         DEPLOY_DRY_RUN: '${{ inputs.dry_run }}'
 
     - name: 'Upload Report'
-      uses: 'actions/upload-artifact@v7'
+      uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # v7.0.1
       with:
         name: 'require-checks'
         path: 'build/reports/require-checks/'

@@ -3,7 +3,7 @@ include:
 
 .terra:
   extends: '.scripts-repo'
-  image: 'hashicorp/terraform:1.9'
+  image: 'hashicorp/terraform:1.9@sha256:18f9986038bbaf02cf49db9c09261c778161c51dcc7fb7e355ae8938459428cd'
   cache:
     key: "${CI_COMMIT_REF_SLUG}"
     paths:

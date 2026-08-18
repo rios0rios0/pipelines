@@ -113,7 +113,7 @@ cloudflare_ensure_project() {
   fi
 }
 
-deploy_npm_cli "wrangler" "wrangler"
+deploy_npm_cli "wrangler" "$WRANGLER_CLI_SPEC"
 
 case "$CLOUDFLARE_TARGET" in
   pages)

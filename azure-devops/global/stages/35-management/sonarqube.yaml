@@ -24,7 +24,7 @@ jobs:
   - job: 'report_sonarqube'
     displayName: 'report:sonarqube'
     container:
-      image: 'sonarsource/sonar-scanner-cli:latest'
+      image: 'sonarsource/sonar-scanner-cli:12.1.0.3233_8.0.1@sha256:23ca0f137965d9dff2198074043fd48d386280bc5d0ccac8c8349cea4cf096a9'
       options: '--user root' # TODO: workaround for Azure DevOps error
     variables:
       GIT_DEPTH: '0'

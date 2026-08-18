@@ -29,6 +29,7 @@ quality:vulture:
   extends: '.pdm'
   stage: 'code check (style/quality)'
   script:
-    - pip install vulture --quiet
+    # Pinned; kept in step with global/scripts/shared/pinned-versions.sh.
+    - 'pip install --only-binary :all: "vulture==2.16" --quiet'
     - vulture . --min-confidence 80 --exclude .venv
   allow_failure: true

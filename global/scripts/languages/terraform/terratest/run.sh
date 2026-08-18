@@ -7,6 +7,7 @@ if [ -z "${SCRIPTS_DIR:-}" ]; then
   SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
   export SCRIPTS_DIR
 fi
+. "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
 
 # Runs the consumer's Terratest Go suite and publishes the results as
 # JUnit XML. Complements the `terra-test` runner (native `terraform test`
@@ -51,22 +52,23 @@ fi
 
 mkdir -p "${REPORT_PATH}"
 
-# Ensure GOPATH/bin is on PATH so a fresh `go install` is visible in the
-# same invocation. `go env GOPATH` is portable across macOS/Linux and
-# every Go version.
-GOBIN="$(go env GOPATH)/bin"
-export PATH="${GOBIN}:${PATH}"
+# Ensure the directory `go install` actually writes to is on PATH, so a fresh
+# install is visible in the same invocation. It is `GOBIN` when that is set and
+# `GOPATH/bin` otherwise; assuming `GOPATH/bin` meant that on a runner with
+# `GOBIN` configured the binary landed somewhere never added to PATH, and the
+# terratest run then failed on a missing `go-junit-report`.
+GOBIN_DIR="$(go env GOBIN)"
+[ -n "$GOBIN_DIR" ] || GOBIN_DIR="$(go env GOPATH)/bin"
+export PATH="${GOBIN_DIR}:${PATH}"
 
-if ! command -v go-junit-report > /dev/null 2>&1; then
-  echo "Installing go-junit-report..."
-  go install github.com/jstemmer/go-junit-report/v2@latest
-else
-  # Already present (persistent agent): re-resolve @latest so long-lived hosts
-  # stay current. `go install` reuses the module cache and only rebuilds when
-  # @latest advances, so this is cheap when already up to date.
-  echo "Updating go-junit-report..."
-  go install github.com/jstemmer/go-junit-report/v2@latest
-fi
+# Installed UNCONDITIONALLY, not only when the binary is missing. A persistent
+# runner with an older `go-junit-report` would otherwise keep it, so the pin
+# would name a version that never ran. `go install` at an exact version is
+# idempotent and served from the module cache, so this is cheap when already
+# current -- and it is the same "always install" shape this script had before
+# the pin, which resolved `@latest` on every run.
+echo "Installing go-junit-report $GO_JUNIT_REPORT_VERSION..."
+go install "github.com/jstemmer/go-junit-report/v2@$GO_JUNIT_REPORT_VERSION"
 
 echo "Running terratest suite in ${TESTS_DIR}/..."
 # `-set-exit-code` makes go-junit-report return the same exit status as

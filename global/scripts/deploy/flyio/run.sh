@@ -48,41 +48,33 @@ if ! command -v flyctl > /dev/null 2>&1 && deploy_is_dry_run; then
 elif ! command -v flyctl > /dev/null 2>&1; then
   echo "Downloading flyctl..."
 
-  # Resolve the latest tag through the `releases/latest` redirect rather than
-  # the GitHub API: the API is rate limited to 60 requests/hour per IP
-  # unauthenticated and intermittently returns 403 from shared runner IPs,
-  # which would leave the version empty and -- with no `set -e` under POSIX sh
-  # -- sail through into a malformed download URL. Same resolver the gitleaks
-  # and shellcheck installers use.
+  # The version is PINNED and the archive is CHECKSUM-VERIFIED. Resolving
+  # `releases/latest` at run time left the deploy client -- the process that
+  # holds the production Fly API token -- chosen by whoever answered the
+  # redirect, and left a deploy unable to state which client shipped it.
   #
-  # `--proto '=https' --proto-redir '=https'` is required precisely BECAUSE
-  # this resolver depends on following a redirect. By default `curl -L` will
-  # happily follow an HTTPS response into a plain-HTTP location, so a hostile
-  # or compromised redirect could downgrade the transport and choose which
-  # bytes land in the archive below -- an archive this script then makes
-  # executable and runs with the job's credentials in scope. Constraining both
-  # the initial request and every redirect target to HTTPS removes the
-  # downgrade as an option rather than trusting the remote not to offer it.
-  FLYCTL_VERSION=$(curl -fsSLI --proto '=https' --proto-redir '=https' -o /dev/null -w '%{url_effective}' https://github.com/superfly/flyctl/releases/latest | sed 's#.*/tag/##')
-  if [ -z "$FLYCTL_VERSION" ]; then
-    echo "ERROR: could not resolve the latest flyctl version (GitHub outage or network failure)." >&2
-    exit 1
-  fi
-
+  # `download_verified` keeps the HTTPS constraint that mattered here
+  # (`--proto '=https' --proto-redir '=https'`): release URLs redirect to a
+  # CDN, and by default curl follows an HTTPS response into a plain-HTTP
+  # location, so a hostile redirect could otherwise choose the bytes that
+  # become this executable.
   ARCH=$(uname -m)
   case "$ARCH" in
-    x86_64)        FLYCTL_ARCH="x86_64" ;;
-    aarch64|arm64) FLYCTL_ARCH="arm64" ;;
+    x86_64)        FLYCTL_ARCH="x86_64"; FLYCTL_DIGEST_ARCH="X86_64" ;;
+    aarch64|arm64) FLYCTL_ARCH="arm64";  FLYCTL_DIGEST_ARCH="ARM64" ;;
     *)
       echo "Unsupported architecture: $ARCH" >&2
       exit 1
       ;;
   esac
 
-  # Same HTTPS pinning as the resolver above: the release asset URL redirects
-  # to a CDN, and this is the request whose bytes become an executable.
-  if ! curl -fsSL --proto '=https' --proto-redir '=https' "https://github.com/superfly/flyctl/releases/download/$FLYCTL_VERSION/flyctl_${FLYCTL_VERSION#v}_Linux_${FLYCTL_ARCH}.tar.gz" -o /tmp/flyctl.tar.gz; then
-    echo "ERROR: failed to download flyctl $FLYCTL_VERSION (Linux/$FLYCTL_ARCH)." >&2
+  FLYCTL_SHA256=$(pinned_digest FLYCTL "$FLYCTL_DIGEST_ARCH") || exit 1
+
+  echo "Installing flyctl v$FLYCTL_VERSION (Linux/$FLYCTL_ARCH)..."
+  if ! download_verified \
+    "https://github.com/superfly/flyctl/releases/download/v${FLYCTL_VERSION}/flyctl_${FLYCTL_VERSION}_Linux_${FLYCTL_ARCH}.tar.gz" \
+    /tmp/flyctl.tar.gz \
+    "$FLYCTL_SHA256"; then
     exit 1
   fi
   if ! tar -xzf /tmp/flyctl.tar.gz -C /tmp flyctl; then

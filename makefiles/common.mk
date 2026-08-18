@@ -10,8 +10,29 @@
 
 .PHONY: setup codeql semgrep hadolint shellcheck gitleaks sast
 
+# Bootstraps the local checkout of this repository that every other target
+# reads its scripts from.
+#
+# This used to be `curl -sSL .../clone.sh | bash`. That is the same
+# pipe-a-remote-script-into-a-shell shape the SAST stage of this repository
+# flags in consumers' code, and it was the FIRST command a new developer ran --
+# fetched from a branch, unpinned, unverified, executed with their own user's
+# privileges on their own workstation. `clone.sh` only ever ran `git clone` or
+# `git pull --ff-only`, so doing that directly is behaviour-identical and
+# fetches no remote script at all. `clone.sh` remains for anyone who wants the
+# documented one-liner, but nothing in this repository depends on it any more.
+PIPELINES_HOME ?= $(HOME)/Development/github.com/rios0rios0/pipelines
+PIPELINES_REPO ?= https://github.com/rios0rios0/pipelines.git
+
 setup:
-	@curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
+	@if [ -d "$(PIPELINES_HOME)/.git" ]; then \
+		echo "Updating pipelines repository at $(PIPELINES_HOME)..."; \
+		git -C "$(PIPELINES_HOME)" pull --ff-only; \
+	else \
+		echo "Cloning pipelines repository to $(PIPELINES_HOME)..."; \
+		mkdir -p "$$(dirname "$(PIPELINES_HOME)")"; \
+		git clone "$(PIPELINES_REPO)" "$(PIPELINES_HOME)"; \
+	fi
 
 # Skipped, with an explanation, when no language is configured. Not every
 # language this repository supports HAS a CodeQL extractor -- Dart notably does

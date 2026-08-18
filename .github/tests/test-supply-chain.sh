@@ -1,0 +1,332 @@
+#!/usr/bin/env bash
+set -e
+
+# Hold the supply-chain pinning contract across the whole repository.
+#
+# Why a dedicated regression test exists:
+#
+# Pinning is not a state you reach, it is a state you keep. Every one of the
+# findings below was introduced by someone acting reasonably -- copying a
+# vendor's documented install one-liner, adding an action the way GitHub's
+# marketplace prints it, reaching for `:latest` because it is what the README
+# said. None of them looks wrong in review, and every one of them is invisible
+# in a diff unless you already know to look for it.
+#
+# Each assertion therefore encodes a failure mode that has ALREADY happened
+# here, and would otherwise reappear one commit at a time:
+#
+#   - an unpinned action → a tag is mutable, so a compromised or retagged
+#     release runs with the job's token, in every consumer's pipeline at once;
+#   - an unpinned image → the build environment changes without a diff, and a
+#     red build cannot be reproduced;
+#   - a `curl | sh` install → the runner's credentials are handed to whatever
+#     that URL returns at that moment;
+#   - an unverified download → the same, one step removed;
+#   - a `@latest` / unversioned package install → the tool that decides whether
+#     the code is safe to ship is chosen by whoever published most recently.
+#
+# The assertions are deliberately written against the FILES, not against a
+# resolved pipeline: a violation must fail here, before it is merged, rather
+# than in whichever consumer happens to run the affected stage first.
+
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$SCRIPTS_DIR"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+TESTS_PASSED=0
+TESTS_FAILED=0
+
+# assert_empty <description> <captured-output>
+#
+# Passes when the output is empty. Every finding below is expressed as "list
+# the violations", so the offending file:line is printed with the failure
+# instead of leaving the reader to re-run a grep by hand.
+assert_empty() {
+  local description="$1"
+  local findings="$2"
+  if [[ -z "$findings" ]]; then
+    echo -e "${GREEN}  PASS: $description${NC}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  else
+    echo -e "${RED}  FAIL: $description${NC}"
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && echo "         $line"
+    done <<< "$findings"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+  fi
+}
+
+assert_true() {
+  local description="$1"
+  local condition="$2"
+  if eval "$condition"; then
+    echo -e "${GREEN}  PASS: $description${NC}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  else
+    echo -e "${RED}  FAIL: $description${NC}"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+  fi
+}
+
+# drop_comments
+#
+# Filters a `grep -Hn` result down to lines where the match is real code, not
+# prose. This repository documents the patterns it forbids at length -- the
+# comment above `npx --yes knip@6.32.2` explains what `npx --yes knip` used to
+# do -- so a check that forbids a pattern would otherwise be failed by its own
+# explanation. Matches `file:line:` followed by optional indent, an optional
+# YAML list dash, then `#`.
+drop_comments() {
+  grep -vE ':[0-9]+:[[:space:]]*(-[[:space:]]*)?#' || true
+}
+
+# Every YAML file in the repository, excluding the consumer-facing examples
+# (checked separately, with a different rule) and git internals.
+# `"$@"` is load-bearing: callers pass `-print0`, and a function that drops it
+# leaves `find` printing newline-separated paths into an `xargs -0` that then
+# treats the whole list as ONE filename. grep fails, the output is empty, and
+# the assertion passes without having examined anything. Three of the checks
+# below were silently vacuous this way until a deliberate violation was used to
+# prove each assertion actually fires.
+yaml_files() {
+  find . -type f \( -name '*.yaml' -o -name '*.yml' \) \
+    -not -path './.git/*' \
+    -not -path './.docs/examples/*' "$@"
+}
+
+echo "=========================================="
+echo "Supply-chain pinning contract"
+echo "=========================================="
+echo ""
+
+# ---------------------------------------------------------------------------
+echo "1. GitHub Actions are pinned to immutable commits"
+# ---------------------------------------------------------------------------
+# A tag is a label the publisher can move at any time, so `@v4` is a promise
+# rather than a pin. Only a 40-character commit SHA is immutable.
+#
+# `rios0rios0/pipelines/...` is excluded on purpose: those are SAME-REPOSITORY
+# references with an identical trust boundary, and
+# `test-workflow-composition.sh` Test 7 separately REQUIRES them to be `@main`
+# so the library can develop against itself. Pinning them would be a
+# chicken-and-egg (the SHA cannot exist before the commit that needs it).
+# Anchored to a real YAML key (`^ indent [- ] uses:`), not a bare "uses:"
+# anywhere on the line. This repository's comments discuss `uses:` jobs at
+# length -- "evaluated in the caller's `uses:` job", "consumed as
+# `uses: owner/repo/...@vN`" -- and an unanchored match reads those as
+# unpinned actions.
+UNPINNED_ACTIONS="$(
+  yaml_files -print0 2>/dev/null | xargs -0 grep -HnE "^[[:space:]]*(-[[:space:]]*)?uses:" 2>/dev/null \
+    | drop_comments \
+    | grep -v 'rios0rios0/' \
+    | grep -vE "uses: *'?[^'@]+@[0-9a-f]{40}'?" \
+    || true
+)"
+assert_empty "every third-party action is pinned to a 40-character commit SHA" "$UNPINNED_ACTIONS"
+
+# A bare SHA is unreadable and unmaintainable; the trailing comment is what
+# lets a human (and Dependabot/Renovate) see which version is deployed.
+SHA_NO_VERSION="$(
+  yaml_files -print0 2>/dev/null | xargs -0 grep -HnE "^[[:space:]]*(-[[:space:]]*)?uses:" 2>/dev/null \
+    | drop_comments \
+    | grep -E "@[0-9a-f]{40}" \
+    | grep -vE "@[0-9a-f]{40}'? +# *v?[0-9]" \
+    || true
+)"
+assert_empty "every SHA-pinned action records its version in a trailing comment" "$SHA_NO_VERSION"
+echo ""
+
+# ---------------------------------------------------------------------------
+echo "2. Container images are pinned to immutable digests"
+# ---------------------------------------------------------------------------
+# A tag can be repointed at new content; only `@sha256:` names the bytes.
+UNPINNED_IMAGES="$(
+  yaml_files -print0 2>/dev/null | xargs -0 grep -HnE "^[[:space:]]*(-[[:space:]]*)?image:[[:space:]]*['\"]?[a-zA-Z0-9]" 2>/dev/null \
+    | grep -v '@sha256:' \
+    | grep -v '!reference' \
+    || true
+)"
+assert_empty "every 'image:' in a CI template is digest-pinned" "$UNPINNED_IMAGES"
+
+UNPINNED_FROM="$(
+  find . -type f -name 'Dockerfile*' -not -path './.git/*' -print0 2>/dev/null \
+    | xargs -0 grep -Hn '^FROM' 2>/dev/null \
+    | grep -v '@sha256:' \
+    || true
+)"
+assert_empty "every Dockerfile 'FROM' is digest-pinned" "$UNPINNED_FROM"
+echo ""
+
+# ---------------------------------------------------------------------------
+echo "3. No remote script is piped into a shell"
+# ---------------------------------------------------------------------------
+# `curl ... | sh` hands the runner -- holding the repository token, and often
+# cloud credentials -- to whatever that URL returns at that moment, with no
+# pin, no checksum and no opportunity to review. Comments are stripped before
+# matching so the prose documenting the rejected pattern (which is extensive,
+# and deliberately so) does not fail the check that forbids it.
+PIPE_TO_SHELL="$(
+  find . -type f \( -name '*.sh' -o -name '*.yaml' -o -name '*.yml' -o -name '*.mk' -o -name 'Makefile' \) \
+    -not -path './.git/*' -not -path './.github/tests/*' -print0 2>/dev/null \
+    | xargs -0 grep -HnE '(curl|wget)[^|#]*\|[[:space:]]*(sudo[[:space:]]+)?(ba)?sh' 2>/dev/null \
+    | drop_comments \
+    || true
+)"
+assert_empty "no executable path pipes a downloaded script into a shell" "$PIPE_TO_SHELL"
+echo ""
+
+# ---------------------------------------------------------------------------
+echo "4. Downloaded binaries are checksum-verified"
+# ---------------------------------------------------------------------------
+# The shared helpers are what every installer routes through.
+assert_true "the pinned-version manifest exists" \
+  "[ -f global/scripts/shared/pinned-versions.sh ]"
+assert_true "the verifying downloader exists" \
+  "[ -f global/scripts/shared/verify-download.sh ]"
+
+# Sourced files must not be executable -- the repository's convention for
+# "this is a library, not an entry point".
+assert_true "pinned-versions.sh is sourced, not executed (no +x)" \
+  "[ ! -x global/scripts/shared/pinned-versions.sh ]"
+assert_true "verify-download.sh is sourced, not executed (no +x)" \
+  "[ ! -x global/scripts/shared/verify-download.sh ]"
+
+# A digest must be a real SHA-256, not a placeholder someone meant to fill in.
+BAD_DIGESTS="$(
+  grep -nE '^[A-Z0-9_]+_SHA256[A-Z0-9_]*=' global/scripts/shared/pinned-versions.sh \
+    | grep -vE '="[0-9a-f]{64}"$' \
+    || true
+)"
+assert_empty "every committed digest is 64 lower-case hex characters" "$BAD_DIGESTS"
+
+# Every pinned version must have a matching *_PINNED_VERSION constant, which is
+# what `pinned_digest` compares against to decide whether the committed digest
+# still applies to the version actually requested.
+MISSING_PINNED="$(
+  grep -oE '^[A-Z0-9_]+_VERSION=' global/scripts/shared/pinned-versions.sh \
+    | sed 's/_VERSION=$//' | grep -v '_PINNED$' | sort -u \
+    | while read -r tool; do
+        grep -q "^${tool}_PINNED_VERSION=" global/scripts/shared/pinned-versions.sh \
+          || echo "${tool}: has ${tool}_VERSION but no ${tool}_PINNED_VERSION"
+      done
+)"
+assert_empty "every overridable version has a pinned constant to compare against" "$MISSING_PINNED"
+
+# Any script that downloads an executable must route through the verifier.
+# `grep -l` on the file, not on a resolved pipeline, so a new installer that
+# forgets the helper fails here rather than in a consumer's job.
+# Matched on the URL ALONE, not on `curl ... <url>` on one line. The helper
+# takes the URL as an argument, so in every converted installer the URL and the
+# call sit on different lines -- a same-line pattern would therefore stop
+# matching the moment a script was fixed, and stop matching again if someone
+# later replaced the helper with a bare `curl` split across lines. The helper
+# and the manifest are excluded because they define the contract rather than
+# consume it.
+UNVERIFIED_DOWNLOADS="$(
+  for f in $(grep -rlE "https://[^ \"']*/(releases|download)/" \
+      --include='*.sh' global/scripts 2>/dev/null \
+      | grep -v 'shared/verify-download.sh' \
+      | grep -v 'shared/pinned-versions.sh'); do
+    grep -q 'download_verified' "$f" || echo "$f: reaches a release artifact without download_verified"
+  done
+)"
+assert_empty "every script fetching a release artifact uses download_verified" "$UNVERIFIED_DOWNLOADS"
+echo ""
+
+# ---------------------------------------------------------------------------
+echo "5. Package installs name a version"
+# ---------------------------------------------------------------------------
+# `@latest` and a bare package name both mean "whatever the registry serves
+# now", which for a linter or scanner means the verdict on unchanged code can
+# change overnight.
+GO_LATEST="$(
+  find . -type f \( -name '*.sh' -o -name '*.yaml' -o -name '*.yml' \) \
+    -not -path './.git/*' -not -path './.github/tests/*' -print0 2>/dev/null \
+    | xargs -0 grep -Hn 'go install' 2>/dev/null \
+    | grep '@latest' \
+    | drop_comments \
+    || true
+)"
+assert_empty "no 'go install ...@latest'" "$GO_LATEST"
+
+NPX_UNPINNED="$(
+  find . -type f \( -name '*.sh' -o -name '*.yaml' -o -name '*.yml' \) \
+    -not -path './.git/*' -not -path './.github/tests/*' -print0 2>/dev/null \
+    | xargs -0 grep -HnE 'npx --yes [a-z@]' 2>/dev/null \
+    | drop_comments \
+    | grep -vE 'npx --yes "?\$?\{?[A-Z_]+' \
+    | grep -vE 'npx --yes [a-z0-9@/.-]+@[0-9]' \
+    || true
+)"
+assert_empty "every 'npx --yes <pkg>' names a version" "$NPX_UNPINNED"
+
+PIP_UNPINNED="$(
+  find . -type f \( -name '*.sh' -o -name '*.yaml' -o -name '*.yml' \) \
+    -not -path './.git/*' -not -path './.github/tests/*' -print0 2>/dev/null \
+    | xargs -0 grep -HnE 'pip install ' 2>/dev/null \
+    | drop_comments \
+    | grep -vE '(==|\$[A-Z_{])' \
+    | grep -vE '\-\-upgrade pip' \
+    || true
+)"
+assert_empty "every 'pip install' names a version" "$PIP_UNPINNED"
+
+GEM_UNPINNED="$(
+  find . -type f \( -name '*.sh' -o -name '*.yaml' -o -name '*.yml' \) \
+    -not -path './.git/*' -not -path './.github/tests/*' -print0 2>/dev/null \
+    | xargs -0 grep -Hn 'gem install' 2>/dev/null \
+    | drop_comments \
+    | grep -vE '(\-v |\$[A-Z_{])' \
+    || true
+)"
+assert_empty "every 'gem install' names a version" "$GEM_UNPINNED"
+echo ""
+
+# ---------------------------------------------------------------------------
+echo "6. A consumer's pin reaches the scripts, not just the templates"
+# ---------------------------------------------------------------------------
+# This is the finding that made all the others less useful than they looked.
+# Each platform's scripts-repo abstract cloned the default branch with no ref,
+# so a consumer pinning `@4.23.0` got the workflow file from the tag and every
+# SCRIPT it executed from `main`. Pinning the entry point while the payload
+# floats is worse than not pinning: it reads as covered.
+for abstract in \
+  'github/global/abstracts/scripts-repo/action.yaml' \
+  'gitlab/global/abstracts/scripts-repo.yaml' \
+  'azure-devops/global/abstracts/scripts-repo.yaml'; do
+  assert_true "$(basename "$(dirname "$abstract")")/$(basename "$abstract"): checks out an explicit ref" \
+    "grep -qE 'PIPELINES_REF|action_ref' '$abstract'"
+  assert_true "$(basename "$(dirname "$abstract")")/$(basename "$abstract"): no ref-less 'git clone' of the scripts repo" \
+    "! grep -qE 'git clone( --depth 1)? \"?\\\$?\{?(SCRIPTS_REPO|PIPELINES_REPO)|git clone --depth 1 https://github.com/rios0rios0/pipelines' '$abstract'"
+done
+echo ""
+
+# ---------------------------------------------------------------------------
+echo "7. The documented consumer path pins too"
+# ---------------------------------------------------------------------------
+# The examples are what people copy. An example that says `@main` teaches every
+# consumer to track a moving branch, which is the same exposure this whole
+# change exists to remove -- and no assertion above covers them, because they
+# are deliberately excluded from `yaml_files`.
+EXAMPLES_ON_MAIN="$(
+  find .docs/examples -type f \( -name '*.yaml' -o -name '*.yml' \) 2>/dev/null -print0 \
+    | xargs -0 grep -Hn "rios0rios0/pipelines" 2>/dev/null \
+    | grep '@main' \
+    || true
+)"
+assert_empty "no example tells consumers to track '@main'" "$EXAMPLES_ON_MAIN"
+echo ""
+
+echo "=========================================="
+echo -e "Passed: ${GREEN}${TESTS_PASSED}${NC}"
+echo -e "Failed: ${RED}${TESTS_FAILED}${NC}"
+echo "=========================================="
+
+if [ "$TESTS_FAILED" -gt 0 ]; then
+  exit 1
+fi
+
+echo -e "${GREEN}Supply-chain pinning contract holds${NC}"

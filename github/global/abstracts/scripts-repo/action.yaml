@@ -1,9 +1,64 @@
+name: 'Checkout pipelines scripts'
+description: >-
+  Check out the shared `global/scripts/` tree at an explicit, recorded revision
+  and export its location as `SCRIPTS_DIR`.
+
+# Every job in every consumer pipeline runs the shell scripts this action
+# fetches, so the revision it resolves is the revision that actually executes.
+# It previously ran a bare `git clone` of the default branch, which meant a
+# consumer pinning `uses: rios0rios0/pipelines/...@4.23.0` still executed
+# scripts from whatever `main` happened to be at that moment -- the pin covered
+# the workflow file and nothing it ran. The clone now follows the ref this
+# action was itself resolved at, and a consumer can override it outright, so a
+# pin is a pin.
+inputs:
+  ref:
+    description: >-
+      Branch, tag or full commit SHA of rios0rios0/pipelines to check the
+      scripts out at. Defaults to the ref this action was resolved at, so a
+      caller that pins the action pins the scripts with it.
+    required: false
+    default: ''
+
 runs:
   using: 'composite'
   steps:
     - name: 'Checkout scripts'
-      run: |
-        SCRIPTS_DIR="$(mktemp -d)/pipelines"
-        echo "SCRIPTS_DIR=$SCRIPTS_DIR" >> $GITHUB_ENV
-        git clone --depth 1 https://github.com/rios0rios0/pipelines.git "$SCRIPTS_DIR"
       shell: 'bash'
+      env:
+        # Precedence: an explicit input, then the ref this action was resolved
+        # at, then `main`. `github.action_ref` is empty for a local `./path`
+        # reference, which is why the final fallback exists at all.
+        PIPELINES_REF: "${{ inputs.ref || github.action_ref || 'main' }}"
+        PIPELINES_REPOSITORY: "${{ github.action_repository || 'rios0rios0/pipelines' }}"
+      run: |
+        set -euo pipefail
+
+        SCRIPTS_DIR="$(mktemp -d)/pipelines"
+        mkdir -p "$SCRIPTS_DIR"
+
+        # `git init` + `git fetch <ref>` rather than `git clone --branch <ref>`:
+        # `--branch` accepts a branch or a tag but rejects a raw commit SHA, and
+        # a SHA is the only form of this input that is genuinely immutable. This
+        # shape accepts all three, so pinning to a commit is possible at all.
+        git init --quiet "$SCRIPTS_DIR"
+        git -C "$SCRIPTS_DIR" remote add origin "https://github.com/${PIPELINES_REPOSITORY}.git"
+
+        if ! git -C "$SCRIPTS_DIR" fetch --quiet --depth 1 --no-tags origin "$PIPELINES_REF"; then
+          echo "ERROR: could not fetch '${PIPELINES_REF}' from ${PIPELINES_REPOSITORY}." >&2
+          echo "Expected a branch, a tag, or a full 40-character commit SHA." >&2
+          exit 1
+        fi
+        git -C "$SCRIPTS_DIR" checkout --quiet FETCH_HEAD
+
+        # Record what actually landed. A ref is a label and a label can be
+        # moved; the commit is the thing that ran. Printing it means a job log
+        # is enough to answer "which scripts did this run execute?" months
+        # later, without trusting that the tag still points where it did.
+        RESOLVED_SHA="$(git -C "$SCRIPTS_DIR" rev-parse HEAD)"
+        echo "Checked out ${PIPELINES_REPOSITORY}@${PIPELINES_REF} (${RESOLVED_SHA})"
+
+        {
+          echo "SCRIPTS_DIR=$SCRIPTS_DIR"
+          echo "PIPELINES_SCRIPTS_SHA=$RESOLVED_SHA"
+        } >> "$GITHUB_ENV"

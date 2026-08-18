@@ -35,7 +35,7 @@ if [ ! -d "$NETLIFY_OUTPUT_DIRECTORY" ] && ! deploy_is_dry_run; then
   exit 1
 fi
 
-deploy_npm_cli "netlify" "netlify-cli"
+deploy_npm_cli "netlify" "$NETLIFY_CLI_SPEC"
 
 # `--no-build` keeps the build on the CI runner rather than re-running it on
 # Netlify, where it would draw down the credit pool a second time for work the

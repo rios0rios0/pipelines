@@ -645,6 +645,36 @@ def render_markdown(results: list[dict], unannotated: list[dict], inline: list[d
     return "\n".join(lines)
 
 
+def report_path(report_dir: Path, filename: str) -> Path:
+    """Join a report file name onto the report directory, refusing to escape it.
+
+    The directory is the CALLER's choice and may legitimately be absolute --
+    `cleanup.sh` passes `$REPORT_PATH` -- so it is deliberately not confined to
+    the working tree. What is confined is the part this script constructs: the
+    resolved file must still sit inside the directory it was given. Same shape
+    as `report_path` in languages/dart/analyze/dart_analyze_report.py.
+    """
+    base = Path(os.path.realpath(report_dir))
+    resolved = Path(os.path.realpath(base / filename))
+    if resolved.parent != base:
+        raise SystemExit(
+            "refusing to write '%s' outside the report directory '%s'" % (filename, report_dir))
+    return resolved
+
+
+def read_fixture(raw: str) -> dict:
+    """Load the offline fixture, refusing anything that is not a readable file.
+
+    `--fixture` is a path from the command line, so it is validated before being
+    opened rather than after: a directory or a dangling path should say so here,
+    not surface as an opaque IsADirectoryError three frames down.
+    """
+    path = Path(os.path.realpath(raw))
+    if not path.is_file():
+        raise SystemExit("fixture file not found: %s" % raw)
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo-dir", default=".", help="repository root to scan")
@@ -658,7 +688,7 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     root = Path(args.repo_dir).resolve()
-    fixture = json.loads(Path(args.fixture).read_text(encoding="utf-8")) if args.fixture else None
+    fixture = read_fixture(args.fixture) if args.fixture else None
 
     tasks, unannotated, inline = build_tasks(root)
     if not tasks:
@@ -704,9 +734,9 @@ def main(argv: list[str]) -> int:
         "drifted_copies": inline,
         "unannotated_pins": unannotated,
     }
-    (report_dir / "dependency-updates.json").write_text(
+    report_path(report_dir, "dependency-updates.json").write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    (report_dir / "dependency-updates.md").write_text(
+    report_path(report_dir, "dependency-updates.md").write_text(
         render_markdown(results, unannotated, inline), encoding="utf-8")
     print("\nReports written to %s" % report_dir)
 

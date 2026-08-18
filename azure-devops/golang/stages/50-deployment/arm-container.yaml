@@ -6,24 +6,37 @@ stages:
       - job: 'deployment'
         displayName: 'deployment'
         steps:
+          # The branch name reaches the script through `env:`. It is chosen by
+          # whoever opens the pull request, and interpolated with `$( )` it was
+          # substituted into the script text before the agent ran it -- so a
+          # branch named `x";az ...;#` executed on the runner holding this
+          # pipeline's Azure credentials.
           - script: |
-              resourceGroupName="$(ENVIRONMENT)-rg-$(RESOURCE_GROUP_NAME)-$(AZM_LOCATION)"
+              resourceGroupName="$ENVIRONMENT_NAME-rg-$RESOURCE_GROUP-$AZM_LOCATION_NAME"
               echo "##vso[task.setvariable variable=resourceGroupName]$resourceGroupName"
 
-              imageName=$(REGISTRY_SERVER)/$(Build.Repository.Name)
+              imageName="$REGISTRY_SERVER_NAME/$BUILD_REPOSITORY_NAME"
 
               TAG="latest"
-              if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
-                TAG="$(Build.SourceBranchName)"
+              if [[ "$BUILD_SOURCE_BRANCH" == refs/tags/* ]]; then
+                TAG="$BUILD_SOURCE_BRANCH_NAME"
               fi
 
               IMAGE_NAME="$imageName:$TAG"
 
               echo "##vso[task.setvariable variable=CONTAINER_IMAGE]$IMAGE_NAME"
 
-              resourceGroupExists=$(az group exists --name $resourceGroupName)
+              resourceGroupExists=$(az group exists --name "$resourceGroupName")
               echo "##vso[task.setvariable variable=resourceGroupExists]$resourceGroupExists"
             displayName: 'Set Resource Group Name'
+            env:
+              ENVIRONMENT_NAME: $(ENVIRONMENT)
+              RESOURCE_GROUP: $(RESOURCE_GROUP_NAME)
+              AZM_LOCATION_NAME: $(AZM_LOCATION)
+              REGISTRY_SERVER_NAME: $(REGISTRY_SERVER)
+              BUILD_REPOSITORY_NAME: $(Build.Repository.Name)
+              BUILD_SOURCE_BRANCH: $(Build.SourceBranch)
+              BUILD_SOURCE_BRANCH_NAME: $(Build.SourceBranchName)
           - template: '../../../global/stages/50-deployment/arm-parameters.yaml'
             parameters:
               armTemplateFile: 'azuredeploy.json'

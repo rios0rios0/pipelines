@@ -92,7 +92,7 @@ set --
 # while the job still reports success. If the registry really is unreachable,
 # semgrep itself says so, in its own words.
 semgrep_registry_pack_exists() {
-  _sr_code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 "https://semgrep.dev/c/$1" 2>/dev/null)"
+  _sr_code="$(curl -sSL --proto '=https' --proto-redir '=https' -o /dev/null -w '%{http_code}' --max-time 15 "https://semgrep.dev/c/$1" 2>/dev/null)"
   [ "$_sr_code" != "404" ]
 }
 

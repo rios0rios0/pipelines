@@ -3,6 +3,11 @@
 on:
   workflow_call:
     inputs:
+      install_run_scripts:
+        type: 'boolean'
+        required: false
+        default: false
+        description: 'Run dependency lifecycle scripts after installing. See the toolchain workflow.'
       sonar_host:
         description: 'SonarQube/SonarCloud host URL (leave empty to skip SonarQube)'
         required: false
@@ -32,6 +37,7 @@ jobs:
   npm:
     uses: 'rios0rios0/pipelines/.github/workflows/npm.yaml@main'
     with:
+      install_run_scripts: ${{ inputs.install_run_scripts }}
       sonar_host: '${{ inputs.sonar_host }}'
       runs_on: ${{ inputs.runs_on }}
       codeql_upload: ${{ inputs.codeql_upload }}

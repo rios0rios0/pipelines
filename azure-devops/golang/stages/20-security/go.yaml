@@ -28,9 +28,23 @@ stages:
           GOPATH: "$(Pipeline.Workspace)/.go"
         steps:
           - template: '../../abstracts/go.yaml'
-          - script: |
-              # Pinned; see global/scripts/shared/pinned-versions.sh.
-              go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
-              "$(go env GOPATH)/bin/govulncheck" ./...
+          - template: '../../../global/abstracts/scripts-repo.yaml'
+
+          # Delegates to the shared runner instead of inlining `go install`, which is
+          # what GitHub Actions already did and what this repository's architecture
+          # says ("templates call scripts"). Inlining it kept a third copy of the
+          # pinned version -- the runner reads it from
+          # global/scripts/shared/pinned-versions.sh -- and three copies of a version
+          # drift one bump at a time. The runner also resolves the install directory
+          # from `go env GOBIN` rather than assuming `GOPATH/bin`, and writes a JSON
+          # report, which is why the artifact step below can exist at all.
+          - script: $(Scripts.Directory)/global/scripts/languages/golang/govulncheck/run.sh
             displayName: 'Run govulncheck'
+
+          - task: 'PublishPipelineArtifact@1'
+            inputs:
+              artifactName: 'govulncheck'
+              targetPath: 'build/reports/govulncheck'
+            condition: always()
+            displayName: 'Publish govulncheck report'
         continueOnError: true

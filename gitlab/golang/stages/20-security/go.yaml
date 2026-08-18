@@ -8,12 +8,20 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/codeql.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/hadolint.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/golang/abstracts/go.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
 
+# Delegates to the shared runner instead of inlining `go install` -- see the note
+# on the Azure DevOps twin. It reads the pinned version from
+# global/scripts/shared/pinned-versions.sh, so the version lives in one place.
 sca:govulncheck:
-  extends: '.go'
+  extends: [ '.go', '.scripts-repo' ]
   stage: 'security (sca/sast)'
+  before_script:
+    - !reference [ .scripts-repo, before_script ]
   script:
-    # Pinned; kept in step with global/scripts/shared/pinned-versions.sh.
-    - go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
-    - govulncheck ./...
+    - "$SCRIPTS_DIR/global/scripts/languages/golang/govulncheck/run.sh"
+  artifacts:
+    when: 'always'
+    paths:
+      - 'build/reports/govulncheck'
   allow_failure: true

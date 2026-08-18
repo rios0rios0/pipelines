@@ -205,8 +205,8 @@ stages:
               kind_url="https://kind.sigs.k8s.io/dl/${kind_version}/${kind_binary}"
               local_bin_dir="$(Agent.TempDirectory)/bin"
               mkdir -p "${local_bin_dir}"
-              curl -fsSL -o "/tmp/${kind_binary}" "${kind_url}"
-              curl -fsSL -o "/tmp/${kind_binary}.sha256sum" "${kind_url}.sha256sum"
+              curl -fsSL --proto '=https' --proto-redir '=https' -o "/tmp/${kind_binary}" "${kind_url}"
+              curl -fsSL --proto '=https' --proto-redir '=https' -o "/tmp/${kind_binary}.sha256sum" "${kind_url}.sha256sum"
               # Upstream `.sha256sum` files vary -- some contain just the
               # hash, others contain `<hash>  <filename>`. Extract only the
               # hash and feed `sha256sum -c` a normalised line so the

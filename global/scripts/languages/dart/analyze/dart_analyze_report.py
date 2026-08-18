@@ -109,6 +109,27 @@ def parse(stream) -> list[dict]:
     return diagnostics
 
 
+def report_path(report_dir: str, filename: str) -> str:
+    """Join a report file name onto the report directory, refusing to escape it.
+
+    The directory itself is the CALLER's choice and may legitimately be absolute
+    -- `run.sh` passes `$DART_TOOL_REPORT_PATH`, and the validation suite passes
+    a temporary directory -- so this deliberately does not confine it to the
+    working tree. What it does confine is the part this script constructs: the
+    resolved file must still sit inside the directory it was given, so a name
+    carrying `..` cannot write somewhere the caller never named.
+    """
+    base = os.path.realpath(report_dir)
+    resolved = os.path.realpath(os.path.join(base, filename))
+    if resolved != base and not resolved.startswith(base + os.sep):
+        raise SystemExit(
+            "refusing to write '{name}' outside the report directory '{dir}'".format(
+                name=filename, dir=report_dir
+            )
+        )
+    return resolved
+
+
 def write_json(diagnostics: list[dict], path: str, counts: dict) -> None:
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(
@@ -183,8 +204,8 @@ def main() -> int:
     counts = {level: sum(1 for d in diagnostics if d["severity"] == level) for level in SEVERITY_ORDER}
     counts["total"] = len(diagnostics)
 
-    write_json(diagnostics, os.path.join(report_dir, "analyze.json"), counts)
-    write_junit(diagnostics, os.path.join(report_dir, "junit-analyze.xml"), fatal)
+    write_json(diagnostics, report_path(report_dir, "analyze.json"), counts)
+    write_junit(diagnostics, report_path(report_dir, "junit-analyze.xml"), fatal)
 
     print(
         "dart analyze found {total} issue(s): {ERROR} error(s), {WARNING} warning(s), "

@@ -25,6 +25,13 @@ report:sonarqube:
 report:dependency-track:
   extends: [ '.npm', '.dependency-track' ]
   script:
-    - npm install && npm run sbom
+    # `npm ci --ignore-scripts` rather than `npm install`: this job only needs the
+    # dependency tree on disk to generate an SBOM, so running `postinstall` from every
+    # package in it is pure exposure -- and `npm install` may RESOLVE differently from
+    # the committed lockfile, which would make the SBOM describe a tree that exists
+    # nowhere else. `npm ci` fails when there is no lockfile, which is the right
+    # outcome for an inventory job.
+    - npm ci --ignore-scripts
+    - npm run sbom
     - apt update && apt install -y --no-install-recommends curl jq
     - !reference [ .dependency-track, script ]

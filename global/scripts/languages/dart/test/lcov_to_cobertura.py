@@ -202,7 +202,9 @@ def write_cobertura(files: list[FileCoverage], output: str, sources_root: str) -
     out = [
         '<?xml version="1.0" ?>\n',
         "<!DOCTYPE coverage SYSTEM "
-        "'http://cobertura.sourceforge.net/xml/coverage-04.dtd'>\n",
+        # See the note in terraform/terra-test/run.sh: the DTD is a dead
+        # identifier under either scheme and is never dereferenced.
+        "'https://cobertura.sourceforge.net/xml/coverage-04.dtd'>\n",
         '<coverage line-rate="{lr:.4f}" branch-rate="{br:.4f}" '
         'lines-covered="{lc}" lines-valid="{lv}" '
         'branches-covered="{bc}" branches-valid="{bv}" '

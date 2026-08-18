@@ -3,6 +3,17 @@
 on:
   workflow_call:
     inputs:
+      install_run_scripts:
+        type: 'boolean'
+        required: false
+        default: false
+        description: |
+          Run dependency lifecycle scripts (`postinstall`, `prepare`) after installing.
+          Installs are `--ignore-scripts` by default: `npm ci` / `yarn install` otherwise
+          execute arbitrary code from every package in the transitive tree, as the CI user,
+          before any of this project's own code runs. Set this to `true` for projects that
+          genuinely need them -- native module builds, `prisma generate`, Playwright browser
+          downloads, `husky` -- and the scripts run through `rebuild` afterwards instead.
       sonar_host:
         description: 'SonarQube/SonarCloud host URL (leave empty to skip SonarQube)'
         required: false
@@ -112,9 +123,17 @@ jobs:
           cache: 'yarn'
 
       - run: |
-          yarn install --immutable
+          # `--mode=skip-build`: Yarn 2+ enables lifecycle scripts by default, so a plain
+          # install executes arbitrary code from the whole transitive tree as the CI user.
+          # Projects that need them set `install_run_scripts: true` and get `yarn rebuild`.
+          yarn install --immutable --mode=skip-build
+          if [ "$INSTALL_RUN_SCRIPTS" = 'true' ]; then
+            yarn rebuild
+          fi
           yarn lint:ci
         shell: 'bash'
+        env:
+          INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -126,6 +145,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/javascript/stages/10-code-check/knip@main'
         with:
           package_manager: 'yarn'
+          install_run_scripts: '${{ inputs.install_run_scripts }}'
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -227,9 +247,17 @@ jobs:
           BUILD_ENV: '${{ inputs.build_env }}'
 
       - run: |
-          yarn install --immutable
+          # `--mode=skip-build`: Yarn 2+ enables lifecycle scripts by default, so a plain
+          # install executes arbitrary code from the whole transitive tree as the CI user.
+          # Projects that need them set `install_run_scripts: true` and get `yarn rebuild`.
+          yarn install --immutable --mode=skip-build
+          if [ "$INSTALL_RUN_SCRIPTS" = 'true' ]; then
+            yarn rebuild
+          fi
           yarn test:ci
         shell: 'bash'
+        env:
+          INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
 
       - name: 'Type check the end-to-end specs'
         if: 'inputs.e2e_typecheck'
@@ -291,9 +319,17 @@ jobs:
           BUILD_ENV: '${{ inputs.build_env }}'
 
       - run: |
-          yarn install --immutable
+          # `--mode=skip-build`: Yarn 2+ enables lifecycle scripts by default, so a plain
+          # install executes arbitrary code from the whole transitive tree as the CI user.
+          # Projects that need them set `install_run_scripts: true` and get `yarn rebuild`.
+          yarn install --immutable --mode=skip-build
+          if [ "$INSTALL_RUN_SCRIPTS" = 'true' ]; then
+            yarn rebuild
+          fi
           yarn build
         shell: 'bash'
+        env:
+          INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_yarn_audit' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 

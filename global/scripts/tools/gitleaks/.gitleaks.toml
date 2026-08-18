@@ -11,7 +11,7 @@ title = "gitleaks config"
 #
 # Here is an example of a semi-generic secret
 #
-#   discord_client_secret = "8dyfuiRyq=vVc3RRr_edRk-fK__JItpZ"
+#   discord_client_secret = "<EXAMPLE-SECRET-VALUE-REDACTED>"
 #
 # We can write a regular expression to capture the variable name (identifier),
 # the assignment symbol (like '=' or ':='), and finally the actual secret.

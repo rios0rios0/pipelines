@@ -285,6 +285,40 @@ CRON_COUNT="$(grep -c "cron:" "$SCRIPTS_DIR/.github/workflows/dependency-updates
 assert_eq "the workflow is scheduled twice a week" "2" "$CRON_COUNT"
 echo ""
 
+# --------------------------------------------------------------------------- #
+echo "9. It works on a repository that is not the one holding the script"
+# --------------------------------------------------------------------------- #
+# The `workflow_call` case, and a real bug caught in review: the workflow ran
+# `./global/scripts/...` from `$GITHUB_WORKSPACE`, which under `workflow_call`
+# is the CONSUMER's checkout -- a repository with no reason to contain the
+# script. The script now comes from `$SCRIPTS_DIR` and the scanned tree from
+# `--repo-dir`, and those two being separable is what this asserts.
+CONSUMER="$WORK/consumer"
+mkdir -p "$CONSUMER/.github/workflows"
+cat > "$CONSUMER/.github/workflows/ci.yaml" <<'EOS'
+jobs:
+  build:
+    steps:
+      - uses: 'someorg/someaction@1111111111111111111111111111111111111111' # v3.1.0
+    container:
+      image: 'someimage:1.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+EOS
+set +e
+OUT="$(python3 "$CHECKER" --repo-dir "$CONSUMER" --report "consumer-out" \
+  --fixture "$CURRENT_FIXTURE" 2>&1)"; STATUS=$?
+set -e
+assert_eq "a consumer repo with no manifest exits 0 when current" "0" "$STATUS"
+assert_contains "and still discovers its action and image" "$OUT" "Checking 2 pinned dependencies"
+assert_not_contains "a missing pinned-versions.sh is not an error" "$OUT" "no such file"
+
+set +e
+OUT="$(python3 "$CHECKER" --repo-dir "$CONSUMER" --report "consumer-out" \
+  --fixture "$STALE_FIXTURE" 2>&1)"; STATUS=$?
+set -e
+assert_eq "and still fails when the consumer's pins are stale" "1" "$STATUS"
+assert_contains "naming the consumer's own action" "$OUT" "someorg/someaction"
+echo ""
+
 echo "=========================================="
 echo -e "Passed: ${GREEN}${TESTS_PASSED}${NC}"
 echo -e "Failed: ${RED}${TESTS_FAILED}${NC}"

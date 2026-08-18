@@ -47,6 +47,14 @@ jobs:
       - name: 'Checkout code'
         uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
 
+      # The checker itself lives in THIS repository, and under `workflow_call`
+      # the checkout above is the CONSUMER's repository -- so running
+      # `./global/scripts/...` from the workspace would look for the script in
+      # a repository that has no reason to contain it. `scripts-repo` fetches
+      # the scripts separately and exports `SCRIPTS_DIR`, which is how every
+      # other workflow here reaches a shared runner.
+      - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
       - name: 'Check for dependency updates'
         id: 'check'
         shell: 'bash'
@@ -64,11 +72,19 @@ jobs:
             args='--report-only'
           fi
 
+          # `--repo-dir "$GITHUB_WORKSPACE"` is what separates the two
+          # repositories: the SCRIPT comes from `$SCRIPTS_DIR` (this library),
+          # the pins being inspected come from the checked-out workspace. For a
+          # consumer that is their repository, whose actions and images are
+          # scanned generically; `pinned-versions.sh` is simply absent there and
+          # the manifest scan tolerates that.
+          #
           # `|| status=$?` rather than letting it abort: the report has to be
           # published and summarised even when -- especially when -- the check
           # fails, which is the whole reason this job exists.
           status=0
-          ./global/scripts/tools/dependency-updates/run.sh $args || status=$?
+          "$SCRIPTS_DIR/global/scripts/tools/dependency-updates/run.sh" \
+            --repo-dir "$GITHUB_WORKSPACE" $args || status=$?
           echo "status=${status}" >> "$GITHUB_OUTPUT"
 
       - name: 'Publish the report to the job summary'

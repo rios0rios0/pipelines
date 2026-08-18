@@ -213,6 +213,7 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 | `terra.yaml`                 | Terra CLI quality, security, and tests     | Terraform/HCL |
 | `release.yaml`               | Tag and GitHub Release from a bump commit  | any           |
 | `update-major-version-tag.yaml` | Moving `vN` tag for action consumers    | any           |
+| `dependency-updates.yaml`    | Twice-weekly check for stale pinned dependencies | all           |
 
 #### Usage Example (Go with Docker)
 
@@ -794,6 +795,43 @@ downloaded binary is checksum-verified before it runs. This is enforced by
 | Container images | `tag@sha256:<digest>` | every `image:` and every Dockerfile `FROM` |
 | Downloaded binaries | exact version **and** a committed SHA-256 | `global/scripts/shared/pinned-versions.sh` |
 | `go install` / `pip` / `gem` / `npx` packages | exact version | `pinned-versions.sh`, mirrored inline where a template has no `SCRIPTS_DIR` |
+
+### Knowing when a pin is stale
+
+Pinning stops a dependency moving without a decision. It does not tell you when
+to make one -- a pin never announces that it is three CVEs behind. That is what
+`dependency-updates.yaml` is for: it runs **twice a week** (Monday and Thursday,
+06:00 UTC) and **fails** when any pinned dependency has moved upstream.
+
+```bash
+make check-dependency-updates    # run the same check by hand (needs the network)
+```
+
+It reports four things, and exits non-zero on any of them:
+
+| Surface | Question |
+|---------|----------|
+| GitHub Actions | is there a newer release for that action? |
+| Container images | does the pinned tag still resolve to the digest we pinned? |
+| Binaries and packages | is there a newer version upstream? |
+| Inline copies | do the two copies of a version still agree? |
+
+Images are checked by **digest, not tag**, because that is the question worth
+asking of a container: `python:3.13-slim` is rebuilt with patched system packages
+under the same tag, so "is there a newer tag" would miss every security rebuild.
+
+Set `GITHUB_TOKEN` before running it -- around forty of the lookups hit
+`api.github.com`, which allows 60 requests/hour unauthenticated. A lookup that
+cannot be completed exits `2` and is deliberately never reported as "up to date".
+
+Each pin in `pinned-versions.sh` carries a `# upstream:` annotation naming where
+its releases come from; a pin without one is reported as untracked and fails,
+rather than being skipped quietly. To silence a genuinely rolling reference such
+as `alpine:edge`, add it to `.dependency-updates.json`:
+
+```json
+{ "ignore": ["alpine:edge"] }
+```
 
 ### Bumping a pinned tool
 

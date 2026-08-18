@@ -2,7 +2,7 @@ TAG := latest
 ROOT := global/containers
 CONTAINER_REGISTRY = ghcr.io/rios0rios0/pipelines
 
-.PHONY: login setup-buildx build-and-push test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test-workflow-composition test-supply-chain test-azure-step-names test
+.PHONY: login setup-buildx build-and-push test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test-workflow-composition test-supply-chain test-azure-step-names test-dependency-updates check-dependency-updates test
 
 login:
 	docker login $(CONTAINER_REGISTRY)
@@ -118,9 +118,19 @@ test-supply-chain:
 	@echo "Running supply-chain pinning validation..."
 	@./.github/tests/test-supply-chain.sh
 
+test-dependency-updates:
+	@echo "Running dependency-update checker validation..."
+	@./.github/tests/test-dependency-updates.sh
+
+# Not part of `make test`: it talks to ~40 upstreams over the network, which a
+# unit-test target must not do. The scheduled workflow runs it; this target is
+# for running the same check by hand.
+check-dependency-updates:
+	@./global/scripts/tools/dependency-updates/run.sh
+
 test-azure-step-names:
 	@echo "Running Azure DevOps step-name uniqueness validation..."
 	@./.github/tests/test-azure-step-names.sh
 
-test: test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test-workflow-composition test-supply-chain test-azure-step-names
+test: test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test-workflow-composition test-supply-chain test-azure-step-names test-dependency-updates
 	@echo "All tests completed successfully!"

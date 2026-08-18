@@ -1,0 +1,150 @@
+name: 'Dependency Updates'
+
+# Runs TWICE A WEEK and fails when any pinned dependency has moved upstream.
+#
+# Everything this library executes is pinned -- actions to a commit SHA, images
+# to a digest, binaries to a version plus a committed SHA-256. That is what makes
+# a consumer's pipeline reproducible, and it is also what makes it go stale
+# quietly: a pin never announces that it is three CVEs behind. This is the other
+# half of pinning -- the thing that tells a human when to decide.
+#
+# It is deliberately a RED BUILD rather than an issue or a pull request. An
+# automated bump PR would have to re-resolve a commit SHA, re-fetch a checksum
+# from an upstream manifest and re-resolve an image digest before it could even
+# be correct, and a wrong one of those is a supply-chain change nobody reviewed.
+# A failing job with a diff-ready list keeps the decision with a person.
+on:
+  schedule:
+    # Monday and Thursday at 06:00 UTC. Twice a week is the useful cadence: a
+    # daily run mostly reports the same thing and trains people to ignore it,
+    # while weekly can leave a published CVE unnoticed for six days. Both are
+    # well before the working day in UTC+1..+3 so the result is waiting rather
+    # than arriving mid-afternoon.
+    - cron: '0 6 * * 1'
+    - cron: '0 6 * * 4'
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      report_only:
+        type: 'boolean'
+        required: false
+        default: false
+        description: |
+          Report without failing the job. The default is to FAIL, which is the
+          point of the schedule; this exists for a consumer that wants the
+          report on every pipeline without gating on it.
+
+jobs:
+  check-dependency-updates:
+    name: 'security > check:dependency-updates'
+    runs-on: 'ubuntu-latest'
+    # Read-only. This job resolves versions and digests and writes a report; it
+    # has no reason to touch the repository, and declaring it per job rather
+    # than workflow-wide keeps a future job from inheriting more.
+    permissions:
+      contents: 'read'
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+
+      # The checker itself lives in THIS repository, and under `workflow_call`
+      # the checkout above is the CONSUMER's repository -- so running
+      # `./global/scripts/...` from the workspace would look for the script in a
+      # repository that has no reason to contain it.
+      #
+      # Fetched with `actions/checkout` against an explicit `repository:` rather
+      # than through the `scripts-repo` abstract, following the same pattern
+      # `terra.yaml` already uses. Two reasons, and the second is the one that
+      # decided it:
+      #
+      #   1. The ref follows `job.workflow_ref`, so a consumer calling this
+      #      workflow `@4.23.0` gets the scripts from that tag. The abstract
+      #      resolves `github.action_ref`, which for a same-repository `@main`
+      #      reference is always `main` -- the pin would not reach the scripts.
+      #   2. `uses: rios0rios0/pipelines/...@main` is flagged by SonarCloud
+      #      (`githubactions:S7637`) and simultaneously REQUIRED to be `@main`
+      #      by test-workflow-composition.sh Test 7. Those two rules contradict
+      #      each other, and this shape has neither problem: there is no
+      #      internal `uses:` here at all, only a SHA-pinned third-party action.
+      - name: 'Resolve pipelines ref'
+        id: 'pipelines-ref'
+        shell: 'bash'
+        env:
+          # Through `env:` rather than interpolated into `run:`, which would let
+          # a crafted ref inject shell at YAML-parse time.
+          JOB_WORKFLOW_REF: '${{ job.workflow_ref }}'
+        run: |
+          # `job.workflow_ref` is the ref of the workflow file defining this job
+          # -- this repository's -- while `github.*` belongs to the CALLER.
+          # `GITHUB_WORKFLOW_REF` is the fallback for GitHub Enterprise Server,
+          # where the `job` context is unavailable.
+          ref="${JOB_WORKFLOW_REF:-${GITHUB_WORKFLOW_REF}}"
+          ref="${ref##*@}"
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+
+      - name: 'Checkout pipelines repo for the checker'
+        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+        with:
+          repository: 'rios0rios0/pipelines'
+          ref: '${{ steps.pipelines-ref.outputs.ref }}'
+          path: '.pipelines'
+
+      - name: 'Check for dependency updates'
+        id: 'check'
+        shell: 'bash'
+        env:
+          # Roughly forty of the lookups hit api.github.com, which allows 60
+          # requests/hour unauthenticated -- without a token the run would start
+          # returning 403 part-way through and fail as "lookup error" rather
+          # than reporting anything useful.
+          GITHUB_TOKEN: '${{ github.token }}'
+          REPORT_ONLY: '${{ inputs.report_only }}'
+        run: |
+          set -uo pipefail
+          args=''
+          if [ "${REPORT_ONLY:-false}" = 'true' ]; then
+            args='--report-only'
+          fi
+
+          # `--repo-dir "$GITHUB_WORKSPACE"` is what separates the two
+          # repositories: the SCRIPT comes from `$SCRIPTS_DIR` (this library),
+          # the pins being inspected come from the checked-out workspace. For a
+          # consumer that is their repository, whose actions and images are
+          # scanned generically; `pinned-versions.sh` is simply absent there and
+          # the manifest scan tolerates that.
+          #
+          # `|| status=$?` rather than letting it abort: the report has to be
+          # published and summarised even when -- especially when -- the check
+          # fails, which is the whole reason this job exists.
+          status=0
+          "$GITHUB_WORKSPACE/.pipelines/global/scripts/tools/dependency-updates/run.sh" \
+            --repo-dir "$GITHUB_WORKSPACE" $args || status=$?
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+
+      - name: 'Publish the report to the job summary'
+        if: 'always()'
+        shell: 'bash'
+        run: |
+          report='build/reports/dependency-updates/dependency-updates.md'
+          if [ -f "$report" ]; then
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'The check produced no report -- it failed before writing one.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: 'Upload the report'
+        if: 'always()'
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # v7.0.1
+        with:
+          name: 'dependency-updates'
+          path: 'build/reports/dependency-updates/'
+          if-no-files-found: 'warn'
+          overwrite: 'true'
+          retention-days: 30
+
+      - name: 'Fail when an update is available'
+        if: "steps.check.outputs.status != '0'"
+        shell: 'bash'
+        run: |
+          echo "::error::Pinned dependencies are out of date -- see the job summary for the list."
+          exit 1

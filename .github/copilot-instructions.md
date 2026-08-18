@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, workflow-composition, supply-chain)
+- `make test` - Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, workflow-composition, supply-chain, dependency-updates)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-go-integration-scope` - Test which packages the Go runner's integration phase selects specifically
 - `make test-lambda` - Test Lambda template validation specifically
@@ -29,6 +29,8 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-memory-detection` - Test the cgroup-aware memory ceiling detection specifically
 - `make test-workflow-composition` - Test the GitHub Actions workflow composition standard specifically
 - `make test-supply-chain` - Test the supply-chain pinning contract (actions, images, binaries, packages) specifically
+- `make test-dependency-updates` - Test the dependency-update checker specifically
+- `make check-dependency-updates` - Report which pinned dependencies have a newer release (hits the network)
 - `bash global/scripts/shared/cleanup.sh` - Clean up build reports
 - `docker --version && make --version && go version` - Check dependencies
 
@@ -59,6 +61,11 @@ Everything the pipelines execute is pinned, and `make test-supply-chain` fails t
 
 To bump a tool: change its `*_PINNED_VERSION`, replace every `*_SHA256_*` from the upstream checksum
 manifest (never carry an old digest forward), and run `make test-supply-chain`.
+
+Every pin carries a `# upstream: <kind> <coordinate>` annotation naming where its releases come from.
+Adding a pin without one FAILS `make test-dependency-updates` — that is deliberate, because coverage
+otherwise shrinks one forgotten annotation at a time while the job stays green. The scheduled
+`dependency-updates.yaml` workflow runs the check twice a week and fails when anything is stale.
 
 ## Working Effectively
 

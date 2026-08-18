@@ -57,6 +57,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed `global/containers/bfg.latest/Dockerfile`, which **could not build**: `openjdk:8-jre` was removed when the `openjdk` Docker Official Image was deprecated, so the `FROM` 404s. Moved to `eclipse-temurin:8-jre`, the maintained successor upstream points to
 - fixed the GitLab SAM delivery job's base image, which referenced `ghcr.io/rios0rios0/pipelines/golang:1.19-awscli` -- a Go `1.19` image whose build directory no longer exists in this repository, so it can never receive another security update. Moved to the `1.26-awscli` image that is still built here
 - fixed a `-print0` that `yaml_files()` silently swallowed in the new supply-chain test, which had made three of its assertions pass without examining a single file. Every assertion in that suite was then individually proven to fire against a deliberate violation
+- fixed the Azure DevOps `sca:govulncheck` job, which failed with `The step name Scripts appears more than once` because it included the `scripts-repo` abstract twice -- directly and via `abstracts/go.yaml`. Dropped the redundant direct include
 
 ### Security
 

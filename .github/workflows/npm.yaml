@@ -3,6 +3,17 @@
 on:
   workflow_call:
     inputs:
+      install_run_scripts:
+        type: 'boolean'
+        required: false
+        default: false
+        description: |
+          Run dependency lifecycle scripts (`postinstall`, `prepare`) after installing.
+          Installs are `--ignore-scripts` by default: `npm ci` / `yarn install` otherwise
+          execute arbitrary code from every package in the transitive tree, as the CI user,
+          before any of this project's own code runs. Set this to `true` for projects that
+          genuinely need them -- native module builds, `prisma generate`, Playwright browser
+          downloads, `husky` -- and the scripts run through `rebuild` afterwards instead.
       sonar_host:
         description: 'SonarQube/SonarCloud host URL (leave empty to skip SonarQube)'
         required: false
@@ -76,9 +87,20 @@ jobs:
           cache: 'npm'
 
       - run: |
-          npm ci
+          # `--ignore-scripts`: `npm ci` otherwise runs `postinstall` from every package in
+          # the transitive tree, as the CI user, before any of this project's code runs --
+          # the npm supply-chain execution path. Projects that genuinely need those scripts
+          # set `install_run_scripts: true`, and they run through `npm rebuild` below, after
+          # the tree is on disk and the lockfile has been honoured.
+          npm ci --ignore-scripts
+          if [ "$INSTALL_RUN_SCRIPTS" = 'true' ]; then
+            npm rebuild
+            npm run prepare --if-present
+          fi
           npm run lint:ci
         shell: 'bash'
+        env:
+          INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -90,6 +112,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/javascript/stages/10-code-check/knip@main'
         with:
           package_manager: 'npm'
+          install_run_scripts: '${{ inputs.install_run_scripts }}'
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -147,9 +170,20 @@ jobs:
           cache: 'npm'
 
       - run: |
-          npm ci
+          # `--ignore-scripts`: `npm ci` otherwise runs `postinstall` from every package in
+          # the transitive tree, as the CI user, before any of this project's code runs --
+          # the npm supply-chain execution path. Projects that genuinely need those scripts
+          # set `install_run_scripts: true`, and they run through `npm rebuild` below, after
+          # the tree is on disk and the lockfile has been honoured.
+          npm ci --ignore-scripts
+          if [ "$INSTALL_RUN_SCRIPTS" = 'true' ]; then
+            npm rebuild
+            npm run prepare --if-present
+          fi
           npm audit --audit-level=high
         shell: 'bash'
+        env:
+          INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
     needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
@@ -177,9 +211,20 @@ jobs:
           BUILD_ENV: '${{ inputs.build_env }}'
 
       - run: |
-          npm ci
+          # `--ignore-scripts`: `npm ci` otherwise runs `postinstall` from every package in
+          # the transitive tree, as the CI user, before any of this project's code runs --
+          # the npm supply-chain execution path. Projects that genuinely need those scripts
+          # set `install_run_scripts: true`, and they run through `npm rebuild` below, after
+          # the tree is on disk and the lockfile has been honoured.
+          npm ci --ignore-scripts
+          if [ "$INSTALL_RUN_SCRIPTS" = 'true' ]; then
+            npm rebuild
+            npm run prepare --if-present
+          fi
           npm run test:ci
         shell: 'bash'
+        env:
+          INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
 
       - name: 'Type check the end-to-end specs'
         if: 'inputs.e2e_typecheck'
@@ -233,9 +278,20 @@ jobs:
           BUILD_ENV: '${{ inputs.build_env }}'
 
       - run: |
-          npm ci
+          # `--ignore-scripts`: `npm ci` otherwise runs `postinstall` from every package in
+          # the transitive tree, as the CI user, before any of this project's code runs --
+          # the npm supply-chain execution path. Projects that genuinely need those scripts
+          # set `install_run_scripts: true`, and they run through `npm rebuild` below, after
+          # the tree is on disk and the lockfile has been honoured.
+          npm ci --ignore-scripts
+          if [ "$INSTALL_RUN_SCRIPTS" = 'true' ]; then
+            npm rebuild
+            npm run prepare --if-present
+          fi
           npm run build
         shell: 'bash'
+        env:
+          INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_npm_audit' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 

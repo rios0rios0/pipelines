@@ -244,7 +244,12 @@ fi
 timestamp=$(date +%s)
 {
   printf '<?xml version="1.0" encoding="UTF-8"?>\n'
-  printf '<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">\n'
+  # `https`, though the URL 404s under either scheme -- the Cobertura DTD has
+  # not been served for years and no consumer dereferences a DOCTYPE SYSTEM id
+  # anyway. It stays because every other Cobertura producer emits it, and the
+  # scheme changes because a clear-text URL in generated output is a finding
+  # with no upside.
+  printf '<!DOCTYPE coverage SYSTEM "https://cobertura.sourceforge.net/xml/coverage-04.dtd">\n'
   printf '<coverage line-rate="%s" branch-rate="0" lines-covered="%d" lines-valid="%d" branches-covered="0" branches-valid="0" complexity="0" version="terra-test" timestamp="%d">\n' \
     "${line_rate}" "${tested}" "${total}" "${timestamp}"
   printf '  <sources><source>modules</source></sources>\n'

@@ -1,4 +1,10 @@
 inputs:
+  install_run_scripts:
+    required: false
+    default: 'false'
+    description: |
+      Run dependency lifecycle scripts after installing. Installs are
+      `--ignore-scripts` by default -- see the note on the install steps.
   package_manager:
     required: false
     default: 'npm'
@@ -35,15 +41,32 @@ runs:
         node-version: '20'
         cache: '${{ inputs.package_manager }}'
 
+    # Installed WITHOUT lifecycle scripts. `npm ci` / `yarn install` otherwise run
+    # `postinstall` from every package in the transitive tree, as the CI user, before
+    # any of this project's own code runs. Knip only needs the dependency graph on
+    # disk to resolve imports, so it is the job least likely to need them at all.
     - name: 'Install dependencies (npm)'
       if: inputs.package_manager == 'npm'
-      run: npm ci
+      run: |
+        npm ci --ignore-scripts
+        if [ "$INSTALL_RUN_SCRIPTS" = 'true' ]; then
+          npm rebuild
+          npm run prepare --if-present
+        fi
       shell: 'bash'
+      env:
+        INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
 
     - name: 'Install dependencies (yarn)'
       if: inputs.package_manager == 'yarn'
-      run: yarn install --immutable
+      run: |
+        yarn install --immutable --mode=skip-build
+        if [ "$INSTALL_RUN_SCRIPTS" = 'true' ]; then
+          yarn rebuild
+        fi
       shell: 'bash'
+      env:
+        INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
 
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 

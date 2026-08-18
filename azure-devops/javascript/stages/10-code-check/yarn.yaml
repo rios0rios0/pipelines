@@ -1,4 +1,7 @@
 parameters:
+  - name: 'INSTALL_RUN_SCRIPTS'
+    type: 'boolean'
+    default: false
   - name: 'RUN_BEFORE_CODE_CHECK'
     type: 'string'
     default: 'echo "No before script"'
@@ -48,20 +51,44 @@ stages:
             env:
               PIPELINES_HOOK: ${{ parameters.RUN_BEFORE_CODE_CHECK }}
 
+          # Installed WITHOUT lifecycle scripts. `yarn install` (Yarn 2+ runs them by
+          # default) and `npm ci` otherwise execute `postinstall` from every package in
+          # the transitive tree, as the CI user, before any of this project's own code
+          # runs. Projects that genuinely need them pass `INSTALL_RUN_SCRIPTS: true` and
+          # get `rebuild` afterwards, once the tree is on disk.
+          #
+          # The no-lockfile branch now FAILS instead of falling back to `npm install`.
+          # A resolution performed at CI time is not the resolution anyone reviewed, so
+          # the job was silently testing a dependency set that exists nowhere else --
+          # and `--ignore-scripts` cannot make an unpinned tree safe.
           - script: |
+              set -e
               if [ -f yarn.lock ]; then
-                yarn install --immutable --check-cache
+                yarn install --immutable --check-cache --mode=skip-build
+                if [ "$INSTALL_RUN_SCRIPTS" = 'True' ] || [ "$INSTALL_RUN_SCRIPTS" = 'true' ]; then
+                  yarn rebuild
+                fi
               elif [ -f package-lock.json ]; then
-                npm ci
+                npm ci --ignore-scripts
+                if [ "$INSTALL_RUN_SCRIPTS" = 'True' ] || [ "$INSTALL_RUN_SCRIPTS" = 'true' ]; then
+                  npm rebuild
+                  npm run prepare --if-present
+                fi
               else
-                npm install
+                echo "ERROR: no yarn.lock and no package-lock.json found."
+                echo "Commit a lockfile so CI installs the dependency set you reviewed."
+                exit 1
               fi
             displayName: 'Install dependencies'
             workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+            # Azure stringifies a `boolean` parameter as `True`/`False`, which is why
+            # both spellings are accepted above.
+            env:
+              INSTALL_RUN_SCRIPTS: ${{ parameters.INSTALL_RUN_SCRIPTS }}
 
           # Pinned; `npx --yes knip` executes the newest published knip on
           # every run. See global/scripts/shared/pinned-versions.sh.
-          - script: 'npm_config_ignore_scripts=true npx --yes knip@6.32.2'
+          - script: 'npx --yes --ignore-scripts knip@6.32.2'
             displayName: 'Run Knip unused code detection'
             workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
 

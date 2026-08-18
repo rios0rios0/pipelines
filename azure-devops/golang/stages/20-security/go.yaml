@@ -28,7 +28,6 @@ stages:
           GOPATH: "$(Pipeline.Workspace)/.go"
         steps:
           - template: '../../abstracts/go.yaml'
-          - template: '../../../global/abstracts/scripts-repo.yaml'
 
           # Delegates to the shared runner instead of inlining `go install`, which is
           # what GitHub Actions already did and what this repository's architecture

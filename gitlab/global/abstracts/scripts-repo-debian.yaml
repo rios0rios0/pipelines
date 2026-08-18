@@ -7,5 +7,5 @@ include:
     - |
       apt-get update && \
       apt-get install -y --no-install-recommends \
-          git jq yq
+          git jq
     - !reference [ .scripts-repo, before_script ]

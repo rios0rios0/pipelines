@@ -29,6 +29,23 @@ set -e
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ACTION_FILE="$SCRIPTS_DIR/github/global/stages/40-delivery/docker/action.yaml"
 
+# `yq` is two unrelated programs sharing a name, and which one answers is decided by the machine:
+# GitHub's `ubuntu-latest` preinstalls mikefarah/yq, while Debian and Ubuntu's own `yq` package
+# and `pip install yq` are kislyuk's, which reads the expression as a FILENAME and rejects `eval`.
+# These assertions used to call a bare `yq`, so this suite passed on GitHub's runners and failed
+# on any Debian-ish workstation -- with `can't open '.linters.enable[]'`, which looks like a
+# broken test rather than the wrong program. `make test` is what CONTRIBUTING tells people to run
+# before submitting, so it has to mean the same thing everywhere. Resolved through the same helper
+# the production script uses, so there is one implementation rather than two that can disagree.
+. "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/verify-download.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/resolve-yq.sh"
+
+YQ=""
+YQ_DIR="$(mktemp -d)"
+trap 'rm -rf "$YQ_DIR"' EXIT
+resolve_yq "$YQ_DIR" || { echo "could not resolve mikefarah/yq; cannot run this suite" >&2; exit 1; }
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
@@ -53,7 +70,7 @@ assert_yq() {
   local expression="$2"
   local expected="$3"
   local actual
-  actual=$(yq "$expression" "$ACTION_FILE")
+  actual=$("$YQ" "$expression" "$ACTION_FILE")
   if [ "$actual" = "$expected" ]; then
     echo -e "${GREEN}  PASS: $description${NC}"
     TESTS_PASSED=$((TESTS_PASSED + 1))
@@ -94,11 +111,11 @@ assert_yq \
 # the version (the build-push major floor below) read the file as text instead.
 assert_true \
   "'docker/setup-qemu-action' step must be present so RUN steps in arm64 builds can exec foreign-arch binaries via binfmt" \
-  "yq -e '.runs.steps[] | select(.uses | test(\"^docker/setup-qemu-action@[0-9a-f]{40}\$\"))' '$ACTION_FILE' >/dev/null"
+  "\"$YQ\" -e '.runs.steps[] | select(.uses | test(\"^docker/setup-qemu-action@[0-9a-f]{40}\$\"))' '$ACTION_FILE' >/dev/null"
 
 assert_true \
   "'docker/setup-buildx-action' step must be present — the default Docker builder silently ignores 'platforms:' and emits a single-arch manifest" \
-  "yq -e '.runs.steps[] | select(.uses | test(\"^docker/setup-buildx-action@[0-9a-f]{40}\$\"))' '$ACTION_FILE' >/dev/null"
+  "\"$YQ\" -e '.runs.steps[] | select(.uses | test(\"^docker/setup-buildx-action@[0-9a-f]{40}\$\"))' '$ACTION_FILE' >/dev/null"
 
 assert_yq \
   "'platforms' must be wired into the 'docker/build-push-action' step's 'with:' so the input actually reaches the build" \

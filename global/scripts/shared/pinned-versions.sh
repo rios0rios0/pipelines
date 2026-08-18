@@ -125,6 +125,28 @@ FLYCTL_VERSION="${FLYCTL_VERSION:-${FLYCTL_PINNED_VERSION}}"
 FLYCTL_SHA256_X86_64="5faeeb6806b939540619518be530ad4cf9de090eff1e0e44795e3f09c113b5ce"
 FLYCTL_SHA256_ARM64="677bfad02ea7e44e0c7ef6d0666babc6daa3d468ce97b44d2451d60e97ba3d58"
 
+# mikefarah/yq, resolved by global/scripts/shared/resolve-yq.sh for the
+# golangci-lint config merge. Four digests rather than the usual two because
+# this is the one tool here resolved on macOS as well: `resolve_yq` runs from a
+# developer's `make lint` as readily as from a runner, and the kislyuk `yq` that
+# makes the resolution necessary is just as likely to be the one Homebrew or pip
+# put on a Mac.
+#
+# The digest suffix carries the OS as well as the arch (`LINUX_AMD64`, not
+# `AMD64`) because it names the release asset, and mikefarah publishes one
+# asset per OS/arch pair: `yq_linux_amd64`, `yq_darwin_arm64`, and so on.
+#
+# Verified against the `checksums` file published with the release, whose
+# SHA-256 lives in the column named by `checksums_hashes_order` -- the file
+# carries 31 hashes per asset and no header, so reading the wrong column yields
+# a plausible-looking digest that matches nothing.
+YQ_PINNED_VERSION="4.47.1"
+YQ_VERSION="${YQ_VERSION:-${YQ_PINNED_VERSION}}"
+YQ_SHA256_LINUX_AMD64="0fb28c6680193c41b364193d0c0fc4a03177aecde51cfc04d506b1517158c2fb"
+YQ_SHA256_LINUX_ARM64="b7f7c991abe262b0c6f96bbcb362f8b35429cefd59c8b4c2daa4811f1e9df599"
+YQ_SHA256_DARWIN_AMD64="a9b5ca36f7750576c6ace3cc7193349cd676b3a6bf30193fb2773ff45f5af5c2"
+YQ_SHA256_DARWIN_ARM64="99aae3a7c9ddfe76bb339f0e7acd8224324b6527436fb6a5d890079bf5fcc590"
+
 # The npm-published deploy clients (`wrangler`, `vercel`, `netlify-cli`) talk to
 # a hosted API the vendor versions on their side, so these are the majors this
 # repository has verified rather than exact builds. npm resolves the newest

@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, dart-pipeline, workflow-composition, supply-chain)
+make test              # Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, dart-pipeline, workflow-composition, supply-chain, azure-step-names)
 make test-go-script    # Test Go validation script only
 make test-go-integration-scope  # Test which packages the Go runner's integration phase selects only
 make test-lambda       # Test Lambda template validation only
@@ -32,6 +32,7 @@ make test-memory-detection  # Test the cgroup-aware memory ceiling detection onl
 make test-dart-pipeline # Test the Dart/Flutter pipeline (scripts, Semgrep rules, cross-platform wiring) only
 make test-workflow-composition  # Test the GitHub Actions workflow composition standard only
 make test-supply-chain # Test the supply-chain pinning contract (actions, images, binaries, packages) only
+make test-azure-step-names  # Test Azure DevOps step-name uniqueness across expanded templates only
 make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
 ```
 

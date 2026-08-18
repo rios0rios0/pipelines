@@ -20,11 +20,12 @@ stages:
       - job: 'style_tflint'
         displayName: 'style:tflint'
         steps:
+          # `abstracts/terra.yaml` already includes `scripts-repo`, so
+          # $(Scripts.Directory) is in scope for the installer below. It was
+          # ALSO included directly here, which declared two steps named
+          # `Scripts` -- and Azure rejects the whole job for that before it runs
+          # anything, so the duplicate was never merely redundant.
           - template: '../../abstracts/terra.yaml'
-
-          # `scripts-repo` is what puts $(Scripts.Directory) in scope -- the
-          # same pattern the order-check job below already uses.
-          - template: '../../../global/abstracts/scripts-repo.yaml'
 
           - script: $(Scripts.Directory)/global/scripts/languages/terraform/tflint/install.sh
             displayName: 'Install TFLint (pinned, checksum-verified)'

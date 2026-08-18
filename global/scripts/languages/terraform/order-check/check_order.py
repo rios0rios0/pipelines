@@ -1021,6 +1021,11 @@ def run(repo: Path, cfg: Config, fix: bool) -> list[FileResult]:
 # JUnit + human output
 # --------------------------------------------------------------------------- #
 def write_junit(results: list[FileResult], report_dir: Path) -> None:
+    # `--report` may legitimately be absolute (the flag documents it), so the
+    # directory itself is not confined. The file name this function appends is,
+    # which is what keeps a constructed path from escaping the directory the
+    # caller actually named.
+    report_dir = Path(os.path.realpath(report_dir))
     report_dir.mkdir(parents=True, exist_ok=True)
     cases = []
     total = failures = 0
@@ -1046,7 +1051,12 @@ def write_junit(results: list[FileResult], report_dir: Path) -> None:
            f'  <testsuite name="order-check" tests="{total}" failures="{failures}">\n'
            f'{body}\n'
            '  </testsuite>\n</testsuites>\n')
-    write_text(report_dir / "junit-order-check.xml", xml)
+    junit_path = Path(os.path.realpath(report_dir / "junit-order-check.xml"))
+    if junit_path.parent != report_dir:
+        raise SystemExit(
+            "refusing to write the JUnit report outside '{dir}'".format(dir=report_dir)
+        )
+    write_text(junit_path, xml)
 
 
 def main(argv: list[str]) -> int:

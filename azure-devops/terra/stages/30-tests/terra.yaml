@@ -44,14 +44,14 @@ stages:
       - job: 'test_all'
         displayName: 'test:all'
         steps:
-          # Clone rios0rios0/pipelines into a temp dir and expose its path
-          # as `$(Scripts.Directory)`. Required by the `run.sh` invocation
-          # below — without it the variable resolves to empty, the command
-          # becomes `/global/scripts/...`, and the job fails with exit
-          # `127` ("command not found"). Sibling stages (`35-management`)
-          # already follow this pattern.
-          - template: '../../../global/abstracts/scripts-repo.yaml'
-
+          # `abstracts/terra.yaml` clones rios0rios0/pipelines into a temp dir
+          # and exposes its path as `$(Scripts.Directory)`, which the `run.sh`
+          # invocation below needs — without it the variable resolves to empty,
+          # the command becomes `/global/scripts/...`, and the job fails with
+          # exit `127` ("command not found").
+          #
+          # `scripts-repo` was ALSO included directly here. That declared two
+          # steps named `Scripts`, which Azure rejects before running anything.
           - template: '../../abstracts/terra.yaml'
 
           # Run consumer-provided pre-steps (e.g. configuring SSH for
@@ -157,8 +157,10 @@ stages:
             displayName: 'test:validate'
             dependsOn: []
             steps:
-              - template: '../../../global/abstracts/scripts-repo.yaml'
-
+              # `abstracts/terra.yaml` brings `scripts-repo` with it, so
+              # $(Scripts.Directory) is in scope below. Including it directly as
+              # well declared two steps named `Scripts`, which Azure rejects
+              # before running anything.
               - template: '../../abstracts/terra.yaml'
 
               - ${{ each step in parameters.PRE_STEPS }}:

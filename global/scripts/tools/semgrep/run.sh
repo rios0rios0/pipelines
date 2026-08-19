@@ -41,8 +41,27 @@ SEMGREP_VENV="$HOME/.local/share/semgrep-venv"
 # system-wide one.
 SEMGREP_PINNED_VERSION="${SEMGREP_SPEC##*==}"
 
+# Verify the pin against the PACKAGE MANAGER that performed it, not against
+# `semgrep --version`.
+#
+# `semgrep --version` is not a reliable report of what is installed. The entry
+# point dispatches either to the OCaml CLI or to the legacy Python one, and on
+# 1.173.0 the two do not agree: a clean virtualenv holding `semgrep==1.173.0`
+# answers `1.162.0` to `semgrep --version` while `pip show semgrep`,
+# `importlib.metadata.version("semgrep")`, `semgrep.__VERSION__` and
+# `semgrep-core -version` all answer `1.173.0`. Checking the pin against the
+# CLI therefore fails for a CORRECTLY installed version -- and that failure is
+# indistinguishable from the shadowing this check exists to catch.
+#
+# Two properties are checked instead, and both are ours to assert: `semgrep`
+# on PATH must resolve to the launcher this script symlinks, and the
+# distribution installed in this script's own virtualenv must be the pinned
+# version. Neither goes through the CLI's self-report.
 semgrep_matches_pin() {
-  _sg_current=$(semgrep --version 2>/dev/null | head -1 | tr -d '[:space:]')
+  [ -x "$SEMGREP_VENV/bin/python" ] || return 1
+  [ "$(command -v semgrep 2>/dev/null)" = "$HOME/.local/bin/semgrep" ] || return 1
+  _sg_current=$("$SEMGREP_VENV/bin/python" -c \
+    'import importlib.metadata as m; print(m.version("semgrep"))' 2>/dev/null)
   [ "$_sg_current" = "$SEMGREP_PINNED_VERSION" ]
 }
 
@@ -52,13 +71,39 @@ if ! command -v semgrep > /dev/null 2>&1 || ! semgrep_matches_pin; then
     exit 1
   fi
   echo "Installing $SEMGREP_SPEC..."
-  [ -x "$SEMGREP_VENV/bin/pip" ] || python3 -m venv "$SEMGREP_VENV"
-  "$SEMGREP_VENV/bin/pip" install --quiet --disable-pip-version-check --only-binary :all: "$SEMGREP_SPEC"
+  # Both steps are checked. An unchecked install is worse than a noisy one:
+  # `python3 -m venv` fails on a distribution without the venv module, pip
+  # fails on a missing wheel or a blocked index, and in either case the next
+  # thing that speaks is the pin check below -- which would report a PATH
+  # problem for what is really an install that never happened.
+  if [ ! -x "$SEMGREP_VENV/bin/pip" ] && ! python3 -m venv "$SEMGREP_VENV"; then
+    echo "ERROR: could not create the Semgrep virtualenv at $SEMGREP_VENV." >&2
+    echo "       On Debian and Ubuntu this usually means the python3-venv package is absent." >&2
+    exit 1
+  fi
+  # Output is captured rather than discarded with --quiet, so a failure can
+  # still say why in pip's own words.
+  if ! _sg_pip_log=$("$SEMGREP_VENV/bin/pip" install --disable-pip-version-check --only-binary :all: "$SEMGREP_SPEC" 2>&1); then
+    echo "ERROR: pip could not install $SEMGREP_SPEC into $SEMGREP_VENV." >&2
+    printf '%s\n' "$_sg_pip_log" >&2
+    exit 1
+  fi
   ln -sf "$SEMGREP_VENV/bin/semgrep" "$HOME/.local/bin/semgrep"
 
   if ! semgrep_matches_pin; then
+    # Report what was OBSERVED rather than a presumed cause. This branch has
+    # more than one explanation -- another copy earlier on PATH, a broken
+    # install, a launcher that cannot run -- and naming only the first sends
+    # the reader hunting through PATH for something that may not be there.
+    # The resolved path separates them: a different path is a shadow, the
+    # expected path with an unexpected version string is a broken install.
     echo "ERROR: Semgrep on PATH is not the pinned $SEMGREP_PINNED_VERSION after installation." >&2
-    echo "       Another Semgrep earlier on PATH is shadowing $HOME/.local/bin/semgrep." >&2
+    echo "       PATH resolves 'semgrep' to: $(command -v semgrep 2>/dev/null || echo '<not found>')" >&2
+    echo "       Expected it to resolve to:  $HOME/.local/bin/semgrep" >&2
+    echo "       Version installed in it:    '$("$SEMGREP_VENV/bin/python" -c \
+      'import importlib.metadata as m; print(m.version("semgrep"))' 2>&1 | tail -1)'" >&2
+    echo "       (note: 'semgrep --version' is NOT used here -- it can disagree" >&2
+    echo "        with the installed distribution; see semgrep_matches_pin)" >&2
     exit 1
   fi
 fi

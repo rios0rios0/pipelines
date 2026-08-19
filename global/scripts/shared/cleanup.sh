@@ -33,8 +33,14 @@ fi
 #
 # Prepending when the directory is already present later in PATH leaves a
 # duplicate entry, which is harmless: lookup stops at the first match.
+#
+# `${PATH:+:$PATH}` adds the separator only when PATH is non-empty. A plain
+# ":$PATH" would leave a trailing colon on an empty PATH, and POSIX reads an
+# empty PATH element as the CURRENT DIRECTORY -- which in a preamble sourced
+# by tool installers that then run binaries by name, inside a checked-out
+# repository, is an execution path for anything the repository ships.
 mkdir -p "$HOME/.local/bin"
 case "$PATH:" in
   "$HOME/.local/bin:"*) ;;
-  *) PATH="$HOME/.local/bin:$PATH" && export PATH ;;
+  *) PATH="$HOME/.local/bin${PATH:+:$PATH}" && export PATH ;;
 esac

@@ -63,8 +63,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed the tool installers to stop self-updating to `latest` on every run of a persistent agent. That behaviour was justified as staying current for CVE fixes, but it also meant the gate's verdict on unchanged code could change overnight; bumping a version in `pinned-versions.sh` makes that a reviewed change with a diff, which is what a rule change deserves. An exact version is idempotent, so the "already installed, re-resolve anyway" branches are gone rather than replaced
 - changed the Terragrunt install in the Azure Terraform abstract to a pinned, checksum-verified URL, removing the unauthenticated `api.github.com/releases/latest` lookup it retried around -- and with it the reason the download URL had to be scraped out of an API response at all
 
-- changed the SCA coverage statement across `README.md`, `CLAUDE.md` and `.github/copilot-instructions.md` to match what actually runs now that the all-languages `sca:trivy` job is gone: Go keeps `govulncheck`, Python `safety`, Java OWASP Dependency-Check, JavaScript `yarn npm audit` / `npm audit`, PHP `composer audit`, Ruby `bundler-audit` and Dart OSV-Scanner — while **.NET, Helm, Logstash and Terraform are left with no dependency scanner**, and no language retains an IaC misconfiguration scanner. The Dart documentation moves from "two tools in the standard stack do not support Dart" to three, since Dependency-Track joins CodeQL and OWASP Dependency-Check as unreachable for pub
-- changed the Go module dependencies to their latest versions
+- changed the tor-proxy health check Go module dependencies (github.com/sirupsen/logrus v1.10.0 → v1.10.1; github.com/stretchr/testify v1.10.0 → v1.12.0)
 
 ### Removed
 

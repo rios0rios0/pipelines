@@ -269,7 +269,7 @@ stages:
             displayName: 'Use Go (for terratest tier)'
             condition: and(succeeded(), eq(variables['HAS_TERRATEST'], 'true'))
             inputs:
-              version: '1.26'
+              version: '1.27'
 
           # Tier 1: native `terraform test` with real providers. Drives
           # `tests/e2e/*.tftest.hcl`. Auto-destroys at end-of-file so a

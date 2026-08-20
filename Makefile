@@ -38,6 +38,10 @@ test-go-integration-scope:
 	@echo "Running Go integration phase scope validation..."
 	@./.github/tests/test-go-integration-scope.sh
 
+test-go-tool-staleness:
+	@echo "Running Go source-built tool staleness validation..."
+	@./.github/tests/test-go-tool-staleness.sh
+
 test-lambda:
 	@echo "Running Lambda template validation..."
 	@./.github/tests/test-lambda-templates.sh
@@ -132,5 +136,5 @@ test-azure-step-names:
 	@echo "Running Azure DevOps step-name uniqueness validation..."
 	@./.github/tests/test-azure-step-names.sh
 
-test: test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test-workflow-composition test-supply-chain test-azure-step-names test-dependency-updates
+test: test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-go-tool-staleness test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test-workflow-composition test-supply-chain test-azure-step-names test-dependency-updates
 	@echo "All tests completed successfully!"

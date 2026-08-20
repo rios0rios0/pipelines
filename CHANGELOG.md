@@ -64,6 +64,11 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - changed the Terragrunt install in the Azure Terraform abstract to a pinned, checksum-verified URL, removing the unauthenticated `api.github.com/releases/latest` lookup it retried around -- and with it the reason the download URL had to be scraped out of an API response at all
 
 - changed the tor-proxy health check Go module dependencies (github.com/sirupsen/logrus v1.10.0 → v1.10.1; github.com/stretchr/testify v1.10.0 → v1.12.0)
+- changed the Go version to `1.27.0` and updated all module dependencies
+- changed the golang pipeline version from `1.26.6` to `1.27.0`
+- changed the golang pipeline version from `1.26` to `1.27`
+- changed the terraform pipeline version from `1.15.8` to `1.15.9`
+- changed the golang pipeline version from `1.26` to `1.27`
 
 ### Removed
 

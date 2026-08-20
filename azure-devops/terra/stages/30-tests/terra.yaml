@@ -76,7 +76,7 @@ stages:
           - task: 'GoTool@0'
             displayName: 'Use Go (toolchain auto-upgrades per go.mod)'
             inputs:
-              version: '1.26'
+              version: '1.27'
 
           # Delegate to the shared unified runner so `make test` and the CI
           # flow exercise identical logic: run terra-test, run terratest if

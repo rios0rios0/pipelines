@@ -219,6 +219,37 @@ assert_empty "the self-scan does not reference the action through a moving branc
   "$(grep -n '20-security/codeql@' "$SELF_WORKFLOW" || true)"
 echo ""
 
+# The input is useless if no consumer can reach it, and that is exactly how it shipped
+# first: the action grew `go_version_file` while `go.yaml` still called it with two inputs,
+# so every consumer going through the reusable workflows kept the old behaviour and the fix
+# only ever worked for this repository's own self-scan.
+echo ""
+echo "3b. Consumers can actually reach the toolchain input"
+for wf in go go-docker go-binary go-library go-render; do
+  FILE="$SCRIPTS_DIR/.github/workflows/$wf.yaml"
+  assert_true "$wf.yaml declares go_version_file" \
+    "grep -qE '^ +go_version_file:' '$FILE'"
+  # `grep -F`: the needle contains `${{ }}`, which is an unmatched brace to ERE and a
+  # parameter expansion to the shell. Fixed-string matching sidesteps both.
+  assert_true "$wf.yaml passes it on rather than declaring it decoratively" \
+    "grep -qF 'inputs.go_version_file }}' '$FILE'"
+done
+
+# The chain has to be unbroken end to end: `go-render` -> `go-docker` -> `go.yaml` -> action.
+# Any one link declaring the input without forwarding it looks fine in isolation.
+assert_true "go.yaml hands the input to the CodeQL action, not just to itself" \
+  "grep -A 4 \"20-security/codeql@main\" '$SCRIPTS_DIR/.github/workflows/go.yaml' | grep -q 'go_version_file:'"
+
+# And when nobody sets it, the action must still find a module that is not at the root --
+# otherwise the default silently reproduces the original failure for those repositories.
+assert_true "the action searches for the module when the named file is absent" \
+  "grep -q 'find . -name go.mod' '$CODEQL_ACTION'"
+assert_true "an ambiguous tree is reported rather than guessed at" \
+  "grep -q 'Go toolchain not resolved' '$CODEQL_ACTION'"
+assert_true "the discovered path is what setup-go is given" \
+  "grep -qF 'steps.go_toolchain.outputs.file' '$CODEQL_ACTION'"
+echo ""
+
 # ---------------------------------------------------------------------------
 echo "4. The Go waiver expires"
 # ---------------------------------------------------------------------------

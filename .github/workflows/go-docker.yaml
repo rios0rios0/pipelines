@@ -11,6 +11,19 @@ on:
         required: false
         default: '["ubuntu-latest"]'
         description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See go.yaml.'
+      go_version_file:
+        type: 'string'
+        required: false
+        default: 'go.mod'
+        description: |
+          Path to the `go.mod` whose `go` directive decides which Go the CodeQL analysis runs
+          with. Leave it alone unless this repository has SEVERAL modules: the shared action
+          finds a single module wherever it lives, and only an ambiguous tree needs telling.
+
+          It is a file rather than a version on purpose. The `go` directive is a minimum
+          language version, and the CodeQL runner sets `GOTOOLCHAIN=local`, so a module ahead
+          of the runner's Go cannot be extracted at all -- reading the module's own directive
+          means the analysis can never be older than the code it analyses.
       codeql_upload:
         type: 'string'
         required: false
@@ -55,6 +68,7 @@ jobs:
   go:
     uses: 'rios0rios0/pipelines/.github/workflows/go.yaml@main'
     with:
+      go_version_file: '${{ inputs.go_version_file }}'
       sonar_host: ${{ inputs.sonar_host }}
       runs_on: ${{ inputs.runs_on }}
       codeql_upload: ${{ inputs.codeql_upload }}

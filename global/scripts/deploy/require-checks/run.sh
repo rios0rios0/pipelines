@@ -104,12 +104,45 @@ rc_fetch_with_curl() {
   _rc_api="${GITHUB_API_URL:-https://api.github.com}"
   _rc_page=1
   while [ "$_rc_page" -le 20 ]; do
-    _rc_body="$(curl -sS -f \
+    # `--location`, because a repository or an organisation that has been RENAMED
+    # answers **301**, not 404, and the body of that redirect is a `message`
+    # object rather than a page of check runs. `-f` does not catch it -- it fails
+    # on 4xx and 5xx only -- so without this the redirect body was parsed as the
+    # answer, `.check_runs` read as null, `length` answered 0, and the gate
+    # reported every required check as missing. That is the exact opposite of
+    # what happened: a fully green commit refused by a deploy whose log blames
+    # the tests. `github.repository` is resolved when the run is CREATED, so a
+    # rename between that moment and the deployment job reaching this script is
+    # enough, and the deploy is the last job in the run.
+    #
+    # `--proto '=https' --proto-redir '=https'`, because following a redirect is
+    # only safe if it cannot be followed into plain HTTP with the bearer token
+    # attached. curl already drops the Authorization header when a redirect
+    # crosses to another HOST; the scheme is the half it would otherwise keep.
+    _rc_body="$(curl -sS -f -L --proto '=https' --proto-redir '=https' \
       -H 'Accept: application/vnd.github+json' \
       -H "Authorization: Bearer $_rc_token" \
       -H 'X-GitHub-Api-Version: 2022-11-28' \
       "$_rc_api/repos/$REQUIRE_CHECKS_REPOSITORY/commits/$REQUIRE_CHECKS_COMMIT/check-runs?per_page=100&page=$_rc_page")" \
       || return 1
+
+    # An answer that is not a check-run page is a MISCONFIGURATION, and it must
+    # never be readable as "this commit has no checks": those are opposite
+    # verdicts, only one of them is the repository's fault, and the second is the
+    # one somebody would spend an afternoon re-running green jobs over. Anything
+    # without a `check_runs` ARRAY is refused here rather than folded into an
+    # empty list -- a redirect body, an error envelope, an HTML error page from a
+    # proxy, or a truncated response all land in this branch.
+    if [ "$(printf '%s' "$_rc_body" \
+      | jq -r 'if type == "object" and (.check_runs | type) == "array"
+               then "page" else "other" end' 2> /dev/null)" != 'page' ]; then
+      echo "ERROR: $_rc_api did not answer a check-run page for $REQUIRE_CHECKS_REPOSITORY@$REQUIRE_CHECKS_COMMIT." >&2
+      echo "It said: $(printf '%s' "$_rc_body" \
+        | jq -r '.message? // "the payload carried no check_runs array"' 2> /dev/null)" >&2
+      echo "Check that REQUIRE_CHECKS_REPOSITORY still names this repository -- a renamed owner or repo answers a redirect here." >&2
+      return 1
+    fi
+
     printf '%s' "$_rc_body" | jq -c '.check_runs[] | {name, conclusion}'
     _rc_count="$(printf '%s' "$_rc_body" | jq -r '.check_runs | length')"
     [ "$_rc_count" -lt 100 ] && break
@@ -118,12 +151,22 @@ rc_fetch_with_curl() {
   unset _rc_token _rc_api _rc_page _rc_body _rc_count
 }
 
+# Collected to a file and THEN folded into an array, rather than piped straight
+# into `jq -s`. A pipeline reports the status of its RIGHT-hand side, and `jq -s`
+# succeeds on empty input by answering `[]` -- so every refusal the fetch
+# function raises was discarded, the gate carried on with an empty list, and a
+# missing token or an unreadable repository surfaced as "no successful check",
+# i.e. as a commit that had failed rather than as a job that was misconfigured.
+# `pipefail` is not POSIX, so the pipeline is what has to go.
+RAW_FILE="$REPORT_PATH/check-runs.jsonl"
 echo "Reading check runs through '$RC_TRANSPORT'."
-if ! "rc_fetch_with_$RC_TRANSPORT" | jq -s '.' > "$CHECKS_FILE"; then
+if ! "rc_fetch_with_$RC_TRANSPORT" > "$RAW_FILE"; then
   echo "ERROR: failed to read check runs for $REQUIRE_CHECKS_COMMIT." >&2
   echo "The job needs 'checks: read' permission and a token that can see this repository." >&2
   exit 1
 fi
+jq -s '.' < "$RAW_FILE" > "$CHECKS_FILE"
+rm -f "$RAW_FILE"
 
 echo "Check runs recorded against $REQUIRE_CHECKS_COMMIT:"
 jq -r '.[] | "  \(.conclusion // "pending")\t\(.name)"' "$CHECKS_FILE"

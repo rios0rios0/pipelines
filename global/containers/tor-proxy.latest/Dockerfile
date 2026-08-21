@@ -1,4 +1,14 @@
-FROM golang:1.19.0-alpine3.16@sha256:0eb08c89ab1b0c638a9fe2780f7ae3ab18f6ecda2c76b908e09eb8073912045d AS health_builder
+# KEPT AT OR ABOVE `health/go.mod`'s `go` directive, which is the thing that broke here.
+# This stayed on 1.19 for years while an automated dependency bump walked the module's
+# directive up to 1.27, and `go build` refuses a directive newer than itself -- so
+# `tor-proxy:latest` stopped being publishable on 2026-07-27 and stayed that way, failing with
+# `go: errors parsing go.mod`, which names neither version.
+#
+# The direction of the fix matters: the DIRECTIVE is the requirement and the toolchain follows
+# it, never the other way round. Lowering the directive to suit an old builder would quietly
+# give up whatever the module is entitled to use. `.github/tests/test-go-module-toolchain.sh`
+# holds the two together from now on, and fails the build if this image ever falls behind again.
+FROM golang:1.27.0-alpine3.24@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS health_builder
 
 COPY health src/health
 RUN cd src/health && go build -o /go/health -ldflags="-w -s"

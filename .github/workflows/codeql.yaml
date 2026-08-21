@@ -1,0 +1,67 @@
+name: 'CodeQL'
+
+# This repository's OWN code scanning, moved off GitHub's default setup.
+#
+# Default setup analyses `actions`, `go` and `python` here and needs no file to do it, which is
+# exactly why it was the right choice until it was not: it gives the analysis no environment of
+# its own. Its runner ships one Go and the CodeQL action sets `GOTOOLCHAIN=local` on purpose, so
+# a module whose `go` directive has moved past that image cannot be built, cannot be extracted,
+# and is reported as a *configuration error* rather than as a finding -- ten consecutive red runs
+# on `main` and on every pull request, for a module that compiles perfectly with the toolchain it
+# asks for.
+#
+# There is no version knob in default setup, and there is no file to put one in. Advanced setup
+# is the knob: the analysis becomes a workflow, and a workflow can install the Go the module
+# requires before the extractor looks for one. Nothing about the analysis is weakened -- the same
+# three languages, the same default query suite, the same schedule -- and the Go half stops being
+# blind.
+#
+# **This calls the repository's own composite action rather than wiring `init`/`autobuild`/
+# `analyze` here.** That action is this project's product, three consumers already use it, and a
+# scan written directly in this file would be the one copy nothing tests and nothing else
+# benefits from -- the same argument `CLAUDE.md` makes about deploy jobs. The Go toolchain step
+# therefore lives in the action, so every consumer gets the fix too.
+
+on:
+  push:
+    branches: [ 'main' ]
+  pull_request:
+    branches: [ 'main' ]
+  # Default setup ran weekly. Keeping that cadence matters for a reason unrelated to this
+  # repository's own code: CodeQL ships new queries continuously, so a scheduled run is what
+  # finds a vulnerability class that was not modelled on the day the code was last touched.
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: 'read'
+
+concurrency:
+  group: '${{ github.workflow }}-${{ github.ref }}'
+  cancel-in-progress: "${{ github.event_name == 'pull_request' }}"
+
+jobs:
+  analyze:
+    name: 'Analyze (${{ matrix.language }})'
+    runs-on: 'ubuntu-latest'
+    permissions:
+      contents: 'read'
+      # `security-events: write` is what the SARIF upload needs, and it is granted to this job
+      # rather than to the workflow so a step added later does not inherit it.
+      security-events: 'write'
+      actions: 'read'
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # The three default setup was configured with, kept identical so moving to advanced
+        # setup cannot quietly narrow what is scanned.
+        language: [ 'actions', 'go', 'python' ]
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
+        with:
+          codeql_language: '${{ matrix.language }}'
+          # The only Go module here is the tor-proxy health probe, and its directive is what
+          # decides the toolchain. A repository with its module at the root takes the default.
+          go_version_file: 'global/containers/tor-proxy.latest/health/go.mod'

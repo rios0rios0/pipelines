@@ -136,9 +136,21 @@ rc_fetch_with_curl() {
     if [ "$(printf '%s' "$_rc_body" \
       | jq -r 'if type == "object" and (.check_runs | type) == "array"
                then "page" else "other" end' 2> /dev/null)" != 'page' ]; then
+      # What the answer SAID, by whatever route can still say it. `jq` produces
+      # nothing at all when the body is not JSON -- an HTML error page from a
+      # proxy or a gateway, which is the case this guard most needs to be legible
+      # for -- and its stderr is suppressed here, so reading `.message` alone
+      # leaves the line as `It said:` with nothing after it. The raw first line is
+      # the fallback: long enough to recognise `502 Bad Gateway`, truncated so a
+      # whole error page cannot be pasted into a job log.
+      _rc_said="$(printf '%s' "$_rc_body" | jq -r '.message? // empty' 2> /dev/null)"
+      if [ -z "$_rc_said" ]; then
+        _rc_said="$(printf '%s' "$_rc_body" | tr '\n\r\t' '   ' | sed -n '1s/\(.\{0,200\}\).*/\1/p')"
+      fi
+      [ -z "$_rc_said" ] && _rc_said='the response was empty'
+
       echo "ERROR: $_rc_api did not answer a check-run page for $REQUIRE_CHECKS_REPOSITORY@$REQUIRE_CHECKS_COMMIT." >&2
-      echo "It said: $(printf '%s' "$_rc_body" \
-        | jq -r '.message? // "the payload carried no check_runs array"' 2> /dev/null)" >&2
+      echo "It said: $_rc_said" >&2
       echo "Check that REQUIRE_CHECKS_REPOSITORY still names this repository -- a renamed owner or repo answers a redirect here." >&2
       return 1
     fi
@@ -148,7 +160,7 @@ rc_fetch_with_curl() {
     [ "$_rc_count" -lt 100 ] && break
     _rc_page=$((_rc_page + 1))
   done
-  unset _rc_token _rc_api _rc_page _rc_body _rc_count
+  unset _rc_token _rc_api _rc_page _rc_body _rc_count _rc_said
 }
 
 # Collected to a file and THEN folded into an array, rather than piped straight
@@ -165,7 +177,21 @@ if ! "rc_fetch_with_$RC_TRANSPORT" > "$RAW_FILE"; then
   echo "The job needs 'checks: read' permission and a token that can see this repository." >&2
   exit 1
 fi
-jq -s '.' < "$RAW_FILE" > "$CHECKS_FILE"
+# CHECKED, and this is the one place in the script where an unchecked command
+# would be worst. `jq -s` truncates its target before it fails, so a stream it
+# cannot assemble leaves `$CHECKS_FILE` EMPTY -- and an empty file does not make
+# the gate refuse, it makes the gate PASS: `jq ... | length` prints nothing, the
+# per-name test becomes `[ "" -eq 0 ]`, POSIX `sh` answers "Illegal number" with
+# status 2, and `if` reads that as false and takes the `else` branch, which is
+# the one that prints `OK`. Every required check reported as passing, on a commit
+# whose check runs were never read. A deploy gate is allowed to be wrong in one
+# direction only.
+if ! jq -s '.' < "$RAW_FILE" > "$CHECKS_FILE"; then
+  echo "ERROR: the check runs read from $REQUIRE_CHECKS_REPOSITORY could not be assembled into an array." >&2
+  echo "The transport answered, but not in the one-object-per-line shape both transports emit." >&2
+  rm -f "$RAW_FILE"
+  exit 1
+fi
 rm -f "$RAW_FILE"
 
 echo "Check runs recorded against $REQUIRE_CHECKS_COMMIT:"
@@ -205,6 +231,14 @@ for REQUIRED in $REQUIRE_CHECKS_NAMES; do
   FOUND="$(jq -r --arg n "$REQUIRED" \
     '[.[] | select(.conclusion == "success")
           | select(.name == $n or (.name | endswith(" / " + $n)))] | length' "$CHECKS_FILE")"
+  # Fails CLOSED on anything that is not a count. `jq` prints nothing when it
+  # cannot read the file, and the arithmetic test errors rather than being false
+  # -- which `if` cannot distinguish from a passing check. Belt to the braces
+  # above: the fold is now checked, so this should be unreachable, and a gate
+  # whose failure mode is "approve everything" does not get to rely on should.
+  case "$FOUND" in
+    '' | *[!0-9]*) FOUND=0 ;;
+  esac
   if [ "$FOUND" -eq 0 ]; then
     echo "ERROR: no successful '$REQUIRED' for $REQUIRE_CHECKS_COMMIT." >&2
     MISSING=$((MISSING + 1))

@@ -775,6 +775,93 @@ RC_STATUS=0
 RC_OUT="$(cat "$RC_DIR/out.txt")"
 assert_true "require-checks: the curl transport names a missing token instead of reporting a red commit" \
   "[[ $RC_STATUS -eq 1 ]] && grep -q 'no token available' <<< \"\$RC_OUT\""
+
+# ...and stops there. Exit 1 alone proves nothing about WHICH refusal happened:
+# an empty check list also exits 1, by way of "no successful check", so the
+# assertion above passed for years while the transport error was in fact being
+# discarded. The pipeline `fetch | jq -s '.'` reported jq's status, and `jq -s`
+# answers `[]` on empty input, so a token that was never there read as a commit
+# whose tests had failed. This is the half that can tell the two apart.
+assert_true "require-checks: a transport refusal is not reported as a red commit" \
+  "! grep -q 'no successful' <<< \"\$RC_OUT\""
+
+# A RENAMED owner or repository is the one API answer this gate cannot afford to
+# misread. GitHub answers **301** for it -- not 404 -- and `curl -f` lets a 3xx
+# through, so the redirect body ({"message":"Moved Permanently","url":...}) was
+# parsed as the answer: `.check_runs` read as null, `length` answered 0, and the
+# gate refused a commit on which every required check was green. `github.repository`
+# is fixed when the run is CREATED and the deploy is the last job in it, so a
+# rename during a long pipeline is enough to hit this, and the job's log blames
+# the repository's tests for a change made in an organisation's settings.
+#
+# The fix is `curl -L` (with the redirect confined to https), which the stub here
+# cannot exercise -- it answers whatever fixture it is handed, following nothing.
+# What IS asserted is the guard behind it: any payload without a `check_runs`
+# array is refused loudly instead of being folded into an empty list, so every
+# other unreadable answer -- an error envelope, a proxy's HTML, a truncated body
+# -- fails as the misconfiguration it is.
+printf '{"message":"Moved Permanently","url":"https://api.github.com/repositories/1/commits/abc/check-runs","documentation_url":"https://docs.github.com/rest"}' \
+  > "$RC_DIR/rest-moved.json"
+run_require_checks_curl rest-moved.json
+assert_true "require-checks: a redirect body is refused rather than read as an empty check list" \
+  "[[ $RC_STATUS -eq 1 ]]"
+assert_true "require-checks: the redirect refusal repeats what the API said" \
+  "grep -q 'Moved Permanently' <<< \"\$RC_OUT\""
+assert_true "require-checks: the redirect refusal points at the repository name" \
+  "grep -q 'REQUIRE_CHECKS_REPOSITORY still names this repository' <<< \"\$RC_OUT\""
+assert_true "require-checks: a redirect is not reported as a commit whose checks failed" \
+  "! grep -q 'no successful' <<< \"\$RC_OUT\""
+
+# The same guard, against an answer that is not JSON at all -- a proxy or a
+# gateway error page, which is what a self-hosted runner behind a corporate
+# egress actually receives.
+printf '<html><body>502 Bad Gateway</body></html>' > "$RC_DIR/rest-html.json"
+run_require_checks_curl rest-html.json
+assert_true "require-checks: a non-JSON answer is refused rather than parsed as no checks" \
+  "[[ $RC_STATUS -eq 1 ]] && ! grep -q 'no successful' <<< \"\$RC_OUT\""
+
+# ...and says WHAT it got. `jq` prints nothing for a body it cannot parse and its
+# stderr is suppressed, so reading `.message` alone left the line as `It said:`
+# with nothing after it -- on exactly the answer (a proxy's error page) that this
+# branch exists to make legible. The raw first line is the fallback.
+assert_true "require-checks: a non-JSON refusal quotes the body instead of saying nothing" \
+  "grep -q '502 Bad Gateway' <<< \"\$RC_OUT\""
+assert_true "require-checks: the refusal never prints an empty 'It said:' line" \
+  "! grep -qE 'It said:[[:space:]]*$' <<< \"\$RC_OUT\""
+
+# The gate is allowed to be wrong in ONE direction, and these three say so.
+#
+# `jq -s` truncates its target before it fails, so a stream it cannot assemble
+# leaves the checks file EMPTY -- and an empty file did not make the gate refuse,
+# it made the gate PASS: `jq ... | length` prints nothing, the per-name test
+# becomes `[ "" -eq 0 ]`, POSIX `sh` answers "Illegal number" with status 2, and
+# `if` reads that as false and takes the branch that prints `OK`. Every required
+# check reported as passing, on a commit whose check runs were never read.
+#
+# Stubbed on the `gh` transport rather than `curl`, because that is where it is
+# genuinely REACHABLE: the curl path validates the shape of each page before it
+# emits anything, so its own output is always well-formed JSONL, while `gh api
+# --paginate --jq` is trusted verbatim -- and `gh` is entitled to put a notice on
+# stdout. A test that could only be reached through an impossible curl response
+# would be asserting against a state the script cannot enter.
+printf 'gh: a notice nobody parses\n{"name":"tests > test:all","conclusion":"success"}\n' \
+  > "$RC_DIR/unfoldable.json"
+run_require_checks unfoldable.json
+assert_true "require-checks: a stream that will not fold exits non-zero" "[[ $RC_STATUS -ne 0 ]]"
+assert_true "require-checks: a stream that will not fold never reports the gate as passed" \
+  "! grep -q 'All required checks passed' <<< \"\$RC_OUT\""
+assert_true "require-checks: a stream that will not fold never prints OK for a required name" \
+  "! grep -qE '^OK: ' <<< \"\$RC_OUT\""
+assert_true "require-checks: the fold failure says the shape was wrong, not that the tests failed" \
+  "grep -q 'could not be assembled into an array' <<< \"\$RC_OUT\""
+
+# A page that legitimately carries NO check runs still has to be readable as
+# "this commit was never tested", which is the opposite verdict and the one the
+# empty-list branch exists for. Guarding the shape must not swallow it.
+printf '{"total_count":0,"check_runs":[]}' > "$RC_DIR/rest-untested.json"
+run_require_checks_curl rest-untested.json
+assert_true "require-checks: an empty but well-formed page is still refused as an untested commit" \
+  "[[ $RC_STATUS -eq 1 ]] && grep -q 'no successful .tests > test:all.' <<< \"\$RC_OUT\""
 echo ""
 
 echo "================================"

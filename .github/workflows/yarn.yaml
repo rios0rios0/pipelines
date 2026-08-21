@@ -88,8 +88,29 @@ on:
 # enable is left to fail on its own. That directory is appended to `$GITHUB_PATH`, which is what
 # keeps the shim visible to `actions/setup-node` and every step after it. Only `yarn` is named
 # because the default enables `npm`, `pnpm` and `yarn`, and the shim that failed above is one
-# nothing here ever calls. The directory has to be created first -- `--install-directory` is
-# resolved with `realpath` and does not create what it is given.
+# nothing here ever calls.
+#
+# `mktemp -d` rather than a fixed `$RUNNER_TEMP/corepack`, and the random name is the whole point.
+# `$RUNNER_TEMP` is `_work/_temp` on the runner, shared by every job that lands on it, and a
+# CONTAINER job writes there as **root** through the same bind mount -- so a fixed name is a fixed
+# collision.
+#
+# The shim a container job leaves behind points at the corepack inside THAT image
+# (`../../../__t/node/...`), which resolves to nothing on the host, and the runner cannot wipe
+# `_temp` at the next job's start because the files are root-owned and it runs as the runner user.
+# corepack then probes the leftover with `fs.existsSync`, which FOLLOWS symlinks and answers false
+# for a dangling one, so it skips its own unlink and calls `symlink()` on a path that is already
+# there:
+#
+#     Internal Error: EEXIST: file already exists, symlink
+#     '../../../../../../usr/share/nodejs/corepack/dist/yarn.js'
+#         -> '/home/.../actions-runner/_work/_temp/corepack/yarn'
+#
+# Every job that reached this step on that runner failed there until somebody deleted the
+# directory by hand. A fresh `mktemp -d` is owned by whoever runs it and cannot inherit a previous
+# job's leftover, in a container or out of one -- and it replaces the `mkdir -p` this used to
+# need, because `--install-directory` is resolved with `realpath` and does not create what it is
+# given.
 jobs:
   # first stage
   code_check-basic_checks:
@@ -111,9 +132,9 @@ jobs:
       - name: 'Enable Corepack'
         run: |
           command -v corepack > /dev/null 2>&1 || npm i -g --ignore-scripts corepack@0.34.7
-          mkdir -p "$RUNNER_TEMP/corepack"
-          corepack enable --install-directory "$RUNNER_TEMP/corepack" yarn
-          echo "$RUNNER_TEMP/corepack" >> "$GITHUB_PATH"
+          corepack_dir="$(mktemp -d "$RUNNER_TEMP/corepack.XXXXXX")"
+          corepack enable --install-directory "$corepack_dir" yarn
+          echo "$corepack_dir" >> "$GITHUB_PATH"
         shell: 'bash'
 
       - name: 'Setup Node.js'
@@ -199,9 +220,9 @@ jobs:
       - name: 'Enable Corepack'
         run: |
           command -v corepack > /dev/null 2>&1 || npm i -g --ignore-scripts corepack@0.34.7
-          mkdir -p "$RUNNER_TEMP/corepack"
-          corepack enable --install-directory "$RUNNER_TEMP/corepack" yarn
-          echo "$RUNNER_TEMP/corepack" >> "$GITHUB_PATH"
+          corepack_dir="$(mktemp -d "$RUNNER_TEMP/corepack.XXXXXX")"
+          corepack enable --install-directory "$corepack_dir" yarn
+          echo "$corepack_dir" >> "$GITHUB_PATH"
         shell: 'bash'
 
       - name: 'Setup Node.js'
@@ -228,9 +249,9 @@ jobs:
       - name: 'Enable Corepack'
         run: |
           command -v corepack > /dev/null 2>&1 || npm i -g --ignore-scripts corepack@0.34.7
-          mkdir -p "$RUNNER_TEMP/corepack"
-          corepack enable --install-directory "$RUNNER_TEMP/corepack" yarn
-          echo "$RUNNER_TEMP/corepack" >> "$GITHUB_PATH"
+          corepack_dir="$(mktemp -d "$RUNNER_TEMP/corepack.XXXXXX")"
+          corepack enable --install-directory "$corepack_dir" yarn
+          echo "$corepack_dir" >> "$GITHUB_PATH"
         shell: 'bash'
 
       - name: 'Setup Node.js'
@@ -300,9 +321,9 @@ jobs:
       - name: 'Enable Corepack'
         run: |
           command -v corepack > /dev/null 2>&1 || npm i -g --ignore-scripts corepack@0.34.7
-          mkdir -p "$RUNNER_TEMP/corepack"
-          corepack enable --install-directory "$RUNNER_TEMP/corepack" yarn
-          echo "$RUNNER_TEMP/corepack" >> "$GITHUB_PATH"
+          corepack_dir="$(mktemp -d "$RUNNER_TEMP/corepack.XXXXXX")"
+          corepack enable --install-directory "$corepack_dir" yarn
+          echo "$corepack_dir" >> "$GITHUB_PATH"
         shell: 'bash'
 
       - name: 'Setup Node.js'

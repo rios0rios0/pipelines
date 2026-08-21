@@ -407,11 +407,33 @@ jobs:
           # `yarn.yaml` pins: `0.34.7` spans Node 20 through 26, where `0.35.0` refuses Node 25 --
           # the first version that stops bundling corepack and therefore the one most likely to
           # need this install.
+          #
+          # `mktemp -d` rather than a fixed `$RUNNER_TEMP/corepack`, and the random name is the
+          # whole point. `$RUNNER_TEMP` is `_work/_temp` on the runner, shared by every job that
+          # lands on it, and a CONTAINER job writes there as **root** through the same bind mount
+          # -- so a fixed name is a fixed collision.
+          #
+          # The shim a container job leaves behind points at the corepack inside THAT image
+          # (`../../../__t/node/...`), which resolves to nothing on the host, and the runner
+          # cannot wipe `_temp` at the next job's start because the files are root-owned and it
+          # runs as the runner user. corepack then probes the leftover with `fs.existsSync`, which
+          # FOLLOWS symlinks and answers false for a dangling one, so it skips its own unlink and
+          # calls `symlink()` on a path that is already there:
+          #
+          #     Internal Error: EEXIST: file already exists, symlink
+          #     '../../../../../../usr/share/nodejs/corepack/dist/yarn.js'
+          #         -> '/home/.../actions-runner/_work/_temp/corepack/yarn'
+          #
+          # Every job that reached this step on that runner failed there until somebody deleted
+          # the directory by hand. A fresh `mktemp -d` is owned by whoever runs it and cannot
+          # inherit a previous job's leftover, in a container or out of one -- and it replaces the
+          # `mkdir -p` this used to need, because `--install-directory` is resolved with
+          # `realpath` and does not create what it is given.
           build_command: |
             command -v corepack > /dev/null 2>&1 || npm i -g --ignore-scripts corepack@0.34.7
-            mkdir -p "$RUNNER_TEMP/corepack"
-            corepack enable --install-directory "$RUNNER_TEMP/corepack" yarn
-            export PATH="$RUNNER_TEMP/corepack:$PATH"
+            corepack_dir="$(mktemp -d "$RUNNER_TEMP/corepack.XXXXXX")"
+            corepack enable --install-directory "$corepack_dir" yarn
+            export PATH="$corepack_dir:$PATH"
             yarn install --immutable
             ${{ inputs.build_command }}
     needs: [ 'yarn' ]

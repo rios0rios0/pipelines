@@ -203,11 +203,49 @@ assert_true "the toolchain is installed BEFORE CodeQL initialises its database" 
 # runner's Go, which is the state this whole file exists to prevent.
 SELF_WORKFLOW="$SCRIPTS_DIR/.github/workflows/codeql.yaml"
 assert_true "this repository scans itself through the shared action" \
-  "[[ -f '$SELF_WORKFLOW' ]] && grep -q '20-security/codeql@main' '$SELF_WORKFLOW'"
+  "[[ -f '$SELF_WORKFLOW' ]] && grep -q '20-security/codeql' '$SELF_WORKFLOW'"
 
 NAMED_FILE="$(grep -oE "go_version_file: *'[^']+'" "$SELF_WORKFLOW" 2> /dev/null | head -1 | sed "s/.*'\\(.*\\)'/\\1/")"
 assert_true "the go.mod it names is really there ($NAMED_FILE)" \
   "[[ -n '$NAMED_FILE' && -f '$SCRIPTS_DIR/$NAMED_FILE' ]]"
+
+# The action has to be referenced by LOCAL PATH. `@main` resolves to the copy on the default
+# branch, so a pull request changing the action would test the old one and report green on code
+# nobody ran -- and an external `uses:` on a branch name is a high-severity SonarCloud finding
+# (`githubactions:S7637`) into the bargain. Both were observed on #602 before this line existed.
+assert_true "the self-scan runs THIS commit's action, not the published one" \
+  "grep -qE \"uses: *'\\./github/global/stages/20-security/codeql'\" '$SELF_WORKFLOW'"
+assert_empty "the self-scan does not reference the action through a moving branch" \
+  "$(grep -n '20-security/codeql@' "$SELF_WORKFLOW" || true)"
+echo ""
+
+# ---------------------------------------------------------------------------
+echo "4. The Go waiver expires"
+# ---------------------------------------------------------------------------
+# The Go leg is `continue-on-error` because no RELEASED CodeQL bundle can read a `go 1.27`
+# module: the extractor refuses a language version newer than the Go it was itself built with,
+# and `codeql-cli/v2.26.3` -- the newest -- still carries `go 1.26`. Upstream merged the support
+# on 2026-06-25 and `main` reads `go 1.27`, so this is a wait, not a dead end.
+#
+# A waiver nothing revisits is a hole with a comment over it, so it carries a date and this
+# fails the build once that date passes. The alternative -- lowering the module's directive to
+# suit the scanner -- is the thing this whole file exists to argue against.
+WAIVER_DATE="$(grep -oE 'Expires [0-9]{4}-[0-9]{2}-[0-9]{2}' "$SELF_WORKFLOW" | head -1 | awk '{print $2}')"
+WAIVED="$(grep -cE "continue-on-error: .*matrix.language == 'go'" "$SELF_WORKFLOW" || true)"
+
+if [[ "$WAIVED" -eq 0 ]]; then
+  assert_true "the Go leg is blocking again, so no waiver date is needed" "true"
+else
+  assert_true "the Go waiver carries an expiry date" "[[ -n '$WAIVER_DATE' ]]"
+  if [[ -n "$WAIVER_DATE" ]]; then
+    TODAY="$(date -u +%Y-%m-%d)"
+    assert_true "the Go waiver has not expired (expires $WAIVER_DATE, today $TODAY) -- re-check whether a released CodeQL bundle now ships a go1.27 extractor" \
+      "[[ '$TODAY' < '$WAIVER_DATE' ]]"
+  fi
+  # Whatever the date says, the waiver must never widen past the one language it was granted for.
+  assert_empty "the waiver covers Go alone -- actions and python stay blocking" \
+    "$(grep -nE '^ *continue-on-error: *.?(true|yes)' "$SELF_WORKFLOW" || true)"
+fi
 echo ""
 
 echo "================================"

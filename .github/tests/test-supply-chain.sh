@@ -113,6 +113,14 @@ echo "1. GitHub Actions are pinned to immutable commits"
 # `test-workflow-composition.sh` Test 7 separately REQUIRES them to be `@main`
 # so the library can develop against itself. Pinning them would be a
 # chicken-and-egg (the SHA cannot exist before the commit that needs it).
+#
+# A LOCAL PATH (`uses: ./path/to/action`) is excluded for the same reason, only
+# more so: it is not a reference to another repository at all, it is this very
+# commit's own tree. There is no publisher who could move it and no SHA that
+# would make it more immutable than it already is -- a SHA would in fact be
+# *looser*, since it could name a different commit than the one being tested.
+# It is what `.github/workflows/codeql.yaml` uses so the repository scans itself
+# with the action as it stands in the pull request rather than as published.
 # Anchored to a real YAML key (`^ indent [- ] uses:`), not a bare "uses:"
 # anywhere on the line. This repository's comments discuss `uses:` jobs at
 # length -- "evaluated in the caller's `uses:` job", "consumed as
@@ -122,10 +130,17 @@ UNPINNED_ACTIONS="$(
   yaml_files -print0 2>/dev/null | xargs -0 grep -HnE "^[[:space:]]*(-[[:space:]]*)?uses:" 2>/dev/null \
     | drop_comments \
     | grep -v 'rios0rios0/' \
+    | grep -vE "uses: *'?\./" \
     | grep -vE "uses: *'?[^'@]+@[0-9a-f]{40}'?" \
     || true
 )"
 assert_empty "every third-party action is pinned to a 40-character commit SHA" "$UNPINNED_ACTIONS"
+
+# The exclusion above must stay narrow: only a path that genuinely starts `./`
+# is local. `uses: 'some/action@v4'` must still fail, and so must anything that
+# merely mentions a relative path further along the line.
+assert_empty "a tag-pinned third-party action would still be reported" \
+  "$(printf "x.yaml:1:  - uses: 'some/action@v4'\n" | grep -v 'rios0rios0/' | grep -vE "uses: *'?\\./" | grep -vE "uses: *'?[^'@]+@[0-9a-f]{40}'?" | grep -c . | grep -qE '^1$' && true || echo 'the narrowed exclusion swallowed a tag-pinned action')"
 
 # A bare SHA is unreadable and unmaintainable; the trailing comment is what
 # lets a human (and Dependabot/Renovate) see which version is deployed.

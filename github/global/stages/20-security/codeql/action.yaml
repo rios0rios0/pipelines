@@ -2,6 +2,28 @@ inputs:
   codeql_language:
     description: 'CodeQL language to analyze (e.g., go, python, java-kotlin, javascript-typescript, csharp)'
     required: true
+  go_version_file:
+    description: |
+      Path to the `go.mod` whose `go` directive decides which Go the Go analysis runs with.
+      Only consulted when `codeql_language` is `go`.
+
+      **A FILE, not a version, and that is the whole point.** The `go` directive is a MINIMUM
+      LANGUAGE VERSION, and every `go` invocation refuses a directive newer than itself --
+      before parsing, so `go mod tidy`, `go get` and the extractor's own `packages.Load` all
+      die identically on `go.mod requires go >= X (running go Y; GOTOOLCHAIN=local)`. The
+      CodeQL runner ships one Go and sets `GOTOOLCHAIN=local` deliberately, so it cannot fetch
+      another: a module that has moved ahead of that image is not analysed at all, and CodeQL
+      reports it as a *configuration error* rather than as a finding -- which reads like a
+      broken scanner rather than a module the scanner could not open.
+
+      Pinning a version here would only move the drift somewhere else. Reading the module's own
+      directive means the toolchain follows the requirement automatically: a bump to the next
+      Go needs no change in this file, and the analysis can never be older than the code.
+
+      Set to an empty string to skip the toolchain step entirely and take whatever Go the
+      runner image happens to carry, which is what this action did before.
+    required: false
+    default: 'go.mod'
   upload:
     description: |
       Whether to upload the SARIF results to code scanning ('always', 'failure-only' or 'never').
@@ -32,6 +54,65 @@ runs:
           echo "The '$INIT_SCRIPT' file was not found, skipping..."
         fi
       shell: 'bash'
+
+    # BEFORE `init`, because the extractor resolves `go` from PATH at build time and the
+    # database is initialised against whatever is there. A toolchain installed afterwards is a
+    # toolchain nothing used.
+    #
+    # A MISSING file is not an error: a consumer whose module lives elsewhere sets
+    # `go_version_file`, and failing here would turn "your go.mod moved" into a broken security
+    # scan -- which is the failure mode this step exists to remove, not to reproduce.
+    - name: 'Resolve the Go toolchain the module requires'
+      id: 'go_toolchain'
+      if: "inputs.codeql_language == 'go' && inputs.go_version_file != ''"
+      run: |
+        resolved=''
+        if [ -f "$GO_VERSION_FILE" ]; then
+          resolved="$GO_VERSION_FILE"
+        else
+          # The named file is absent, so LOOK for the module rather than shrugging. A consumer
+          # calling this through `go.yaml` may never pass a path, so without this a repository
+          # whose module sits one directory down would silently take the runner's Go and hit the
+          # very failure this step exists to prevent, with nothing in the log saying why.
+          #
+          # `vendor/` is excluded because a vendored tree carries its own `go.mod` files that
+          # are not the module being built; `.git` because a packfile is not a module.
+          found="$(find . -name go.mod -not -path './.git/*' -not -path '*/vendor/*' 2> /dev/null | sort)"
+          count="$(printf '%s' "$found" | grep -c . || true)"
+          if [ "$count" -eq 1 ]; then
+            resolved="$(printf '%s' "$found" | sed 's|^\./||')"
+            echo "No '$GO_VERSION_FILE'; found exactly one module and using it: $resolved"
+          elif [ "$count" -eq 0 ]; then
+            echo "No '$GO_VERSION_FILE' and no go.mod anywhere; taking the runner's own Go."
+          else
+            # Refusing to guess is the point: picking one of several modules would set the
+            # toolchain from a module that is not the one under analysis, which is a wrong
+            # answer wearing the costume of a right one.
+            echo "::warning title=Go toolchain not resolved::Found $count go.mod files and none at '$GO_VERSION_FILE'. Set 'go_version_file' to the module CodeQL should analyse, or the runner's own Go is used and a module requiring a newer one cannot be extracted."
+            printf '%s\n' "$found"
+          fi
+        fi
+
+        if [ -n "$resolved" ]; then
+          echo "present=true" >> "$GITHUB_OUTPUT"
+          echo "file=$resolved" >> "$GITHUB_OUTPUT"
+          echo "Go analysis will use the toolchain '$resolved' asks for:"
+          grep -E '^(go|toolchain) ' "$resolved" || true
+        else
+          echo "present=false" >> "$GITHUB_OUTPUT"
+        fi
+      shell: 'bash'
+      env:
+        GO_VERSION_FILE: '${{ inputs.go_version_file }}'
+
+    - name: 'Set up Go'
+      if: "steps.go_toolchain.outputs.present == 'true'"
+      uses: 'actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16' # v6.5.0
+      with:
+        go-version-file: '${{ steps.go_toolchain.outputs.file }}'
+        # The analysis compiles the module once and the runner is thrown away; a cache keyed on
+        # a lockfile this action never resolves would cost more to warm than it saves.
+        cache: false
 
     - name: 'Initialize CodeQL'
       uses: 'github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd' # v4.37.7

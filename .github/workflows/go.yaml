@@ -24,6 +24,19 @@ on:
           runner here rather than in each caller's job list makes moving a whole pipeline one
           switch. A JSON array rather than a plain string because a reusable-workflow input
           cannot be typed as a list, and multi-label runners need more than one value.
+      go_version_file:
+        type: 'string'
+        required: false
+        default: 'go.mod'
+        description: |
+          Path to the `go.mod` whose `go` directive decides which Go the CodeQL analysis runs
+          with. Leave it alone unless this repository has SEVERAL modules: the shared action
+          finds a single module wherever it lives, and only an ambiguous tree needs telling.
+
+          It is a file rather than a version on purpose. The `go` directive is a minimum
+          language version, and the CodeQL runner sets `GOTOOLCHAIN=local`, so a module ahead
+          of the runner's Go cannot be extracted at all -- reading the module's own directive
+          means the analysis can never be older than the code it analyses.
       codeql_upload:
         type: 'string'
         required: false
@@ -154,6 +167,7 @@ jobs:
         with:
           codeql_language: 'go'
           upload: '${{ inputs.codeql_upload }}'
+          go_version_file: '${{ inputs.go_version_file }}'
     needs: [ 'code_check-style_golangci_lint' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 

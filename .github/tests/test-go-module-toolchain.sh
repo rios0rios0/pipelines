@@ -230,11 +230,12 @@ echo "4. The Go waiver expires"
 # A waiver nothing revisits is a hole with a comment over it, so it carries a date and this
 # fails the build once that date passes. The alternative -- lowering the module's directive to
 # suit the scanner -- is the thing this whole file exists to argue against.
-WAIVER_DATE="$(grep -oE 'Expires [0-9]{4}-[0-9]{2}-[0-9]{2}' "$SELF_WORKFLOW" | head -1 | awk '{print $2}')"
-WAIVED="$(grep -cE "continue-on-error: .*matrix.language == 'go'" "$SELF_WORKFLOW" || true)"
+WAIVER_DATE="$(grep -oE 'Expires 20[0-9]{2}-[0-9]{2}-[0-9]{2}' "$SELF_WORKFLOW" | head -1 | awk '{print $2}')"
+GO_IN_MATRIX="$(grep -cE "language: *\\[.*'go'" "$SELF_WORKFLOW" || true)"
 
-if [[ "$WAIVED" -eq 0 ]]; then
-  assert_true "the Go leg is blocking again, so no waiver date is needed" "true"
+if [[ "$GO_IN_MATRIX" -ne 0 ]]; then
+  # The waiver is over: Go is analysed again, so nothing here needs a date.
+  assert_true "Go is back in the CodeQL matrix, so no waiver is in force" "true"
 else
   assert_true "the Go waiver carries an expiry date" "[[ -n '$WAIVER_DATE' ]]"
   if [[ -n "$WAIVER_DATE" ]]; then
@@ -242,9 +243,29 @@ else
     assert_true "the Go waiver has not expired (expires $WAIVER_DATE, today $TODAY) -- re-check whether a released CodeQL bundle now ships a go1.27 extractor" \
       "[[ '$TODAY' < '$WAIVER_DATE' ]]"
   fi
-  # Whatever the date says, the waiver must never widen past the one language it was granted for.
-  assert_empty "the waiver covers Go alone -- actions and python stay blocking" \
-    "$(grep -nE '^ *continue-on-error: *.?(true|yes)' "$SELF_WORKFLOW" || true)"
+
+  # The gap must be DECLARED, not merely absent. A language quietly dropped from a
+  # matrix looks identical to one nobody thought of, and reads as covered on every
+  # dashboard that counts green checks -- which is the whole failure mode here.
+  assert_true "the missing Go analysis is announced by a job of its own" \
+    "grep -q 'go-analysis-waived:' '$SELF_WORKFLOW'"
+  assert_true "that job warns rather than passing silently" \
+    "grep -q '::warning title=Go is not being analysed' '$SELF_WORKFLOW'"
+
+  # And it must not be papered over with a green `Analyze (go)` check: a leg that runs,
+  # fails and is forgiven is worse than one that is honestly absent.
+  #
+  # Comment lines are dropped before matching, for the reason `test-supply-chain.sh` gives
+  # about its own rules: the workflow explains at length why `continue-on-error` was rejected
+  # here, and a check that forbids a pattern must not be failed by the paragraph forbidding it.
+  assert_empty "no continue-on-error hides a failing analysis" \
+    "$(grep -n 'continue-on-error' "$SELF_WORKFLOW" | grep -vE '^[0-9]+: *#' || true)"
+
+  # The other two languages keep running. Dropping Go must never quietly drop them too.
+  for lang in actions python; do
+    assert_true "'$lang' is still analysed while Go is waived" \
+      "grep -qE \"language: *\\[.*'$lang'\" '$SELF_WORKFLOW'"
+  done
 fi
 echo ""
 

@@ -54,35 +54,12 @@ jobs:
       security-events: 'write'
       actions: 'read'
     timeout-minutes: 30
-    # WAIVED FOR `go` ONLY, AND ONLY UNTIL A RELEASED CODEQL CAN READ THE MODULE.
-    # Expires 2026-11-01, enforced by `.github/tests/test-go-module-toolchain.sh` -- a waiver
-    # nothing revisits is just a hole with a comment over it.
-    #
-    # `health/go.mod` declares `go 1.27.0`, and CodeQL's Go extractor refuses a module whose
-    # language version is newer than the Go the extractor itself was built with:
-    #
-    #   health/main.go:1:1: package requires newer Go version go1.27 (application built with go1.26)
-    #
-    # That is not something a toolchain step can fix -- the extractor is a prebuilt binary in the
-    # bundle. Upstream has done the work (`github/codeql` merged "Go 1.27 is now supported" on
-    # 2026-06-25 and its `go/extractor/go.mod` reads `go 1.27` on `main`), but it is NOT in a
-    # released bundle: `codeql-cli/v2.26.3`, the newest, still reads `go 1.26`, and the change
-    # note still sits unreleased in `go/ql/lib/change-notes/`.
-    #
-    # So the choice is between waiving the Go leg for a few weeks and lowering the module's
-    # directive to suit a scanner. The directive stays: it is the requirement, and the analysis
-    # is what has to catch up. `actions` and `python` remain blocking throughout.
-    #
-    # To check whether the waiver can go:
-    #   gh api repos/github/codeql/contents/go/extractor/go.mod?ref=codeql-cli/vX.Y.Z \
-    #     --jq .content | base64 -d | grep '^go '
-    continue-on-error: "${{ matrix.language == 'go' }}"
     strategy:
       fail-fast: false
       matrix:
-        # The three default setup was configured with, kept identical so moving to advanced
-        # setup cannot quietly narrow what is scanned.
-        language: [ 'actions', 'go', 'python' ]
+        # Two of the three default setup was configured with. `go` is absent on purpose and
+        # the job below says so out loud -- see it for why, and for when it comes back.
+        language: [ 'actions', 'python' ]
     steps:
       - uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
 
@@ -92,3 +69,52 @@ jobs:
           # The only Go module here is the tor-proxy health probe, and its directive is what
           # decides the toolchain. A repository with its module at the root takes the default.
           go_version_file: 'global/containers/tor-proxy.latest/health/go.mod'
+
+  # `go` IS NOT ANALYSED, AND THIS JOB EXISTS TO SAY SO RATHER THAN LET IT PASS QUIETLY.
+  #
+  # No RELEASED CodeQL bundle can read this repository's Go module. The extractor refuses a
+  # language version newer than the Go it was itself built with:
+  #
+  #   health/main.go:1:1: package requires newer Go version go1.27 (application built with go1.26)
+  #
+  # and no toolchain step can fix that -- `actions/setup-go` does put Go 1.27.0 on PATH (verified:
+  # "Successfully set up Go version 1.27.0", autobuilder reporting "environment has go1.27.0"),
+  # but the extractor is a prebuilt binary inside the bundle. Upstream merged "Go 1.27 is now
+  # supported" on 2026-06-25 and `go/extractor/go.mod` reads `go 1.27` on `main`; it is simply not
+  # released yet -- `codeql-cli/v2.26.3`, the newest, still reads `go 1.26`.
+  #
+  # The two rejected alternatives, and why:
+  #
+  #   - leaving the leg in with `continue-on-error` produces a GREEN `Analyze (go)` check over an
+  #     analysis that did not run, which is precisely the silent-pass shape the test suites in
+  #     this repository exist to refuse;
+  #   - lowering the module's `go` directive to suit the scanner would buy a green run by giving
+  #     up what the module is entitled to use, and would have to be paid again every release.
+  #
+  # So the gap is declared instead. Expires 2026-11-01, enforced by
+  # `.github/tests/test-go-module-toolchain.sh`, which fails `make test` once that date passes.
+  go-analysis-waived:
+    name: 'Analyze (go) — waived, CodeQL cannot read go 1.27 yet'
+    runs-on: 'ubuntu-latest'
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: 'Announce the gap'
+        run: |
+          echo '::warning title=Go is not being analysed::CodeQL has no released bundle whose Go extractor can read a `go 1.27` module. Support is merged upstream but unreleased. Waiver expires 2026-11-01.'
+          {
+            echo '### Go code scanning is waived'
+            echo ''
+            echo 'No released CodeQL bundle can extract this repository'"'"'s Go module:'
+            echo 'the extractor refuses a language version newer than the Go it was built'
+            echo 'with, and `codeql-cli/v2.26.3` is built with `go 1.26`.'
+            echo ''
+            echo 'Upstream merged Go 1.27 support on 2026-06-25; it is not in a release yet.'
+            echo ''
+            echo '**Expires 2026-11-01.** To check whether it can be lifted:'
+            echo ''
+            echo '```'
+            echo 'gh api repos/github/codeql/contents/go/extractor/go.mod?ref=codeql-cli/vX.Y.Z \'
+            echo '  --jq .content | base64 -d | grep "^go "'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

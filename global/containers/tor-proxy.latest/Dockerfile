@@ -1,4 +1,10 @@
-FROM golang:1.19.0-alpine3.16@sha256:0eb08c89ab1b0c638a9fe2780f7ae3ab18f6ecda2c76b908e09eb8073912045d AS health_builder
+# The builder has to be able to READ `health/go.mod`, which is the thing that broke here.
+# It sat at 1.19 while an automated dependency bump walked the module's `go` directive up to
+# 1.27, and `go build` refuses a directive newer than itself -- so `tor-proxy:latest` stopped
+# being publishable on 2026-07-27 and stayed that way, failing with `go: errors parsing
+# go.mod`, which names neither version. `.github/tests/test-go-module-toolchain.sh` now holds
+# the two together.
+FROM golang:1.26.7-alpine3.24@sha256:28d89ee9cc0ff9fec75c82ca201e6bf7fdf9a679d4b7b24dfa04f2bb766bb468 AS health_builder
 
 COPY health src/health
 RUN cd src/health && go build -o /go/health -ldflags="-w -s"

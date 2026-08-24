@@ -2,13 +2,16 @@
 
 **ALWAYS FOLLOW THESE INSTRUCTIONS FIRST.** Only fallback to additional search and context gathering if the information in these instructions is incomplete or found to be in error.
 
-This repository provides comprehensive SDLC pipeline templates for GitHub Actions, GitLab CI, and Azure DevOps across multiple programming languages including GoLang, Java, Python, JavaScript, PHP, Ruby, and .NET.
+This repository provides comprehensive SDLC pipeline templates for GitHub Actions, GitLab CI, and Azure DevOps across multiple programming languages including GoLang, Java, Python, JavaScript, PHP, Ruby, .NET, Dart/Flutter, and Terraform/Terra.
 
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, workflow-composition, supply-chain, dependency-updates)
+- `make test` - Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, memory-detection, dart-pipeline, workflow-composition, supply-chain, dependency-updates, azure-step-names)
 - `make test-go-script` - Test Go script changes specifically
+- `make test-go-module-toolchain` - Test that every `go.mod` toolchain directive is readable by the images/analysers that consume it specifically
+- `make test-go-tool-staleness` - Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves specifically
+- `make test-go-tmpdir-modcache` - Test that the Go module cache stays out of `$TMPDIR` specifically
 - `make test-go-integration-scope` - Test which packages the Go runner's integration phase selects specifically
 - `make test-lambda` - Test Lambda template validation specifically
 - `make test-yaml-merge` - Test YAML merge validation specifically
@@ -27,9 +30,11 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-release-reconcile` - Test release reconciliation gap detection specifically
 - `make test-deploy-providers` - Test the MVP hosting deployment providers (Cloudflare, Vercel, Render, Netlify, Fly.io) specifically
 - `make test-memory-detection` - Test the cgroup-aware memory ceiling detection specifically
+- `make test-dart-pipeline` - Test the Dart/Flutter pipeline (scripts, Semgrep rules, cross-platform wiring) specifically
 - `make test-workflow-composition` - Test the GitHub Actions workflow composition standard specifically
 - `make test-supply-chain` - Test the supply-chain pinning contract (actions, images, binaries, packages) specifically
 - `make test-dependency-updates` - Test the dependency-update checker specifically
+- `make test-azure-step-names` - Test Azure DevOps step-name uniqueness across expanded templates specifically
 - `make check-dependency-updates` - Report which pinned dependencies have a newer release (hits the network)
 - `bash global/scripts/shared/cleanup.sh` - Clean up build reports
 - `docker --version && make --version && go version` - Check dependencies
@@ -762,11 +767,14 @@ docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/
 
 ### Test Suite Usage
 ```bash
-# Run all validation tests (Go, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile)
+# Run all validation tests (see the Quick Reference above for the full target list)
 make test
 
 # Run individual test suites
 make test-go-script
+make test-go-module-toolchain
+make test-go-tool-staleness
+make test-go-tmpdir-modcache
 make test-go-integration-scope
 make test-lambda
 make test-yaml-merge
@@ -776,12 +784,20 @@ make test-tftest-gen
 make test-order-check
 make test-var-catalog
 make test-terraform-validate
+make test-terraform-provider-mirror
 make test-docker-multi-arch
 make test-basic-checks
 make test-dependency-check
 make test-goreleaser-prepare
 make test-release-version-extraction
 make test-release-reconcile
+make test-deploy-providers
+make test-memory-detection
+make test-dart-pipeline
+make test-workflow-composition
+make test-supply-chain
+make test-dependency-updates
+make test-azure-step-names
 ```
 
 Test scripts are located in `.github/tests/`.

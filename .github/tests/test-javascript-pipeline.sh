@@ -19,12 +19,21 @@ set -e
 #      on its own.
 #
 #   2. BLOCKING -- the job must NOT carry `continue-on-error` / `allow_failure` /
-#      `continueOnError`. This is the assertion the whole gate exists for. Its
+#      `continueOnError`, AND on GitHub Actions it must appear in every downstream
+#      `needs:` array. This is the assertion the whole gate exists for. Its
 #      sibling `style:eslint` IS advisory, so "make it consistent with the job
 #      next to it" is a plausible-sounding edit that would silently restore the
 #      exact hole this was written to close: `eslint-config-prettier` switches off
 #      every ESLint rule that overlaps with Prettier, so with both jobs advisory
 #      nothing anywhere fails on formatting.
+#
+#      The `needs:` half is the same rule read the other way, and GitHub Actions
+#      is the only platform that needs it asserted: GitLab and Azure have real
+#      stage barriers, while GitHub has none. A job nothing depends on is not a
+#      gate -- it goes red beside a security stage, a test stage and a delivery
+#      stage that all ran to completion on unformatted code. The first version of
+#      this suite checked `continue-on-error` and NOT this, and the job shipped
+#      orphaned; `dart.yaml` had the convention right all along.
 #
 #   3. BEHAVIOURAL -- the runner's own decisions: skip a project that does not use
 #      Prettier, fail one that is unformatted, pass one that is not, rewrite in
@@ -146,6 +155,20 @@ for workflow in yarn npm; do
   wf="$SCRIPTS_DIR/.github/workflows/${workflow}.yaml"
   assert_true "GitHub Actions: ${workflow}.yaml style:format is NOT continue-on-error" \
     "! gh_job_block '$wf' | grep -q 'continue-on-error: true'"
+done
+
+# On GitHub Actions a blocking job that nothing `needs:` blocks nothing: there is
+# no implicit stage barrier, so it runs CONCURRENTLY with the security, test and
+# delivery stages instead of gating them. `dart.yaml` is the reference -- its own
+# `code_check-style_format` is named in every second-stage `needs:` array.
+for workflow in yarn npm; do
+  wf="$SCRIPTS_DIR/.github/workflows/${workflow}.yaml"
+  # Every job that declares `needs:` on a code-check sibling must name this one too.
+  orphaned="$(awk '
+    /^  [a-z_-]+:$/ { job = $1 }
+    /needs: \[.*code_check-/ && !/code_check-style_format/ { print job " " $0 }
+  ' "$wf")"
+  assert_equals "GitHub Actions: ${workflow}.yaml gates its second stage on style:format" "" "$orphaned"
 done
 
 assert_true "GitLab CI: style:format is NOT allow_failure" \

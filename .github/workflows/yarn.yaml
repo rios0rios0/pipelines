@@ -202,7 +202,7 @@ jobs:
         with:
           codeql_language: 'javascript-typescript'
           upload: '${{ inputs.codeql_upload }}'
-    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
+    needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_semgrep:
@@ -212,7 +212,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/semgrep@main'
         with:
           semgrep_lang: 'javascript'
-    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
+    needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_gitleaks:
@@ -220,7 +220,7 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/gitleaks@main'
-    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
+    needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_hadolint:
@@ -228,7 +228,7 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
-    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
+    needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -255,7 +255,7 @@ jobs:
 
       - run: 'yarn npm audit --recursive --severity high'
         shell: 'bash'
-    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
+    needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 

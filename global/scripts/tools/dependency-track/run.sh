@@ -37,7 +37,17 @@ fi
 # without `metadata.component` used to create a project literally called
 # `null` and then keep updating it on every build -- a silent, portfolio-wide
 # mess that no exit code ever reported.
-projectName="${DEPENDENCY_TRACK_PROJECT_NAME:-$(jq -r '.metadata.component.name // empty' "$bomFile" | sed 's|/|-|g')}"
+#
+# The `/` -> `-` normalisation is applied to BOTH sources, not just the
+# BOM-derived one. An override names the SAME project the BOM path would
+# produce, so if `@org/app` becomes `@org-app` from a BOM it has to become
+# `@org-app` from the variable too. Applying it to only one of them lets an
+# override re-open the exact cross-platform split this script exists to close:
+# one platform overriding with `@org/app` and another falling through to the
+# BOM would file one application under two projects, silently, with both
+# uploads returning 200.
+rawProjectName="${DEPENDENCY_TRACK_PROJECT_NAME:-$(jq -r '.metadata.component.name // empty' "$bomFile")}"
+projectName=$(printf '%s' "$rawProjectName" | sed 's|/|-|g')
 if [ -z "$projectName" ]; then
   echo "ERROR: $bomFile has no .metadata.component.name." >&2
   echo "       Dependency-Track identifies a project by (name, version), so an" >&2
@@ -231,6 +241,26 @@ responseFile="${TMPDIR:-/tmp}/dependency-track-response.$$"
 #
 # Backslashes and double quotes are escaped because curl parses a double-quoted
 # config value with C-style escapes; an unescaped one would truncate the header.
+# A line break in the token is rejected outright rather than escaped. curl's
+# config format is LINE-based, so a newline ends the `header = "..."` directive
+# no matter how the value is quoted, and everything after it is parsed as a
+# further directive -- `output = ...` to redirect the response, another
+# `header = ...` to tamper with the request. Escaping `\` and `"` (below) does
+# not close that: those are within-line concerns. No legitimate Dependency-Track
+# API key contains a line break, so the safe handling is to refuse and say why.
+# Same raw-vs-clean byte comparison the NVD key sanitiser uses, which catches a
+# CR as well as an LF.
+rawTokenLen=$(printf '%s' "${DEPENDENCY_TRACK_TOKEN:-}" | wc -c | tr -d ' ')
+cleanTokenLen=$(printf '%s' "${DEPENDENCY_TRACK_TOKEN:-}" | tr -d '\r\n' | wc -c | tr -d ' ')
+if [ "$rawTokenLen" != "$cleanTokenLen" ]; then
+  echo "ERROR: DEPENDENCY_TRACK_TOKEN contains a line break." >&2
+  echo "       The key is passed to curl through its line-based config format, so" >&2
+  echo "       a newline would terminate the header directive and let the rest of" >&2
+  echo "       the value be parsed as further curl directives. Check the secret" >&2
+  echo "       for a trailing newline picked up by the secret store." >&2
+  exit 1
+fi
+
 escapedToken=$(printf '%s' "${DEPENDENCY_TRACK_TOKEN:-}" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
 httpStatus=$(printf 'header = "X-Api-Key: %s"\n' "$escapedToken" | curl --config - "$@" --silent --show-error \
   --output "$responseFile" --write-out '%{http_code}' \

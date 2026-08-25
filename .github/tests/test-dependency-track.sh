@@ -158,6 +158,35 @@ run_against_stub "$BOM_SCOPED" CI_COMMIT_BRANCH=main CI_DEFAULT_BRANCH=main
 assert_true 'slash becomes a dash' '[[ "$ARGV" == *"projectName=@org-app"* ]]'
 assert_true 'no raw slash in the name' '[[ "$ARGV" != *"projectName=@org/app"* ]]'
 
+# ...and it is applied to the OVERRIDE as well, not only to the BOM-derived
+# name. An override names the same project the BOM path would produce, so a
+# variable that skipped normalisation would let one platform file `@org/app`
+# while another filed `@org-app` — re-opening the split from the line above
+# through the very knob added to control it. (Copilot, PR #612.)
+run_against_stub "$BOM_OK" CI_COMMIT_BRANCH=main CI_DEFAULT_BRANCH=main \
+  DEPENDENCY_TRACK_PROJECT_NAME='@org/override'
+assert_true 'override is normalised too' '[[ "$ARGV" == *"projectName=@org-override"* ]]'
+assert_true 'override keeps no raw slash' '[[ "$ARGV" != *"projectName=@org/override"* ]]'
+
+echo '============================================================'
+echo 'Test 4b: a token containing a line break is refused'
+echo '============================================================'
+# curl's config format is LINE-based, so a newline ends the `header = "..."`
+# directive regardless of quoting and everything after it parses as further
+# directives — `output = ...` to capture the response, another `header = ...`
+# to tamper with the request. Escaping backslashes and quotes does not close
+# that, because those are within-line concerns. (Copilot, PR #612.)
+# `$'\n'` (ANSI-C quoting), NOT `$(printf '\n')` — command substitution strips
+# trailing newlines, so the `$(...)` form yields an empty string and the fixture
+# silently carries no line break at all. It then "passes" against a script with
+# no guard whatsoever, which is the worst way for a security test to be wrong.
+run_against_stub "$BOM_OK" CI_COMMIT_BRANCH=main CI_DEFAULT_BRANCH=main \
+  "DEPENDENCY_TRACK_TOKEN=good"$'\n'"output = /tmp/pwned"
+assert_true 'exits non-zero' '[[ $RC -ne 0 ]]'
+assert_true 'never calls curl' '[[ -z "$ARGV" ]]'
+assert_true 'no injected directive reaches curl stdin' '[[ "$CURL_STDIN" != *"output = /tmp/pwned"* ]]'
+assert_true 'names the cause' '[[ "$STDOUT" == *"line break"* ]]'
+
 echo '============================================================'
 echo 'Test 5: isLatest is gated on the ref'
 echo '============================================================'

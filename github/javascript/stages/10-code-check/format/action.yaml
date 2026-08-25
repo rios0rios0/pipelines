@@ -1,0 +1,96 @@
+# Prettier gate.
+#
+# The JavaScript twin of `github/dart/stages/10-code-check/format`, and it is
+# BLOCKING for the same reason that one is: a formatting gate that cannot fail is
+# not a gate, and the drift it exists to catch is fixed by one command. The
+# sibling `style:eslint` job is `continue-on-error` because a linter's findings
+# need judgement; `prettier --write .` needs none.
+#
+# It SKIPS a project that does not use Prettier -- no configuration file, no
+# `prettier` dependency -- so adopting this workflow cannot fail a repository for
+# a tool it never chose. See the runner for the whole rule.
+inputs:
+  install_run_scripts:
+    required: false
+    default: 'false'
+    description: |
+      Run dependency lifecycle scripts after installing. Installs are
+      `--ignore-scripts` by default -- see the note on the install steps.
+  package_manager:
+    required: false
+    default: 'npm'
+    description: 'Package manager to use (npm or yarn)'
+  node_version:
+    required: false
+    default: '20'
+    description: 'Node.js version handed to actions/setup-node.'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+
+    # Node 25 dropped the bundled Corepack, so `corepack enable` is a command-not-found there.
+    # Installed only when genuinely absent: on the versions that still bundle it npm refuses to
+    # overwrite the shim it did not install and fails with `EEXIST`. `0.34.7` is the last release
+    # whose engines span Node 20 through 26. The shims are written to `$RUNNER_TEMP` and put on
+    # `$GITHUB_PATH` rather than left where `corepack enable` puts them by default, which is next
+    # to the Node binary -- on a self-hosted runner that is a system path the runner user does
+    # not own, so the step dies with `EACCES: permission denied, symlink ... -> '/usr/bin/pnpm'`.
+    # `mktemp -d` rather than a fixed `$RUNNER_TEMP/corepack`, because that directory is shared
+    # with every other job on the runner and a CONTAINER job writes there as root.
+    - name: 'Enable Corepack'
+      if: inputs.package_manager == 'yarn'
+      run: |
+        command -v corepack > /dev/null 2>&1 || npm i -g --ignore-scripts corepack@0.34.7
+        corepack_dir="$(mktemp -d "$RUNNER_TEMP/corepack.XXXXXX")"
+        corepack enable --install-directory "$corepack_dir" yarn
+        echo "$corepack_dir" >> "$GITHUB_PATH"
+      shell: 'bash'
+
+    - name: 'Setup Node.js'
+      uses: 'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38' # v6.5.0
+      with:
+        node-version: '${{ inputs.node_version }}'
+        cache: '${{ inputs.package_manager }}'
+
+    # Installed WITHOUT lifecycle scripts, like every other install in this stage:
+    # `npm ci` / `yarn install` otherwise run `postinstall` from every package in
+    # the transitive tree, as the CI user, before any of this project's own code
+    # runs. Prettier is a self-contained JavaScript package and needs none of them.
+    #
+    # The install is what makes this gate hold the project to the version in its
+    # OWN lockfile rather than to whatever is newest -- a formatter's output is
+    # the verdict, so a floating resolve would reformat the tree on a major bump
+    # nobody made.
+    - name: 'Install dependencies (npm)'
+      if: inputs.package_manager == 'npm'
+      run: |
+        npm ci --ignore-scripts
+        if [ "$INSTALL_RUN_SCRIPTS" = 'true' ]; then
+          npm rebuild
+          npm run prepare --if-present
+        fi
+      shell: 'bash'
+      env:
+        INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
+
+    - name: 'Install dependencies (yarn)'
+      if: inputs.package_manager == 'yarn'
+      run: |
+        yarn install --immutable --mode=skip-build
+        if [ "$INSTALL_RUN_SCRIPTS" = 'true' ]; then
+          yarn rebuild
+        fi
+      shell: 'bash'
+      env:
+        INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
+
+    - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - name: 'Run the Prettier check'
+      run: $SCRIPTS_DIR/global/scripts/languages/javascript/format/run.sh
+      shell: 'bash'
+      env:
+        JS_PACKAGE_MANAGER: '${{ inputs.package_manager }}'

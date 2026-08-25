@@ -1,4 +1,5 @@
 include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/javascript/abstracts/yarn.yaml'
 
 style:eslint:
@@ -19,6 +20,39 @@ style:eslint:
         echo 'No "typecheck" script or tsconfig.json found; skipping the type check.'
       fi
     - !reference [ .style:eslint, after_script ]
+  cache:
+    paths: !reference [ .style:eslint, cache, paths ]
+
+# BLOCKING, unlike `style:eslint` above, and the difference is deliberate.
+# `eslint-config-prettier` -- which almost every JavaScript project installs --
+# switches OFF every ESLint rule that overlaps with Prettier, so `style:eslint` is
+# already silent about formatting by design. Without this job nothing checks it at
+# all: the two halves cancel out, and a repository can hold a committed
+# `.prettierrc`, a curated `.prettierignore`, hundreds of unformatted files and a
+# green pipeline at the same time. `allow_failure: true` here would recreate that.
+#
+# A project that does not use Prettier is SKIPPED, not failed -- the runner decides,
+# so the rule is the same sentence on all three platforms rather than three
+# re-implementations that drift.
+style:format:
+  extends: '.yarn'
+  stage: 'code check (style/quality)'
+  before_script:
+  script:
+    # The consumer's hook installs the dependency tree, exactly as it does for
+    # `style:eslint` -- and the install is what holds this gate to the Prettier in
+    # the project's own lockfile rather than to whatever is newest. A formatter's
+    # OUTPUT is the verdict, so a floating resolve would reformat the tree on a
+    # major bump nobody made.
+    - !reference [ .style:eslint, before_script ]
+    # `.scripts-repo` rather than its Debian variant: this job runs in the `.yarn`
+    # image as the unprivileged `node` user, so that variant's `apt-get install`
+    # would fail. It needs nothing that variant adds -- the Node image ships `git`.
+    - !reference [ .scripts-repo, before_script ]
+    - $SCRIPTS_DIR/global/scripts/languages/javascript/format/run.sh
+    - !reference [ .style:eslint, after_script ]
+  variables:
+    JS_PACKAGE_MANAGER: 'yarn'
   cache:
     paths: !reference [ .style:eslint, cache, paths ]
 

@@ -962,6 +962,34 @@ Optional environment variables:
 | **Go Test Runner** | Comprehensive testing | `global/scripts/languages/golang/test/`          |
 | **CycloneDX**      | SBOM generation       | `global/scripts/languages/golang/cyclonedx/`     |
 
+#### JavaScript / TypeScript Tools
+
+| Tool         | Purpose                                                          | Script Location                                  |
+|--------------|-------------------------------------------------------------------|--------------------------------------------------|
+| **format**   | Prettier gate (`--fix` rewrites in place)                        | `global/scripts/languages/javascript/format/`    |
+| **knip**     | Unused exports and unused files detection (advisory)             | `global/scripts/languages/javascript/knip/`      |
+
+The `style:format` job is **blocking**, while `style:eslint` beside it is
+advisory, and the difference is deliberate rather than an oversight.
+`eslint-config-prettier` — which almost every JavaScript project installs —
+switches off every ESLint rule that overlaps with Prettier, so the ESLint job is
+silent about formatting by design. With no formatting job the two halves cancel
+out and nothing checks it at all: a repository can hold a committed
+`.prettierrc`, a curated `.prettierignore`, hundreds of unformatted files and a
+green pipeline at the same time. A linter's findings need judgement, so it is
+right that they do not fail a build; `prettier --write .` needs none.
+
+A project with **no Prettier configuration and no `prettier` dependency is
+skipped**, so adopting these workflows cannot fail a repository for a tool it
+never chose. A project that does use it runs its OWN Prettier — the version in
+its lockfile — because a formatter's output is the verdict, and a floating
+resolve would reformat the whole tree on a major release nobody asked for.
+
+> **Adopting this on an existing repository**: run `make format` (or
+> `yarn format`) once and commit the result, in its own commit. Until then the
+> job reports every file the formatter would rewrite, which on a repository that
+> has never run it is most of them.
+
 #### Dart / Flutter Tools
 
 | Tool             | Purpose                                                    | Script Location                              |
@@ -1288,7 +1316,7 @@ Available language files:
 | `golang.mk`     | Go                | `golangci-lint --fix`                 | Go test + coverage              |
 | `python.mk`     | Python (PDM)      | `isort` + `black` + `flake8` + `mypy` | `pytest`                        |
 | `java.mk`       | Java (Gradle)     | `./gradlew check`                     | `./gradlew test`                |
-| `javascript.mk` | JavaScript (Yarn) | `yarn lint`                           | `yarn test`                     |
+| `javascript.mk` | JavaScript (Yarn) | `prettier --write` + `yarn lint` + unused-code scan | `yarn test`   |
 | `dotnet.mk`     | .NET/C#           | `dotnet format`                       | `dotnet test`                   |
 | `dart.mk`       | Dart / Flutter    | `dart format --fix` + `dart analyze` + unused-code scan | `dart`/`flutter test` + coverage → JUnit, Cobertura, LCOV |
 | `terraform.mk`  | Terraform         | `terraform fmt` + `validate`          | `terraform plan`                |

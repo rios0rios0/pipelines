@@ -159,6 +159,28 @@ jobs:
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 
+  # BLOCKING, unlike its `style:eslint` sibling above, and the difference is
+  # deliberate. `eslint-config-prettier` -- which almost every JavaScript project
+  # installs -- switches OFF every ESLint rule that overlaps with Prettier, so
+  # `style:eslint` is already silent about formatting by design. Without this job
+  # nothing checks it at all: the two halves cancel out, and a repository can hold
+  # a committed `.prettierrc`, a curated `.prettierignore`, hundreds of unformatted
+  # files and a green pipeline at the same time. That is not a gate with a gap; it is no
+  # gate. `continue-on-error` here would recreate it.
+  #
+  # A project that does not use Prettier is SKIPPED, not failed -- see the runner.
+  code_check-style_format:
+    name: 'code-check > style:format'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    steps:
+      - uses: 'rios0rios0/pipelines/github/javascript/stages/10-code-check/format@main'
+        with:
+          package_manager: 'yarn'
+          node_version: '${{ inputs.node_version }}'
+          install_run_scripts: '${{ inputs.install_run_scripts }}'
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
   code_check-quality_knip:
     name: 'code-check > quality:knip'
     runs-on: ${{ fromJSON(inputs.runs_on) }}

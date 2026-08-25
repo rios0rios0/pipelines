@@ -1,0 +1,71 @@
+parameters:
+  - name: 'WORKING_DIRECTORY'
+    type: 'string'
+    default: ''
+  - name: 'RUN_BEFORE_CODE_CHECK'
+    type: 'string'
+    default: 'echo "No before script"'
+  - name: 'RUN_AFTER_CODE_CHECK'
+    type: 'string'
+    default: 'echo "No after script"'
+  - name: 'INSTALL_RUN_SCRIPTS'
+    type: 'boolean'
+    default: false
+
+steps:
+  - template: '../../../../global/abstracts/scripts-repo.yaml'
+
+  # The hook's VALUE is shell, supplied by the consumer's pipeline. Passing it
+  # through `env:` and running it with `eval` keeps it DATA at template-expansion
+  # time: Azure substitutes `${{ }}` into the YAML before the agent ever sees it,
+  # so a value containing a newline or a quote used to be able to terminate this
+  # step and append steps of its own.
+  - bash: 'eval "$PIPELINES_HOOK"'
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+    displayName: 'Run Before Prettier'
+    env:
+      PIPELINES_HOOK: ${{ parameters.RUN_BEFORE_CODE_CHECK }}
+
+  # Installed WITHOUT lifecycle scripts, like every other install in this stage.
+  # The install is also what holds this gate to the Prettier in the project's own
+  # lockfile rather than to whatever is newest: a formatter's OUTPUT is the
+  # verdict, so a floating resolve would reformat the tree on a major bump nobody
+  # made.
+  #
+  # The no-lockfile branch FAILS rather than falling back to `npm install`, for
+  # the same reason the sibling `quality:knip` job does: a resolution performed at
+  # CI time is not the resolution anyone reviewed.
+  - script: |
+      set -e
+      if [ -f yarn.lock ]; then
+        yarn install --immutable --check-cache --mode=skip-build
+        if [ "$INSTALL_RUN_SCRIPTS" = 'True' ] || [ "$INSTALL_RUN_SCRIPTS" = 'true' ]; then
+          yarn rebuild
+        fi
+      elif [ -f package-lock.json ]; then
+        npm ci --ignore-scripts
+        if [ "$INSTALL_RUN_SCRIPTS" = 'True' ] || [ "$INSTALL_RUN_SCRIPTS" = 'true' ]; then
+          npm rebuild
+          npm run prepare --if-present
+        fi
+      else
+        echo "ERROR: no yarn.lock and no package-lock.json found."
+        echo "Commit a lockfile so CI installs the dependency set you reviewed."
+        exit 1
+      fi
+    displayName: 'Install dependencies for Prettier'
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+    # Azure stringifies a `boolean` parameter as `True`/`False`, which is why
+    # both spellings are accepted above.
+    env:
+      INSTALL_RUN_SCRIPTS: ${{ parameters.INSTALL_RUN_SCRIPTS }}
+
+  - script: '$(Scripts.Directory)/global/scripts/languages/javascript/format/run.sh'
+    displayName: 'Run Prettier format check'
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+
+  - bash: 'eval "$PIPELINES_HOOK"'
+    workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
+    displayName: 'Run After Prettier'
+    env:
+      PIPELINES_HOOK: ${{ parameters.RUN_AFTER_CODE_CHECK }}

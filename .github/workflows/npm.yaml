@@ -105,6 +105,27 @@ jobs:
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 
+  # BLOCKING, unlike its `style:eslint` sibling above, and the difference is
+  # deliberate. `eslint-config-prettier` -- which almost every JavaScript project
+  # installs -- switches OFF every ESLint rule that overlaps with Prettier, so
+  # `style:eslint` is already silent about formatting by design. Without this job
+  # nothing checks it at all: the two halves cancel out, and a repository can hold
+  # a committed `.prettierrc`, a curated `.prettierignore`, hundreds of unformatted
+  # files and a green pipeline at the same time. That is not a gate with a gap; it is no
+  # gate. `continue-on-error` here would recreate it.
+  #
+  # A project that does not use Prettier is SKIPPED, not failed -- see the runner.
+  code_check-style_format:
+    name: 'code-check > style:format'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    steps:
+      - uses: 'rios0rios0/pipelines/github/javascript/stages/10-code-check/format@main'
+        with:
+          package_manager: 'npm'
+          install_run_scripts: '${{ inputs.install_run_scripts }}'
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
+
   code_check-quality_knip:
     name: 'code-check > quality:knip'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
@@ -126,7 +147,7 @@ jobs:
         with:
           codeql_language: 'javascript-typescript'
           upload: '${{ inputs.codeql_upload }}'
-    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
+    needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_semgrep:
@@ -136,7 +157,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/semgrep@main'
         with:
           semgrep_lang: 'javascript'
-    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
+    needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_gitleaks:
@@ -144,7 +165,7 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/gitleaks@main'
-    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
+    needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   security-sast_hadolint:
@@ -152,7 +173,7 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
-    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
+    needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -184,7 +205,7 @@ jobs:
         shell: 'bash'
         env:
           INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
-    needs: [ 'code_check-style_eslint', 'code_check-quality_knip' ]
+    needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 

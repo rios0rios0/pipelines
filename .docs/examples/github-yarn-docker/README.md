@@ -22,7 +22,8 @@ Minimal example showing how to use the reusable JavaScript/Yarn + Docker workflo
 curl -sSL https://raw.githubusercontent.com/rios0rios0/pipelines/main/clone.sh | bash
 
 # Then use the Makefile targets
-make lint       # Run ESLint
+make lint       # Format with Prettier, then run ESLint
+make format     # Format with Prettier only
 make test       # Run Yarn tests
 make sast       # Run CodeQL security analysis
 make security   # Run all security tools at once
@@ -30,7 +31,7 @@ make security   # Run all security tools at once
 
 ## What the Pipeline Does
 
-1. **Code Check** -- ESLint
+1. **Code Check** -- Prettier (blocking) and ESLint
 2. **Security** -- CodeQL, Semgrep, Gitleaks, Hadolint
 3. **Tests** -- Yarn test:ci + build verification
 4. **Delivery** -- Docker image build and push to `ghcr.io`

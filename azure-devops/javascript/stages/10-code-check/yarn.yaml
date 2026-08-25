@@ -33,6 +33,30 @@ stages:
               RUN_BEFORE_CODE_CHECK: ${{ parameters.RUN_BEFORE_CODE_CHECK }}
               RUN_AFTER_CODE_CHECK: ${{ parameters.RUN_AFTER_CODE_CHECK }}
 
+      # BLOCKING, unlike `style_eslint` above, and the difference is deliberate.
+      # `eslint-config-prettier` -- which almost every JavaScript project installs --
+      # switches OFF every ESLint rule that overlaps with Prettier, so the ESLint job
+      # is already silent about formatting by design. Without this one nothing checks
+      # it at all: the two halves cancel out, and a repository can hold a committed
+      # `.prettierrc`, a curated `.prettierignore`, hundreds of unformatted files and
+      # a green pipeline at the same time. A `continueOnError: true` here would
+      # recreate that.
+      #
+      # A project that does not use Prettier is SKIPPED, not failed -- the runner
+      # decides, so the rule is the same sentence on all three platforms rather than
+      # three re-implementations that drift.
+      - job: 'style_format'
+        displayName: 'style:format'
+        steps:
+          - template: '../../abstracts/corepack-node20.18.3-no-cache.yaml'
+
+          - template: 'steps/format.yaml'
+            parameters:
+              WORKING_DIRECTORY: "${{ parameters.WORKING_DIRECTORY }}"
+              RUN_BEFORE_CODE_CHECK: ${{ parameters.RUN_BEFORE_CODE_CHECK }}
+              RUN_AFTER_CODE_CHECK: ${{ parameters.RUN_AFTER_CODE_CHECK }}
+              INSTALL_RUN_SCRIPTS: ${{ parameters.INSTALL_RUN_SCRIPTS }}
+
       - job: 'quality_knip'
         displayName: 'quality:knip'
         steps:

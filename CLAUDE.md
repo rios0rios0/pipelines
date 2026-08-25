@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, dart-pipeline, workflow-composition, supply-chain, runner-cache-gating, azure-step-names)
+make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, dart-pipeline, javascript-pipeline, workflow-composition, supply-chain, runner-cache-gating, azure-step-names)
 make test-go-script    # Test Go validation script only
 make test-go-module-toolchain  # Test that every go.mod toolchain directive is readable by the images/analysers that consume it only
 make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves only
@@ -33,6 +33,7 @@ make test-release-reconcile  # Test release reconciliation gap detection only
 make test-deploy-providers   # Test the MVP hosting deployment providers (Cloudflare, Vercel, Render, Netlify, Fly.io) only
 make test-memory-detection  # Test the cgroup-aware memory ceiling detection only
 make test-dart-pipeline # Test the Dart/Flutter pipeline (scripts, Semgrep rules, cross-platform wiring) only
+make test-javascript-pipeline  # Test the JavaScript formatting gate (Prettier runner + cross-platform wiring) only
 make test-workflow-composition  # Test the GitHub Actions workflow composition standard only
 make test-supply-chain # Test the supply-chain pinning contract (actions, images, binaries, packages) only
 make test-runner-cache-gating  # Test that no GitHub Actions cache restores into $HOME on a self-hosted runner only

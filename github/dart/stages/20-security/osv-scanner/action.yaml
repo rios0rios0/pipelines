@@ -30,7 +30,31 @@ runs:
 
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 
+    # Skipped on a self-hosted runner, where every path below lives in `$HOME` and therefore
+    # persists on local disk between jobs. There the restore is not merely redundant -- `tar`
+    # cannot write over the SDK that is already unpacked (`Cannot mkdir: Permission denied`),
+    # exits 2, and the action logs `Failed to restore` after downloading the whole archive.
+    #
+    # Measured on a 12-vCPU self-hosted runner, one workflow run of a Flutter consumer: the
+    # archive is 1.67 GB, it arrives at ~8.5 MB/s, and the restore step took 214s, 270s, 308s,
+    # 338s and 358s across the five jobs -- four of the five then threw the download away. The
+    # post-job step re-tars the same 1.67 GB for another 87-102s and ends in `Failed to save:
+    # Unable to reserve cache`. On `style:format` that is 314s of cache around 17.6s of work.
+    #
+    # The one job whose restore SUCCEEDED still paid 308s for it, and that is the number that
+    # settles this: a cold `dart_ensure_sdk` in the same run installed the SDK from Google's
+    # archive in 126s. The cache is slower than the download it exists to avoid, so skipping it
+    # is a win on a cold self-hosted host as well as on a warm one -- where the SDK is already
+    # there and the install costs nothing at all.
+    #
+    # This is the reasoning `github/golang` already applies to `actions/setup-go`, and the
+    # reasoning the codeql stage applies read the other way round: it skips the cache because
+    # its runner is thrown away, and these skip it because theirs is not.
+    #
+    # `!= 'self-hosted'` rather than `== 'github-hosted'` so an empty context keeps today's
+    # behaviour instead of silently disabling the cache for hosted consumers.
     - name: 'Cache the Dart/Flutter SDK and pub packages'
+      if: "runner.environment != 'self-hosted'"
       uses: 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' # v4.3.0
       with:
         path: |

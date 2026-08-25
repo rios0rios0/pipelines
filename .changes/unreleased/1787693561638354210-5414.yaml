@@ -1,0 +1,4 @@
+kind: 'Security'
+body: '**BREAKING CHANGE:** installed JavaScript dependencies with lifecycle scripts DISABLED (`npm ci --ignore-scripts`, `yarn install --mode=skip-build`) in every lint, test, knip and SBOM job on all three platforms. A plain install executes `postinstall` from every package in the transitive tree, as the CI user, before any of the project''s own code runs -- the npm supply-chain execution path in its most direct form. **Projects that genuinely need those scripts** -- native module builds, `prisma generate`, Playwright browser downloads, `husky` -- **set `install_run_scripts: true`** (GitHub Actions input, forwarded through the `*-docker`, `*-library` and `*-cloudflare` workflows) or `INSTALL_RUN_SCRIPTS: true` (Azure DevOps parameter), and the scripts then run through `npm rebuild` / `yarn rebuild` after the tree is on disk'
+breaking: true
+time: '2026-08-25T21:32:41.638293028Z'

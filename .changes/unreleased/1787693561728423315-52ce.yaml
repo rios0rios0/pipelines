@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added `DEPENDENCY_TRACK_PARENT_NAME` / `_PARENT_VERSION`, so newly created projects land under a collection parent. Worth knowing what this can and cannot do: `BomResource.uploadBom` resolves the parent ONLY inside its `if (project == null && autoCreate)` branch — the same in `4.14` and `5.0.5`, checked in both — so for a project that already exists both fields are read and then **ignored**, with no error, no warning and nothing in the response to notice. It parents what this pipeline creates from here on; adopting an existing portfolio needs `PATCH /api/v1/project/{uuid}` from an administrative job'
+time: '2026-08-25T21:32:41.728377251Z'

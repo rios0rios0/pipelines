@@ -1,0 +1,4 @@
+kind: 'Security'
+body: '**BREAKING CHANGE:** the Azure DevOps JavaScript code-check job now FAILS when a project has neither `yarn.lock` nor `package-lock.json`, instead of falling back to `npm install`. A resolution performed at CI time is not the resolution anyone reviewed, so the job was testing a dependency set that exists nowhere else. The GitLab SBOM job moves from `npm install` to `npm ci` for the same reason -- an inventory built from an unpinned tree describes nothing'
+breaking: true
+time: '2026-08-25T21:32:41.635775111Z'

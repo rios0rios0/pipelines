@@ -116,6 +116,15 @@ drop_allowed_first_party_refs() {
     | grep -vE "^[^:]+:[0-9]+:[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]*['\"]?rios0rios0/\.github/\.github/workflows/(claude|claude-code-review)\.yaml@main['\"]?([[:space:]]+#.*)?$"
 }
 
+# `-not -path './.changes/*'` on every scan below is `drop_comments` for a
+# different shape of prose. The changelog is now kept as chlog fragments, which
+# are YAML files under `.changes/unreleased/`, so this repository's own
+# changelog sits inside the name filter for the first time -- and a changelog
+# describes call sites for a living ("pinned every `go install ...@latest`
+# (`govulncheck`, ...)"). Scanning it reports the description of a fix as the
+# violation it fixed. It is excluded for exactly the reason `./.github/tests/*`
+# already is: prose ABOUT a call site is not a call site.
+
 # Every YAML file in the repository, excluding the consumer-facing examples
 # (checked separately, with a different rule) and git internals.
 # `"$@"` is load-bearing: callers pass `-print0`, and a function that drops it
@@ -127,6 +136,7 @@ drop_allowed_first_party_refs() {
 yaml_files() {
   find . -type f \( -name '*.yaml' -o -name '*.yml' \) \
     -not -path './.git/*' \
+    -not -path './.changes/*' \
     -not -path './.docs/examples/*' "$@"
 }
 
@@ -242,7 +252,7 @@ echo "3. No remote script is piped into a shell"
 # and deliberately so) does not fail the check that forbids it.
 PIPE_TO_SHELL="$(
   find . -type f \( -name '*.sh' -o -name '*.yaml' -o -name '*.yml' -o -name '*.mk' -o -name 'Makefile' \) \
-    -not -path './.git/*' -not -path './.github/tests/*' -print0 2>/dev/null \
+    -not -path './.git/*' -not -path './.changes/*' -not -path './.github/tests/*' -print0 2>/dev/null \
     | xargs -0 grep -HnE '(curl|wget)[^|#]*\|[[:space:]]*(sudo[[:space:]]+)?(ba)?sh' 2>/dev/null \
     | drop_comments \
     || true
@@ -350,7 +360,7 @@ echo "5. Package installs name a version"
 # change overnight.
 GO_LATEST="$(
   find . -type f \( -name '*.sh' -o -name '*.yaml' -o -name '*.yml' \) \
-    -not -path './.git/*' -not -path './.github/tests/*' -print0 2>/dev/null \
+    -not -path './.git/*' -not -path './.changes/*' -not -path './.github/tests/*' -print0 2>/dev/null \
     | xargs -0 grep -Hn 'go install' 2>/dev/null \
     | grep '@latest' \
     | drop_comments \
@@ -360,7 +370,7 @@ assert_empty "no 'go install ...@latest'" "$GO_LATEST"
 
 NPX_UNPINNED="$(
   find . -type f \( -name '*.sh' -o -name '*.yaml' -o -name '*.yml' \) \
-    -not -path './.git/*' -not -path './.github/tests/*' -print0 2>/dev/null \
+    -not -path './.git/*' -not -path './.changes/*' -not -path './.github/tests/*' -print0 2>/dev/null \
     | xargs -0 grep -HnE 'npx --yes [a-z@]' 2>/dev/null \
     | drop_comments \
     | grep -vE 'npx --yes "?\$?\{?[A-Z_]+' \
@@ -371,7 +381,7 @@ assert_empty "every 'npx --yes <pkg>' names a version" "$NPX_UNPINNED"
 
 PIP_UNPINNED="$(
   find . -type f \( -name '*.sh' -o -name '*.yaml' -o -name '*.yml' \) \
-    -not -path './.git/*' -not -path './.github/tests/*' -print0 2>/dev/null \
+    -not -path './.git/*' -not -path './.changes/*' -not -path './.github/tests/*' -print0 2>/dev/null \
     | xargs -0 grep -HnE 'pip install ' 2>/dev/null \
     | drop_comments \
     | grep -vE '(==|\$[A-Z_{])' \
@@ -382,7 +392,7 @@ assert_empty "every 'pip install' names a version" "$PIP_UNPINNED"
 
 GEM_UNPINNED="$(
   find . -type f \( -name '*.sh' -o -name '*.yaml' -o -name '*.yml' \) \
-    -not -path './.git/*' -not -path './.github/tests/*' -print0 2>/dev/null \
+    -not -path './.git/*' -not -path './.changes/*' -not -path './.github/tests/*' -print0 2>/dev/null \
     | xargs -0 grep -Hn 'gem install' 2>/dev/null \
     | drop_comments \
     | grep -vE '(\-v |\$[A-Z_{])' \

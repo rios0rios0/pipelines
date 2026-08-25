@@ -1,0 +1,3 @@
+kind: 'Security'
+body: 'pinned **every container image to an immutable `@sha256:` digest** (42 references), and normalised the floating tags to a concrete version first, so `alpine:latest`, `alpine/git:latest`, `golang:latest`, `python:3-alpine` and an entirely untagged `bitnami/kubectl` no longer decide the build environment at pull time. A tag can be repointed at new content, which meant a red build could not be reproduced and a green one proved nothing about tomorrow'
+time: '2026-08-25T21:32:41.525302669Z'

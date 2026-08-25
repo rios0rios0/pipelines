@@ -1,3 +1,3 @@
 ## :vertical_traffic_light: Quality checklist
 
-- [ ] Did you update the unreleased section on `CHANGELOG.md` with a version number and date?
+- [ ] Did you compile the pending fragments into a version section with a number and date (`chlog batch auto && chlog merge`)?

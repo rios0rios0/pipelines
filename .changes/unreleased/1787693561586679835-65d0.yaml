@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed every example under `.docs/examples/` to pin this repository, on all three platforms -- `@main` to `@4.23.0` on GitHub, `/main/` to `/4.23.0/` in the GitLab remote includes, and an explicit `ref:` added to the Azure `resources.repositories` blocks, which resolve the default branch when none is given. The examples are what people copy, so an example that tracks a branch teaches every consumer the exposure this change exists to remove. Each carries a comment on how to bump it and that a commit SHA works in the same position'
+time: '2026-08-25T21:32:41.586583419Z'

@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added a `# upstream: <kind> <coordinate> [track=<major>]` annotation to every pin in `global/scripts/shared/pinned-versions.sh`, naming where that pin''s releases come from. A pin with no annotation is reported as untracked and **fails** the check rather than being skipped quietly, because coverage otherwise shrinks one forgotten annotation at a time while the job stays green. `track=` exists for pins deliberately held back -- GoReleaser is on `1.x` because `2.x` is a breaking configuration change, and without it the check would report that migration as an update on every run until somebody muted the job'
+time: '2026-08-25T21:32:41.705697755Z'

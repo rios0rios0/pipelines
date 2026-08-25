@@ -8,6 +8,7 @@ development practices, refer to the **[Development Guide](https://github.com/rio
 ## Prerequisites
 
 - [Make](https://www.gnu.org/software/make/)
+- [chlog](https://github.com/luizjhonata/chlog) (`go install github.com/luizjhonata/chlog@latest`)
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) v2+
 - [Bash](https://www.gnu.org/software/bash/) 4+
 
@@ -30,7 +31,10 @@ development practices, refer to the **[Development Guide](https://github.com/rio
    ```bash
    make test-workflow-composition
    ```
-8. Update `CHANGELOG.md` under `[Unreleased]`
+8. Add a changelog fragment — never edit `CHANGELOG.md`, which is generated from them:
+   ```bash
+   chlog new --kind Added --body "added the thing that was not there before"
+   ```
 9. Commit following the [commit conventions](https://github.com/rios0rios0/guide/wiki/Life-Cycle/Git-Flow)
 10. Open a pull request against `main`
 

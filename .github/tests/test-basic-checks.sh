@@ -1,10 +1,23 @@
 #!/usr/bin/env bash
 # Test script for the changelog validation logic in
-# azure-devops/global/stages/10-code-check/basic-checks.yaml.
+# azure-devops/global/stages/10-code-check/basic-checks.yaml
+# and in global/scripts/shared/changelog-check.sh.
 #
 # Exercises chlog-based (fragment), chlog release/bump (CHANGELOG.md updated),
 # and legacy (direct CHANGELOG.md edit) changelog validation by creating
 # temporary git repos that simulate PR diffs.
+#
+# EVERY fixture is run twice: once against the extracted template logic below,
+# and once against the real `global/scripts/shared/changelog-check.sh` on disk.
+# That second run is the point of the pairing. The rule is implemented four
+# times -- once per platform template, plus the standalone script -- because the
+# `quality:basic-checks` job runs in a minimal image with only the consumer's
+# repository on disk and cannot reach the scripts repo (see the comment at the
+# top of `changelog-check.sh`). Four implementations of one rule drift silently:
+# the script was left non-chlog-aware for the whole life of the templates' chlog
+# support, and it therefore FAILED a legitimate fragment-only branch while the
+# three templates passed it. Asserting the same expectation against both here is
+# what makes that divergence loud instead of invisible.
 set -euo pipefail
 
 RED='\033[0;31m'
@@ -204,6 +217,50 @@ assert_fail() {
   fi
 }
 
+# The real shared script, run from the fixture's working tree exactly as a
+# consumer would run it. The source branch is passed explicitly so the bump-branch
+# flip is exercised through the documented argument rather than through whatever
+# the fixture happens to have checked out.
+REAL_SCRIPT="$REPO_ROOT/global/scripts/shared/changelog-check.sh"
+
+assert_script_pass() {
+  local description="$1"
+  local source_branch
+  source_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
+  if sh "$REAL_SCRIPT" main "$source_branch" >/dev/null 2>&1; then
+    echo -e "${GREEN}PASS${NC} changelog-check.sh: $description"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  else
+    echo -e "${RED}FAIL${NC} changelog-check.sh: $description (expected pass, got fail)"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+  fi
+}
+
+# `assert_script_fail <description> <expected-message>` -- the second argument is
+# NOT optional decoration. A script that rejects everything satisfies a bare
+# "expected fail" on every negative fixture, which is precisely how the
+# non-chlog-aware version of this script scored 9 of these 10 assertions while
+# being wrong: it refused a legitimate fragment-only branch AND refused the
+# invalid ones, for the same reason, and only the positive fixture noticed.
+# Requiring the message pins WHICH branch of the check refused, so a negative
+# assertion cannot be satisfied by the wrong code path.
+assert_script_fail() {
+  local description="$1"
+  local expected="$2"
+  local source_branch output
+  source_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
+  if output="$(sh "$REAL_SCRIPT" main "$source_branch" 2>&1)"; then
+    echo -e "${RED}FAIL${NC} changelog-check.sh: $description (expected fail, got pass)"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+  elif ! printf '%s' "$output" | grep -qF "$expected"; then
+    echo -e "${RED}FAIL${NC} changelog-check.sh: $description (failed for the wrong reason; expected \"$expected\")"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+  else
+    echo -e "${GREEN}PASS${NC} changelog-check.sh: $description"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  fi
+}
+
 echo "=== Basic-checks changelog validation ==="
 
 # ── chlog mode ────────────────────────────────────────────────────────────────
@@ -222,6 +279,7 @@ echo "kind: Added" > .changes/unreleased/fragment-1.yaml
 git add .chlog.yaml .changes/unreleased/fragment-1.yaml
 git commit -m "add fragment" >/dev/null 2>&1
 assert_pass "chlog repo with fragment added"
+assert_script_pass "chlog repo with fragment added"
 
 echo ""
 echo "Test 2: chlog repo without fragment → should fail"
@@ -233,6 +291,7 @@ echo "some change" > src.txt
 git add .chlog.yaml src.txt
 git commit -m "change without fragment" >/dev/null 2>&1
 assert_fail "chlog repo without fragment"
+assert_script_fail "chlog repo without fragment" "No changelog fragment was added"
 
 echo ""
 echo "Test 3: chlog repo with only pre-existing fragment (not newly added) → should fail"
@@ -250,6 +309,7 @@ echo "kind: Changed" > .changes/unreleased/old-fragment.yaml
 git add .changes/unreleased/old-fragment.yaml
 git commit -m "modify existing fragment" >/dev/null 2>&1
 assert_fail "chlog repo with only modified (not new) fragment"
+assert_script_fail "chlog repo with only modified (not new) fragment" "No changelog fragment was added"
 
 echo ""
 echo "Test 4: chlog repo on bump branch with CHANGELOG.md updated (no fragment) → should pass"
@@ -268,6 +328,7 @@ sed -i 's/## \[Unreleased\]/## [Unreleased]\n\n## [1.2.0] - 2026-01-02\n\n### Ad
 git add CHANGELOG.md
 git commit -m "chore(bump): bumped version to 1.2.0" >/dev/null 2>&1
 assert_pass "chlog repo on bump branch with CHANGELOG.md updated"
+assert_script_pass "chlog repo on bump branch with CHANGELOG.md updated"
 
 echo ""
 echo "Test 5: chlog repo on bump branch without CHANGELOG.md update → should fail"
@@ -282,6 +343,7 @@ echo "some change" > src.txt
 git add src.txt
 git commit -m "chore(bump): bump without changelog" >/dev/null 2>&1
 assert_fail "chlog repo on bump branch without CHANGELOG.md update"
+assert_script_fail "chlog repo on bump branch without CHANGELOG.md update" "Release/bump PR did not update CHANGELOG.md"
 
 echo ""
 echo "Test 6: chlog repo on 'bump/*' branch with CHANGELOG.md updated → should pass"
@@ -299,6 +361,7 @@ sed -i 's/## \[Unreleased\]/## [Unreleased]\n\n## [1.2.0] - 2026-01-02\n\n### Ad
 git add CHANGELOG.md
 git commit -m "bump: bumped version to 1.2.0" >/dev/null 2>&1
 assert_pass "chlog repo on 'bump/*' branch with CHANGELOG.md updated"
+assert_script_pass "chlog repo on 'bump/*' branch with CHANGELOG.md updated"
 
 # ── legacy mode ───────────────────────────────────────────────────────────────
 
@@ -314,6 +377,7 @@ sed -i 's/## \[Unreleased\]/## [Unreleased]\n\n### Added\n\n- new feature/' CHAN
 git add CHANGELOG.md
 git commit -m "add changelog entry" >/dev/null 2>&1
 assert_pass "legacy repo with CHANGELOG.md entry under [Unreleased]"
+assert_script_pass "legacy repo with CHANGELOG.md entry under [Unreleased]"
 
 echo ""
 echo "Test 8: legacy repo without CHANGELOG.md modification → should fail"
@@ -324,6 +388,7 @@ echo "some change" > src.txt
 git add src.txt
 git commit -m "change without changelog" >/dev/null 2>&1
 assert_fail "legacy repo without CHANGELOG.md modification"
+assert_script_fail "legacy repo without CHANGELOG.md modification" "CHANGELOG.md was NOT modified"
 
 echo ""
 echo "Test 9: legacy repo with entry below version section (not under [Unreleased]) → should fail"
@@ -345,6 +410,7 @@ CHANGELOG
 git add CHANGELOG.md
 git commit -m "add entry in wrong section" >/dev/null 2>&1
 assert_fail "legacy repo with entry below version section"
+assert_script_fail "legacy repo with entry below version section" "entries are NOT under [Unreleased]"
 
 echo ""
 echo "Test 10: legacy repo with CHANGELOG.md missing [Unreleased] section → should fail"
@@ -364,6 +430,46 @@ CHANGELOG
 git add CHANGELOG.md
 git commit -m "modify changelog without unreleased" >/dev/null 2>&1
 assert_fail "legacy repo with CHANGELOG.md missing [Unreleased] section"
+assert_script_fail "legacy repo with CHANGELOG.md missing [Unreleased] section" "does not contain an [Unreleased] section"
+
+# ── the four implementations must move together ───────────────────────────────
+#
+# The fixtures above run the rule twice: through the extracted Azure logic and
+# through the real shared script. The GitHub and GitLab templates hold the same
+# rule in their own inline copies and cannot be executed here (a composite
+# action and a GitLab job body are not standalone scripts). This is the cheap
+# tripwire for them: if a future edit drops the chlog branch from any one of the
+# four, one of these fails and names the file. It is deliberately structural --
+# it proves the code path still EXISTS, not that it behaves; behaviour is what
+# the twenty assertions above are for.
+
+echo ""
+echo "── all four implementations carry the chlog path ──"
+
+assert_contains() {
+  local file="$1"
+  local needle="$2"
+  if grep -qF -- "$needle" "$REPO_ROOT/$file"; then
+    echo -e "${GREEN}PASS${NC} $file mentions '$needle'"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  else
+    echo -e "${RED}FAIL${NC} $file no longer mentions '$needle' -- the four changelog checks have drifted"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+  fi
+}
+
+for impl in \
+  'global/scripts/shared/changelog-check.sh' \
+  'github/global/stages/10-code-check/basic-checks/action.yaml' \
+  'gitlab/global/stages/10-code-check/basic-checks.yaml' \
+  'azure-devops/global/stages/10-code-check/basic-checks.yaml'; do
+  assert_contains "$impl" '.chlog.yaml'
+  assert_contains "$impl" '.changes/unreleased/'
+  # `--diff-filter=A` is the load-bearing half of the fragment rule: without it,
+  # editing an entry somebody else already recorded counts as this change's entry.
+  assert_contains "$impl" '--diff-filter=A'
+  assert_contains "$impl" 'chore/bump-*|bump/*'
+done
 
 # ── summary ───────────────────────────────────────────────────────────────────
 

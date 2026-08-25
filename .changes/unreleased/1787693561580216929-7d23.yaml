@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed the Terragrunt install in the Azure Terraform abstract to a pinned, checksum-verified URL, removing the unauthenticated `api.github.com/releases/latest` lookup it retried around -- and with it the reason the download URL had to be scraped out of an API response at all'
+time: '2026-08-25T21:32:41.580161763Z'

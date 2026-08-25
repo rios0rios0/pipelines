@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added `global/scripts/shared/pinned-versions.sh`, the single source of truth for every third-party binary these pipelines download, and `global/scripts/shared/verify-download.sh`, the integrity-checked downloader every installer now routes through. Both are sourced, never executed. Each version stays overridable from the environment so an operator can respond to an upstream CVE without waiting for a release here; `pinned_digest` refuses to reuse a committed digest against an overridden version -- verifying new bytes against an old digest would fail every time and read like an attack -- and names the variable that restores verification instead'
+time: '2026-08-25T21:32:41.609970302Z'

@@ -1,0 +1,3 @@
+kind: 'Security'
+body: 'validated the report paths the Dart analyze reporter and the Terraform order-check build before writing to them. Both legitimately accept an absolute output directory, so the directory itself is deliberately not confined -- what is confined is the file name each script appends to it'
+time: '2026-08-25T21:32:41.614312855Z'

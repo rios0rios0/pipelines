@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added checksum verification to the Dart and Flutter SDK downloads, against the `.sha256sum` and the `releases_linux.json` `sha256` field Google publishes. This is deliberately weaker than the pinned tools and the comments say so: the SDK version is the consumer''s to choose, so no digest can be committed here, and a compromised publisher would serve a matching checksum too. It still catches a truncated transfer, a cache serving wrong bytes, and any tamper that cannot also rewrite a second HTTPS request'
+time: '2026-08-25T21:32:41.601282171Z'

@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'left `actions/setup-node` (`yarn`/`npm`) and `actions/setup-java` (`maven`/`gradle`) ON, deliberately and with the measurement to back it: their caches target `$HOME` too, but their files are writable, so the restore SUCCEEDS -- ~9s for a 58 MB yarn cache across ten jobs of two runs, no failure and no post-job save. That is a genuine cache seeding a cold host, not a broken one, and turning it off would be a change with nothing behind it. The GitLab CI and Azure DevOps templates need no equivalent fix at all: both keep their caches inside the per-job workspace (`$CI_PROJECT_DIR`, `$(Pipeline.Workspace)`), which is exactly what makes this a GitHub-only defect'
+time: '2026-08-25T21:32:41.674733862Z'

@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed a BOM without `metadata.component` creating a project literally named `null`. `jq -r` prints the STRING `null` for a missing key, and `null` is a perfectly valid project name, so the upload succeeded and kept updating that project on every build. The name is now extracted with `// empty` and an absent one **fails the job** naming the field; an absent *version* is not fatal and uploads as a versionless project, which Dependency-Track keeps as one stable identity rather than one pinned to the literal version `null`'
+time: '2026-08-25T21:32:41.700250238Z'

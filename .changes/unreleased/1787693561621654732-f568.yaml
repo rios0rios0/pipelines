@@ -1,0 +1,3 @@
+kind: 'Security'
+body: 'generated the test database password per run instead of hard-coding `pipelines`. It was only ever reachable on loopback, so nothing leaked -- but a well-known password is still well-known, and no scanner can tell one in a template apart from a real credential'
+time: '2026-08-25T21:32:41.621619365Z'

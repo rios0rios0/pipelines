@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the GitLab CI abstract carrying a SECOND, divergent implementation of the upload. Its inline `curl` did not apply the shared script''s `sed ''s|/|-|g''` name normalisation, so a scoped npm package uploaded as `@org/app` from GitLab and `@org-app` from Azure DevOps — **two projects for one application**, for the life of the repository — and it sent no `isLatest` at all, so a GitLab-built application never had a latest version and any collection parent aggregating it reported nothing. There is now one implementation and the abstract calls it'
+time: '2026-08-25T21:32:41.692207453Z'

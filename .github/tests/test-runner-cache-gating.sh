@@ -100,6 +100,27 @@ assert_reports() {
   fi
 }
 
+# `assert_reports` alone is not enough for a fixture that trips MORE THAN ONE rule.
+# The inverted-gate fixtures below are also, by construction, `setup-go` steps that
+# are not gated -- so the positive rule reports them too, and a bare non-empty check
+# would pass with the anti-gate branch permanently dead. This asserts the count of
+# findings that actually came from the branch under test.
+assert_reports_n() {
+  local description="$1"
+  local value="$2"
+  local pattern="$3"
+  local want="$4"
+  local got
+  got="$(printf '%s\n' "$value" | grep -c -- "$pattern" || true)"
+  if [[ "$got" == "$want" ]]; then
+    echo -e "${GREEN}  PASS: $description${NC}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  else
+    echo -e "${RED}  FAIL: $description (matched $got, expected $want)${NC}"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+  fi
+}
+
 # The checker. Prints one `<file>:<line>: <finding>` per violation and nothing
 # at all when the tree is clean, so the same program serves the real tree and
 # the deliberate-violation fixtures below.
@@ -117,7 +138,10 @@ import sys
 # string on an older runner, a future third value) must keep the cache ON for
 # hosted consumers rather than silently disabling it for everyone.
 GATE = "runner.environment != 'self-hosted'"
-ANTI_GATE = re.compile(r"runner\.environment\s*==\s*'github-hosted'")
+# Either quote style. GitHub Actions expressions only accept SINGLE quotes -- the
+# double-quoted form is a parse error, so it cannot ship silently -- but matching both
+# costs one character class and keeps the diagnostic honest about what it looks for.
+ANTI_GATE = re.compile(r'runner\.environment\s*==\s*[\'"]github-hosted[\'"]')
 
 SETUP_GO = re.compile(r"actions/setup-go@")
 CACHE = re.compile(r"actions/cache(?:/restore|/save)?@")
@@ -311,6 +335,9 @@ YAML
 assert_reports "an ungated actions/cache naming a \$HOME path is reported" \
   "$(python3 "$CHECKER" "$FIXTURES/ungated-cache")"
 
+# Both quote styles. Only the single-quoted form is valid GitHub Actions expression
+# syntax -- the double-quoted one is a parse error and cannot ship silently -- but the
+# diagnostic should not depend on the author having written the version that parses.
 mkdir -p "$FIXTURES/anti-gate"
 cat > "$FIXTURES/anti-gate/action.yaml" <<'YAML'
 runs:
@@ -319,9 +346,18 @@ runs:
     - uses: 'actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16' # v6.5.0
       with:
         cache: ${{ runner.environment == 'github-hosted' }}
+
+    - name: 'Cache the SDK'
+      if: '${{ runner.environment == "github-hosted" }}'
+      uses: 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' # v4.3.0
+      with:
+        path: |
+          ~/.pub-cache
+        key: 'sdk'
 YAML
-assert_reports "the inverted \`== 'github-hosted'\` gate is reported" \
-  "$(python3 "$CHECKER" "$FIXTURES/anti-gate")"
+ANTI_GATE_OUT="$(python3 "$CHECKER" "$FIXTURES/anti-gate")"
+assert_reports_n "the inverted \`== 'github-hosted'\` gate is reported in both quote styles" \
+  "$ANTI_GATE_OUT" 'disables the cache for every consumer' 2
 echo ""
 
 # ---------------------------------------------------------------------------

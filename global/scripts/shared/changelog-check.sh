@@ -105,7 +105,7 @@ if [ -f ".chlog.yaml" ]; then
         echo "  This project uses chlog for changelog management."
         echo "  Every change must include a changelog fragment."
         echo ""
-        echo "  Run: chlog new -k <Kind> -b \"<description>\""
+        echo "  Run: chlog new --kind <Kind> --body \"<description>\""
         echo "  Kinds: Added, Changed, Deprecated, Removed, Fixed, Security"
         echo ""
         echo "  See: https://github.com/luizjhonata/chlog"

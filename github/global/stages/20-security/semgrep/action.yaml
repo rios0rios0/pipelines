@@ -14,7 +14,9 @@ runs:
       uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
 
     - name: 'Get Scripts'
-      uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+      # Keep the executable scripts on the same exact commit as this composite.
+      # `$/` is GitHub's self-repository reference; it does not resolve a branch.
+      uses: '$/github/global/abstracts/scripts-repo'
 
     - name: 'Pre-steps'
       if: "inputs.pre_script != ''"

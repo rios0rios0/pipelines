@@ -785,16 +785,25 @@ Create these variable groups in Azure DevOps Library:
 
 ## Supply-Chain Pinning
 
-Everything these pipelines execute is pinned to something immutable, and every
-downloaded binary is checksum-verified before it runs. This is enforced by
-`make test-supply-chain`, so it stays true rather than being true once.
+Third-party GitHub actions and container images are content-pinned, direct tool
+installs declare an exact version, and standalone binary downloads are verified
+against committed checksums. First-party GitHub actions declare whether they
+intentionally follow `@main` or must follow the exact running workflow commit
+through `$/path/to/action`. `make test-supply-chain` and
+`make test-workflow-composition` enforce these guarantees and that distinction.
 
 | What | Pinned to | Where |
 |------|-----------|-------|
-| Third-party GitHub Actions | 40-character commit SHA, with the version in a trailing `# vX.Y.Z` comment | every `uses:` outside `rios0rios0/pipelines` |
+| Third-party GitHub Actions | 40-character commit SHA, with the version in a trailing `# vX.Y.Z` comment | every `uses:` except internal pipeline references and the two explicitly allowlisted organization-owned Claude workflows |
+| First-party GitHub Actions | `$/path/to/action` where a consumer pin must cover the nested action; explicit `@main` otherwise | workflow-composition contract |
 | Container images | `tag@sha256:<digest>` | every `image:` and every Dockerfile `FROM` |
 | Downloaded binaries | exact version **and** a committed SHA-256 | `global/scripts/shared/pinned-versions.sh` |
 | `go install` / `pip` / `gem` / `npx` packages | exact version | `pinned-versions.sh`, mirrored inline where a template has no `SCRIPTS_DIR` |
+
+These controls do not claim offline reproducibility for package-manager
+transitive dependencies or live service content such as Semgrep Registry packs.
+Lockfiles, hashes, or a mirrored registry are still required where that stronger
+guarantee is part of a consumer's threat model.
 
 ### Knowing when a pin is stale
 
@@ -853,9 +862,17 @@ it against a different version would fail every time and read like an attack.
 
 ### Pinning this repository (consumers)
 
-Pin the entry point, and the scripts follow it. Before, a consumer pinning the
-workflow still executed scripts from `main`; the `scripts-repo` abstracts now
-check out the ref the caller resolved.
+Pinning the entry point fixes the reusable workflow file. A nested first-party
+action using `$/path/to/action` follows that exact commit; one using `@main`
+deliberately continues to follow the latest first-party implementation. The Yarn
+Semgrep chain uses `$/` for both the composite and its `scripts-repo` checkout,
+so a workflow SHA pins the scanner wiring and script tree end to end. This
+self-reference requires GitHub Actions runner 2.336.0 or newer and is not
+available on GitHub Enterprise Server.
+
+Before `scripts-repo` honoured explicit refs, even a directly pinned action
+still fetched scripts from `main`. The abstracts now check out the ref the
+action itself resolved.
 
 ```yaml
 # GitHub Actions -- a release tag, or a commit SHA for full immutability

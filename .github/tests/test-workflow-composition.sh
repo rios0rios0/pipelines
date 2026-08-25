@@ -284,9 +284,18 @@ done < <(awk -F'\t' '$1 == "uses"' "$FACTS")
 assert_empty "every deployment job declares needs:, environment: and if:, under '# fifth stage'" "$UNGATED"
 echo ""
 
-echo "Test 7: internal references are not pinned to a moving target"
-assert_empty "every rios0rios0/pipelines reference inside a workflow is @main" \
-  "$(awk -F'\t' '$1 == "uses" && index($4, "rios0rios0/pipelines") == 1 && $4 !~ /@main$/ { print $2 ": " $4 }' "$FACTS")"
+echo "Test 7: internal references declare their revision policy"
+INTERNAL_REFERENCE_FINDINGS="$(
+  awk -F'\t' \
+    '$1 == "uses" && index($4, "rios0rios0/pipelines/") == 1 && $4 !~ /@main$/ { print $2 ": unexpected internal ref " $4 }' \
+    "$FACTS"
+)"
+YARN_SEMGREP_REF="$(fact_value 'uses' 'yarn.yaml' 'security-sast_semgrep')"
+if [[ "$YARN_SEMGREP_REF" != '$/github/global/stages/20-security/semgrep' ]]; then
+  INTERNAL_REFERENCE_FINDINGS="${INTERNAL_REFERENCE_FINDINGS}${INTERNAL_REFERENCE_FINDINGS:+$'\n'}yarn.yaml: Semgrep must resolve at the reusable workflow's exact commit (found '${YARN_SEMGREP_REF:-none}')"
+fi
+assert_empty "internal refs use explicit @main or exact-running-commit $/ semantics" \
+  "$INTERNAL_REFERENCE_FINDINGS"
 echo ""
 
 echo "Test 8: every reusable workflow is documented"

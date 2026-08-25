@@ -209,7 +209,9 @@ jobs:
     name: 'security > sast:semgrep'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
-      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/semgrep@main'
+      # `$/` resolves this action from the exact commit of this reusable workflow.
+      # A consumer pinning yarn.yaml therefore pins the Semgrep composite as well.
+      - uses: '$/github/global/stages/20-security/semgrep'
         with:
           semgrep_lang: 'javascript'
     needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]

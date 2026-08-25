@@ -24,6 +24,14 @@ jobs:
         with:
           go-version: '1.25'
           cache-dependency-path: 'go.sum'
+          # See `github/golang/stages/10-code-check/golangci-lint/action.yaml` for the measured
+          # reason this is gated: on a self-hosted runner GOMODCACHE and GOCACHE persist on local
+          # disk, the restore untars over files that already exist, `tar` exits 2 and the entire
+          # download is discarded. `runs-on` is hard-coded to a hosted runner in this file, so the
+          # expression is a no-op today. It is written anyway so the rule `make
+          # test-runner-cache-gating` enforces needs no exemption list, and so that adding a
+          # `runs_on` input here later cannot silently reintroduce the defect.
+          cache: ${{ runner.environment != 'self-hosted' }}
 
       - name: 'Install dependencies'
         run: |

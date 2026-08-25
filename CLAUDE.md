@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, dart-pipeline, workflow-composition, supply-chain, azure-step-names)
+make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, dart-pipeline, workflow-composition, supply-chain, runner-cache-gating, azure-step-names)
 make test-go-script    # Test Go validation script only
 make test-go-module-toolchain  # Test that every go.mod toolchain directive is readable by the images/analysers that consume it only
 make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves only
@@ -35,6 +35,7 @@ make test-memory-detection  # Test the cgroup-aware memory ceiling detection onl
 make test-dart-pipeline # Test the Dart/Flutter pipeline (scripts, Semgrep rules, cross-platform wiring) only
 make test-workflow-composition  # Test the GitHub Actions workflow composition standard only
 make test-supply-chain # Test the supply-chain pinning contract (actions, images, binaries, packages) only
+make test-runner-cache-gating  # Test that no GitHub Actions cache restores into $HOME on a self-hosted runner only
 make test-dependency-updates  # Test the dependency-update checker only
 make check-dependency-updates # Report which pinned dependencies have a newer release (network)
 make test-azure-step-names  # Test Azure DevOps step-name uniqueness across expanded templates only
@@ -164,6 +165,56 @@ Five decisions shape it; do not "simplify" any of them away:
 is empty by default and is meant for genuinely ROLLING tags such as
 `alpine:edge`, which is rebuilt almost daily — a check that is always red stops
 being read.
+
+### Caches on a Self-Hosted Runner
+
+**Enforced by `.github/tests/test-runner-cache-gating.sh` (`make test-runner-cache-gating`).** Read this
+before adding an `actions/cache` step or an `actions/setup-*` that takes a `cache:` input.
+
+GitHub's cache service is designed for a runner that starts empty. A self-hosted runner does not:
+`$HOME` survives every job on that host, so a restore into `~/…` untars an archive over files that are
+already there. That is not a redundant copy, it is a **failed** one — `tar` exits 2, the action logs
+`Failed to restore`, and the whole download is discarded after it has been paid for. Two shapes of the
+same defect were observed, and the differing errno is why they read like unrelated bugs:
+
+| Language | What `tar` says | Why |
+|----------|-----------------|-----|
+| Go | `Cannot open: File exists` | `GOMODCACHE` is deliberately read-only, so `tar` cannot replace it |
+| Dart | `Cannot mkdir: Permission denied` | the unpacked SDK directory is already present and not writable |
+
+Measured on a 12-vCPU self-hosted runner, one workflow run each:
+
+| Language | Archive | Restore, per job | Post-job save, per job |
+|----------|---------|------------------|------------------------|
+| Go | 263–286 MB | 47–68s (1s when it MISSES) | 33–78s |
+| Dart | **1.67 GB** | **214–358s** | 87–102s |
+
+On Dart's `style:format` that is 314s of cache around 17.6s of work, and roughly 31 minutes of runner
+time per pipeline run. **Nothing reports any of it**: every file is valid YAML, every job stays green,
+and the only symptom is a pipeline that is slow for no stated reason.
+
+Four constraints shape this; do not "simplify" any of them away:
+
+| Constraint | Why |
+|------------|-----|
+| **`!= 'self-hosted'`, never `== 'github-hosted'`** | A context that resolves to neither — an empty string on an older runner, a future third value — must keep the cache ON for hosted consumers rather than silently disabling it for everyone. The test rejects the inverted form |
+| **A cache that WORKS on self-hosted is still not necessarily worth it** | The one Dart job whose restore succeeded still paid 308s, while a cold `dart_ensure_sdk` in the same run installed the same SDK from Google's archive in 126s. A cache slower than the download it replaces is not a cache — which is what makes skipping it right on a cold self-hosted host as well as on a warm one |
+| **`actions/setup-node` and `actions/setup-java` are deliberately left ON** | Their caches target `$HOME` too, but their files are writable, so the restore SUCCEEDS — ~9s for a 58 MB `yarn` cache across ten jobs of two runs, no failure and no post-job save. That is a genuine cache seeding a cold host, and turning it off would be a change with no measurement behind it. If one is ever observed failing, it belongs under the rule |
+| **The gate is written even where `runs-on` is hard-coded to a hosted runner** | `terra.yaml` and this repository's `ci.yaml` pin `ubuntu-latest`, so the expression is provably a no-op there. Writing it anyway is what lets the rule have no exemption list — and `terra.yaml` is a reusable workflow, so the day it gains the `runs_on` input that `go.yaml`, `yarn.yaml` and `dart.yaml` already have, the gate is already correct |
+
+Two `actions/cache` steps are outside the rule by their **path** rather than by exemption, and the rule
+is written so that stays true without a list: `golang/stages/30-tests/all` caches `${{ env.GO_BIN_DIR }}`
+(7 MB of test-tool binaries, writable, saves a `go install` chain every run), and
+`java/stages/20-security/dependency-check` caches `.owasp` — inside the workspace, which every platform
+wipes per job, and load-bearing because rebuilding the NVD database costs hours.
+
+**This is a GitHub-only defect and needs no cross-platform equivalent.** GitLab CI and Azure DevOps both
+keep their caches inside the per-job workspace (`$CI_PROJECT_DIR`, `$(Pipeline.Workspace)`), so neither
+can restore over a directory a previous job left behind.
+
+One practical note for anyone auditing this by hand: `github/terra/terra.yaml` is a **symlink** into
+`.github/workflows/`, and `grep -r` does not follow one. Three ungated call sites hid behind that, which
+is a large part of why the rule is a test rather than a review habit.
 
 ### Workflow Composition Standard
 

@@ -29,5 +29,5 @@ report:dependency-track:
   extends: [ '.report:dependency-track', '.dependency-track' ]
   script:
     - gradle cyclonedxBom
-    - apk add --no-cache curl jq
+    - apk add --no-cache curl jq git
     - !reference [ .dependency-track, script ]

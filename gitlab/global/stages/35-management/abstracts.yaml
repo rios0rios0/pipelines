@@ -1,3 +1,10 @@
+include:
+  # `.dependency-track` below references `.scripts-repo`, so this file must
+  # carry the definition rather than hope a caller happened to include it.
+  # GitLab de-duplicates identical `include: remote:` URLs, so a caller that
+  # already includes it pays nothing.
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
+
 .sonarqube:
   image:
     name: 'sonarsource/sonar-scanner-cli:latest'
@@ -45,18 +52,41 @@
     - if: "$CI_MERGE_REQUEST_IID"
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
 
+# Uploads the CycloneDX BOM to Dependency-Track.
+#
+# This used to be an inline `curl` that DIVERGED from the shared
+# `global/scripts/tools/dependency-track/run.sh` every other platform calls, in
+# two ways that both produced real portfolio damage:
+#
+#   - It did not apply the shared script's `sed 's|/|-|g'` name normalisation,
+#     so a scoped npm package uploaded as `@org/app` here and `@org-app` from
+#     Azure DevOps — TWO projects for one application, for the life of the repo.
+#   - It sent no `isLatest` at all, so a GitLab-built application never had a
+#     latest version and a collection parent aggregating it reported nothing.
+#
+# Neither failed a job, which is why both survived. There is now exactly one
+# implementation and this abstract calls it.
+#
+# `!reference [ .scripts-repo, before_script ]` inside `script:` rather than
+# `extends: '.scripts-repo'` is deliberate and load-bearing: GitLab's `extends`
+# REPLACES `before_script`, it does not concatenate, so extending the
+# scripts-repo abstract here would silently wipe the `before_script` that
+# `.go` uses to set `GOPATH` and `.pdm` uses to prepare its virtualenv. This is
+# the same idiom the sibling `report:sonarqube` jobs already use.
 .dependency-track:
   stage: 'management'
   script:
-    - 'export REQUEST_CONTENT_TYPE="Content-Type: multipart/form-data"'
-    - 'export REQUEST_API_KEY="X-Api-Key: $DEPENDENCY_TRACK_TOKEN"'
-    - curl --fail --request 'POST' "$DEPENDENCY_TRACK_HOST_URL/api/v1/bom"
-      -H "$REQUEST_CONTENT_TYPE" -H "$REQUEST_API_KEY"
-      -F "projectName=$(cat $PREFIX$REPORT_PATH/bom.json | jq -r '.metadata.component.name')"
-      -F "projectVersion=$(cat $PREFIX$REPORT_PATH/bom.json | jq -r '.metadata.component.version')"
-      -F 'autoCreate=true' -F "bom=@$PREFIX$REPORT_PATH/bom.json"
+    - !reference [ .scripts-repo, before_script ]
+    - $SCRIPTS_DIR/global/scripts/tools/dependency-track/run.sh
   tags:
     - 'dev-gitlab-runner-onprem'
+  # Merge-request pipelines no longer upload.
+  #
+  # `(name, version)` IS a project's identity in Dependency-Track, so an upload
+  # from a branch whose version file has already been bumped creates that
+  # version's project BEFORE the merge — and if the merge never happens, the
+  # project stays forever. Uploading only from the default branch and from tags
+  # means the portfolio contains released versions and nothing else.
   rules: # TODO: this could be not duplicated using !reference
-    - if: "$CI_MERGE_REQUEST_IID"
+    - if: "$CI_COMMIT_TAG"
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"

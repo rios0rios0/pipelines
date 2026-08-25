@@ -11,7 +11,16 @@ report:sonarqube:
 
 report:dependency-track:
   extends: [ '.go', '.dependency-track' ]
+  # The upload step is spelled out here rather than inherited.
+  #
+  # GitLab's `extends` REPLACES `script:`, it does not append to it, so this
+  # job's own `script:` silently overrode `.dependency-track`'s — the BOM was
+  # generated on every default-branch build and then thrown away with the job's
+  # workspace. Nothing failed: `cyclonedx/run.sh` exits 0, so the job was green
+  # for as long as it existed, and the only symptom was a Go project that never
+  # appeared in the portfolio.
   script:
     - !reference [ .scripts-repo, before_script ]
     - $SCRIPTS_DIR/global/scripts/languages/golang/init/run.sh
     - $SCRIPTS_DIR/global/scripts/languages/golang/cyclonedx/run.sh
+    - $SCRIPTS_DIR/global/scripts/tools/dependency-track/run.sh

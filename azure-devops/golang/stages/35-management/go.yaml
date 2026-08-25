@@ -14,6 +14,19 @@ stages:
 
       - job: 'report_dependency_track'
         displayName: 'report:dependency-track'
+        # A pull-request validation build must not create a project.
+        # `(name, version)` IS a project's identity in Dependency-Track, so a PR
+        # whose version file is already bumped would mint that version's project
+        # before the merge — and keep it if the merge never happens. The shared
+        # `run.sh` refuses the upload anyway; this only saves spinning the job.
+        #
+        # `Build.Reason` rather than a default-branch comparison: Azure DevOps
+        # publishes NO variable carrying the repository's default branch
+        # (`Build.Repository.*` has Name, Uri, Provider, ID, LocalPath, Clean,
+        # Tfvc.Workspace and Git.SubmoduleCheckout, and nothing else), so a
+        # `Build.Repository.DefaultBranch` comparison would test against an empty
+        # string and silently disable every upload.
+        condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
         variables:
           REPORT_PATH: 'build/reports'
           GOPATH: "$(Pipeline.Workspace)/.go"

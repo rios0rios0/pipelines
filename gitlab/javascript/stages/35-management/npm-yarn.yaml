@@ -33,5 +33,5 @@ report:dependency-track:
     # outcome for an inventory job.
     - npm ci --ignore-scripts
     - npm run sbom
-    - apt update && apt install -y --no-install-recommends curl jq
+    - apt update && apt install -y --no-install-recommends curl jq git
     - !reference [ .dependency-track, script ]

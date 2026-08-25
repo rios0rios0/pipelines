@@ -2,7 +2,7 @@ TAG := latest
 ROOT := global/containers
 CONTAINER_REGISTRY = ghcr.io/rios0rios0/pipelines
 
-.PHONY: login setup-buildx build-and-push test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test-javascript-pipeline test-workflow-composition test-supply-chain test-runner-cache-gating test-azure-step-names test-dependency-updates test-go-module-toolchain check-dependency-updates test
+.PHONY: login setup-buildx build-and-push test-dependency-track test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test-javascript-pipeline test-workflow-composition test-supply-chain test-runner-cache-gating test-azure-step-names test-dependency-updates test-go-module-toolchain check-dependency-updates test
 
 login:
 	docker login $(CONTAINER_REGISTRY)
@@ -90,6 +90,10 @@ test-dependency-check:
 	@echo "Running OWASP Dependency-Check NVD cache/API-key validation..."
 	@./.github/tests/test-dependency-check.sh
 
+test-dependency-track:
+	@echo "Running Dependency-Track BOM uploader validation..."
+	@./.github/tests/test-dependency-track.sh
+
 test-goreleaser-prepare:
 	@echo "Running GoReleaser main package detection validation..."
 	@./.github/tests/test-goreleaser-prepare.sh
@@ -148,5 +152,5 @@ test-go-module-toolchain:
 	@echo "Running Go module/builder toolchain agreement validation..."
 	@./.github/tests/test-go-module-toolchain.sh
 
-test: test-go-module-toolchain test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-go-tool-staleness test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test-javascript-pipeline test-workflow-composition test-supply-chain test-runner-cache-gating test-azure-step-names test-dependency-updates
+test: test-dependency-track test-go-module-toolchain test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-go-tool-staleness test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test-javascript-pipeline test-workflow-composition test-supply-chain test-runner-cache-gating test-azure-step-names test-dependency-updates
 	@echo "All tests completed successfully!"

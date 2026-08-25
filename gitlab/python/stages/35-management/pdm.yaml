@@ -32,7 +32,7 @@ report:dependency-track:
   extends: [ '.pdm', '.dependency-track' ]
   script:
     - mkdir -p "$PREFIX$REPORT_PATH"
-    - apt update && apt install -y --no-install-recommends curl jq
+    - apt update && apt install -y --no-install-recommends curl jq git
 
     - $SCRIPTS_DIR/global/scripts/languages/python/cyclonedx/run.sh
     - !reference [ .dependency-track, script ]

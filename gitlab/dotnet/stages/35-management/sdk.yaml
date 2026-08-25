@@ -33,5 +33,5 @@ report:dependency-track:
   script:
     - dotnet tool install --global CycloneDX
     - dotnet CycloneDX $SLN_FILE -o "$PREFIX$REPORT_PATH" --json -rs
-    - apt update && apt install -y --no-install-recommends curl jq
+    - apt update && apt install -y --no-install-recommends curl jq git
     - !reference [ .dependency-track, script ]

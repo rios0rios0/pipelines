@@ -920,6 +920,40 @@ weaker than a tag, far better than a branch. Every example under
 | **SonarQube**        | Code quality & security                 | `global/scripts/tools/sonarqube/`                             | Project settings      |
 | **Dependency Track** | SBOM tracking                           | `global/scripts/tools/dependency-track/`                      | Environment variables |
 
+#### Dependency-Track configuration
+
+The uploader is driven entirely by environment variables. Only the first two are required.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `DEPENDENCY_TRACK_HOST_URL` | — | Base URL of the instance. A trailing `/` or `/api` is stripped, so both forms work |
+| `DEPENDENCY_TRACK_TOKEN` | — | API key. Sent through a `curl` config file on **stdin**, never on argv |
+| `DEPENDENCY_TRACK_DEFAULT_BRANCH` | — | The repository's default branch, as `main` or `refs/heads/main`. Needed **only on Azure DevOps and GitHub Actions**, neither of which publishes it (see below) |
+| `DEPENDENCY_TRACK_PARENT_NAME` / `_PARENT_VERSION` | — | Collection parent for **newly created** projects |
+| `DEPENDENCY_TRACK_PROJECT_NAME` / `_PROJECT_VERSION` | from the BOM | Override the identity taken from `metadata.component` |
+| `DEPENDENCY_TRACK_IS_LATEST` | auto-detected | Force the `isLatest` flag on or off |
+| `DEPENDENCY_TRACK_UPLOAD_ON_PULL_REQUEST` | `false` | Upload from merge/pull-request builds too |
+| `DEPENDENCY_TRACK_INSECURE` | unset | Skip TLS verification (prefer trusting the CA on the agent) |
+
+Three behaviours are worth knowing before adopting it, because each one is silent:
+
+- **Merge/pull-request builds do not upload.** A project's identity in Dependency-Track is the pair
+  `(name, version)`, so a pull request whose version file is already bumped would create that version's
+  project *before* the merge — and keep it if the merge never happens. Set
+  `DEPENDENCY_TRACK_UPLOAD_ON_PULL_REQUEST=true` if you want per-pull-request inventory.
+- **`isLatest` is claimed only on a default branch or a tag.** GitLab CI publishes `CI_DEFAULT_BRANCH`, so
+  it needs no help. **Azure DevOps publishes no variable carrying the repository's default branch**
+  (`Build.Repository.DefaultBranch` does not exist), and GitHub Actions exposes it only through the
+  `github.event.repository` context — on those two, set `DEPENDENCY_TRACK_DEFAULT_BRANCH` or a
+  default-branch build will upload without claiming the flag.
+- **A collection parent applies only to projects being created.** Dependency-Track resolves `parentName`
+  solely when it auto-creates the project; for one that already exists the field is read and ignored, with
+  no error. Re-parenting an existing portfolio needs `PATCH /api/v1/project/{uuid}` from an administrative
+  job.
+
+Verified against Dependency-Track `4.14.x` and `5.0.5`: the upload endpoint, its multipart parameters and
+its authentication header are identical across both, so one code path serves them.
+
 ### Basic Checks
 
 Every pipeline includes **basic checks** that run in parallel with linting during the **Code Check** stage. These checks verify:

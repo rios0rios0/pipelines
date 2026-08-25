@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, dart-pipeline, javascript-pipeline, workflow-composition, supply-chain, runner-cache-gating, azure-step-names)
+make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, dart-pipeline, javascript-pipeline, workflow-composition, supply-chain, runner-cache-gating, azure-step-names)
 make test-go-script    # Test Go validation script only
 make test-go-module-toolchain  # Test that every go.mod toolchain directive is readable by the images/analysers that consume it only
 make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves only
@@ -27,6 +27,7 @@ make test-terraform-provider-mirror  # Test the local Terraform provider mirror 
 make test-docker-multi-arch  # Test 40-delivery/docker multi-arch contract only
 make test-basic-checks # Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) only
 make test-dependency-check  # Test the OWASP Dependency-Check NVD cache / API-key contract only
+make test-dependency-track  # Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, cross-platform wiring) only
 make test-goreleaser-prepare  # Test the GoReleaser main package detection only
 make test-release-version-extraction  # Test release version extraction (tag ref + bump commit) only
 make test-release-reconcile  # Test release reconciliation gap detection only
@@ -384,6 +385,41 @@ Because the tools run directly on the host, the consuming CI job only needs the 
 | `cache/save` is gated on a `.owasp/.odc-complete` marker, not on `always()` alone | Saving unconditionally made one cancelled run permanent: the half-written database was published, restored, rejected by Dependency-Check, and rebuilt from zero until the timeout killed it and it saved another partial. `run.sh` clears the marker before running and writes it only after the analysis returns, so it is the one trustworthy "this database is whole" signal — a partial `odc.mv.db` is indistinguishable from a good one on disk |
 
 With no API key the runner uses NIST's gzipped JSON data feeds (`nvdDatafeedUrl`), which are not rate limited, so a keyless project still gets a usable scan; a **cold** run uses them even when a key *is* present, for the reason in the table above. `NVD_DATAFEED_URL` overrides this with a self-hosted [`vulnz`](https://github.com/jeremylong/open-vulnerability-cli) mirror. The database is pinned to `.owasp/` (both plugins require an absolute path and otherwise default it into `~/.m2` / `$GRADLE_USER_HOME`, where the pipelines were not caching it) and reused for 24h via `nvdValidForHours`. The job is capped at 45 minutes on every platform so a pathological download is bounded rather than trusted — a safety net, not the fix; the datafeed bootstrap is what keeps a cold build under it. Covered by `.github/tests/test-dependency-check.sh`, which runs the script against a stub build tool and asserts on the argv it actually produces, including both the cold (datafeed) and warm (API delta) paths.
+
+### Dependency-Track and the Project Identity Model
+
+`global/scripts/tools/dependency-track/run.sh` is the one uploader every platform calls. Read this before
+changing it, because every defect it has ever had returned **HTTP 200 and a green job**.
+
+**A project's identity is the PAIR `(name, version)`.** Each pair is a separate entity with its own UUID,
+components and findings; there is no "project that holds several versions". An uploader that sends the
+release version with `autoCreate=true` therefore mints a permanent new project on every bump, and nothing
+removes it. One consuming instance reached **2585 projects across 77 distinct names**, one application
+accounting for 355 of them, with every upload succeeding throughout.
+
+**The upload API is identical on `4.14.x` and `5.0.5`, and the script has one code path.** Verified against the
+`5.0.5` tag rather than the documentation site: `BomResource` is still `@Path("/v1/bom")`, the multipart
+parameters are byte-identical, and auth is still `X-Api-Key`. v5 adds a `resources/v2` package that holds
+no BOM resource. Do not add version detection this does not need. One model change DOES land for anything
+that READS a project back: `ACTIVE` became `INACTIVE_SINCE` (nullable timestamp), `isActive()` kept as a
+derived accessor. The v5 tree also moved to `apiserver/src/main/java/...`, which is why those files look
+absent at the 4.x path.
+
+Seven constraints shape this; `make test-dependency-track` asserts all of them:
+
+| Constraint | Why |
+|------------|-----|
+| **A merge/pull request never uploads** | A PR whose version file is already bumped mints that version's project BEFORE the merge, and keeps it if the merge never happens — the largest single source of sprawl. Gated in the SHARED SCRIPT, not per-platform YAML, so a consumer pinned to an older template revision gets it and so the suite can exercise it offline. Only a POSITIVELY identified PR is skipped: "I could not tell" must not silently mean "nothing was recorded" |
+| **`isLatest` is claimed only for a default branch or tag** | At most one version per name carries it, and a collection project with `AGGREGATE_LATEST_VERSION_CHILDREN` reads its metrics from that child. Asserting it every run moved the flag backwards onto older versions, so the parent reported a risk score belonging to the wrong version |
+| **Azure DevOps and GitHub Actions cannot report their own default branch** | `Build.Repository.DefaultBranch` **does not exist** (`Build.Repository.*` is Name, Uri, Provider, ID, LocalPath, Clean, Tfvc.Workspace, Git.SubmoduleCheckout). A condition comparing against it tests an empty string, is always false, and silently disables every upload. GitHub exposes the default branch only through `github.event.repository`, not the environment. `DEPENDENCY_TRACK_DEFAULT_BRANCH` supplies it; without it those platforms upload but do not claim the flag. Two assertions stop the non-existent variable being reintroduced |
+| **`parentName` only parents projects being CREATED** | `BomResource.uploadBom` resolves the parent solely inside `if (project == null && autoCreate)` — same in `4.14` and 5.0.5. For an existing project both parent fields are read and ignored, with no error and nothing in the response to notice. Adopting an existing portfolio needs `PATCH /api/v1/project/{uuid}` from an administrative job |
+| **`jq -r` prints the STRING `null` for a missing key** | And `null` is a valid project name, so a BOM without `metadata.component` created a project literally called `null` and kept updating it. Extraction uses `// empty`; a missing name fails the job, a missing *version* uploads versionless (one stable identity, better than one pinned to `null`) |
+| **The API key is never on argv** | argv is world-readable through `ps` and `/proc/<pid>/cmdline`, which on a shared or self-hosted runner means every other job on that host. The header goes in through `curl --config -` on stdin — same posture as `global/scripts/deploy/render/run.sh`, same reasoning as `-DnvdApiKeyEnvironmentVariable` |
+| **There is exactly ONE implementation** | The GitLab abstract used to inline its own `curl` that skipped the `sed 's\|/\|-\|g'` name normalisation and sent no `isLatest`, so a scoped npm package became TWO projects depending on which platform built it. Separately, the GitLab **Go** job defined its own `script:` — and GitLab's `extends` REPLACES `script:` rather than appending — so it generated a BOM and threw it away, green, forever |
+
+**GitHub Actions has no `35-management` stage at all** (`github/global/stages/` goes 20 → 40), so it has no
+Dependency-Track job to wire. That is a pre-existing gap, not something this uploader can paper over; adding
+the stage is its own piece of work.
 
 ### Dart & Flutter Support
 

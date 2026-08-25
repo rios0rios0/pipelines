@@ -9,6 +9,20 @@ runs:
       with:
         go-version-file: 'go.mod'
         cache-dependency-path: 'go.sum'
+        # Skipped on a self-hosted runner, where GOMODCACHE and GOCACHE persist on local
+        # disk between jobs. There the restore is not merely redundant -- it untars the archive
+        # over files that already exist, `tar` exits 2 with `Cannot open: File exists`, the
+        # action logs `Failed to restore`, and the entire download is discarded. Measured on a
+        # 12-vCPU self-hosted runner: 2.3-2.5 GB pulled at ~8 MB/s, 344-702s PER JOB across four
+        # jobs of the same run, against 1s when that job happens to miss the cache.
+        #
+        # This is the reasoning the codeql stage already applies, read the other way round: it
+        # skips the cache because its runner is thrown away, and these skip it because theirs
+        # is not.
+        #
+        # `!= 'self-hosted'` rather than `== 'github-hosted'` so an empty context keeps
+        # today's behaviour instead of silently disabling the cache for hosted consumers.
+        cache: ${{ runner.environment != 'self-hosted' }}
 
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 

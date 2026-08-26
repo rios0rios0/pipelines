@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added a tailored `code-review` skill under `.github/skills/` so GitHub Copilot reviews changes against the [rios0rios0/guide](https://github.com/rios0rios0/guide/wiki) standards and this repository''s own load-bearing invariants'
+time: '2026-08-26T16:14:24.354964642Z'

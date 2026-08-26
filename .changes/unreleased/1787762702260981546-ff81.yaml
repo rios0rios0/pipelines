@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed `global/scripts/shared/changelog-check.sh` detecting chlog only through `.chlog.yaml`, while the three basic-checks templates had already been widened to accept a `.chlog.yml` or a bare `.changes/unreleased/` directory. The shared script therefore demanded a hand-edited `CHANGELOG.md` from a repository that generates it from fragments — exactly the drift the four-way duplication is warned about in its own header'
-time: '2026-08-26T16:45:02.260895597Z'

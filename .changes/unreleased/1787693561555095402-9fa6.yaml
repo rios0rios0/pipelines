@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the SonarQube job, which **has not run for anyone since SonarSource re-versioned their image**: `sonarsource/sonar-scanner-cli:6.2.1` no longer exists on Docker Hub (the tags now run `11.x`/`12.x`, and everything at `6.x` was pruned), so the `container:` failed to pull. Five GitHub workflows referenced it; the job is `continue-on-error: true` and gated on `sonar_host`, which is exactly why a hard pull failure looked like nothing at all. Now pinned to `12.1.0.3233_8.0.1` -- verified to be the same image `latest` resolves to -- on all three platforms, replacing the Azure template''s `:latest` at the same time'
-time: '2026-08-25T21:32:41.555035848Z'

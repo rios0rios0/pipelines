@@ -1,3 +1,0 @@
-kind: 'Security'
-body: 'replaced the illustrative secret in `global/scripts/tools/gitleaks/.gitleaks.toml` with a placeholder. It came from the upstream sample config and was never live, which is exactly why it is worth removing: it is indistinguishable from the real thing to every tool that reads the file'
-time: '2026-08-25T21:32:41.619417771Z'

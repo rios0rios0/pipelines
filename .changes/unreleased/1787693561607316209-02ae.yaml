@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added `global/scripts/languages/terraform/{tflint,terra}/install.sh`, pinned and checksum-verified installers replacing the vendors'' `curl | sh` one-liners on all three platforms. TFLint''s zip is unpacked with `unzip` or, where that is absent (alpine and the `*-slim` images), Python''s stdlib `zipfile`, matching how the Dart SDK archive is already handled'
-time: '2026-08-25T21:32:41.60727393Z'

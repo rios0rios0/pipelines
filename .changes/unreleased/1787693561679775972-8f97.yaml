@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: '**the Dart number that settles the argument is the job whose restore SUCCEEDED**: it still paid 308s, while a cold `dart_ensure_sdk` in the same run installed the same SDK straight from Google''s archive in 126s. The cache is slower than the download it exists to avoid, so skipping it is a win on a cold self-hosted host as well as on a warm one -- where the SDK is already unpacked and the install costs nothing at all. This is the reasoning the CodeQL stage has always applied, read the other way round: it skips the cache because its runner is thrown away, and these skip it because theirs is not'
-time: '2026-08-25T21:32:41.679735509Z'

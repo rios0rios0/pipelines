@@ -1,3 +1,0 @@
-kind: 'Added'
-body: '**adopting this on an existing repository takes one commit**: run `make format` (or `yarn format`) and commit the result before merging the pipeline bump, or the first run reports every file the formatter would rewrite. Consumers that list required checks for a deployment gate should add `code-check > style:format` to that list'
-time: '2026-08-25T21:32:41.710812628Z'

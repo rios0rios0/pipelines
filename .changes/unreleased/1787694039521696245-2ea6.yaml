@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed `make test` failing the moment the changelog became chlog fragments. `.github/tests/test-supply-chain.sh` scans the tree for `*.sh`/`*.yaml`/`*.yml` and greps for unpinned installs, and `CHANGELOG.md` had always been invisible to it because `.md` is not in the name filter. Fragments are `.yaml`, so the same changelog prose landed inside the filter for the first time and five assertions failed on entries that DESCRIBE the pinning work ("pinned every `go install ...@latest` (`govulncheck`, ...)") rather than on any call site. Every scan now excludes `./.changes/*`, for exactly the reason it already excludes `./.github/tests/*`: prose about a call site is not a call site'
-time: '2026-08-25T21:40:39.521645018Z'

@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the Hadolint installer, which **had silently stopped updating**. `v2.15.1` renamed its release assets from `hadolint-Linux-x86_64` to `hadolint-linux-x86_64` (lower-case "l"); the resolver kept returning the new version, the download kept 404ing on the old capitalised name, and the retry-and-fallback logic kept quietly installing the hard-coded `v2.14.0` -- so the "always current for CVE fixes" behaviour had become untrue, and the failure presented as a flaky network rather than a broken URL. Pinning fixes the version and the asset name together, and the whole retry/backoff apparatus is gone with the run-time lookup it existed to protect'
-time: '2026-08-25T21:32:41.552343646Z'

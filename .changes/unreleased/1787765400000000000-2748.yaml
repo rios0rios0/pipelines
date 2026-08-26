@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the GitHub Copilot code-review skill''s secret-hygiene guidance, which named vendor token prefixes literally and was therefore matched by a rule in the shipped GitLab-customised Gitleaks ruleset that fires on a prefix alone with no body check -- the documentation tripped the very rule it described, turning every repository that adopted the skill red. The bullet now names the vendors instead, and `global/scripts/tools/README.md` records the convention that documentation about secret shapes must not quote the shapes'
-time: '2026-08-26T17:30:00.000000000Z'

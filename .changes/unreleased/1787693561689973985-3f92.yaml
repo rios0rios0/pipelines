@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the GitLab CI **Go** job generating a BOM and never uploading it. GitLab''s `extends` REPLACES `script:` rather than appending to it, so the job''s own `script:` silently overrode the abstract''s. `cyclonedx/run.sh` exits 0, so the job was green for as long as it existed and the only symptom was a Go project that never appeared in the portfolio'
-time: '2026-08-25T21:32:41.689930417Z'

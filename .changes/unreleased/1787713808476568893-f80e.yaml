@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the changelog check in `basic-checks` treating a repository as non-chlog when it carries no `.chlog.yaml`. Detection now also accepts `.chlog.yml` and a `.changes/unreleased/` directory, mirroring AutoBump''s `DetectChlog`. The config file is optional -- chlog falls back to its built-in defaults when none is found -- so a project that dropped the redundant config fell through to the plain `CHANGELOG.md` branch and was asked to hand-edit a changelog it generates from fragments. Applied to the GitHub, Azure DevOps, and GitLab variants'
+time: '2026-08-26T03:10:08.476510872Z'

@@ -56,8 +56,15 @@ jobs:
           echo ""
           echo "=== Changelog Check ==="
 
-          if [ -f ".chlog.yaml" ]; then
-            echo "Detected chlog-based changelog (found .chlog.yaml)."
+          # A repository counts as a chlog user when it commits a config file OR when it
+          # merely carries the fragment directory: the config is optional, and chlog falls
+          # back to its built-in defaults when none is found. Testing only for .chlog.yaml
+          # made a repository that dropped the redundant config fall through to the plain
+          # CHANGELOG.md branch below, demanding a hand-edited changelog from a project that
+          # generates it from fragments. Mirrors AutoBump's DetectChlog so the two cannot
+          # disagree about whether a repository uses chlog.
+          if [ -f ".chlog.yaml" ] || [ -f ".chlog.yml" ] || [ -d ".changes/unreleased" ]; then
+            echo "Detected chlog-based changelog."
 
             case "$SOURCE_BRANCH" in
               chore/bump-*|bump/*)

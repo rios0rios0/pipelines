@@ -71,6 +71,31 @@ assert_true() {
   fi
 }
 
+# active_uses_ref <file> <expected-ref>
+#
+# Matches only an executable YAML `uses:` key. Documentation and commented-out
+# examples must not be able to satisfy a regression assertion.
+active_uses_ref() {
+  local file="$1"
+  local expected_ref="$2"
+  awk -v expected_ref="$expected_ref" '
+    /^[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]*/ {
+      value = $0
+      sub(/^[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]*/, "", value)
+      sub(/[[:space:]]*#.*/, "", value)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+      quote = substr(value, 1, 1)
+      if ((quote == sprintf("%c", 39) || quote == "\"") && substr(value, length(value), 1) == quote) {
+        value = substr(value, 2, length(value) - 2)
+      }
+      if (value == expected_ref) {
+        found = 1
+      }
+    }
+    END { exit found ? 0 : 1 }
+  ' "$file"
+}
+
 # drop_comments
 #
 # Filters a `grep -Hn` result down to lines where the match is real code, not
@@ -81,6 +106,14 @@ assert_true() {
 # YAML list dash, then `#`.
 drop_comments() {
   grep -vE ':[0-9]+:[[:space:]]*(-[[:space:]]*)?#' || true
+}
+
+# Keep first-party moving references explicit rather than exempting an owner.
+# The two organization-wide Claude workflows are centrally managed policy;
+# internal pipeline actions are governed by the workflow-composition contract.
+drop_allowed_first_party_refs() {
+  grep -vE "^[^:]+:[0-9]+:[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]*['\"]?rios0rios0/pipelines/[^'\"[:space:]#]+@main['\"]?([[:space:]]+#.*)?$" \
+    | grep -vE "^[^:]+:[0-9]+:[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]*['\"]?rios0rios0/\.github/\.github/workflows/(claude|claude-code-review)\.yaml@main['\"]?([[:space:]]+#.*)?$"
 }
 
 # Every YAML file in the repository, excluding the consumer-facing examples
@@ -108,11 +141,15 @@ echo "1. GitHub Actions are pinned to immutable commits"
 # A tag is a label the publisher can move at any time, so `@v4` is a promise
 # rather than a pin. Only a 40-character commit SHA is immutable.
 #
-# `rios0rios0/pipelines/...` is excluded on purpose: those are SAME-REPOSITORY
-# references with an identical trust boundary, and
-# `test-workflow-composition.sh` Test 7 separately REQUIRES them to be `@main`
-# so the library can develop against itself. Pinning them would be a
-# chicken-and-egg (the SHA cannot exist before the commit that needs it).
+# `rios0rios0/pipelines/...@main` is excluded on purpose: those are explicitly
+# moving SAME-REPOSITORY references whose policy is enforced separately by
+# `test-workflow-composition.sh` Test 7. A `$/path/to/action` self-repository
+# reference is excluded for the opposite reason: runner 2.336.0+ resolves it
+# from the exact repository and commit of the running workflow or composite,
+# so it is already immutable without a circular hard-coded SHA.
+# The two exact `rios0rios0/.github` Claude workflow paths are separately
+# allowlisted above as intentionally moving organization-owned policy. No other
+# repository under the same owner inherits that exception.
 #
 # A LOCAL PATH (`uses: ./path/to/action`) is excluded for the same reason, only
 # more so: it is not a reference to another repository at all, it is this very
@@ -129,8 +166,9 @@ echo "1. GitHub Actions are pinned to immutable commits"
 UNPINNED_ACTIONS="$(
   yaml_files -print0 2>/dev/null | xargs -0 grep -HnE "^[[:space:]]*(-[[:space:]]*)?uses:" 2>/dev/null \
     | drop_comments \
-    | grep -v 'rios0rios0/' \
+    | drop_allowed_first_party_refs \
     | grep -vE "uses: *'?\./" \
+    | grep -vE "uses: *'?\\\$/" \
     | grep -vE "uses: *'?[^'@]+@[0-9a-f]{40}'?" \
     || true
 )"
@@ -139,8 +177,27 @@ assert_empty "every third-party action is pinned to a 40-character commit SHA" "
 # The exclusion above must stay narrow: only a path that genuinely starts `./`
 # is local. `uses: 'some/action@v4'` must still fail, and so must anything that
 # merely mentions a relative path further along the line.
-assert_empty "a tag-pinned third-party action would still be reported" \
-  "$(printf "x.yaml:1:  - uses: 'some/action@v4'\n" | grep -v 'rios0rios0/' | grep -vE "uses: *'?\\./" | grep -vE "uses: *'?[^'@]+@[0-9a-f]{40}'?" | grep -c . | grep -qE '^1$' && true || echo 'the narrowed exclusion swallowed a tag-pinned action')"
+assert_empty "third-party and similarly named actions would still be reported" \
+  "$(printf "%s\n" \
+    "x.yaml:1:  - uses: 'some/action@v4'" \
+    "x.yaml:2:  - uses: 'rios0rios0/another-action@main'" \
+    "x.yaml:3:  - uses: 'rios0rios0/pipelines-evil/action@main'" \
+    "x.yaml:4:  - uses: 'rios0rios0/.github/.github/workflows/claude-evil.yaml@main'" \
+    "x.yaml:5:  - uses: 'rios0rios0/.github/.github/workflows/claude.yaml@feature'" \
+    "x.yaml:6:  - uses: 'rios0rios0/.github/.github/workflows/claude.yaml@main-evil'" \
+    "x.yaml:7:  - uses: 'rios0rios0/.github/.github/workflows/claude.yaml@main'" \
+    "x.yaml:8:  - uses: 'rios0rios0/pipelines/action@feature'" \
+    "x.yaml:9:  - uses: 'some/action@v1' # uses: 'rios0rios0/pipelines/action@main'" \
+    "x.yaml:10: - uses: 'rios0rios0/pipelines/action@main'" \
+    | drop_allowed_first_party_refs \
+    | grep -vE "uses: *'?\\./" \
+    | grep -vE "uses: *'?[^'@]+@[0-9a-f]{40}'?" \
+    | grep -c . | grep -qE '^8$' && true || echo 'a first-party exclusion swallowed an unapproved action')"
+
+# The new exact-commit self-reference must be accepted without widening the
+# exclusion above to an arbitrary unpinned action.
+assert_empty "an exact-commit self-repository action is accepted" \
+  "$(printf "x.yaml:1:  - uses: '\$/path/to/action'\n" | drop_allowed_first_party_refs | grep -vE "uses: *'?\\./" | grep -vE "uses: *'?\\\$/" | grep -vE "uses: *'?[^'@]+@[0-9a-f]{40}'?" || true)"
 
 # A bare SHA is unreadable and unmaintainable; the trailing comment is what
 # lets a human (and Dependabot/Renovate) see which version is deployed.
@@ -351,6 +408,15 @@ for abstract in \
   assert_true "$(basename "$(dirname "$abstract")")/$(basename "$abstract"): no ref-less 'git clone' of the scripts repo" \
     "! grep -qE 'git clone( --depth 1)? \"?\\\$?\{?(SCRIPTS_REPO|PIPELINES_REPO)|git clone --depth 1 https://github.com/rios0rios0/pipelines' '$abstract'"
 done
+
+# The Yarn Semgrep chain is the first first-party GitHub path that promises
+# end-to-end immutability from a consumer's reusable-workflow SHA. Both edges
+# must use GitHub's exact-running-commit self reference; either edge falling
+# back to `@main` makes a rerun of an unchanged consumer execute new code.
+assert_true "yarn.yaml: Semgrep composite follows the reusable-workflow commit" \
+  "active_uses_ref '.github/workflows/yarn.yaml' '\$/github/global/stages/20-security/semgrep'"
+assert_true "semgrep/action.yaml: scripts checkout follows the composite commit" \
+  "active_uses_ref 'github/global/stages/20-security/semgrep/action.yaml' '\$/github/global/abstracts/scripts-repo'"
 echo ""
 
 # ---------------------------------------------------------------------------

@@ -107,7 +107,7 @@ When adding a new language or toolchain, always use the toolchain name in the wo
 
 ### Supply-Chain Pinning
 
-**Enforced by `.github/tests/test-supply-chain.sh` (`make test-supply-chain`), 23 assertions, every one of
+**Enforced by `.github/tests/test-supply-chain.sh` (`make test-supply-chain`), 27 assertions, every one of
 them proven to fire against a deliberate violation.** Read this before adding an action, an image, or
 anything that downloads a binary.
 
@@ -128,8 +128,8 @@ Five constraints shape this family; do not "simplify" any of them away:
 | Constraint | Why |
 |------------|-----|
 | **A pinned version and its digest move together** | A committed digest describes ONE build. `pinned_digest` compares `<TOOL>_VERSION` against `<TOOL>_PINNED_VERSION` and refuses to reuse the digest when they differ — verifying new bytes against an old digest fails every time and reads like an attack. An override without `<TOOL>_SHA256_OVERRIDE` warns loudly and skips verification rather than failing the job, because responding to an upstream CVE must not require a release here |
-| **Same-repository `@main` references are deliberate** | `rios0rios0/pipelines/...@main` shares this repository's trust boundary, `test-workflow-composition.sh` Test 7 REQUIRES it, and pinning it is a chicken-and-egg — the SHA cannot exist before the commit that needs it. The supply-chain test excludes them explicitly, so the two suites cannot contradict each other |
-| **The `scripts-repo` abstracts must honour an explicit ref** | They cloned the default branch with no ref, so a consumer pinning `@4.23.0` got the workflow from the tag and every SCRIPT from `main`. Pinning the entry point while the payload floats is worse than not pinning: it reads as covered. GitHub follows `github.action_ref`; GitLab and Azure take `PIPELINES_REF`. All three use `git init` + `git fetch <ref>`, NOT `git clone --branch`, because `--branch` rejects a raw commit SHA — the only genuinely immutable form |
+| **Same-repository references declare whether they move** | `rios0rios0/pipelines/...@main` deliberately follows the latest first-party implementation. When an executable chain must follow a consumer's pinned workflow SHA, use GitHub's `$/path/to/action` self-repository syntax instead: runner 2.336.0+ resolves it from the exact repository and commit of the running workflow or composite, without a circular hard-coded SHA. It is a GitHub.com feature and is unavailable on GitHub Enterprise Server. The Yarn Semgrep workflow and its scripts checkout use this exact-commit form; `test-workflow-composition.sh` Test 7 and the supply-chain test hold both edges. |
+| **The `scripts-repo` abstracts must honour an explicit ref** | They cloned the default branch with no ref, so a consumer pinning `@4.23.0` got the workflow from the tag and every SCRIPT from `main`. Pinning the entry point while the payload floats is worse than not pinning: it reads as covered. GitHub follows `github.action_ref` — including the exact SHA supplied by a `$/` self-reference; GitLab and Azure take `PIPELINES_REF`. All three use `git init` + `git fetch <ref>`, NOT `git clone --branch`, because `--branch` rejects a raw commit SHA — the only genuinely immutable form |
 | **The tools no longer self-update** | Several installers re-resolved `releases/latest` on every run of a persistent agent, justified as staying current for CVE fixes. It also meant a linter or scanner's verdict on unchanged code could change overnight, and the earlier verdict could not be reproduced. An exact version is idempotent, so those branches were deleted rather than rewritten |
 | **The test strips comments before matching** | This repository documents the patterns it forbids at length, so a check that bans `npx --yes knip` is otherwise failed by the comment explaining why. `drop_comments` handles it; `yaml_files` must pass `"$@"` through to `find`, because a swallowed `-print0` made three assertions pass without examining a single file |
 
@@ -246,6 +246,13 @@ it does not copy its jobs. `go-render.yaml` calls `go-docker.yaml`, which calls 
 files, each adding one stage, none repeating another. Copying instead of calling drifts one input at
 a time, and every drift reads to the next person like a deliberate difference.
 
+**Internal GitHub actions have two explicit revision policies.** `@main` is the intentionally moving
+default for first-party stages. `$/path/to/action` resolves the action at the exact commit of the running
+workflow or composite and is required when a consumer's pinned entry point promises an immutable
+execution chain. The latter requires GitHub Actions runner 2.336.0 or newer and is unavailable on GitHub
+Enterprise Server. Do not replace `$/` with `@main` in the Yarn Semgrep chain: doing so lets an unchanged
+consumer SHA execute different scanner wiring or scripts on a rerun.
+
 **A deploy is a job with `needs:`, never a second workflow.** This is the rule the whole standard
 exists for. The shape a consumer reaches for instead is:
 
@@ -346,7 +353,7 @@ GitHub convenience layer is missing, add the `<toolchain>-<provider>.yaml`.
 
 ### How Platforms Consume Templates
 
-**GitHub Actions** — Reusable workflows via `uses: 'rios0rios0/pipelines/.github/workflows/<workflow>@main'`
+**GitHub Actions** — Reusable workflows via `uses: 'rios0rios0/pipelines/.github/workflows/<workflow>@<tag-or-sha>'`
 
 **GitLab CI** — Remote includes via `remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/<lang>/<template>.yaml'`
 

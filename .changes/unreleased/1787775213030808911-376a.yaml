@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'restored the `.changes/unreleased/` directory with a `.gitkeep`, so the release tooling keeps recognising this project as [chlog](https://github.com/luizjhonata/chlog)-based after a release consumes the last fragment. Git tracks files rather than directories, so the bump commit that removed the final fragment removed the directory too, and the next run read the empty `[Unreleased]` section as "nothing to release"'
+time: '2026-08-26T20:13:33.030730542Z'

@@ -4,8 +4,9 @@
 # and in global/scripts/shared/changelog-check.sh.
 #
 # Exercises chlog-based (fragment), chlog release/bump (CHANGELOG.md updated),
-# and legacy (direct CHANGELOG.md edit) changelog validation by creating
-# temporary git repos that simulate PR diffs.
+# automation-branch (autoupdate's dedupe: a new entry OR one already pending on
+# the target branch), and legacy (direct CHANGELOG.md edit) changelog validation
+# by creating temporary git repos that simulate PR diffs.
 #
 # EVERY fixture is run twice: once against the extracted template logic below,
 # and once against the real `global/scripts/shared/changelog-check.sh` on disk.
@@ -47,8 +48,14 @@ SOURCE_BRANCH="${SOURCE_BRANCH:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null ||
 echo ""
 echo "=== Changelog Check ==="
 
-if [ -f ".chlog.yaml" ]; then
-  echo "Detected chlog-based changelog (found .chlog.yaml)."
+# The prefix autoupdate names its aggregate branch with: `aggregate_branch_prefix`
+# in autoupdate's own configuration, `chore/autoupdate-` by default. Set
+# AUTOUPDATE_BRANCH_PREFIX in the consumer's CI variables for a repository that
+# customised it.
+AUTOUPDATE_PREFIX="${AUTOUPDATE_BRANCH_PREFIX:-chore/autoupdate-}"
+
+if [ -f ".chlog.yaml" ] || [ -f ".chlog.yml" ] || [ -d ".changes/unreleased" ]; then
+  echo "Detected chlog-based changelog."
 
   case "$SOURCE_BRANCH" in
     chore/bump-*|bump/*)
@@ -67,6 +74,50 @@ if [ -f ".chlog.yaml" ]; then
       fi
 
       echo "CHANGELOG.md was updated. OK."
+      ;;
+    "$AUTOUPDATE_PREFIX"*)
+      # autoupdate writes NO entry when the target branch already records the
+      # statement it would have written. It runs unattended, on a schedule, against
+      # the same repositories, so without that check yesterday's bullet is restated
+      # verbatim on every run until a release moves it away. A correct run therefore
+      # legitimately carries no fragment, and demanding one fails a pull request
+      # that is right (rios0rios0/autoupdate, `newChangelogEntries`).
+      #
+      # The other half of that rule IS checkable, and is what is enforced here:
+      # omitting the fragment is acceptable only BECAUSE one is already pending, so
+      # something must be pending. Nothing added and nothing pending means the
+      # change is written down nowhere -- a real miss, or a dedupe that broke -- and
+      # still fails.
+      echo "Automation branch detected ('$SOURCE_BRANCH')."
+
+      NEW_FRAGMENTS=$(git diff --name-only --diff-filter=A "origin/$TARGET_BRANCH"...HEAD -- '.changes/unreleased/' 2>/dev/null || true)
+      if [ -n "$NEW_FRAGMENTS" ]; then
+        echo "Found changelog fragment(s):"
+        echo "$NEW_FRAGMENTS"
+      else
+        # Only a .yaml/.yml file counts as pending. A .gitkeep holding the directory
+        # open in git is not an entry, and accepting it would wave through every
+        # automation branch in any repository that keeps one.
+        PENDING_FRAGMENTS=$(git ls-tree -r --name-only "origin/$TARGET_BRANCH" -- '.changes/unreleased/' 2>/dev/null | grep -E '[.](yaml|yml)$' | head -1 || true)
+        if [ -z "$PENDING_FRAGMENTS" ]; then
+          echo ""
+          echo "============================================================"
+          echo "  ERROR: No changelog fragment was added, and none is pending."
+          echo ""
+          echo "  An automation branch may omit the fragment only when the"
+          echo "  target branch already records the same statement as pending."
+          echo "  '$TARGET_BRANCH' records none, so this change is written"
+          echo "  down nowhere."
+          echo ""
+          echo "  Run: chlog new --kind <Kind> --body \"<description>\""
+          echo "  See: https://github.com/luizjhonata/chlog"
+          echo "============================================================"
+          echo ""
+          exit 1
+        fi
+        echo "No new fragment, and '$TARGET_BRANCH' already records pending fragment(s):"
+        echo "$PENDING_FRAGMENTS"
+      fi
       ;;
     *)
       echo "Checking for new fragments in '.changes/unreleased/'..."
@@ -90,6 +141,22 @@ else
 
   CHANGED_FILES=$(git diff --name-only "origin/$TARGET_BRANCH"...HEAD -- 'CHANGELOG.md' 2>/dev/null || true)
   if [ -z "$CHANGED_FILES" ]; then
+    # The same exemption the chlog path above makes, for a repository that keeps a
+    # hand-written CHANGELOG.md: autoupdate suppresses the entry when [Unreleased]
+    # on the target branch already states it.
+    PENDING_ENTRIES=''
+    case "$SOURCE_BRANCH" in
+      "$AUTOUPDATE_PREFIX"*)
+        PENDING_ENTRIES=$(git show "origin/$TARGET_BRANCH:CHANGELOG.md" 2>/dev/null | awk '/^##[[:space:]]*\[Unreleased\]/{inside=1;next} /^##[[:space:]]*\[/{inside=0} inside && /^[[:space:]]*[-*][[:space:]]/{print;exit}' || true)
+        ;;
+    esac
+
+    if [ -n "$PENDING_ENTRIES" ]; then
+      echo "Automation branch detected ('$SOURCE_BRANCH')."
+      echo "No CHANGELOG.md change, and [Unreleased] on '$TARGET_BRANCH' already records entries. OK."
+      exit 0
+    fi
+
     echo ""
     echo "============================================================"
     echo "  ERROR: CHANGELOG.md was NOT modified."
@@ -432,6 +499,135 @@ git commit -m "modify changelog without unreleased" >/dev/null 2>&1
 assert_fail "legacy repo with CHANGELOG.md missing [Unreleased] section"
 assert_script_fail "legacy repo with CHANGELOG.md missing [Unreleased] section" "does not contain an [Unreleased] section"
 
+# ── automation branches (autoupdate's dedupe) ─────────────────────────────────
+#
+# autoupdate does not restate an entry the target branch already records as
+# pending -- it runs unattended on a schedule, so without that check yesterday's
+# bullet is written again verbatim on every run. A correct autoupdate branch can
+# therefore carry no entry at all, and the strict rules above fail it.
+#
+# For a branch carrying the automation prefix the requirement becomes "a new
+# entry OR one already pending". The fixtures below pin both halves: the
+# exemption applies, it is NOT a blanket skip (nothing pending still fails), and
+# it does NOT extend to human branches -- for a person who forgot the entry,
+# "something else was already pending" is a coincidence, not a defence.
+
+echo ""
+echo "── automation branches (autoupdate dedupe) ──"
+
+echo ""
+echo "Test 11: chlog repo, automation branch, no fragment, target has one pending -> should pass"
+WORK_DIR="$(setup_repo "auto-chlog-pending")"
+cd "$WORK_DIR"
+touch .chlog.yaml
+mkdir -p .changes/unreleased
+echo "kind: 'Changed'" > .changes/unreleased/pending.yaml
+git add .chlog.yaml .changes/unreleased/pending.yaml
+git commit -m "add chlog config and a pending fragment" >/dev/null 2>&1
+git push origin main >/dev/null 2>&1
+git checkout -b chore/autoupdate-2026-08-26 >/dev/null 2>&1
+echo "require example.com/x v1.2.3" > go.mod
+git add go.mod
+git commit -m "chore(deps): update Go module dependencies" >/dev/null 2>&1
+assert_pass "chlog repo, automation branch, entry already pending on target"
+assert_script_pass "chlog repo, automation branch, entry already pending on target"
+
+echo ""
+echo "Test 12: chlog repo, automation branch, no fragment, nothing pending -> should fail"
+WORK_DIR="$(setup_repo "auto-chlog-empty")"
+cd "$WORK_DIR"
+mkdir -p .changes/unreleased
+# A .gitkeep is what holds the directory open in git; it is not an entry, and
+# counting it would wave through every automation branch in such a repository.
+touch .changes/unreleased/.gitkeep
+git add .changes/unreleased/.gitkeep
+git commit -m "add an empty unreleased directory" >/dev/null 2>&1
+git push origin main >/dev/null 2>&1
+git checkout -b chore/autoupdate-2026-08-26 >/dev/null 2>&1
+echo "require example.com/x v1.2.3" > go.mod
+git add go.mod
+git commit -m "chore(deps): update Go module dependencies" >/dev/null 2>&1
+assert_fail "chlog repo, automation branch, nothing added and nothing pending"
+assert_script_fail "chlog repo, automation branch, nothing added and nothing pending" \
+  "No changelog fragment was added, and none is pending"
+
+echo ""
+echo "Test 13: chlog repo, automation branch, fragment added -> should pass"
+WORK_DIR="$(setup_repo "auto-chlog-fragment")"
+cd "$WORK_DIR"
+touch .chlog.yaml
+git add .chlog.yaml
+git commit -m "add chlog config" >/dev/null 2>&1
+git push origin main >/dev/null 2>&1
+git checkout -b chore/autoupdate-2026-08-26 >/dev/null 2>&1
+mkdir -p .changes/unreleased
+echo "kind: 'Changed'" > .changes/unreleased/new.yaml
+git add .changes/unreleased/new.yaml
+git commit -m "chore(deps): update Go module dependencies" >/dev/null 2>&1
+assert_pass "chlog repo, automation branch, fragment added"
+assert_script_pass "chlog repo, automation branch, fragment added"
+
+echo ""
+echo "Test 14: chlog repo, HUMAN branch, no fragment, target has one pending -> should fail"
+WORK_DIR="$(setup_repo "auto-chlog-human")"
+cd "$WORK_DIR"
+touch .chlog.yaml
+mkdir -p .changes/unreleased
+echo "kind: 'Changed'" > .changes/unreleased/pending.yaml
+git add .chlog.yaml .changes/unreleased/pending.yaml
+git commit -m "add chlog config and a pending fragment" >/dev/null 2>&1
+git push origin main >/dev/null 2>&1
+git checkout -b feat/test >/dev/null 2>&1
+echo "some change" > src.txt
+git add src.txt
+git commit -m "change without fragment" >/dev/null 2>&1
+assert_fail "chlog repo, human branch, pending fragment is not a defence"
+assert_script_fail "chlog repo, human branch, pending fragment is not a defence" \
+  "No changelog fragment was added"
+
+echo ""
+echo "Test 15: legacy repo, automation branch, no edit, [Unreleased] has entries -> should pass"
+WORK_DIR="$(setup_repo "auto-legacy-pending")"
+cd "$WORK_DIR"
+sed -i 's/## \[Unreleased\]/## [Unreleased]\n\n### Changed\n\n- changed the Go module dependencies to their latest versions/' CHANGELOG.md
+git add CHANGELOG.md
+git commit -m "record a pending entry" >/dev/null 2>&1
+git push origin main >/dev/null 2>&1
+git checkout -b chore/autoupdate-2026-08-26 >/dev/null 2>&1
+echo "require example.com/x v1.2.3" > go.mod
+git add go.mod
+git commit -m "chore(deps): update Go module dependencies" >/dev/null 2>&1
+assert_pass "legacy repo, automation branch, entry already under [Unreleased]"
+assert_script_pass "legacy repo, automation branch, entry already under [Unreleased]"
+
+echo ""
+echo "Test 16: legacy repo, automation branch, no edit, [Unreleased] empty -> should fail"
+WORK_DIR="$(setup_repo "auto-legacy-empty")"
+cd "$WORK_DIR"
+git checkout -b chore/autoupdate-2026-08-26 >/dev/null 2>&1
+echo "require example.com/x v1.2.3" > go.mod
+git add go.mod
+git commit -m "chore(deps): update Go module dependencies" >/dev/null 2>&1
+assert_fail "legacy repo, automation branch, nothing recorded anywhere"
+assert_script_fail "legacy repo, automation branch, nothing recorded anywhere" \
+  "CHANGELOG.md was NOT modified"
+
+echo ""
+echo "Test 17: legacy repo, HUMAN branch, no edit, [Unreleased] has entries -> should fail"
+WORK_DIR="$(setup_repo "auto-legacy-human")"
+cd "$WORK_DIR"
+sed -i 's/## \[Unreleased\]/## [Unreleased]\n\n### Changed\n\n- an entry somebody else recorded/' CHANGELOG.md
+git add CHANGELOG.md
+git commit -m "record a pending entry" >/dev/null 2>&1
+git push origin main >/dev/null 2>&1
+git checkout -b feat/test >/dev/null 2>&1
+echo "some change" > src.txt
+git add src.txt
+git commit -m "change without changelog" >/dev/null 2>&1
+assert_fail "legacy repo, human branch, pending entry is not a defence"
+assert_script_fail "legacy repo, human branch, pending entry is not a defence" \
+  "CHANGELOG.md was NOT modified"
+
 # ── the four implementations must move together ───────────────────────────────
 #
 # The fixtures above run the rule twice: through the extracted Azure logic and
@@ -469,6 +665,11 @@ for impl in \
   # editing an entry somebody else already recorded counts as this change's entry.
   assert_contains "$impl" '--diff-filter=A'
   assert_contains "$impl" 'chore/bump-*|bump/*'
+  # The automation exemption: autoupdate legitimately files no entry when the
+  # target branch already records the statement, so dropping this arm turns every
+  # scheduled dependency pull request red.
+  assert_contains "$impl" 'AUTOUPDATE_BRANCH_PREFIX'
+  assert_contains "$impl" '"$AUTOUPDATE_PREFIX"*)'
 done
 
 # ── summary ───────────────────────────────────────────────────────────────────

@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed the tool installers to stop self-updating to `latest` on every run of a persistent agent. That behaviour was justified as staying current for CVE fixes, but it also meant the gate''s verdict on unchanged code could change overnight; bumping a version in `pinned-versions.sh` makes that a reviewed change with a diff, which is what a rule change deserves. An exact version is idempotent, so the "already installed, re-resolve anyway" branches are gone rather than replaced'
+time: '2026-08-25T21:32:41.583235558Z'

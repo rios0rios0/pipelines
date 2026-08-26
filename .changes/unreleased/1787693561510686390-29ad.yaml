@@ -1,0 +1,3 @@
+kind: 'Security'
+body: 'added `--ignore-scripts` to the deploy CLI installs (`wrangler`, `vercel`, `netlify-cli`) and pinned them to a verified major. `npm install` runs arbitrary `postinstall` scripts from the package and its whole transitive tree, as the CI user, with the deploy token already in the environment -- the standard npm supply-chain execution path, and none of the three CLIs needs one to work'
+time: '2026-08-25T21:32:41.510278107Z'

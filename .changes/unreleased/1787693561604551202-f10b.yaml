@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added `make test-supply-chain` (`.github/tests/test-supply-chain.sh`), 23 assertions holding the whole contract: actions pinned to SHAs and carrying their version comment, images and `FROM` lines digest-pinned, no remote script piped into a shell, every release download routed through `download_verified`, every committed digest well-formed, every package install naming a version, every `scripts-repo` abstract honouring an explicit ref, and no example teaching consumers to track `@main`. Pinning is not a state you reach but one you keep, and every finding here was introduced by someone doing something reasonable -- copying a vendor''s documented one-liner, or adding an action the way the marketplace prints it'
+time: '2026-08-25T21:32:41.604500169Z'

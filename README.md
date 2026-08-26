@@ -976,7 +976,13 @@ its authentication header are identical across both, so one code path serves the
 Every pipeline includes **basic checks** that run in parallel with linting during the **Code Check** stage. These checks verify:
 
 1. **Rebase verification** — the PR/MR branch is rebased on top of the target branch (usually `main`). If the branch is behind, the pipeline fails with clear instructions to rebase. This enforces a linear commit history and prevents merge conflicts from reaching the test and delivery stages.
-2. **Changelog validation** — the `CHANGELOG.md` file was modified and new entries are placed under the `[Unreleased]` section. If entries appear below an existing version section (e.g., due to an erroneous rebase), the pipeline fails with instructions to fix the placement.
+2. **Changelog validation** — every branch carries its own changelog entry. Which form is required depends on the repository's layout, and the check decides by looking for a `.chlog.yaml` at the root:
+   - **[chlog](https://github.com/luizjhonata/chlog) repositories** (a `.chlog.yaml` exists) — an ordinary branch must **add a new fragment** under `.changes/unreleased/`, and the failure message quotes the `chlog new --kind <Kind> --body "<description>"` that writes one. A `bump/*` or `chore/bump-*` branch carries no fragment — `chlog merge` has already folded the pending ones into `CHANGELOG.md` — so on those the requirement flips to an updated `CHANGELOG.md`.
+   - **Every other repository** — the `CHANGELOG.md` file must be modified and the new entries must be placed under the `[Unreleased]` section. If entries appear below an existing version section (e.g., due to an erroneous rebase), the pipeline fails with instructions to fix the placement.
+
+   Either way the check is skipped when the branch HEAD is already an ancestor of the target branch, since a branch that is already merged has nothing left to gate.
+
+   The rule is implemented four times — once inline per platform template, plus the standalone `global/scripts/shared/changelog-check.sh` — because `quality:basic-checks` runs in a minimal image holding only the consumer's repository and cannot reach this repository's scripts. `.github/tests/test-basic-checks.sh` runs the same fixtures against the shared script and asserts that all four still carry the chlog path, so the copies cannot drift apart quietly.
 
 ### OWASP Dependency-Check and the NVD Database
 

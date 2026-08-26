@@ -1,0 +1,3 @@
+kind: 'Security'
+body: 'dropped root from the `mssql-tools18` image, which only invokes `sqlcmd` against a remote server. The `awscli`, `golang-awscli` and `bfg` images deliberately still run as root and say why in a comment: the first two are GitLab CI job containers, where the runner clones into `/builds` and a non-root build container cannot write there without runner-side configuration, and `bfg` rewrites a git repository bind-mounted at `/code`'
+time: '2026-08-25T21:32:41.631229879Z'

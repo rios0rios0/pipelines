@@ -1,0 +1,29 @@
+# chlog — fragment-based changelog management (https://github.com/luizjhonata/chlog).
+#
+# Every value below is chlog's own default, spelled out on purpose: the file is the
+# one place a reader can see what the kinds are and which bump each one infers,
+# without going and reading the tool. Keep it in step with the `--kind` values the
+# AI-assistant block in CLAUDE.md advertises.
+#
+# No kind maps to `major`. Under SemVer a major bump means a backward-incompatible
+# change, which is a property of the change and not of its category, so it is
+# signalled per fragment by `chlog new --breaking` and never inferred from a label.
+changesDir: .changes
+unreleasedDir: unreleased
+changelogPath: CHANGELOG.md
+versionFormat: '## [{{.Version}}] - {{.Time.Format "2006-01-02"}}'
+kindFormat: '### {{.Kind}}'
+changeFormat: '- {{.Body}}'
+kinds:
+  - label: Added
+    auto: minor
+  - label: Changed
+    auto: minor
+  - label: Deprecated
+    auto: minor
+  - label: Removed
+    auto: minor
+  - label: Fixed
+    auto: patch
+  - label: Security
+    auto: patch

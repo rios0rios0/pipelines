@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added `global/scripts/languages/javascript/format/run.sh`, the one runner all three platforms call, with the same `check` / `--fix` modes as its Dart twin. It runs the project''s OWN Prettier rather than `npx --yes prettier`: unlike a linter, where a new release adds findings, a formatter''s OUTPUT is the verdict, so a floating resolve reformats the whole tree on a major bump and an untouched repository goes red on a day nobody changed anything. It prefers a declared `format:check` script the way `style:eslint` prefers `lint:ci`, falls back to the linked binary, and resolves through the package manager for a Yarn Plug''n''Play tree where `node_modules/` does not exist'
+time: '2026-08-25T21:32:41.720939663Z'

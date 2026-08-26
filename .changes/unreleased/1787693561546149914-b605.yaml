@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the GitLab SAM delivery job''s base image, which referenced `ghcr.io/rios0rios0/pipelines/golang:1.19-awscli` -- a Go `1.19` image whose build directory no longer exists in this repository, so it can never receive another security update. Moved to the `1.26-awscli` image that is still built here'
+time: '2026-08-25T21:32:41.546100556Z'

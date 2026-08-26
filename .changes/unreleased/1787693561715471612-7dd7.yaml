@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added `make format` to `makefiles/javascript.mk` and wired the `--fix` mode into its `lint`, so `make lint` LEAVES the tree clean rather than merely reporting that it is not -- matching `dart.mk`, which already documented that as how the language fragments behave'
+time: '2026-08-25T21:32:41.715434345Z'

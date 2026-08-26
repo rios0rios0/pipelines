@@ -1,0 +1,3 @@
+kind: 'Security'
+body: 'refused source distributions and install-time scripts wherever a package manager runs on a runner: `--only-binary :all:` on every `pip install` (an sdist executes its `setup.py` AS PART OF THE INSTALL, so it is arbitrary code execution before the tool is ever invoked), `npm_config_ignore_scripts=true` in front of every `npx --yes`, and `--ignore-scripts` on the deploy CLI installs. Each pin was checked to resolve binary-only including its full transitive tree, so the flag costs nothing today and a future bump that cannot resolve is a signal worth reading'
+time: '2026-08-25T21:32:41.513331277Z'

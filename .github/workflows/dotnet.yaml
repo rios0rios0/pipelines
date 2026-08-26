@@ -2,6 +2,15 @@
 # the parent workflow is responsible for setting up the call events²
 on:
   workflow_call:
+    inputs:
+      codeql_upload:
+        description: |
+          Whether sast:codeql uploads its SARIF results ('always', 'failure-only' or 'never').
+          Set to 'never' on a private repository without GitHub Advanced Security, where code
+          scanning is unavailable and only the upload -- not the analysis -- fails.
+        required: false
+        type: string
+        default: 'always'
 
 jobs:
   # first stage
@@ -44,6 +53,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
         with:
           codeql_language: 'csharp'
+          upload: '${{ inputs.codeql_upload }}'
     needs: [ 'code_check-quality_resharper' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 

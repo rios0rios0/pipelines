@@ -3,6 +3,14 @@
 on:
   workflow_call:
     inputs:
+      codeql_upload:
+        description: |
+          Whether sast:codeql uploads its SARIF results ('always', 'failure-only' or 'never').
+          Set to 'never' on a private repository without GitHub Advanced Security, where code
+          scanning is unavailable and only the upload -- not the analysis -- fails.
+        required: false
+        type: string
+        default: 'always'
       install_run_scripts:
         type: 'boolean'
         required: false
@@ -27,6 +35,7 @@ jobs:
   yarn:
     uses: 'rios0rios0/pipelines/.github/workflows/yarn.yaml@main'
     with:
+      codeql_upload: '${{ inputs.codeql_upload }}'
       install_run_scripts: ${{ inputs.install_run_scripts }}
       sonar_host: '${{ inputs.sonar_host }}'
     secrets:

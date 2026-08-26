@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the `style:golangci-lint` job dying on every Go consumer once the pinned Go toolchain moved to `1.27.0`: golangci-lint `2.12.2` is built with go1.26 and panics with `file requires newer Go version go1.27 (application built with go1.26)` while loading the 1.27 standard library, so the linter exits 2 before evaluating a single rule and the job fails with no findings to act on. Bumped the pinned version to `2.13.1` (built with go1.27.0) -- `2.13.0` is the first release carrying go1.27 support -- and refreshed both release digests'
-time: '2026-08-25T21:32:41.642499678Z'

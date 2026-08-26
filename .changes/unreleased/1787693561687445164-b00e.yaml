@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the Dependency-Track API key being passed on **argv** (`-H "X-Api-Key: $TOKEN"`). argv is world-readable through `ps` and `/proc/<pid>/cmdline`, which on a shared or self-hosted runner means every other job on that host. The header now goes in through a `curl --config -` file on stdin — the same posture `global/scripts/deploy/render/run.sh` already uses, and the same reasoning as `-DnvdApiKeyEnvironmentVariable` in the Dependency-Check runner. A test asserts the token never appears in the recorded argv'
-time: '2026-08-25T21:32:41.687393715Z'

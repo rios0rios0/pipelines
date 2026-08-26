@@ -1,4 +1,0 @@
-kind: 'Removed'
-body: '**BREAKING CHANGE:** removed Trivy from every platform, script, Makefile target and document in this repository, following the report that the tool was compromised and exfiltrated data. Deleted `global/scripts/tools/trivy/` (`run.sh`, `run-sca.sh`, and the fleet-wide `.trivyignore`), the `sast:trivy` and `sca:trivy` jobs on all three platforms (`{gitlab,azure-devops}/global/stages/20-security/trivy{,-sca}.yaml` and `github/global/stages/20-security/trivy{,-sca}/`), the `trivy` target from `makefiles/common.mk` (and from `sast`), and `make test-trivy-merge` with its `.github/tests/test-trivy-merge.sh`. **Consumers must remove any `sast:trivy` / `sca:trivy` entry from a `require-checks` list**, or the gate waits forever on a job that no longer runs. A project `.trivyignore` is now inert and can be deleted'
-breaking: true
-time: '2026-08-25T21:32:41.560306318Z'

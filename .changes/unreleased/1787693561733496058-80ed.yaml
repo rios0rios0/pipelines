@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added `make test-dependency-track` (`.github/tests/test-dependency-track.sh`), 55 assertions over the Dependency-Track BOM uploader and its wiring on every platform that has one. The uploader had **no test of any kind** before this, which is most of why the defects below survived: every one of them returns HTTP 200 and a green job'
-time: '2026-08-25T21:32:41.733450085Z'

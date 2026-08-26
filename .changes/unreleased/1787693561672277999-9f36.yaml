@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'gated the three `actions/setup-go` steps in `terra.yaml` and the one in this repository''s own `ci.yaml` even though `runs-on` is hard-coded to `ubuntu-latest` in both files, so the expression is provably a no-op there today. Written anyway for two reasons: the rule above then needs no exemption list, which is what stops it rotting, and `terra.yaml` is a reusable workflow -- the day somebody gives it the `runs_on` input that `go.yaml`, `yarn.yaml` and `dart.yaml` already have, the gate is already correct instead of silently reintroducing the defect'
-time: '2026-08-25T21:32:41.672239082Z'

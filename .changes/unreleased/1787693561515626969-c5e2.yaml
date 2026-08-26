@@ -1,3 +1,0 @@
-kind: 'Security'
-body: 'pinned every `go install ...@latest` (`govulncheck`, `gotestsum`, `gocovmerge`, `gocover-cobertura`, `go-junit-report`, `cyclonedx-gomod`), every unversioned `pip install` (`pdm`, `vulture`, `semgrep`), `gem install` (`bundler-audit`, `debride`) and `npx --yes knip`. For a linter or scanner this is not only a supply-chain question: the tool that decides whether the code is safe to ship was chosen by whoever published most recently, so an unchanged commit could pass on Monday and fail on Tuesday with nothing in the diff to explain it, and the earlier verdict could not be reproduced'
-time: '2026-08-25T21:32:41.515587441Z'

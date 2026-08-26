@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added `DEPENDENCY_TRACK_PROJECT_NAME` / `_PROJECT_VERSION` overrides, `DEPENDENCY_TRACK_DEFAULT_BRANCH` (see below), and `DEPENDENCY_TRACK_UPLOAD_ON_PULL_REQUEST` for a consumer that genuinely wants per-pull-request inventory'
-time: '2026-08-25T21:32:41.72588285Z'

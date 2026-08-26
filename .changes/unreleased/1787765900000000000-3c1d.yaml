@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'exposed `codeql_upload` on the Bundler, .NET, PDM and Yarn workflows, which had been left out when the input was added to the Go, Gradle, Maven and npm ones. Without it a private repository has no way to set the upload off, and since code scanning needs GitHub Advanced Security there, `sast:codeql` completes its analysis and then dies on the upload alone -- taking the job, and the whole run, down with it. The input is optional and still defaults to `always`, so nothing changes for a repository that does not set it. Composer is untouched because its workflow runs no CodeQL step'
-time: '2026-08-26T18:05:00.000000000Z'

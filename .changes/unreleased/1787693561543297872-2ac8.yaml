@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed a `-print0` that `yaml_files()` silently swallowed in the new supply-chain test, which had made three of its assertions pass without examining a single file. Every assertion in that suite was then individually proven to fire against a deliberate violation'
-time: '2026-08-25T21:32:41.54325212Z'

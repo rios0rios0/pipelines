@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'the job is **BLOCKING**, unlike the advisory `style:eslint` beside it, and that difference is the point rather than an inconsistency: a linter''s findings need judgement, `prettier --write .` needs none, and an advisory formatting gate is how the drift accumulated in the first place. A project with no Prettier configuration and no `prettier` dependency is **skipped**, not failed, so adopting these workflows cannot fail a repository for a tool it never chose -- the same shape as Hadolint skipping a repository with no Dockerfile'
-time: '2026-08-25T21:32:41.718465931Z'

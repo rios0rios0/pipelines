@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'changed the golang pipeline version from `1.26.6` to `1.27.0`'
-time: '2026-08-25T21:32:41.571682434Z'

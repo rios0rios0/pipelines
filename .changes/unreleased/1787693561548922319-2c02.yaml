@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed `global/containers/bfg.latest/Dockerfile`, which **could not build**: `openjdk:8-jre` was removed when the `openjdk` Docker Official Image was deprecated, so the `FROM` 404s. Moved to `eclipse-temurin:8-jre`, the maintained successor upstream points to'
-time: '2026-08-25T21:32:41.5488861Z'

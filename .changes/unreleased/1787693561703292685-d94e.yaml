@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added `.dependency-updates.json` support (`{"ignore": ["glob", ...]}`) for genuinely ROLLING references such as `alpine:edge`, which is rebuilt almost daily. It is empty by default: a check that is always red stops being read, but silencing something by default would hide the ordinary stale pins the tool exists to find'
-time: '2026-08-25T21:32:41.703248032Z'

@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added a regression assertion (`test-yaml-merge` Test 9) that fails when any test script invokes a bare `yq` instead of the resolved `$YQ`. A bare invocation is what every yq example on the internet looks like, and the failure it causes appears only on machines nobody runs CI on. Comment lines are stripped before matching, for the same reason the supply-chain suite strips them -- this repository documents the patterns it forbids at length, so the paragraph explaining the rule would otherwise break it. Proven to fire against a deliberate violation'
-time: '2026-08-25T21:32:41.598224034Z'

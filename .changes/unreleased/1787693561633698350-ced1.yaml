@@ -1,3 +1,0 @@
-kind: 'Security'
-body: 'delegated `sca:govulncheck` on Azure DevOps and GitLab CI to the shared runner, which GitHub Actions already used. Inlining `go install` kept a third copy of the pinned version, and three copies drift one bump at a time; the runner reads it from `pinned-versions.sh`, resolves the install directory from `go env GOBIN` instead of assuming `GOPATH/bin`, and writes the JSON report both platforms now publish'
-time: '2026-08-25T21:32:41.633655103Z'

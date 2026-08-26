@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the Azure DevOps `sca:govulncheck` job, which failed with `The step name Scripts appears more than once` because it included the `scripts-repo` abstract twice -- directly and via `abstracts/go.yaml`. Dropped the redundant direct include'
-time: '2026-08-25T21:32:41.540662394Z'

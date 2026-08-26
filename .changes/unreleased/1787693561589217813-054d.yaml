@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'refreshed `CLAUDE.md` and `.github/copilot-instructions.md` to document the `make test-go-module-toolchain`, `make test-go-tool-staleness`, and `make test-go-tmpdir-modcache` targets, realign both `make test` summaries with the current suite, and (in the Copilot file) add Dart/Flutter and Terraform/Terra to the supported-language list and the missing `make test-dart-pipeline` / `make test-azure-step-names` targets'
-time: '2026-08-25T21:32:41.589176706Z'

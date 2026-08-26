@@ -1,3 +1,0 @@
-kind: 'Security'
-body: 'enforced HTTPS on every download that could follow a redirect into plain HTTP (`--proto ''=https'' --proto-redir ''=https''` for `curl`, `--https-only` for `wget`), across the Dockerfiles, the shared scripts and the Azure and GitLab templates'
-time: '2026-08-25T21:32:41.626257949Z'

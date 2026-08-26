@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'changed the changelog check to quote `chlog new --kind <Kind> --body "<description>"` in its failure message on all four implementations (shared script, GitHub, GitLab, Azure DevOps). The short `-k`/`-b` forms work and are documented in the tool, but every other place in this repository — `CONTRIBUTING.md`, `CLAUDE.md`, the pull request templates — quotes the long form, and a command pasted out of a CI log reads better when its flags name themselves.'
-time: '2026-08-25T22:37:40.077107628Z'

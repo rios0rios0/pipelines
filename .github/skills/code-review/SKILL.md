@@ -155,10 +155,11 @@ See [Security](https://github.com/rios0rios0/guide/wiki/Security).
 - **No hard-coded secrets.** API keys, tokens, passwords, and private keys belong in
   environment variables or a secret manager — never in source, tests, fixtures, or the
   changelog. A secret that reaches a commit must be rotated, not merely deleted.
-- **Never write a PEM header sentinel or a realistic key shape into a fixture**
-  (`ghp_…`, `sk-…`, `AKIA…`, `xoxb-…`, JWT-shaped strings, or the dashed `BEGIN …` banners).
+- **Never write a PEM header sentinel or a realistic key shape into a fixture** (a GitHub,
+  OpenAI, AWS, or Slack token prefix, JWT-shaped strings, or the dashed `BEGIN …` banners).
   Gitleaks matches the shape, not the value, so a placeholder that merely *looks* like a
-  credential fails the pipeline. Use inert placeholders such as `fixture-token-placeholder`.
+  credential fails the pipeline — spelling those prefixes out here would trip it too. Use
+  inert placeholders such as `fixture-token-placeholder`.
 - **Suppressions must be justified.** Entries in `.gitleaksignore`, `.trivyignore`,
   `.semgrepignore`, or `.codeql-false-positives` need a fingerprint, a dated comment, and a
   reason. A suppression added to silence a real finding is a Critical.

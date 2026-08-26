@@ -18,5 +18,10 @@ This directory contains **language-agnostic** security and quality tools used ac
 - Each tool directory contains a `run.sh` entry point.
 - Configuration files (e.g., `.gitleaks.toml`, `.hadolint.yaml`) are stored alongside the script.
 - These tools are invoked by CI pipelines (GitHub Actions, GitLab CI, Azure DevOps) and by local Makefiles.
+- **Documentation about secret shapes must not spell the shapes out.** Several rules in
+  `gitleaks/.gitleaks.toml` match a vendor prefix or a key banner on its own, with no body
+  check, so a guide, changelog, comment, or fixture that quotes one literally becomes a
+  finding itself. Name the vendor instead, and use inert placeholders such as
+  `fixture-token-placeholder`.
 
 For **language-specific** tools (e.g., golangci-lint, checkstyle, goreleaser), see [`../languages/`](../languages/).

@@ -3,6 +3,14 @@
 on:
   workflow_call:
     inputs:
+      codeql_upload:
+        description: |
+          Whether sast:codeql uploads its SARIF results ('always', 'failure-only' or 'never').
+          Set to 'never' on a private repository without GitHub Advanced Security, where code
+          scanning is unavailable and only the upload -- not the analysis -- fails.
+        required: false
+        type: string
+        default: 'always'
       tag_prefixes:
         type: 'string'
         required: false
@@ -12,6 +20,8 @@ on:
 jobs:
   dotnet:
     uses: 'rios0rios0/pipelines/.github/workflows/dotnet.yaml@main'
+    with:
+      codeql_upload: '${{ inputs.codeql_upload }}'
 
   # fourth stage
   delivery-release:

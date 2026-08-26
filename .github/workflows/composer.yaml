@@ -57,6 +57,14 @@ jobs:
 
 
   # second stage
+  # There is deliberately no `sast:codeql` job here, and no `codeql_upload` input to go with it:
+  # CodeQL cannot analyse PHP. It builds databases for C/C++, C#, GitHub Actions, Go, Java/Kotlin,
+  # JavaScript/TypeScript, Python, Ruby, Rust and Swift, and PHP is the one top-ten language on
+  # GitHub it has never covered -- upstream lists it as a long-term candidate with no committed
+  # plan. Adding the job would fail at database creation, not find nothing.
+  # Static analysis for PHP is therefore carried by `sast:semgrep` below, which does support the
+  # language; that job is the covering control, so keep it in place rather than treating this
+  # stage as lighter than the other stacks'.
   security-sast_semgrep:
     name: 'security > sast:semgrep'
     runs-on: 'ubuntu-latest'

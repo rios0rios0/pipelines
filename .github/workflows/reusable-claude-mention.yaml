@@ -37,6 +37,5 @@ jobs:
         uses: 'anthropics/claude-code-action@70fec183852c4f82f3f1969faed7dd60c5149ca7' # v1.0.207
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: '--model claude-opus-4-8'
           additional_permissions: |
             actions: read

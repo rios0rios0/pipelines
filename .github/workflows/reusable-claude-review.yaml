@@ -7,12 +7,26 @@ on:
         type: 'string'
         required: false
         default: '["ubuntu-latest"]'
-        description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See go.yaml.'
+        description: |
+          JSON array of runner labels (e.g. '["self-hosted"]'); see the `runs_on` input in
+          go.yaml for the shape's rationale.
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: true
         description: 'OAuth token used by the Claude Code action'
 
+# A bare self-hosted runner selected through `runs_on` must be provisioned before these jobs pass
+# -- and NOT with host Node: the Actions runner ships its own (`externals/node*`) and executes
+# every JavaScript action with it, on self-hosted hosts too. What a minimal host lacks is what
+# `anthropics/claude-code-action` shells OUT to. Every step of that composite declares
+# `shell: bash`; `oven-sh/setup-bun` unpacks Bun through `@actions/tool-cache`, which resolves
+# `unzip` and throws when it is absent; Bun installs into `$HOME/.bun/bin`, so `$HOME` must be
+# writable; `bun install --production` then resolves the action's dependencies from the npm
+# registry; and the checkout -- plus the plugin marketplace cloned below -- needs `git`. So:
+# `bash`, `git` and `unzip` on `PATH`, a writable `$HOME`, and egress to `github.com`,
+# `registry.npmjs.org`, `api.github.com` and `api.anthropic.com`. A missing one does not fail at
+# job selection -- it fails minutes in, inside the action, with an error that never names the
+# runner.
 jobs:
   claude-review:
     if: github.event.pull_request.head.repo.full_name == github.repository
@@ -30,6 +44,10 @@ jobs:
 
       - name: 'Run Claude Code Review'
         id: 'claude-review'
+        # The provisioning list in the comment above `jobs:` (and README.md's "Claude Review and
+        # Claude Mention" section) describes THIS pin's install chain -- `oven-sh/setup-bun`,
+        # `@actions/tool-cache` resolving `unzip`, `$HOME/.bun/bin`, `bun install --production`.
+        # `dependency-updates.yaml` exists to make this SHA move; re-read both when it does.
         uses: 'anthropics/claude-code-action@70fec183852c4f82f3f1969faed7dd60c5149ca7' # v1.0.207
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

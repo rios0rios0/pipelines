@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'documented the self-hosted provisioning requirements on the Claude reusable workflows (`bash`, `git` and `unzip`, a writable `$HOME`, and egress to `github.com`, `registry.npmjs.org`, `api.github.com` and `api.anthropic.com` -- the runner supplies its own Node) and recorded the fork-guard asymmetry of the mention responder where a consumer reads it, in `README.md` and above `jobs:`'
+time: '2026-08-27T22:34:29.299648138Z'

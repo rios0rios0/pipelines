@@ -1,6 +1,16 @@
 on:
   workflow_call:
     inputs:
+      runs_on:
+        type: 'string'
+        required: false
+        default: '["ubuntu-latest"]'
+        description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See yarn.yaml.'
+      codeql_upload:
+        type: 'string'
+        required: false
+        default: 'always'
+        description: "CodeQL SARIF upload mode ('always', 'failure-only' or 'never'). See yarn.yaml."
       install_run_scripts:
         type: 'boolean'
         required: false
@@ -20,6 +30,8 @@ jobs:
   yarn:
     uses: 'rios0rios0/pipelines/.github/workflows/yarn.yaml@main'
     with:
+      runs_on: ${{ inputs.runs_on }}
+      codeql_upload: ${{ inputs.codeql_upload }}
       install_run_scripts: ${{ inputs.install_run_scripts }}
       sonar_host: ${{ inputs.sonar_host }}
     secrets:
@@ -28,7 +40,7 @@ jobs:
   # fourth stage
   delivery-release:
     name: 'delivery > release'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     outputs:
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
@@ -39,7 +51,7 @@ jobs:
 
   delivery-docker:
     name: 'delivery > docker'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/docker@main'
         with:

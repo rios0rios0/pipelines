@@ -8,7 +8,13 @@
 # `ipa` is not built here: it needs a `macos-latest` runner and, to be
 # installable, a signing identity and provisioning profile that belong to the
 # consuming project rather than to a shared template. Add a job with
-# `runs-on: macos-latest` and `targets: ipa` when you have them.
+# `targets: ipa` when you have them -- and give it a SECOND input,
+# `runs_on_macos`, defaulting to `'["macos-latest"]'`, rather than hardcoding the
+# runner. `runs_on` carries one value for the whole workflow, so a job on another
+# platform cannot share it; and `test-workflow-composition.sh` rejects a pinned
+# runner outright, because a hard `runs-on` is what strands a consumer whose
+# hosted minutes are gone. Resolving from a declared input is the contract, not
+# resolving from that particular input.
 on:
   workflow_call:
     inputs:

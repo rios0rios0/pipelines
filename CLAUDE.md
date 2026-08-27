@@ -231,7 +231,7 @@ is a large part of why the rule is a test rather than a review habit.
 
 ### Workflow Composition Standard
 
-**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), nine
+**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), eleven
 assertions, every one of them proven to fire against a deliberate violation.** Read this section
 before writing anything under `.github/workflows/`, and before writing a pipeline in a repository
 that consumes this one.
@@ -294,6 +294,61 @@ Every deployment job therefore declares, and the test asserts, all four of:
 **Job names are an API, not a label.** `delivery > <target>` and `deployment > <provider>` are the
 strings consumers pass to `require-checks`, because GitHub composes a check's name from the calling
 job and the called workflow's job. Renaming a job renames a check for everyone downstream.
+
+**A `STANDALONE` workflow is exempt from the composition rules, not from every rule.** The two Claude
+reusables are listed there, so the naming, delegation and suffix assertions skip them by design —
+which left their wiring asserted by nothing at all. The last two assertions cover what that exemption
+leaves behind, and both read the PARSED document (YAML 1.1 resolves `on:` to the boolean `true`, so no
+indentation rule can reach under it) — which is why this suite needs PyYAML at all, and why it says so
+by name rather than dying when it is absent.
+
+The tenth is the **`runs_on` contract**, and it has two halves because either alone is defeatable. The
+contract half runs over *every* workflow declaring the input — 19 today, not just the Claude pair,
+since `go.yaml`, `yarn.yaml`, `npm.yaml` and `dart.yaml` declare the byte-identical shape: optional,
+defaulting to `'["ubuntu-latest"]'`, and reaching every job — resolved from a **declared input** for a
+normal job, or forwarded in `with:` for a job that `uses:` another workflow, where GitHub rejects the
+`runs-on` key outright. The declaration half keeps a `reusable-claude-*.yaml` glob, because generalising
+alone would invert the assertion: a workflow that *drops* the input stops being iterated and would pass
+by not being looked at.
+
+Two edges of that rule are worth stating, because the obvious stricter version of each is wrong. The
+runner must be **caller-selectable**, not literally `inputs.runs_on`: `runs_on` carries one value for
+the whole workflow, so a job on another platform cannot share it, and `flutter-artifacts.yaml` documents
+exactly such a job (an `ipa` build needing macOS) — it must take a second input rather than a pinned
+runner, which is what the check enforces. And the forward is demanded only when the **callee** declares
+`runs_on`: a `with:` key the callee does not declare is rejected by GitHub outright, so demanding it
+unconditionally would be a trap the first time one of these calls something like
+`update-major-version-tag.yaml`.
+
+That callee lookup has a **converse**, and it is the rule that catches the most consequential shape:
+a *reusable* workflow whose job calls one that takes `runs_on` must declare and forward it. Without it
+the inversion returns one level up — a composed workflow that drops the input stops being iterated and
+passes by not being looked at, while its consumers cannot reach another runner at all, for the composed
+pipeline *or* its own delivery jobs. `yarn-docker.yaml` and `yarn-library.yaml` were exactly that: their
+npm twins with the input deleted, hardcoded to `ubuntu-latest`, green the whole time. A **leaf** caller
+is deliberately not asked, since taking the default is what a caller is for. And because the runner rule
+accepts any declared input, a workflow declaring `runs_on` must have at least one job resolve from or
+forward *it* — otherwise a consumer sets an input that GitHub accepts and nobody reads.
+
+The eleventh is the **mention responder's trigger guard**, which is an authorization boundary rather
+than a style rule — that job runs with `contents: write` and the repository's secrets. It shipped with
+a hole worth remembering: an `issue_comment` payload carries **both** `comment` and `issue`, so a
+clause reading `github.event.issue.author_association` — the *thread author's* — also evaluated on
+every comment, and any comment by anyone on a maintainer-opened `@claude` thread started the job. (Not
+an escalation: the action re-checks the actor's write permission and refuses to act. But the job
+started, which on a self-hosted runner is the whole exposure.) The assertion is structural, not a
+string match: the `if:` is split into its top-level `||` clauses, and each clause reading an
+`author_association` must carry the null-check selecting the payload it belongs to, with the `issue`
+clause additionally excluding comment events — by `github.event.comment == null` or
+`github.event_name == 'issues'`, either spelling, because the invariant is what matters and not the
+idiom. The split assumes each clause is itself parenthesised, and checks that assumption rather than
+documenting it: one clause reading more than one payload's association means a wrapping reformat
+collapsed them, at which point the pairing degrades to "present somewhere in the expression" — a PASS
+that verifies nothing, which is the failure this assertion exists to prevent. *Which* association a
+clause reads is only half the boundary, so the allowlist is pinned too: every clause's
+`contains(fromJSON(…))` must be exactly `OWNER`, `MEMBER`, `COLLABORATOR`. Adding `CONTRIBUTOR` or
+`NONE` is one token in the same free-text block and opens the job to anyone, with every pairing check
+still passing.
 
 **Secrets reach a build as secrets.** A value passed into a reusable workflow as an *input* loses
 the caller's masking; passed as a *secret* it keeps it. That is why the deployment workflows take

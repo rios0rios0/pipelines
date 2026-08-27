@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added the converse of the callee lookup to the workflow `runs_on` assertion -- a reusable workflow calling one that takes `runs_on` must declare and forward it, which is what caught the `yarn` children -- plus checks that a declared `runs_on` reaches at least one job and that the mention responder''s trigger allowlist is exactly `OWNER`, `MEMBER`, `COLLABORATOR`'
+time: '2026-08-27T23:41:17.084648027Z'

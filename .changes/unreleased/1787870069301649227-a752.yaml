@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added a workflow-composition assertion that the Claude reusable workflows declare an optional `runs_on` input defaulting to GitHub-hosted and consume it via `fromJSON`'
+time: '2026-08-27T22:34:29.301610358Z'

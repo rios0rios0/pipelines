@@ -107,23 +107,25 @@ jobs:
       - name: 'Checkout code'
         uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
 
-      - name: 'Install ShellCheck'
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
-
+      # This repository lints itself with the same runner it ships to consumers, rather than
+      # with a second implementation maintained here. That closes two gaps at once.
+      #
+      # SCOPE: the loop this replaces iterated `find global/scripts`, so `.github/tests/` --
+      # the largest body of shell in the repository -- was never linted by CI at all. Ten
+      # warnings accumulated there unread, visible only to somebody invoking the runner by
+      # hand. The runner scans from the repository root, excluding `.git`, `node_modules`,
+      # `vendor` and `.codeql-db`.
+      #
+      # VERSION: `apt-get install shellcheck` took whatever the Ubuntu image shipped that day.
+      # The runner installs a version pinned in `pinned-versions.sh` and checksum-verified by
+      # `verify-download.sh` -- which is this repository's own supply-chain rule, and the
+      # reason the runner gives for pinning applies exactly here: a new ShellCheck release
+      # adds checks, so an unchanged script could pass in the morning and fail in the
+      # afternoon with nothing in the diff to explain it.
+      #
+      # Severity is unchanged (`--severity=warning`), and the runner already exits non-zero on
+      # a finding, so the gate keeps failing the build the way the loop did.
       - name: 'Run ShellCheck'
-        run: |
-          echo "Running ShellCheck on all shell scripts..."
-          errors=0
-          for script in $(find global/scripts -name "*.sh" -type f); do
-            echo "Checking $script..."
-            if shellcheck --severity=warning "$script"; then
-              echo "  ✓ $script"
-            else
-              echo "  ✗ $script has issues"
-              errors=$((errors + 1))
-            fi
-          done
-          if [ "$errors" -gt 0 ]; then
-            echo "ShellCheck found issues in $errors script(s)"
-            exit 1
-          fi
+        run: ./global/scripts/tools/shellcheck/run.sh
+        env:
+          SCRIPTS_DIR: ${{ github.workspace }}

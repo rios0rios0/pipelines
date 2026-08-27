@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed CI never linting most of the shell in this repository. The `Lint Shell Scripts` job iterated `find global/scripts`, so `.github/tests/` -- the largest body of shell here -- was outside its scope entirely, and ten ShellCheck warnings accumulated there unread, visible only to somebody invoking `global/scripts/tools/shellcheck/run.sh` by hand. The job now runs that same runner, which scans from the repository root, so this repository is linted by the tool it ships to consumers rather than by a second implementation maintained beside it'
+time: '2026-08-27T04:58:25.481129426Z'

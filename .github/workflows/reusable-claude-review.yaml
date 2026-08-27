@@ -38,3 +38,8 @@ jobs:
           prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
           show_full_output: true
           display_report: true
+        env:
+          # Sets the model without touching `claude_args`: parse-sdk-options.ts resolves
+          # `model: options.model || modelFromClaudeArgs`, where `options.model` is this
+          # variable -- so it wins over `--model` and leaves the tool wiring alone.
+          ANTHROPIC_MODEL: 'claude-opus-5'

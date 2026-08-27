@@ -39,3 +39,8 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           additional_permissions: |
             actions: read
+        env:
+          # Sets the model without touching `claude_args`: parse-sdk-options.ts resolves
+          # `model: options.model || modelFromClaudeArgs`, where `options.model` is this
+          # variable -- so it wins over `--model` and leaves the tool wiring alone.
+          ANTHROPIC_MODEL: 'claude-opus-5'

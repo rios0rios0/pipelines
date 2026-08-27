@@ -3,6 +3,11 @@
 on:
   workflow_call:
     inputs:
+      runs_on:
+        type: 'string'
+        required: false
+        default: '["ubuntu-latest"]'
+        description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See yarn.yaml.'
       codeql_upload:
         description: |
           Whether sast:codeql uploads its SARIF results ('always', 'failure-only' or 'never').
@@ -35,6 +40,7 @@ jobs:
   yarn:
     uses: 'rios0rios0/pipelines/.github/workflows/yarn.yaml@main'
     with:
+      runs_on: ${{ inputs.runs_on }}
       codeql_upload: '${{ inputs.codeql_upload }}'
       install_run_scripts: ${{ inputs.install_run_scripts }}
       sonar_host: '${{ inputs.sonar_host }}'
@@ -44,7 +50,7 @@ jobs:
   # fourth stage
   delivery-release:
     name: 'delivery > release'
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     outputs:
       tag_name: '${{ steps.release.outputs.tag_name }}'
     strategy:

@@ -409,7 +409,11 @@ def normalized(value):
 # input (`flutter-artifacts.yaml` documents an `ipa` job needing macOS). So the rule
 # is "resolves from a DECLARED input", which rejects every hardcoded runner while
 # leaving a second input available for a hard platform requirement.
-RUNNER = re.compile(r'^\$\{\{ fromJSON\(inputs\.(\w+)\) \}\}$')
+# `\s*` inside, not just around: `normalized()` collapses the whitespace bordering
+# `${{ … }}` and a reformat may equally produce `fromJSON( inputs.runs_on )`. Anchoring
+# on exact interior spacing would report that correct job as PINNING A RUNNER -- the
+# wrong-defect message the `with:` compare was already fixed for.
+RUNNER = re.compile(r'^\$\{\{\s*fromJSON\(\s*inputs\.(\w+)\s*\)\s*\}\}$')
 
 
 def declared_inputs(document):
@@ -432,7 +436,15 @@ def takes_runs_on(workflows_dir, uses):
     this directory can be resolved; anything else is assumed to take it, which is
     the status quo rather than a new silence.
     """
-    path = os.path.join(workflows_dir, os.path.basename(str(uses).split('@')[0]))
+    reference = str(uses).split('@')[0]
+    # By basename alone, `someorg/theirrepo/.github/workflows/go.yaml@v1` would resolve
+    # to THIS repository's `go.yaml` and the forward would be demanded of a callee that
+    # does not declare it -- the same trap this function exists to avoid, from the other
+    # side. Only a local path or this repository's own workflows are resolvable.
+    if not (reference.startswith('./')
+            or reference.startswith('rios0rios0/pipelines/.github/workflows/')):
+        return True
+    path = os.path.join(workflows_dir, os.path.basename(reference))
     if not os.path.isfile(path):
         return True
     try:
@@ -456,10 +468,25 @@ for path in sorted(glob.glob(os.path.join(workflows_dir, '*.yaml'))):
 
         spec = runs_on_input(document)
         if spec is None:
-            # CONTRACT half applies only to workflows that offer the input; the
-            # declaration half is what makes its absence a finding where it matters.
+            # CONTRACT half applies only to workflows that offer the input, so its
+            # ABSENCE has to be a finding in its own right or the whole assertion
+            # inverts -- a workflow that drops the input stops being iterated and
+            # passes by not being looked at. Two ways it becomes one:
             if path in must_declare:
                 print(f'{name}: declares no runs_on workflow_call input')
+            elif 'workflow_call' in (document.get('on', document.get(True)) or {}):
+                # A REUSABLE workflow that composes one taking `runs_on` must pass the
+                # choice through; otherwise its consumers cannot reach a self-hosted
+                # runner at all, for the composed pipeline OR its own jobs. `yarn-docker`
+                # and `yarn-library` were exactly this -- their npm twins with the input
+                # dropped. A LEAF caller (this repository's own `claude-review.yaml`) is
+                # not reusable and is entitled to take the default, so it is not asked.
+                for job, body in (document.get('jobs') or {}).items():
+                    body = body or {}
+                    if 'uses' in body and takes_runs_on(workflows_dir, body['uses']):
+                        print(f'{name}: job {job} calls a workflow that takes runs_on, but '
+                              f'{name} declares no runs_on of its own to forward -- its '
+                              f'consumers cannot reach another runner')
             continue
 
         if not isinstance(spec, dict):
@@ -470,6 +497,7 @@ for path in sorted(glob.glob(os.path.join(workflows_dir, '*.yaml'))):
             if spec.get('default') != '["ubuntu-latest"]':
                 problems.append('runs_on does not default to ["ubuntu-latest"]')
 
+        reaches_a_job = False
         for job, body in (document.get('jobs') or {}).items():
             body = body or {}
             # A job that CALLS another workflow cannot declare `runs-on` -- GitHub
@@ -482,14 +510,27 @@ for path in sorted(glob.glob(os.path.join(workflows_dir, '*.yaml'))):
                     continue
                 if normalized((body.get('with') or {}).get('runs_on')) != '${{ inputs.runs_on }}':
                     problems.append(f'job {job} calls a workflow without forwarding runs_on')
+                else:
+                    reaches_a_job = True
                 continue
-            selector = RUNNER.match(normalized(body.get('runs-on')) or '')
+            selected = normalized(body.get('runs-on'))
+            selector = RUNNER.match(selected) if isinstance(selected, str) else None
             if not selector:
                 problems.append(f'job {job} pins a runner instead of resolving one from an '
                                 f'input ({body.get("runs-on")!r})')
             elif selector.group(1) not in declared_inputs(document):
                 problems.append(f'job {job} resolves its runner from inputs.{selector.group(1)}, '
                                 f'which the workflow does not declare')
+            elif selector.group(1) == 'runs_on':
+                reaches_a_job = True
+
+        # The runner rule accepts ANY declared input, which is what lets a job with a hard
+        # platform requirement take a second one. Without this, a workflow could declare
+        # `runs_on` and route every job through something else: the consumer sets it, GitHub
+        # accepts it because it is declared, and nobody reads it. A silently ignored input is
+        # worse than a rejected one, and the assertion's label promises it reaches a job.
+        if not problems and not reaches_a_job:
+            problems.append('declares runs_on that no job resolves from or forwards')
     except (OSError, yaml.YAMLError) as error:
         problems.append(f'unreadable ({error})')
     except Exception as error:                      # noqa: BLE001 -- see the note above
@@ -523,6 +564,7 @@ echo "Test 11: the mention responder's trigger guard reads the right author"
 # matters and not the idiom. A clause reading no association at all is an unguarded
 # trigger and is reported as one.
 BAD_TRIGGER="$(python3 - "$WORKFLOWS_DIR" <<'PY'
+import json
 import os
 import re
 import sys
@@ -538,6 +580,12 @@ WORKFLOW = 'reusable-claude-mention.yaml'
 ASSOCIATION = re.compile(r'github\.event\.(\w+)\.author_association')
 # Either spelling excludes an `issue_comment` payload, which carries both objects.
 COMMENT_EXCLUSIONS = ("github.event.comment == null", "github.event_name == 'issues'")
+# WHICH association a clause reads is only half the boundary; the other half is what it
+# is read AGAINST. Adding `CONTRIBUTOR` or `NONE` is one token inside the same free-text
+# block, and it opens the job to anyone who has ever landed a commit -- or to anyone at
+# all -- while every pairing check above still passes.
+PRIVILEGED = ['COLLABORATOR', 'MEMBER', 'OWNER']
+ALLOWLIST = re.compile(r'contains\(\s*fromJSON\(\s*\'(\[[^\']*\])\'\s*\)')
 
 
 def or_clauses(expression):
@@ -589,6 +637,15 @@ try:
                       f'associations {sorted(authors)} -- the top-level `||` split did not '
                       f'separate them, so the null-check pairing is unverified')
                 continue
+            for raw in ALLOWLIST.findall(clause):
+                try:
+                    allowed = sorted(json.loads(raw))
+                except ValueError:
+                    print(f'{WORKFLOW}: job {job} has an association list that is not JSON: {raw}')
+                    continue
+                if allowed != PRIVILEGED:
+                    print(f'{WORKFLOW}: job {job} admits {allowed} -- the trigger allowlist must '
+                          f'be exactly {PRIVILEGED}')
             for author in sorted(authors):
                 if f'github.event.{author} != null' not in clause:
                     print(f'{WORKFLOW}: job {job} reads {author}.author_association '

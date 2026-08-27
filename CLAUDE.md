@@ -320,6 +320,16 @@ runner, which is what the check enforces. And the forward is demanded only when 
 unconditionally would be a trap the first time one of these calls something like
 `update-major-version-tag.yaml`.
 
+That callee lookup has a **converse**, and it is the rule that catches the most consequential shape:
+a *reusable* workflow whose job calls one that takes `runs_on` must declare and forward it. Without it
+the inversion returns one level up — a composed workflow that drops the input stops being iterated and
+passes by not being looked at, while its consumers cannot reach another runner at all, for the composed
+pipeline *or* its own delivery jobs. `yarn-docker.yaml` and `yarn-library.yaml` were exactly that: their
+npm twins with the input deleted, hardcoded to `ubuntu-latest`, green the whole time. A **leaf** caller
+is deliberately not asked, since taking the default is what a caller is for. And because the runner rule
+accepts any declared input, a workflow declaring `runs_on` must have at least one job resolve from or
+forward *it* — otherwise a consumer sets an input that GitHub accepts and nobody reads.
+
 The eleventh is the **mention responder's trigger guard**, which is an authorization boundary rather
 than a style rule — that job runs with `contents: write` and the repository's secrets. It shipped with
 a hole worth remembering: an `issue_comment` payload carries **both** `comment` and `issue`, so a
@@ -334,7 +344,11 @@ clause additionally excluding comment events — by `github.event.comment == nul
 idiom. The split assumes each clause is itself parenthesised, and checks that assumption rather than
 documenting it: one clause reading more than one payload's association means a wrapping reformat
 collapsed them, at which point the pairing degrades to "present somewhere in the expression" — a PASS
-that verifies nothing, which is the failure this assertion exists to prevent.
+that verifies nothing, which is the failure this assertion exists to prevent. *Which* association a
+clause reads is only half the boundary, so the allowlist is pinned too: every clause's
+`contains(fromJSON(…))` must be exactly `OWNER`, `MEMBER`, `COLLABORATOR`. Adding `CONTRIBUTOR` or
+`NONE` is one token in the same free-text block and opens the job to anyone, with every pairing check
+still passing.
 
 **Secrets reach a build as secrets.** A value passed into a reusable workflow as an *input* loses
 the caller's masking; passed as a *secret* it keeps it. That is why the deployment workflows take

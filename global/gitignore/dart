@@ -1,5 +1,9 @@
-# `global/scripts/languages/dart/test/run.sh` writes its reports under REPORT_PATH,
-# which `common` already covers. This one is deliberately left where the Dart
-# tooling puts it, because that is the path `package:coverage` and the IDE plugins
-# expect, so it stays in the working tree after every run.
+# `makefiles/dart.mk` sets `REPORT_PATH ?= ./reports`, so Dart projects collect tool
+# reports here rather than under `build/`.
+/reports/
+
+# `global/scripts/languages/dart/test/run.sh` writes its JUnit and Cobertura under
+# REPORT_PATH, but leaves the LCOV tracefile where the Dart tooling puts it, because
+# that is the path `package:coverage` and the IDE plugins expect. So it stays in the
+# working tree after every run.
 /coverage/

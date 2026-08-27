@@ -44,8 +44,9 @@ FRAGMENT_DIR="$SCRIPTS_DIR/global/gitignore"
 
 # Which language fragments apply is not new configuration to keep in step: the
 # project's Makefile already declares the pipeline it consumes, so the `.mk` files it
-# includes are the answer. A language with no fragment of its own writes only under
-# REPORT_PATH, which `common` already covers, so a miss here is not a gap.
+# includes are the answer. A language with no fragment of its own leaves REPORT_PATH at
+# its default `build/reports/`, which `common` covers -- a fragment exists precisely for
+# the languages that override it (golang, dart, python) or write outside it.
 fragments='common'
 if [ -f Makefile ]; then
   # Word-splitting is deliberate and safe: the pattern captures [a-z0-9-] only, so no

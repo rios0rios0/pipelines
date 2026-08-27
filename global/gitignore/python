@@ -1,0 +1,4 @@
+# `makefiles/python.mk` sets `REPORT_PATH ?= ./reports`, so Python projects collect tool
+# reports here rather than under `build/` -- `vulture/run.sh` writes `vulture.txt` and
+# `cyclonedx/run.sh` writes its BOM into it.
+/reports/

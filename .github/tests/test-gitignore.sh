@@ -90,6 +90,22 @@ assert_true "a project with no Makefile still gets common" \
   "grep -qxF '.codeql-db/' '$NOMAKE/.gitignore'"
 
 echo ""
+echo "Every language that overrides REPORT_PATH is covered"
+# `common` ignores the DEFAULT report directory, `build/reports/`. Three .mk fragments
+# override REPORT_PATH to `./reports`, and each needs its own fragment saying so. Dart and
+# Python were both missed on the first pass, so this asserts the property rather than the
+# list: whatever `makefiles/` overrides, `global/gitignore/` must cover.
+for lang in $(grep -rl 'REPORT_PATH *?*= *\./reports' "$SCRIPTS_DIR/makefiles/" \
+              | sed 's|.*/||; s|\.mk$||' | sort); do
+  OVERRIDER="$TEST_DIR/overrider-$lang"
+  make_repo "$OVERRIDER" "$lang"
+  gi "$OVERRIDER" > /dev/null 2>&1
+  mkdir -p "$OVERRIDER/reports" && : > "$OVERRIDER/reports/tool.json"
+  assert_true "$lang overrides REPORT_PATH to ./reports, and ./reports/ is ignored" \
+    "git -C '$OVERRIDER' check-ignore -q reports/tool.json"
+done
+
+echo ""
 echo "Idempotency"
 cp "$REPO/.gitignore" "$TEST_DIR/first-run"
 gi "$REPO" > /dev/null

@@ -742,8 +742,8 @@ Three properties are deliberate:
 | Property | Why |
 |----------|-----|
 | **The block sits FIRST in the file** | Gitignore resolves last-match-wins, so anything BELOW the block overrides it. Putting the block last would let a shared entry silently defeat a project's own `!` negation — the project must stay able to opt out of a rule it does not want |
-| **Which fragments apply is read from the consumer's Makefile** | It already declares the pipeline it consumes, so the `.mk` files it includes are the answer, and there is no second list to keep in step. A language with no fragment of its own writes only under `REPORT_PATH`, which `common` already covers |
-| **Only `golang` and `dart` have a fragment beyond `common`** | `makefiles/golang.mk` overrides `REPORT_PATH` to `./reports` and its test runner writes JUnit/coverage files at the repository root; Dart leaves `coverage/lcov.info` where its own tooling expects it. Every other language writes under `REPORT_PATH` alone. Add a fragment only with evidence that a script writes outside it |
+| **Which fragments apply is read from the consumer's Makefile** | It already declares the pipeline it consumes, so the `.mk` files it includes are the answer, and there is no second list to keep in step. A language with no fragment of its own leaves `REPORT_PATH` at its default `build/reports/`, which `common` covers |
+| **A fragment exists only where a language writes outside `build/reports/`** | Three `.mk` fragments override `REPORT_PATH` to `./reports` -- `golang.mk:16`, `dart.mk:26` and `python.mk:16` -- so each of those three needs `/reports/`, which `common` does not cover. Go additionally writes JUnit and coverage files at the repository root, and Dart leaves `coverage/lcov.info` where `package:coverage` and the IDE plugins expect it. Java, JavaScript, PHP, Ruby, .NET and Terraform keep the default `build/reports/` and need nothing. Check `grep -rn 'REPORT_PATH *?*=' makefiles/` before concluding a language is covered -- reading a truncated grep of that command is how `dart` and `python` were missed the first time |
 
 ## Contribution Requirements
 

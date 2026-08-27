@@ -336,6 +336,37 @@ done < <(reusable_workflows)
 assert_empty "every deployment suffix names a 50-deployment provider that exists" "$NO_ACTION"
 echo ""
 
+# The Claude reusables are STANDALONE, so every rule above deliberately skips them --
+# and nothing else asserts their `runs_on` wiring. Consumers route these onto
+# self-hosted runners through that input (#635), so a refactor that drops it or
+# re-hardcodes the runner goes green while breaking every such consumer. Asserted on
+# the PARSED document, same as the Dart suite: YAML 1.1 reads `on:` as the boolean
+# `true`, and a grep would pass on a file that only mentions the name in a comment.
+BAD_RUNS_ON=''
+for file in reusable-claude-review.yaml reusable-claude-mention.yaml; do
+  result="$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/$file'))
+trigger = d.get('on', d.get(True))
+spec = ((trigger.get('workflow_call') or {}).get('inputs') or {}).get('runs_on')
+problems = []
+if spec is None:
+    problems.append('declares no runs_on workflow_call input')
+else:
+    if spec.get('required') is not False:
+        problems.append('runs_on is not optional')
+    if spec.get('default') != '[\"ubuntu-latest\"]':
+        problems.append('runs_on does not default to [\"ubuntu-latest\"]')
+for name, job in (d.get('jobs') or {}).items():
+    if job.get('runs-on') != '\${{ fromJSON(inputs.runs_on) }}':
+        problems.append(f'job {name} does not consume fromJSON(inputs.runs_on)')
+print('; '.join(problems))
+")"
+  [[ -n "$result" ]] && BAD_RUNS_ON="${BAD_RUNS_ON}${file}: ${result}"$'\n'
+done
+assert_empty "the Claude reusables declare and consume the runs_on input" "$BAD_RUNS_ON"
+echo ""
+
 echo "================================"
 echo -e "Tests passed: ${GREEN}${TESTS_PASSED}${NC}"
 if [[ $TESTS_FAILED -gt 0 ]]; then

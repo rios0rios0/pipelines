@@ -27,7 +27,13 @@ jobs:
         uses: 'anthropics/claude-code-action@70fec183852c4f82f3f1969faed7dd60c5149ca7' # v1.0.207
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: '--model claude-opus-4-8'
+          # `--allowedTools` is what installs the inline-comment MCP server: agent mode derives
+          # its tool list from claude_args alone, and the server is only wired when the list
+          # names it (see install-mcp-server.ts). Without this Claude reviews the PR but has
+          # no way to post, and falls back to a `gh` call that headless CI cannot approve.
+          claude_args: >-
+            --model claude-opus-4-8
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
           prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'

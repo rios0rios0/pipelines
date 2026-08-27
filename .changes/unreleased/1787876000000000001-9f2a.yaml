@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the Claude review workflow never posting its findings. It ran, reviewed the pull request and produced a report, then had nowhere to put it: the run ended with `The inline-comment MCP tool isn''t available in this environment` and the action logged `No buffered inline comments`. A `prompt:` puts the action in agent mode, where the allowed-tool list comes only from `claude_args`, and the inline-comment MCP server is installed only when that list names it. `claude_args` now passes `--allowedTools` with `mcp__github_inline_comment__create_inline_comment` and the `gh pr` commands, matching the action''s own documented PR-review example.'
+time: '2026-08-27T22:00:00.000000000Z'

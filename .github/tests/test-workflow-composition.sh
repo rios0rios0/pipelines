@@ -344,35 +344,42 @@ done < <(reusable_workflows)
 assert_empty "every deployment suffix names a 50-deployment provider that exists" "$NO_ACTION"
 echo ""
 
-echo "Test 10: the Claude reusables declare and consume runs_on"
-# The Claude reusables are STANDALONE, so every rule above deliberately skips
-# them -- and nothing else asserts their `runs_on` wiring. Consumers route these
-# onto self-hosted runners through that input (#635), so a refactor that drops it
-# or re-hardcodes the runner goes green while quietly pinning every such consumer
-# back onto a hosted runner.
+echo "Test 10: every workflow declaring runs_on declares and consumes it the same way"
+# Two halves, because either alone is defeatable.
 #
-# Three things about the shape below are deliberate:
+# The CONTRACT half runs over every workflow that declares a `runs_on` input --
+# 19 of them today, not just the two this test was written for. The shape is not
+# Claude-specific: `go.yaml`, `yarn.yaml`, `npm.yaml`, `dart.yaml` and their
+# children all declare the byte-identical input, and only the Dart ones were
+# asserted anywhere (`test-dart-pipeline.sh`). Running the same body over all of
+# them costs nothing and closes the gap a `reusable-claude-*` glob leaves: a
+# future Claude workflow named outside that pattern.
 #
-#   - It reads the PARSED document, the only assertion here that does, and the
-#     file header says why. Same shape as `test-dart-pipeline.sh`, which asserts
-#     this same wiring on the Dart workflows.
-#   - The files come from a GLOB, not a list. A third `reusable-claude-*.yaml`
-#     added to STANDALONE is already skipped by Tests 1, 2 and 9 by design; named
-#     in a list here it would be unchecked by this one too, and a hardcoded runner
-#     in it would go green. A glob matching nothing is itself reported, so a
-#     rename fails here rather than passing by having nothing left to check.
+# The DECLARATION half keeps the glob, because generalising alone would invert
+# the assertion -- a workflow that DROPS the input stops being iterated and
+# passes by not being looked at. The Claude reusables are STANDALONE, so Tests 1,
+# 2 and 9 skip them by design and nothing else names them; the glob, rather than
+# a list of two filenames, is what stops a third one from being invisible here as
+# well. A glob matching nothing is itself reported, so a rename fails rather than
+# passing with nothing left to check.
+#
+# Two more things about the shape below are deliberate:
+#
+#   - It reads the PARSED document, one of the two assertions here that does, and
+#     the file header says why. Same shape as `test-dart-pipeline.sh`.
 #   - Every path through the Python exits 0 and speaks through stdout. This script
 #     runs under `set -e`, so a non-zero exit inside the command substitution would
-#     kill the suite after nine PASS lines with no FAIL line and no summary --
-#     which reads as a crash rather than as a verdict. `except Exception` around
-#     the per-file body is deliberately that broad: `OSError`/`YAMLError` cover an
-#     unreadable file, but an EMPTY workflow (`safe_load` returns `None`), a scalar
-#     `runs_on:` or a job with an empty body are all well-formed YAML that raise
-#     `AttributeError` on the lookups below -- which would abort the suite for the
-#     shapes it exists to report.
+#     kill the suite mid-run with no FAIL line and no summary -- which reads as a
+#     crash rather than as a verdict. `except Exception` around the per-file body
+#     is deliberately that broad: `OSError`/`YAMLError` cover an unreadable file,
+#     but an EMPTY workflow (`safe_load` returns `None`), a scalar `runs_on:` or a
+#     job with an empty body are all well-formed YAML that raise `AttributeError`
+#     on the lookups below -- which would abort the suite for the shapes it exists
+#     to report.
 BAD_RUNS_ON="$(python3 - "$WORKFLOWS_DIR" <<'PY'
 import glob
 import os
+import re
 import sys
 
 try:
@@ -383,23 +390,45 @@ except ImportError:
     sys.exit(0)
 
 workflows_dir = sys.argv[1]
-paths = sorted(glob.glob(os.path.join(workflows_dir, 'reusable-claude-*.yaml')))
-if not paths:
+
+# `${{inputs.runs_on}}` and `${{ inputs.runs_on }}` are the same forward. Comparing
+# the raw string would report the correct one as "not forwarding runs_on", which
+# points a reader at the wrong defect -- `test-dart-pipeline.sh` checks presence for
+# the same reason. Normalising keeps the stricter check without the false positive.
+EXPRESSION = re.compile(r'\$\{\{\s*(.*?)\s*\}\}')
+
+
+def normalized(value):
+    return EXPRESSION.sub(r'${{ \1 }}', value) if isinstance(value, str) else value
+
+
+def runs_on_input(document):
+    # YAML 1.1 reads the `on:` key as the boolean `true`.
+    trigger = document.get('on', document.get(True)) or {}
+    return ((trigger.get('workflow_call') or {}).get('inputs') or {}).get('runs_on')
+
+
+# DECLARATION half: these must offer the input at all.
+must_declare = sorted(glob.glob(os.path.join(workflows_dir, 'reusable-claude-*.yaml')))
+if not must_declare:
     print('no reusable-claude-*.yaml in .github/workflows/ -- renamed, or removed')
 
-for path in paths:
+for path in sorted(glob.glob(os.path.join(workflows_dir, '*.yaml'))):
     name = os.path.basename(path)
     problems = []
     try:
         with open(path, encoding='utf-8') as handle:
             document = yaml.safe_load(handle) or {}
 
-        # YAML 1.1 reads the `on:` key as the boolean `true`.
-        trigger = document.get('on', document.get(True)) or {}
-        spec = ((trigger.get('workflow_call') or {}).get('inputs') or {}).get('runs_on')
+        spec = runs_on_input(document)
         if spec is None:
-            problems.append('declares no runs_on workflow_call input')
-        elif not isinstance(spec, dict):
+            # CONTRACT half applies only to workflows that offer the input; the
+            # declaration half is what makes its absence a finding where it matters.
+            if path in must_declare:
+                print(f'{name}: declares no runs_on workflow_call input')
+            continue
+
+        if not isinstance(spec, dict):
             problems.append(f'runs_on is not an input declaration ({spec!r})')
         else:
             if spec.get('required') is not False:
@@ -415,9 +444,9 @@ for path in paths:
             # asserting anything about it would let half a migration through, the
             # shape `test-dart-pipeline.sh` calls out on the Dart children.
             if 'uses' in body:
-                if (body.get('with') or {}).get('runs_on') != '${{ inputs.runs_on }}':
+                if normalized((body.get('with') or {}).get('runs_on')) != '${{ inputs.runs_on }}':
                     problems.append(f'job {job} calls a workflow without forwarding runs_on')
-            elif body.get('runs-on') != '${{ fromJSON(inputs.runs_on) }}':
+            elif normalized(body.get('runs-on')) != '${{ fromJSON(inputs.runs_on) }}':
                 problems.append(f'job {job} does not consume fromJSON(inputs.runs_on)')
     except (OSError, yaml.YAMLError) as error:
         problems.append(f'unreadable ({error})')
@@ -428,7 +457,98 @@ for path in paths:
         print(f'{name}: ' + '; '.join(problems))
 PY
 )"
-assert_empty "the Claude reusables declare and consume the runs_on input" "$BAD_RUNS_ON"
+assert_empty "every runs_on input is optional, defaults to hosted, and reaches every job" "$BAD_RUNS_ON"
+echo ""
+
+echo "Test 11: the mention responder's trigger guard reads the right author"
+# The `@claude` responder runs with `contents: write` and this repository's secrets,
+# so its `if:` is the authorization boundary. It shipped with a hole: an
+# `issue_comment` payload carries BOTH `comment` and `issue`, so the clause reading
+# `github.event.issue.author_association` -- the THREAD AUTHOR's -- also evaluated on
+# every comment, and any comment by anyone on a maintainer-opened `@claude` thread
+# started the job.
+#
+# That guard now lives in a free-text `if:` block, which is the shape a reformat or a
+# "simplify these conditions" pass eats first, defended only by a comment saying not
+# to. This whole suite exists because a review habit is not an assertion, so the guard
+# gets one too.
+#
+# It is asserted STRUCTURALLY, not as a string match: the expression is split into its
+# top-level `||` clauses, and each clause that reads an `author_association` must also
+# carry the null-check selecting the payload it belongs to. The `issue` clause must
+# additionally exclude comment events -- by `github.event.comment == null` or by
+# `github.event_name == 'issues'`, either spelling, because the invariant is what
+# matters and not the idiom. A clause reading no association at all is an unguarded
+# trigger and is reported as one.
+BAD_TRIGGER="$(python3 - "$WORKFLOWS_DIR" <<'PY'
+import os
+import re
+import sys
+
+try:
+    import yaml
+except ImportError:
+    print('PyYAML is required for this assertion '
+          '(CI installs python3-yaml; locally: pip install pyyaml)')
+    sys.exit(0)
+
+WORKFLOW = 'reusable-claude-mention.yaml'
+ASSOCIATION = re.compile(r'github\.event\.(\w+)\.author_association')
+# Either spelling excludes an `issue_comment` payload, which carries both objects.
+COMMENT_EXCLUSIONS = ("github.event.comment == null", "github.event_name == 'issues'")
+
+
+def or_clauses(expression):
+    """Split on `||` at parenthesis depth 0 -- the clauses are themselves parenthesised."""
+    clauses, depth, current = [], 0, ''
+    index = 0
+    while index < len(expression):
+        character = expression[index]
+        if character == '(':
+            depth += 1
+        elif character == ')':
+            depth -= 1
+        elif depth == 0 and expression[index:index + 2] == '||':
+            clauses.append(current)
+            current = ''
+            index += 2
+            continue
+        current += character
+        index += 1
+    clauses.append(current)
+    return [clause.strip() for clause in clauses if clause.strip()]
+
+
+path = os.path.join(sys.argv[1], WORKFLOW)
+try:
+    with open(path, encoding='utf-8') as handle:
+        document = yaml.safe_load(handle) or {}
+
+    for job, body in (document.get('jobs') or {}).items():
+        condition = ' '.join(str((body or {}).get('if', '')).split())
+        if not condition:
+            print(f'{WORKFLOW}: job {job} has no `if:` -- the trigger is unguarded')
+            continue
+        for clause in or_clauses(condition):
+            authors = set(ASSOCIATION.findall(clause))
+            if not authors:
+                print(f'{WORKFLOW}: job {job} has a clause reading no author_association: {clause}')
+                continue
+            for author in sorted(authors):
+                if f'github.event.{author} != null' not in clause:
+                    print(f'{WORKFLOW}: job {job} reads {author}.author_association '
+                          f'without requiring github.event.{author} != null')
+                if author == 'issue' and not any(x in clause for x in COMMENT_EXCLUSIONS):
+                    print(f'{WORKFLOW}: job {job} reads the THREAD AUTHOR association on a clause '
+                          f'that an issue_comment payload also reaches -- it carries both '
+                          f'`comment` and `issue`')
+except (OSError, yaml.YAMLError) as error:
+    print(f'{WORKFLOW}: unreadable ({error})')
+except Exception as error:                          # noqa: BLE001 -- see Test 10's note
+    print(f'{WORKFLOW}: {type(error).__name__}: {error}')
+PY
+)"
+assert_empty "every trigger clause checks the association of whoever wrote what it matched" "$BAD_TRIGGER"
 echo ""
 
 echo "================================"

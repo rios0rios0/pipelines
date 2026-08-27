@@ -231,7 +231,7 @@ is a large part of why the rule is a test rather than a review habit.
 
 ### Workflow Composition Standard
 
-**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), ten
+**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), eleven
 assertions, every one of them proven to fire against a deliberate violation.** Read this section
 before writing anything under `.github/workflows/`, and before writing a pipeline in a repository
 that consumes this one.
@@ -297,13 +297,32 @@ job and the called workflow's job. Renaming a job renames a check for everyone d
 
 **A `STANDALONE` workflow is exempt from the composition rules, not from every rule.** The two Claude
 reusables are listed there, so the naming, delegation and suffix assertions skip them by design —
-which left their `runs_on` wiring asserted by nothing at all. The tenth assertion covers it: both must
-declare an optional `runs_on` defaulting to `'["ubuntu-latest"]'`, and every job in them must consume
-`${{ fromJSON(inputs.runs_on) }}`, so a refactor that re-hardcodes the runner fails here instead of
-silently pinning every consumer back onto a hosted one. It reads the PARSED document — YAML 1.1
-resolves `on:` to the boolean `true`, so no indentation rule can reach under it — which makes it the
-one assertion in that suite needing PyYAML, and it says so by name rather than dying when it is
-absent.
+which left their wiring asserted by nothing at all. The last two assertions cover what that exemption
+leaves behind, and both read the PARSED document (YAML 1.1 resolves `on:` to the boolean `true`, so no
+indentation rule can reach under it) — which is why this suite needs PyYAML at all, and why it says so
+by name rather than dying when it is absent.
+
+The tenth is the **`runs_on` contract**, and it has two halves because either alone is defeatable. The
+contract half runs over *every* workflow declaring the input — 19 today, not just the Claude pair,
+since `go.yaml`, `yarn.yaml`, `npm.yaml` and `dart.yaml` declare the byte-identical shape: optional,
+defaulting to `'["ubuntu-latest"]'`, and reaching every job — as `runs-on: ${{ fromJSON(inputs.runs_on) }}`
+for a normal job, or forwarded in `with:` for a job that `uses:` another workflow, where GitHub rejects
+the `runs-on` key outright. The declaration half keeps a `reusable-claude-*.yaml` glob, because
+generalising alone would invert the assertion: a workflow that *drops* the input stops being iterated
+and would pass by not being looked at.
+
+The eleventh is the **mention responder's trigger guard**, which is an authorization boundary rather
+than a style rule — that job runs with `contents: write` and the repository's secrets. It shipped with
+a hole worth remembering: an `issue_comment` payload carries **both** `comment` and `issue`, so a
+clause reading `github.event.issue.author_association` — the *thread author's* — also evaluated on
+every comment, and any comment by anyone on a maintainer-opened `@claude` thread started the job. (Not
+an escalation: the action re-checks the actor's write permission and refuses to act. But the job
+started, which on a self-hosted runner is the whole exposure.) The assertion is structural, not a
+string match: the `if:` is split into its top-level `||` clauses, and each clause reading an
+`author_association` must carry the null-check selecting the payload it belongs to, with the `issue`
+clause additionally excluding comment events — by `github.event.comment == null` or
+`github.event_name == 'issues'`, either spelling, because the invariant is what matters and not the
+idiom.
 
 **Secrets reach a build as secrets.** A value passed into a reusable workflow as an *input* loses
 the caller's masking; passed as a *secret* it keeps it. That is why the deployment workflows take

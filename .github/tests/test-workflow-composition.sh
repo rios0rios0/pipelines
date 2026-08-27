@@ -32,12 +32,20 @@ set -e
 #
 # WHAT IT DOES NOT DO
 #
-# It does not parse YAML with a library -- PyYAML is not assumed present here,
-# the same constraint `order-check` and `var-catalog` work under. It reads the
-# files as indented text, which is sufficient because every assertion below is
-# about a line shape (a job key at two spaces, a `name:` at four) rather than
-# about a resolved document. A workflow written in flow style would slip past
-# it; none is, and one would fail review long before this.
+# Tests 1-9 do not parse YAML with a library -- the same constraint `order-check`
+# and `var-catalog` work under. They read the files as indented text, which is
+# sufficient because each is about a line shape (a job key at two spaces, a
+# `name:` at four) rather than about a resolved document. A workflow written in
+# flow style would slip past them; none is, and one would fail review long
+# before this.
+#
+# Test 10 is the one exception and does need PyYAML, because the key it asserts
+# under is one YAML 1.1 RESOLVES: `on:` parses as the boolean `true`, so
+# `runs_on` sits under no key spelled `on` at all and no indentation rule can
+# reach it. It is written so that a host without PyYAML sees that assertion FAIL
+# BY NAME rather than a traceback -- see the comment there. CI installs
+# `python3-yaml` (`.github/workflows/ci.yaml`), and `make test` already requires
+# it for `test-azure-step-names.sh` and `test-lambda-templates.sh`.
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export SCRIPTS_DIR
@@ -336,34 +344,72 @@ done < <(reusable_workflows)
 assert_empty "every deployment suffix names a 50-deployment provider that exists" "$NO_ACTION"
 echo ""
 
-# The Claude reusables are STANDALONE, so every rule above deliberately skips them --
-# and nothing else asserts their `runs_on` wiring. Consumers route these onto
-# self-hosted runners through that input (#635), so a refactor that drops it or
-# re-hardcodes the runner goes green while breaking every such consumer. Asserted on
-# the PARSED document, same as the Dart suite: YAML 1.1 reads `on:` as the boolean
-# `true`, and a grep would pass on a file that only mentions the name in a comment.
-BAD_RUNS_ON=''
-for file in reusable-claude-review.yaml reusable-claude-mention.yaml; do
-  result="$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/$file'))
-trigger = d.get('on', d.get(True))
-spec = ((trigger.get('workflow_call') or {}).get('inputs') or {}).get('runs_on')
-problems = []
-if spec is None:
-    problems.append('declares no runs_on workflow_call input')
-else:
-    if spec.get('required') is not False:
-        problems.append('runs_on is not optional')
-    if spec.get('default') != '[\"ubuntu-latest\"]':
-        problems.append('runs_on does not default to [\"ubuntu-latest\"]')
-for name, job in (d.get('jobs') or {}).items():
-    if job.get('runs-on') != '\${{ fromJSON(inputs.runs_on) }}':
-        problems.append(f'job {name} does not consume fromJSON(inputs.runs_on)')
-print('; '.join(problems))
-")"
-  [[ -n "$result" ]] && BAD_RUNS_ON="${BAD_RUNS_ON}${file}: ${result}"$'\n'
-done
+echo "Test 10: the Claude reusables declare and consume runs_on"
+# The Claude reusables are STANDALONE, so every rule above deliberately skips
+# them -- and nothing else asserts their `runs_on` wiring. Consumers route these
+# onto self-hosted runners through that input (#635), so a refactor that drops it
+# or re-hardcodes the runner goes green while quietly pinning every such consumer
+# back onto a hosted runner.
+#
+# Three things about the shape below are deliberate:
+#
+#   - It reads the PARSED document, the only assertion here that does, and the
+#     file header says why. Same shape as `test-dart-pipeline.sh`, which asserts
+#     this same wiring on the Dart workflows.
+#   - The files come from a GLOB, not a list. A third `reusable-claude-*.yaml`
+#     added to STANDALONE is already skipped by Tests 1, 2 and 9 by design; named
+#     in a list here it would be unchecked by this one too, and a hardcoded runner
+#     in it would go green. A glob matching nothing is itself reported, so a
+#     rename fails here rather than passing by having nothing left to check.
+#   - Every path through the Python exits 0 and speaks through stdout, including
+#     a missing PyYAML and an unreadable file. This script runs under `set -e`, so
+#     a non-zero exit inside the command substitution would kill the suite after
+#     nine PASS lines with no FAIL line and no summary -- which reads as a crash
+#     rather than as a verdict.
+BAD_RUNS_ON="$(python3 - "$WORKFLOWS_DIR" <<'PY'
+import glob
+import os
+import sys
+
+try:
+    import yaml
+except ImportError:
+    print('PyYAML is required for this assertion '
+          '(CI installs python3-yaml; locally: pip install pyyaml)')
+    sys.exit(0)
+
+workflows_dir = sys.argv[1]
+paths = sorted(glob.glob(os.path.join(workflows_dir, 'reusable-claude-*.yaml')))
+if not paths:
+    print('no reusable-claude-*.yaml in .github/workflows/ -- renamed, or removed')
+
+for path in paths:
+    name = os.path.basename(path)
+    try:
+        with open(path, encoding='utf-8') as handle:
+            document = yaml.safe_load(handle)
+    except (OSError, yaml.YAMLError) as error:
+        print(f'{name}: unreadable ({error})')
+        continue
+
+    problems = []
+    # YAML 1.1 reads the `on:` key as the boolean `true`.
+    trigger = document.get('on', document.get(True)) or {}
+    spec = ((trigger.get('workflow_call') or {}).get('inputs') or {}).get('runs_on')
+    if spec is None:
+        problems.append('declares no runs_on workflow_call input')
+    else:
+        if spec.get('required') is not False:
+            problems.append('runs_on is not optional')
+        if spec.get('default') != '["ubuntu-latest"]':
+            problems.append('runs_on does not default to ["ubuntu-latest"]')
+    for job, body in (document.get('jobs') or {}).items():
+        if body.get('runs-on') != '${{ fromJSON(inputs.runs_on) }}':
+            problems.append(f'job {job} does not consume fromJSON(inputs.runs_on)')
+    if problems:
+        print(f'{name}: ' + '; '.join(problems))
+PY
+)"
 assert_empty "the Claude reusables declare and consume the runs_on input" "$BAD_RUNS_ON"
 echo ""
 

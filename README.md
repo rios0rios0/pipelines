@@ -267,6 +267,30 @@ token, which is how it posts reviews and comments. That is GitHub authentication
 separate from `claude_code_oauth_token`, which authenticates to Anthropic. Removing the scope
 fails every run with `Could not fetch an OIDC token`.
 
+Both take an optional `runs_on` — a JSON array of runner labels, `'["ubuntu-latest"]'` by
+default — for moving the pair onto self-hosted runners. Two things are worth knowing before
+using it.
+
+**A bare self-hosted host needs provisioning, and not the part most people reach for first.**
+The Actions runner ships its own Node and runs every JavaScript action with it, self-hosted
+included, so host Node is not the gap. What `anthropics/claude-code-action` shells out to is:
+`bash` (every step of that composite declares it), `unzip` (the Bun install unpacks through
+`@actions/tool-cache`, which resolves it and throws when it is absent), `git`, a writable
+`$HOME` (Bun lands in `$HOME/.bun/bin`), and egress to `github.com`, `registry.npmjs.org`,
+`api.github.com` and `api.anthropic.com`. A missing one does not fail at job selection — it
+fails minutes in, inside the action, with an error that never names the runner.
+
+**The two workflows differ in what they let onto that host.** `reusable-claude-review.yaml`
+runs only for pull requests opened from the repository itself. `reusable-claude-mention.yaml`
+deliberately does not, because answering `@claude` under a fork's pull request is the point of a
+mention responder. Only an OWNER, MEMBER or COLLABORATOR can trigger it and the action re-checks
+the actor's write permission, so an outside contributor cannot start it — but a maintainer's
+`@claude` on a fork PR then runs holding `contents: write` and this repository's secrets, and
+checks the fork's branch out into the workspace. The action restores `.claude/` and `.mcp.json`
+from the base branch first, so that injection path is closed; the fork's code itself is still on
+the runner, and a hosted runner discards it with the VM where a persistent self-hosted one does
+not.
+
 `.github/workflows/claude-review.yaml`:
 
 ```yaml

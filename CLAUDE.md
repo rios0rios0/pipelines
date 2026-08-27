@@ -231,7 +231,7 @@ is a large part of why the rule is a test rather than a review habit.
 
 ### Workflow Composition Standard
 
-**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), nine
+**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), ten
 assertions, every one of them proven to fire against a deliberate violation.** Read this section
 before writing anything under `.github/workflows/`, and before writing a pipeline in a repository
 that consumes this one.
@@ -294,6 +294,16 @@ Every deployment job therefore declares, and the test asserts, all four of:
 **Job names are an API, not a label.** `delivery > <target>` and `deployment > <provider>` are the
 strings consumers pass to `require-checks`, because GitHub composes a check's name from the calling
 job and the called workflow's job. Renaming a job renames a check for everyone downstream.
+
+**A `STANDALONE` workflow is exempt from the composition rules, not from every rule.** The two Claude
+reusables are listed there, so the naming, delegation and suffix assertions skip them by design —
+which left their `runs_on` wiring asserted by nothing at all. The tenth assertion covers it: both must
+declare an optional `runs_on` defaulting to `'["ubuntu-latest"]'`, and every job in them must consume
+`${{ fromJSON(inputs.runs_on) }}`, so a refactor that re-hardcodes the runner fails here instead of
+silently pinning every consumer back onto a hosted one. It reads the PARSED document — YAML 1.1
+resolves `on:` to the boolean `true`, so no indentation rule can reach under it — which makes it the
+one assertion in that suite needing PyYAML, and it says so by name rather than dying when it is
+absent.
 
 **Secrets reach a build as secrets.** A value passed into a reusable workflow as an *input* loses
 the caller's masking; passed as a *secret* it keeps it. That is why the deployment workflows take

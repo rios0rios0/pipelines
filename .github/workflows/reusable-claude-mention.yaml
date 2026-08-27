@@ -9,20 +9,37 @@ on:
         default: '["ubuntu-latest"]'
         description: |
           JSON array of runner labels (e.g. '["self-hosted"]'); see the `runs_on` input in
-          go.yaml for the shape's rationale. Unlike the review workflow, this responder has no
-          same-repository guard -- a trusted `@claude` mention under a fork's pull request runs
-          here holding `contents: write`, so on a persistent self-hosted host the fork's code
-          can share the machine. Weigh that before routing this workflow off hosted runners.
+          go.yaml for the shape's rationale, and the comment above `jobs:` for what this
+          workflow in particular puts on the runner it names.
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: true
         description: 'OAuth token used by the Claude Code action'
 
-# `ubuntu-latest` carries the Node runtime `anthropics/claude-code-action` runs on; a bare
-# self-hosted runner selected through `runs_on` needs that runtime, a writable `$HOME` for the
-# Bun and Claude CLI install the action performs, and network egress to `api.anthropic.com` and
-# `github.com`. A missing one does not fail at job selection -- it fails minutes in, inside the
-# action, with an error that never names the runner.
+# A bare self-hosted runner selected through `runs_on` must be provisioned before these jobs pass
+# -- and NOT with host Node: the Actions runner ships its own (`externals/node*`) and executes
+# every JavaScript action with it, on self-hosted hosts too. What a minimal host lacks is what
+# `anthropics/claude-code-action` shells OUT to. Every step of that composite declares
+# `shell: bash`; `oven-sh/setup-bun` unpacks Bun through `@actions/tool-cache`, which resolves
+# `unzip` and throws when it is absent; Bun installs into `$HOME/.bun/bin`, so `$HOME` must be
+# writable; `bun install --production` then resolves the action's dependencies from the npm
+# registry; and the checkout -- plus the PR branch tag mode fetches below -- needs `git`. So:
+# `bash`, `git` and `unzip` on `PATH`, a writable `$HOME`, and egress to `github.com`,
+# `registry.npmjs.org`, `api.github.com` and `api.anthropic.com`. A missing one does not fail at
+# job selection -- it fails minutes in, inside the action, with an error that never names the
+# runner.
+#
+# Unlike `reusable-claude-review.yaml`, this responder carries no same-repository guard, and that
+# is deliberate -- answering `@claude` under a fork's pull request is the point of a mention
+# responder. Know what it puts on the host before naming a persistent one. Only an OWNER, MEMBER
+# or COLLABORATOR can trigger it (the `if:` below) and the action re-checks the actor's write
+# permission, so an outside contributor cannot start it; but a maintainer's `@claude` on a fork
+# PR then runs holding `contents: write` and this repository's secrets, and tag mode fetches
+# `refs/pull/<n>/head` and checks the FORK's branch out into the workspace
+# (`src/github/operations/branch.ts`). The action restores `.claude/` and `.mcp.json` from the
+# base branch before the CLI reads them, so that injection path is closed -- the fork's code
+# itself is still on the runner, and a hosted runner discards it with the VM where a self-hosted
+# one does not.
 jobs:
   claude:
     if: |

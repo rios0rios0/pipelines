@@ -49,6 +49,7 @@ pipelines/
 ├── .github/workflows/          # GitHub Actions reusable workflows
 │   ├── go-docker.yaml         # Go with Docker delivery
 │   ├── go-render.yaml         # Go with Docker delivery + Render deployment
+│   ├── go-flyio.yaml          # Go with Docker delivery + Fly.io deployment
 │   ├── go-binary.yaml         # Go binary compilation
 │   ├── pdm-docker.yaml        # Python/PDM with Docker
 │   ├── gradle-docker.yaml     # Java/Gradle with Docker delivery
@@ -177,6 +178,7 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 | `go.yaml`                    | Go testing and quality checks              | Go            |
 | `go-docker.yaml`             | Go with Docker image delivery              | Go            |
 | `go-render.yaml`             | Go with Docker delivery + Render deployment | Go            |
+| `go-flyio.yaml`              | Go with Docker delivery + Fly.io deployment | Go            |
 | `go-library.yaml`            | Go module tagged for the proxy             | Go            |
 | `go-binary.yaml`             | Go binary compilation and release          | Go            |
 | `pdm.yaml`                   | Python/PDM testing and quality checks      | Python        |

@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed the Claude reusable workflows to run on Claude Opus 5, set through the `ANTHROPIC_MODEL` environment variable rather than a `--model` flag. `parse-sdk-options.ts` resolves the model as `options.model || modelFromClaudeArgs`, where `options.model` is `process.env.ANTHROPIC_MODEL`, so the variable takes precedence and the workflows keep passing no `claude_args` -- which is what lets `track_progress` tag mode wire its own tools. Left unset, the CLI default applies, and in CI that resolved to Claude Sonnet 5 with Claude Haiku 4.5 for comment classification.'
+time: '2026-08-27T23:00:00.000000000Z'

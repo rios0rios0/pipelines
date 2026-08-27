@@ -253,10 +253,13 @@ Pass the secret explicitly rather than with `secrets: inherit` — Semgrep's
 `yaml.github-actions.security.secrets-inherit` rule fails `make sast` on the inherited form.
 
 The caller's `permissions:` is a **ceiling** for the workflow it calls, so it must grant at
-least what the definition declares — `id-token: write` included. Neither definition pins a
-model or an `--allowedTools` list: the review runs with `track_progress: true`, which puts
-the action in tag mode, where it wires its own posting tool and takes the Claude Code CLI's
-default model.
+least what the definition declares — `id-token: write` included. Neither definition passes
+`claude_args`: the review runs with `track_progress: true`, which puts the action in tag mode,
+where it wires its own posting tool. The model is pinned with the `ANTHROPIC_MODEL`
+environment variable rather than `--model`, because `parse-sdk-options.ts` resolves
+`model: options.model || modelFromClaudeArgs` — the variable wins, and setting it leaves the
+tool wiring untouched. Without it the CLI default applies, which in CI resolves to
+Claude Sonnet, not Opus.
 
 **`id-token: write` is required.** Unless a `github_token` is passed explicitly, the action's
 `setupGitHubToken()` always requests a GitHub OIDC token and exchanges it for a GitHub App

@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed the Claude workflow display names so each matches its file name exactly: `claude-review.yaml` and `reusable-claude-review.yaml` are `Claude Review`, `claude-mention.yaml` and `reusable-claude-mention.yaml` are `Claude Mention`. `reusable-claude-mention.yaml` had kept `Claude Code` from before the move, and the review pair read `Claude Code Review`, which broke the symmetry with its `Claude Mention` sibling.'
+time: '2026-08-27T21:05:00.000000000Z'

@@ -214,8 +214,8 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 | `release.yaml`               | Tag and GitHub Release from a bump commit  | any           |
 | `update-major-version-tag.yaml` | Moving `vN` tag for action consumers    | any           |
 | `dependency-updates.yaml`    | Twice-weekly check for stale pinned dependencies | all           |
-| `reusable-claude-review.yaml`  | Claude automated review on every pull request | any       |
-| `reusable-claude-mention.yaml` | Claude responding to `@claude` mentions  | any           |
+| `reusable-claude-review.yaml`  | `Claude Review` — automated review on every pull request | any |
+| `reusable-claude-mention.yaml` | `Claude Mention` — responds to `@claude` mentions | any  |
 
 #### Usage Example (Go with Docker)
 
@@ -239,7 +239,7 @@ jobs:
     uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'
 ```
 
-#### Usage Example (Claude Code Review)
+#### Usage Example (Claude Review and Claude Mention)
 
 `reusable-claude-review.yaml` posts an automated review on every pull request;
 `reusable-claude-mention.yaml` answers `@claude` mentions in issues, PR comments, and reviews.
@@ -250,14 +250,20 @@ caller below, named without it. Both need the
 Pass the secret explicitly rather than with `secrets: inherit` — Semgrep's
 `yaml.github-actions.security.secrets-inherit` rule fails `make sast` on the inherited form.
 
+The caller's `permissions:` is a **ceiling** for the workflow it calls, so it must grant at
+least what the definition declares. Neither needs `id-token: write`:
+`anthropics/claude-code-action` documents that scope as required only for workload identity
+federation, or the Bedrock / Vertex / Foundry OIDC paths, and these authenticate with
+`claude_code_oauth_token`.
+
 `.github/workflows/claude-review.yaml`:
 
 ```yaml
-name: 'Claude Code Review'
+name: 'Claude Review'
 
 on:
   pull_request:
-    types: [opened, synchronize, ready_for_review, reopened]
+    types: ['opened', 'synchronize', 'ready_for_review', 'reopened']
 
 jobs:
   claude-review:
@@ -268,23 +274,22 @@ jobs:
       contents: 'read'
       pull-requests: 'write'
       issues: 'write'
-      id-token: 'write'
 ```
 
 `.github/workflows/claude-mention.yaml`:
 
 ```yaml
-name: 'Claude Code'
+name: 'Claude Mention'
 
 on:
   issue_comment:
-    types: [created]
+    types: ['created']
   pull_request_review_comment:
-    types: [created]
+    types: ['created']
   issues:
-    types: [opened, assigned]
+    types: ['opened', 'assigned']
   pull_request_review:
-    types: [submitted]
+    types: ['submitted']
 
 jobs:
   claude-mention:
@@ -295,7 +300,6 @@ jobs:
       contents: 'write'
       pull-requests: 'write'
       issues: 'write'
-      id-token: 'write'
       actions: 'read'
 ```
 

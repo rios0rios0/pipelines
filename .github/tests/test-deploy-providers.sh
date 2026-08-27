@@ -772,6 +772,10 @@ RC_STATUS=0
     REQUIRE_CHECKS_COMMIT=abc REQUIRE_CHECKS_REPOSITORY=o/r SCRIPTS_DIR="$SCRIPTS_DIR" \
     "$RC_CURL_BIN/sh" "$REQUIRE_SH"
 ) > "$RC_DIR/out.txt" 2>&1 || RC_STATUS=$?
+# Read back through `assert_true`, whose condition is a STRING it `eval`s, so ShellCheck sees
+# `\$RC_OUT` as literal text and reports the assignment as unused. Scoped to this one
+# assignment rather than to the file, so a genuinely dead variable is still reported.
+# shellcheck disable=SC2034
 RC_OUT="$(cat "$RC_DIR/out.txt")"
 assert_true "require-checks: the curl transport names a missing token instead of reporting a red commit" \
   "[[ $RC_STATUS -eq 1 ]] && grep -q 'no token available' <<< \"\$RC_OUT\""

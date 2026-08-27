@@ -148,7 +148,7 @@ func ThirdUtility() bool {
 }
 EOF
 
-cd "$TEST_DIR_COMPLETE"
+cd "$TEST_DIR_COMPLETE" || exit 1
 echo "Running comprehensive coverage test..."
 if "$GO_TEST_RUN"; then
   echo "✓ Test 1 PASSED: Comprehensive coverage with build tags"
@@ -253,7 +253,7 @@ func AnotherUtility(x int) int {
 }
 EOF
 
-cd "$TEST_DIR_NO_TAGS"
+cd "$TEST_DIR_NO_TAGS" || exit 1
 echo "Running backward compatibility test with complete coverage..."
 if "$GO_TEST_RUN"; then
   echo "✓ Test 2 PASSED: Backward compatibility with complete coverage"
@@ -313,7 +313,7 @@ func Utility() string {
 }
 EOF
 
-cd "$TEST_DIR_NO_TESTS"
+cd "$TEST_DIR_NO_TESTS" || exit 1
 echo "Running test with no test files (should handle gracefully)..."
 if "$GO_TEST_RUN"; then
   echo "✓ Test 3 PASSED: No test files scenario handled gracefully"
@@ -409,7 +409,7 @@ func RepositoryHelper() bool {
 }
 EOF
 
-cd "$TEST_DIR_WITH_TEST_FOLDER"
+cd "$TEST_DIR_WITH_TEST_FOLDER" || exit 1
 echo "Running test with test folder (should exclude test packages from coverage)..."
 if "$GO_TEST_RUN"; then
   echo "✓ Test 4 PASSED: Test folder exclusion scenario"

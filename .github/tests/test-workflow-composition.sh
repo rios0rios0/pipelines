@@ -361,11 +361,15 @@ echo "Test 10: the Claude reusables declare and consume runs_on"
 #     in a list here it would be unchecked by this one too, and a hardcoded runner
 #     in it would go green. A glob matching nothing is itself reported, so a
 #     rename fails here rather than passing by having nothing left to check.
-#   - Every path through the Python exits 0 and speaks through stdout, including
-#     a missing PyYAML and an unreadable file. This script runs under `set -e`, so
-#     a non-zero exit inside the command substitution would kill the suite after
-#     nine PASS lines with no FAIL line and no summary -- which reads as a crash
-#     rather than as a verdict.
+#   - Every path through the Python exits 0 and speaks through stdout. This script
+#     runs under `set -e`, so a non-zero exit inside the command substitution would
+#     kill the suite after nine PASS lines with no FAIL line and no summary --
+#     which reads as a crash rather than as a verdict. `except Exception` around
+#     the per-file body is deliberately that broad: `OSError`/`YAMLError` cover an
+#     unreadable file, but an EMPTY workflow (`safe_load` returns `None`), a scalar
+#     `runs_on:` or a job with an empty body are all well-formed YAML that raise
+#     `AttributeError` on the lookups below -- which would abort the suite for the
+#     shapes it exists to report.
 BAD_RUNS_ON="$(python3 - "$WORKFLOWS_DIR" <<'PY'
 import glob
 import os
@@ -385,27 +389,41 @@ if not paths:
 
 for path in paths:
     name = os.path.basename(path)
+    problems = []
     try:
         with open(path, encoding='utf-8') as handle:
-            document = yaml.safe_load(handle)
-    except (OSError, yaml.YAMLError) as error:
-        print(f'{name}: unreadable ({error})')
-        continue
+            document = yaml.safe_load(handle) or {}
 
-    problems = []
-    # YAML 1.1 reads the `on:` key as the boolean `true`.
-    trigger = document.get('on', document.get(True)) or {}
-    spec = ((trigger.get('workflow_call') or {}).get('inputs') or {}).get('runs_on')
-    if spec is None:
-        problems.append('declares no runs_on workflow_call input')
-    else:
-        if spec.get('required') is not False:
-            problems.append('runs_on is not optional')
-        if spec.get('default') != '["ubuntu-latest"]':
-            problems.append('runs_on does not default to ["ubuntu-latest"]')
-    for job, body in (document.get('jobs') or {}).items():
-        if body.get('runs-on') != '${{ fromJSON(inputs.runs_on) }}':
-            problems.append(f'job {job} does not consume fromJSON(inputs.runs_on)')
+        # YAML 1.1 reads the `on:` key as the boolean `true`.
+        trigger = document.get('on', document.get(True)) or {}
+        spec = ((trigger.get('workflow_call') or {}).get('inputs') or {}).get('runs_on')
+        if spec is None:
+            problems.append('declares no runs_on workflow_call input')
+        elif not isinstance(spec, dict):
+            problems.append(f'runs_on is not an input declaration ({spec!r})')
+        else:
+            if spec.get('required') is not False:
+                problems.append('runs_on is not optional')
+            if spec.get('default') != '["ubuntu-latest"]':
+                problems.append('runs_on does not default to ["ubuntu-latest"]')
+
+        for job, body in (document.get('jobs') or {}).items():
+            body = body or {}
+            # A job that CALLS another workflow cannot declare `runs-on` -- GitHub
+            # rejects the key there -- so it forwards the input instead. Demanding
+            # `runs-on` of every job would fail such a job for being correct; not
+            # asserting anything about it would let half a migration through, the
+            # shape `test-dart-pipeline.sh` calls out on the Dart children.
+            if 'uses' in body:
+                if (body.get('with') or {}).get('runs_on') != '${{ inputs.runs_on }}':
+                    problems.append(f'job {job} calls a workflow without forwarding runs_on')
+            elif body.get('runs-on') != '${{ fromJSON(inputs.runs_on) }}':
+                problems.append(f'job {job} does not consume fromJSON(inputs.runs_on)')
+    except (OSError, yaml.YAMLError) as error:
+        problems.append(f'unreadable ({error})')
+    except Exception as error:                      # noqa: BLE001 -- see the note above
+        problems.append(f'{type(error).__name__}: {error}')
+
     if problems:
         print(f'{name}: ' + '; '.join(problems))
 PY

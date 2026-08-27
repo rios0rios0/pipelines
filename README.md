@@ -283,9 +283,10 @@ fails minutes in, inside the action, with an error that never names the runner.
 **The two workflows differ in what they let onto that host.** `reusable-claude-review.yaml`
 runs only for pull requests opened from the repository itself. `reusable-claude-mention.yaml`
 deliberately does not, because answering `@claude` under a fork's pull request is the point of a
-mention responder. Only an OWNER, MEMBER or COLLABORATOR can trigger it and the action re-checks
-the actor's write permission, so an outside contributor cannot start it — but a maintainer's
-`@claude` on a fork PR then runs holding `contents: write` and this repository's secrets, and
+mention responder. An outside contributor is kept out twice over — the job's `if:` admits only an
+OWNER, MEMBER or COLLABORATOR, reading the association of whoever wrote the text that matched, and
+the action independently re-checks the actor's write permission — but a maintainer's `@claude` on
+a fork PR then runs holding `contents: write` and this repository's secrets, and
 checks the fork's branch out into the workspace. The action restores `.claude/` and `.mcp.json`
 from the base branch first, so that injection path is closed; the fork's code itself is still on
 the runner, and a hosted runner discards it with the VM where a persistent self-hosted one does

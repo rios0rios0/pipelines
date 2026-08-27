@@ -44,6 +44,10 @@ jobs:
 
       - name: 'Run Claude Code Review'
         id: 'claude-review'
+        # The provisioning list in the comment above `jobs:` (and README.md's "Claude Review and
+        # Claude Mention" section) describes THIS pin's install chain -- `oven-sh/setup-bun`,
+        # `@actions/tool-cache` resolving `unzip`, `$HOME/.bun/bin`, `bun install --production`.
+        # `dependency-updates.yaml` exists to make this SHA move; re-read both when it does.
         uses: 'anthropics/claude-code-action@70fec183852c4f82f3f1969faed7dd60c5149ca7' # v1.0.207
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

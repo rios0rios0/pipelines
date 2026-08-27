@@ -31,17 +31,27 @@ on:
 #
 # Unlike `reusable-claude-review.yaml`, this responder carries no same-repository guard, and that
 # is deliberate -- answering `@claude` under a fork's pull request is the point of a mention
-# responder. Know what it puts on the host before naming a persistent one. Only an OWNER, MEMBER
-# or COLLABORATOR can trigger it (the `if:` below) and the action re-checks the actor's write
-# permission, so an outside contributor cannot start it; but a maintainer's `@claude` on a fork
-# PR then runs holding `contents: write` and this repository's secrets, and tag mode fetches
-# `refs/pull/<n>/head` and checks the FORK's branch out into the workspace
-# (`src/github/operations/branch.ts`). The action restores `.claude/` and `.mcp.json` from the
-# base branch before the CLI reads them, so that injection path is closed -- the fork's code
-# itself is still on the runner, and a hosted runner discards it with the VM where a self-hosted
-# one does not.
+# responder. Know what it puts on the host before naming a persistent one. Two independent things
+# keep an outside contributor out: the `if:` below admits only an OWNER, MEMBER or COLLABORATOR,
+# reading the association of whoever wrote the text it matched on (see the note there -- the third
+# clause needed a guard to make that true), and the action re-checks the actor's write permission
+# itself. But a maintainer's `@claude` on a fork PR runs holding `contents: write` and this
+# repository's secrets, and tag mode then fetches `refs/pull/<n>/head` and checks the FORK's branch
+# out into the workspace (`src/github/operations/branch.ts`). The action restores `.claude/` and
+# `.mcp.json` from the base branch before the CLI reads them, so that injection path is closed --
+# the fork's code itself is still on the runner, and a hosted runner discards it with the VM where
+# a persistent self-hosted one does not.
 jobs:
   claude:
+    # Each clause admits ONE event shape and reads the association of whoever wrote the text it
+    # matched on. The third clause's `github.event.comment == null` is what keeps that true and
+    # must not be "simplified" away: an `issue_comment` payload carries BOTH `comment` and
+    # `issue`, so without it the third clause also evaluates on every comment -- and it consults
+    # `github.event.issue.author_association`, the THREAD AUTHOR's. Any comment by anyone on a
+    # maintainer-opened thread whose body or title says `@claude` would then start this job. The
+    # action re-checks the actor's write permission and refuses to act, so it is not an
+    # escalation, but the job still starts on the runner -- which on a self-hosted host is the
+    # whole exposure this workflow's comment above is about.
     if: |
       (github.event.comment != null &&
         contains(github.event.comment.body, '@claude') &&
@@ -49,7 +59,7 @@ jobs:
       (github.event.review != null &&
         contains(github.event.review.body, '@claude') &&
         contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association)) ||
-      (github.event.issue != null &&
+      (github.event.issue != null && github.event.comment == null &&
         (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) &&
         contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association))
     runs-on: ${{ fromJSON(inputs.runs_on) }}
@@ -67,6 +77,10 @@ jobs:
 
       - name: 'Run Claude Code'
         id: 'claude'
+        # The provisioning list in the comment above `jobs:` (and README.md's "Claude Review and
+        # Claude Mention" section) describes THIS pin's install chain -- `oven-sh/setup-bun`,
+        # `@actions/tool-cache` resolving `unzip`, `$HOME/.bun/bin`, `bun install --production`.
+        # `dependency-updates.yaml` exists to make this SHA move; re-read both when it does.
         uses: 'anthropics/claude-code-action@70fec183852c4f82f3f1969faed7dd60c5149ca7' # v1.0.207
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

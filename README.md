@@ -214,8 +214,8 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 | `release.yaml`               | Tag and GitHub Release from a bump commit  | any           |
 | `update-major-version-tag.yaml` | Moving `vN` tag for action consumers    | any           |
 | `dependency-updates.yaml`    | Twice-weekly check for stale pinned dependencies | all           |
-| `reusable-claude-review.yaml`  | Claude automated review on every pull request | any       |
-| `reusable-claude-mention.yaml` | Claude responding to `@claude` mentions  | any           |
+| `reusable-claude-review.yaml`  | `Claude Review` — automated review on every pull request | any |
+| `reusable-claude-mention.yaml` | `Claude Mention` — responds to `@claude` mentions | any  |
 
 #### Usage Example (Go with Docker)
 
@@ -239,7 +239,7 @@ jobs:
     uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'
 ```
 
-#### Usage Example (Claude Code Review)
+#### Usage Example (Claude Review and Claude Mention)
 
 `reusable-claude-review.yaml` posts an automated review on every pull request;
 `reusable-claude-mention.yaml` answers `@claude` mentions in issues, PR comments, and reviews.
@@ -259,7 +259,7 @@ federation, or the Bedrock / Vertex / Foundry OIDC paths, and these authenticate
 `.github/workflows/claude-review.yaml`:
 
 ```yaml
-name: 'Claude Code Review'
+name: 'Claude Review'
 
 on:
   pull_request:

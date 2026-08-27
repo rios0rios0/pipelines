@@ -1,0 +1,5 @@
+# `global/scripts/languages/dart/test/run.sh` writes its reports under REPORT_PATH,
+# which `common` already covers. This one is deliberately left where the Dart
+# tooling puts it, because that is the path `package:coverage` and the IDE plugins
+# expect, so it stays in the working tree after every run.
+/coverage/

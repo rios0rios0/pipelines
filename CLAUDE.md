@@ -105,12 +105,14 @@ than the package manager — the same precedent Go sets with `go.yaml`.
 
 When adding a new language or toolchain, always use the toolchain name in the workflow file.
 
-Not every reusable workflow is a language pipeline. `claude-review.yaml` (automated
-review on every pull request) and `claude-code.yaml` (the `@claude` mention
-responder) are standalone, like `dependency-updates.yaml` and
+Not every reusable workflow is a language pipeline. `reusable-claude-review.yaml` (automated
+review on every pull request) and `reusable-claude-mention.yaml` (the `@claude`
+mention responder) are standalone, like `dependency-updates.yaml` and
 `update-major-version-tag.yaml` — `claude` is an agent, not a toolchain, so they
 are listed in `STANDALONE` in `.github/tests/test-workflow-composition.sh` with
-the reason spelled out there. Consumers pass `CLAUDE_CODE_OAUTH_TOKEN`
+the reason spelled out there. The `reusable-` prefix marks a definition: every
+caller, this repository's own included, drops it and is named
+`claude-review.yaml` / `claude-mention.yaml`. Consumers pass `CLAUDE_CODE_OAUTH_TOKEN`
 explicitly; `secrets: inherit` fails Semgrep's
 `yaml.github-actions.security.secrets-inherit` rule.
 

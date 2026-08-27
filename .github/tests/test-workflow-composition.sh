@@ -45,7 +45,7 @@ export SCRIPTS_DIR
 WORKFLOWS_DIR="$SCRIPTS_DIR/.github/workflows"
 
 # Reusable workflows whose name carries a hyphen WITHOUT being `<toolchain>-`
-# anything. All three are deliberate and none composes a base:
+# anything. All five are deliberate and none composes a base:
 #
 #   flutter-artifacts.yaml        `flutter` is a toolchain in its own right (see
 #                                 the naming table in CLAUDE.md) and Dart's
@@ -59,10 +59,16 @@ WORKFLOWS_DIR="$SCRIPTS_DIR/.github/workflows"
 #                                 `dependency.yaml` for it to be a target of --
 #                                 the hyphen is part of one name rather than a
 #                                 `<toolchain>-<target>` split.
+#   claude-review.yaml            code review by Claude on every pull request.
+#                                 `claude` is the agent, not a toolchain, and
+#                                 `review` is not a deployment provider -- the
+#                                 hyphen is part of one name.
+#   claude-code.yaml              the `@claude` mention responder, standalone
+#                                 for the same reason as `claude-review.yaml`.
 #
 # Anything else added here needs a reason of the same kind. "It did not fit the
 # standard" is not one; that is the finding, not the exemption.
-STANDALONE='flutter-artifacts.yaml update-major-version-tag.yaml dependency-updates.yaml'
+STANDALONE='flutter-artifacts.yaml update-major-version-tag.yaml dependency-updates.yaml claude-review.yaml claude-code.yaml'
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

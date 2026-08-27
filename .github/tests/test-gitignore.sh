@@ -128,6 +128,48 @@ assert_true "generation creates the file when absent" \
   "[ -f '$NOFILE/.gitignore' ]"
 
 echo ""
+echo "Malformed markers are refused, never rewritten"
+# A begin marker with no end made the removal read the rest of the file as block content and
+# throw it away -- silent loss of the project's own entries, in the one place this script
+# promises not to touch. The other shapes are recoverable only by guessing, so they refuse too.
+MAL="$TEST_DIR/malformed"
+
+mal_case() {
+  local body="$1"
+  rm -rf "$MAL"
+  make_repo "$MAL" golang
+  printf '%b' "$body" > "$MAL/.gitignore"
+}
+
+mal_case '# >>> pipelines:begin\nbuild/reports/\nnode_modules/\nsecrets.local\n'
+assert_true "refuses a begin marker with no end" \
+  "! gi '$MAL' > /dev/null 2>&1"
+assert_true "and keeps the project's entries when it refuses" \
+  "grep -qxF 'node_modules/' '$MAL/.gitignore' && grep -qxF 'secrets.local' '$MAL/.gitignore'"
+assert_true "and says which markers it found" \
+  "gi '$MAL' 2>&1 | grep -q 'must come as a pair'"
+
+mal_case 'keep-me\n# <<< pipelines:end\nalso-keep\n'
+assert_true "refuses an end marker with no begin" \
+  "! gi '$MAL' > /dev/null 2>&1"
+
+mal_case '# <<< pipelines:end\nkeep-me\n# >>> pipelines:begin\nx\n'
+assert_true "refuses markers that are out of order" \
+  "! gi '$MAL' > /dev/null 2>&1"
+assert_true "and names the ordering as the reason" \
+  "gi '$MAL' 2>&1 | grep -q 'comes before'"
+
+mal_case '# >>> pipelines:begin\na\n# <<< pipelines:end\nkeep-me\n# >>> pipelines:begin\nb\n# <<< pipelines:end\n'
+assert_true "refuses a duplicated block" \
+  "! gi '$MAL' > /dev/null 2>&1"
+assert_true "and keeps the entries between the two blocks" \
+  "grep -qxF 'keep-me' '$MAL/.gitignore'"
+
+mal_case '# >>> pipelines:begin\nkeep-me\n'
+assert_true "--check reports malformed rather than merely stale" \
+  "gi --check '$MAL' 2>&1 | grep -q 'malformed'"
+
+echo ""
 echo "Real gitignore semantics"
 for artifact in build/reports/x.json reports/x.json .codeql-db/x coverage.out \
                 coverage.txt coverage.xml cobertura.xml junit.xml junit-unit.xml \

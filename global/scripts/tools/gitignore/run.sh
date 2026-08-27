@@ -79,6 +79,46 @@ block="$work/block"
   echo "$END_MARK"
 } > "$block"
 
+# Refuse to touch a file whose markers are not a single well-formed pair.
+#
+# The removal below drops every line between the markers, so a file carrying a begin marker
+# with no end -- a truncated write, a merge conflict resolved badly, a hand edit that deleted
+# one line -- would have the rest of the file read as block content and thrown away. That is
+# silent data loss in the one place this script promises never to touch: the project's own
+# entries. Refusing costs a human one look at the file; rewriting costs them entries they may
+# not notice are gone until something they meant to ignore is committed.
+#
+# Duplicated or out-of-order markers are refused for the same reason. They are recoverable in
+# principle, but only by guessing which block the project meant to keep, and a wrong guess is
+# indistinguishable from the malformed state that caused it.
+if [ -f .gitignore ]; then
+  begins="$(grep -cxF "$BEGIN_MARK" .gitignore || true)"
+  ends="$(grep -cxF "$END_MARK" .gitignore || true)"
+  begin_line="$(grep -nxF "$BEGIN_MARK" .gitignore | head -1 | cut -d: -f1)"
+  end_line="$(grep -nxF "$END_MARK" .gitignore | head -1 | cut -d: -f1)"
+
+  malformed=''
+  if [ "$begins" -gt 1 ] || [ "$ends" -gt 1 ]; then
+    malformed="found $begins begin and $ends end markers; expected at most one of each"
+  elif [ "$begins" -ne "$ends" ]; then
+    malformed="found $begins begin and $ends end markers; they must come as a pair"
+  elif [ "$begins" -eq 1 ] && [ "$begin_line" -gt "$end_line" ]; then
+    malformed="the end marker (line $end_line) comes before the begin marker (line $begin_line)"
+  fi
+
+  if [ -n "$malformed" ]; then
+    echo "ERROR: .gitignore has a malformed pipelines block: $malformed." >&2
+    echo "" >&2
+    echo "  Refusing to rewrite it, because the entries outside the block cannot be told" >&2
+    echo "  apart from its contents -- continuing would risk deleting your own entries." >&2
+    echo "" >&2
+    echo "  Fix the markers by hand, or delete the block entirely, then run this again:" >&2
+    echo "    $BEGIN_MARK" >&2
+    echo "    $END_MARK" >&2
+    exit 2
+  fi
+fi
+
 # Everything outside the markers is the project's own and is copied through
 # untouched. A file with no block yet keeps all of its content, below the new one.
 rest="$work/rest"

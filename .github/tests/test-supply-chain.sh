@@ -437,7 +437,7 @@ echo "7. The documented consumer path pins too"
 # change exists to remove -- and no assertion above covers them, because they
 # are deliberately excluded from `yaml_files`.
 EXAMPLES_ON_MAIN="$(
-  find .docs/examples -type f \( -name '*.yaml' -o -name '*.yml' \) 2>/dev/null -print0 \
+  find .docs/examples -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 2>/dev/null \
     | xargs -0 grep -Hn "rios0rios0/pipelines" 2>/dev/null \
     | grep '@main' \
     || true

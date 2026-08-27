@@ -81,7 +81,13 @@ EOF
     env "$@" "$RUN_SH" > "$projectDir/stdout.txt" 2>&1
   )
 
+  # Every assertion below reads these through `assert_true`, whose condition is a STRING it
+  # `eval`s -- so ShellCheck sees `\$ARGV` as literal text and reports both as unused. They
+  # are the entire output of this helper; the disables are per-assignment so a genuinely dead
+  # variable added later is still reported.
+  # shellcheck disable=SC2034
   ARGV="$(cat "$argvFile")"
+  # shellcheck disable=SC2034
   STDOUT="$(cat "$projectDir/stdout.txt")"
 }
 

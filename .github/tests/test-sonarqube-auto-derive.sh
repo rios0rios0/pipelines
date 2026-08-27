@@ -109,6 +109,12 @@ run_derivation() {
     printf '#!/usr/bin/env sh\nexit 0\n' > "$workdir/bin/sonar-scanner"
     chmod +x "$workdir/bin/sonar-scanner"
 
+    # `SONAR_SCRIPT` is built from `SCRIPT_DIR` at the top of this file, so the target IS
+    # knowable -- it is just not a literal. `source-path=SCRIPTDIR` makes the directive
+    # resolve the same way the assignment does, from this script's own directory, so it
+    # holds whatever working directory ShellCheck is invoked from.
+    # shellcheck source-path=SCRIPTDIR
+    # shellcheck source=../../global/scripts/tools/sonarqube/run.sh
     . "$SONAR_SCRIPT"
   ) > /dev/null 2>&1
 

@@ -6,8 +6,9 @@ on:
 
 jobs:
   claude-review:
-    uses: 'rios0rios0/.github/.github/workflows/claude-code-review.yaml@main'
-    secrets: inherit
+    uses: 'rios0rios0/pipelines/.github/workflows/reusable-claude-review.yaml@main'
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
     permissions:
       contents: 'read'
       pull-requests: 'write'

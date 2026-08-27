@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added `reusable-claude-review.yaml` and `reusable-claude-mention.yaml` as reusable workflows, so the Claude automated PR review and the `@claude` mention responder now live beside every other reusable workflow instead of in `rios0rios0/.github`. The `reusable-` prefix marks the definition: a repository consuming them adds `claude-review.yaml` / `claude-mention.yaml` calling `uses: ''rios0rios0/pipelines/.github/workflows/reusable-claude-review.yaml@main''`, and passes `CLAUDE_CODE_OAUTH_TOKEN` explicitly.'
+time: '2026-08-27T17:49:51.989984255Z'

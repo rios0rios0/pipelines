@@ -214,6 +214,8 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 | `release.yaml`               | Tag and GitHub Release from a bump commit  | any           |
 | `update-major-version-tag.yaml` | Moving `vN` tag for action consumers    | any           |
 | `dependency-updates.yaml`    | Twice-weekly check for stale pinned dependencies | all           |
+| `reusable-claude-review.yaml`  | Claude automated review on every pull request | any       |
+| `reusable-claude-mention.yaml` | Claude responding to `@claude` mentions  | any           |
 
 #### Usage Example (Go with Docker)
 
@@ -235,6 +237,66 @@ permissions:
 jobs:
   pipeline:
     uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'
+```
+
+#### Usage Example (Claude Code Review)
+
+`reusable-claude-review.yaml` posts an automated review on every pull request;
+`reusable-claude-mention.yaml` answers `@claude` mentions in issues, PR comments, and reviews.
+The `reusable-` prefix marks the definition; the file you add to your own repository is the
+caller below, named without it. Both need the
+`CLAUDE_CODE_OAUTH_TOKEN` secret, set either on the repository or on the organization.
+
+Pass the secret explicitly rather than with `secrets: inherit` — Semgrep's
+`yaml.github-actions.security.secrets-inherit` rule fails `make sast` on the inherited form.
+
+`.github/workflows/claude-review.yaml`:
+
+```yaml
+name: 'Claude Code Review'
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+jobs:
+  claude-review:
+    uses: 'rios0rios0/pipelines/.github/workflows/reusable-claude-review.yaml@main'
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+    permissions:
+      contents: 'read'
+      pull-requests: 'write'
+      issues: 'write'
+      id-token: 'write'
+```
+
+`.github/workflows/claude-mention.yaml`:
+
+```yaml
+name: 'Claude Code'
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  claude-mention:
+    uses: 'rios0rios0/pipelines/.github/workflows/reusable-claude-mention.yaml@main'
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+    permissions:
+      contents: 'write'
+      pull-requests: 'write'
+      issues: 'write'
+      id-token: 'write'
+      actions: 'read'
 ```
 
 #### Usage Example (Python/PDM with Docker)

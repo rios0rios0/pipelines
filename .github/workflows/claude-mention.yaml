@@ -1,17 +1,17 @@
-name: 'Claude Code'
+name: 'Claude Mention'
 
 on:
   issue_comment:
-    types: [created]
+    types: ['created']
   pull_request_review_comment:
-    types: [created]
+    types: ['created']
   issues:
-    types: [opened, assigned]
+    types: ['opened', 'assigned']
   pull_request_review:
-    types: [submitted]
+    types: ['submitted']
 
 jobs:
-  claude:
+  claude-mention:
     uses: 'rios0rios0/pipelines/.github/workflows/reusable-claude-mention.yaml@main'
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

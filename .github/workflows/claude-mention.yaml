@@ -12,7 +12,7 @@ on:
 
 jobs:
   claude:
-    uses: 'rios0rios0/pipelines/.github/workflows/claude-code.yaml@main'
+    uses: 'rios0rios0/pipelines/.github/workflows/reusable-claude-mention.yaml@main'
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
     permissions:

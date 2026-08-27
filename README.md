@@ -214,8 +214,8 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 | `release.yaml`               | Tag and GitHub Release from a bump commit  | any           |
 | `update-major-version-tag.yaml` | Moving `vN` tag for action consumers    | any           |
 | `dependency-updates.yaml`    | Twice-weekly check for stale pinned dependencies | all           |
-| `claude-review.yaml`         | Claude automated review on every pull request | any        |
-| `claude-code.yaml`           | Claude responding to `@claude` mentions    | any           |
+| `reusable-claude-review.yaml`  | Claude automated review on every pull request | any       |
+| `reusable-claude-mention.yaml` | Claude responding to `@claude` mentions  | any           |
 
 #### Usage Example (Go with Docker)
 
@@ -241,14 +241,16 @@ jobs:
 
 #### Usage Example (Claude Code Review)
 
-`claude-review.yaml` posts an automated review on every pull request; `claude-code.yaml`
-answers `@claude` mentions in issues, PR comments, and reviews. Both need the
+`reusable-claude-review.yaml` posts an automated review on every pull request;
+`reusable-claude-mention.yaml` answers `@claude` mentions in issues, PR comments, and reviews.
+The `reusable-` prefix marks the definition; the file you add to your own repository is the
+caller below, named without it. Both need the
 `CLAUDE_CODE_OAUTH_TOKEN` secret, set either on the repository or on the organization.
 
 Pass the secret explicitly rather than with `secrets: inherit` — Semgrep's
 `yaml.github-actions.security.secrets-inherit` rule fails `make sast` on the inherited form.
 
-`.github/workflows/claude-code-review.yaml`:
+`.github/workflows/claude-review.yaml`:
 
 ```yaml
 name: 'Claude Code Review'
@@ -259,7 +261,7 @@ on:
 
 jobs:
   claude-review:
-    uses: 'rios0rios0/pipelines/.github/workflows/claude-review.yaml@main'
+    uses: 'rios0rios0/pipelines/.github/workflows/reusable-claude-review.yaml@main'
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
     permissions:
@@ -269,7 +271,7 @@ jobs:
       id-token: 'write'
 ```
 
-`.github/workflows/claude.yaml`:
+`.github/workflows/claude-mention.yaml`:
 
 ```yaml
 name: 'Claude Code'
@@ -285,8 +287,8 @@ on:
     types: [submitted]
 
 jobs:
-  claude:
-    uses: 'rios0rios0/pipelines/.github/workflows/claude-code.yaml@main'
+  claude-mention:
+    uses: 'rios0rios0/pipelines/.github/workflows/reusable-claude-mention.yaml@main'
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
     permissions:

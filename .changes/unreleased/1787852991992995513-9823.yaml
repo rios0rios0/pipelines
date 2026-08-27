@@ -1,3 +1,3 @@
 kind: 'Changed'
-body: 'changed this repository''s own `claude-code-review.yaml` and `claude.yaml` callers to use the new local reusable workflows and to pass `CLAUDE_CODE_OAUTH_TOKEN` explicitly instead of `secrets: inherit`, which Semgrep''s `yaml.github-actions.security.secrets-inherit` rule fails.'
-time: '2026-08-27T17:49:51.992930389Z'
+body: 'changed this repository''s own Claude callers to `claude-review.yaml` and `claude-mention.yaml`, the same names every consuming repository uses, so this repository is no longer a special case. They call the local `reusable-` definitions and pass `CLAUDE_CODE_OAUTH_TOKEN` explicitly instead of `secrets: inherit`, which fails Semgrep''s `yaml.github-actions.security.secrets-inherit` rule.'
+time: '2026-08-27T17:49:51.989984255Z'

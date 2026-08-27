@@ -59,16 +59,18 @@ WORKFLOWS_DIR="$SCRIPTS_DIR/.github/workflows"
 #                                 `dependency.yaml` for it to be a target of --
 #                                 the hyphen is part of one name rather than a
 #                                 `<toolchain>-<target>` split.
-#   claude-review.yaml            code review by Claude on every pull request.
-#                                 `claude` is the agent, not a toolchain, and
-#                                 `review` is not a deployment provider -- the
-#                                 hyphen is part of one name.
-#   claude-code.yaml              the `@claude` mention responder, standalone
-#                                 for the same reason as `claude-review.yaml`.
+#   reusable-claude-review.yaml   code review by Claude on every pull request.
+#                                 The `reusable-` prefix marks the definition
+#                                 apart from the caller repositories name
+#                                 `claude-review.yaml`, including this one --
+#                                 so `reusable` is a marker, not a toolchain,
+#                                 and there is no `reusable.yaml` to compose.
+#   reusable-claude-mention.yaml  the `@claude` mention responder, standalone
+#                                 for the same reason.
 #
 # Anything else added here needs a reason of the same kind. "It did not fit the
 # standard" is not one; that is the finding, not the exemption.
-STANDALONE='flutter-artifacts.yaml update-major-version-tag.yaml dependency-updates.yaml claude-review.yaml claude-code.yaml'
+STANDALONE='flutter-artifacts.yaml update-major-version-tag.yaml dependency-updates.yaml reusable-claude-review.yaml reusable-claude-mention.yaml'
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

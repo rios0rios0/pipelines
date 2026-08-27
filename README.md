@@ -250,6 +250,12 @@ caller below, named without it. Both need the
 Pass the secret explicitly rather than with `secrets: inherit` — Semgrep's
 `yaml.github-actions.security.secrets-inherit` rule fails `make sast` on the inherited form.
 
+The caller's `permissions:` is a **ceiling** for the workflow it calls, so it must grant at
+least what the definition declares. Neither needs `id-token: write`:
+`anthropics/claude-code-action` documents that scope as required only for workload identity
+federation, or the Bedrock / Vertex / Foundry OIDC paths, and these authenticate with
+`claude_code_oauth_token`.
+
 `.github/workflows/claude-review.yaml`:
 
 ```yaml
@@ -257,7 +263,7 @@ name: 'Claude Code Review'
 
 on:
   pull_request:
-    types: [opened, synchronize, ready_for_review, reopened]
+    types: ['opened', 'synchronize', 'ready_for_review', 'reopened']
 
 jobs:
   claude-review:
@@ -268,23 +274,22 @@ jobs:
       contents: 'read'
       pull-requests: 'write'
       issues: 'write'
-      id-token: 'write'
 ```
 
 `.github/workflows/claude-mention.yaml`:
 
 ```yaml
-name: 'Claude Code'
+name: 'Claude Mention'
 
 on:
   issue_comment:
-    types: [created]
+    types: ['created']
   pull_request_review_comment:
-    types: [created]
+    types: ['created']
   issues:
-    types: [opened, assigned]
+    types: ['opened', 'assigned']
   pull_request_review:
-    types: [submitted]
+    types: ['submitted']
 
 jobs:
   claude-mention:
@@ -295,7 +300,6 @@ jobs:
       contents: 'write'
       pull-requests: 'write'
       issues: 'write'
-      id-token: 'write'
       actions: 'read'
 ```
 

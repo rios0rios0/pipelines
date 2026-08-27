@@ -251,10 +251,13 @@ Pass the secret explicitly rather than with `secrets: inherit` — Semgrep's
 `yaml.github-actions.security.secrets-inherit` rule fails `make sast` on the inherited form.
 
 The caller's `permissions:` is a **ceiling** for the workflow it calls, so it must grant at
-least what the definition declares. Neither needs `id-token: write`:
-`anthropics/claude-code-action` documents that scope as required only for workload identity
-federation, or the Bedrock / Vertex / Foundry OIDC paths, and these authenticate with
-`claude_code_oauth_token`.
+least what the definition declares — `id-token: write` included.
+
+**`id-token: write` is required.** Unless a `github_token` is passed explicitly, the action's
+`setupGitHubToken()` always requests a GitHub OIDC token and exchanges it for a GitHub App
+token, which is how it posts reviews and comments. That is GitHub authentication and is
+separate from `claude_code_oauth_token`, which authenticates to Anthropic. Removing the scope
+fails every run with `Could not fetch an OIDC token`.
 
 `.github/workflows/claude-review.yaml`:
 
@@ -274,6 +277,7 @@ jobs:
       contents: 'read'
       pull-requests: 'write'
       issues: 'write'
+      id-token: 'write'
 ```
 
 `.github/workflows/claude-mention.yaml`:
@@ -300,6 +304,7 @@ jobs:
       contents: 'write'
       pull-requests: 'write'
       issues: 'write'
+      id-token: 'write'
       actions: 'read'
 ```
 

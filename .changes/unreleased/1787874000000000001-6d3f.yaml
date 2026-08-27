@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'restored the `id-token: write` permission on the Claude reusable workflows and callers. Removing it broke every Claude run with `Could not fetch an OIDC token`: unless a `github_token` is passed explicitly, `anthropics/claude-code-action`''s `setupGitHubToken()` always requests a GitHub OIDC token and exchanges it for a GitHub App token, which is how it posts reviews and comments. That is GitHub authentication and is independent of `claude_code_oauth_token`, which authenticates to Anthropic. The scope is required, not vestigial, and the README now says so.'
+time: '2026-08-27T21:40:00.000000000Z'

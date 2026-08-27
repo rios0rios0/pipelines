@@ -61,7 +61,7 @@ WORKFLOWS_DIR="$SCRIPTS_DIR/.github/workflows"
 #                                 `<toolchain>-<target>` split.
 #   reusable-claude-review.yaml   code review by Claude on every pull request.
 #                                 The `reusable-` prefix marks the definition
-#                                 apart from the caller repositories name
+#                                 apart from the caller repository's name
 #                                 `claude-review.yaml`, including this one --
 #                                 so `reusable` is a marker, not a toolchain,
 #                                 and there is no `reusable.yaml` to compose.

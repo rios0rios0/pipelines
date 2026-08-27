@@ -287,10 +287,13 @@ mention responder. An outside contributor is kept out twice over — the job's `
 OWNER, MEMBER or COLLABORATOR, reading the association of whoever wrote the text that matched, and
 the action independently re-checks the actor's write permission — but a maintainer's `@claude` on
 a fork PR then runs holding `contents: write` and this repository's secrets, and
-checks the fork's branch out into the workspace. The action restores `.claude/` and `.mcp.json`
-from the base branch first, so that injection path is closed; the fork's code itself is still on
+checks the fork's branch out into the workspace. The action restores its `SENSITIVE_PATHS` from the
+base branch first — `.claude`, `.mcp.json`, `.claude.json`, `.gitmodules`, `.ripgreprc`, `CLAUDE.md`,
+`CLAUDE.local.md`, `.husky` — so that injection path is closed; the fork's code itself is still on
 the runner, and a hosted runner discards it with the VM where a persistent self-hosted one does
-not.
+not. One consequence of `CLAUDE.md` being in that set is worth knowing before you rely on a review:
+a pull request that edits `CLAUDE.md` is reviewed against the **base** branch's copy, so the
+instructions it changes are not the ones the reviewing agent read.
 
 `.github/workflows/claude-review.yaml`:
 
@@ -304,6 +307,10 @@ on:
 jobs:
   claude-review:
     uses: 'rios0rios0/pipelines/.github/workflows/reusable-claude-review.yaml@main'
+    # Read the two paragraphs above before uncommenting: a bare self-hosted host
+    # needs provisioning, and it fails inside the action rather than at selection.
+    # with:
+    #   runs_on: '["self-hosted"]'
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
     permissions:
@@ -331,6 +338,10 @@ on:
 jobs:
   claude-mention:
     uses: 'rios0rios0/pipelines/.github/workflows/reusable-claude-mention.yaml@main'
+    # Read the two paragraphs above before uncommenting: this one also puts a
+    # fork's checked-out branch on whatever host you name here.
+    # with:
+    #   runs_on: '["self-hosted"]'
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
     permissions:

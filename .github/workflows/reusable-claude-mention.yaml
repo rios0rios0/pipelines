@@ -40,7 +40,11 @@ on:
 # out into the workspace (`src/github/operations/branch.ts`). The action restores `.claude/` and
 # `.mcp.json` from the base branch before the CLI reads them, so that injection path is closed --
 # the fork's code itself is still on the runner, and a hosted runner discards it with the VM where
-# a persistent self-hosted one does not.
+# a persistent self-hosted one does not. The restored set is wider than those two: `SENSITIVE_PATHS`
+# is `.claude`, `.mcp.json`, `.claude.json`, `.gitmodules`, `.ripgreprc`, `CLAUDE.md`,
+# `CLAUDE.local.md` and `.husky`. `CLAUDE.md` being in it has a consequence worth knowing here --
+# a reviewing agent's working tree carries the BASE branch's instructions, so a pull request that
+# edits `CLAUDE.md` is invisible to the review of that same pull request.
 jobs:
   claude:
     # Each clause admits ONE event shape and reads the association of whoever wrote the text it

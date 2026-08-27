@@ -305,11 +305,20 @@ by name rather than dying when it is absent.
 The tenth is the **`runs_on` contract**, and it has two halves because either alone is defeatable. The
 contract half runs over *every* workflow declaring the input — 19 today, not just the Claude pair,
 since `go.yaml`, `yarn.yaml`, `npm.yaml` and `dart.yaml` declare the byte-identical shape: optional,
-defaulting to `'["ubuntu-latest"]'`, and reaching every job — as `runs-on: ${{ fromJSON(inputs.runs_on) }}`
-for a normal job, or forwarded in `with:` for a job that `uses:` another workflow, where GitHub rejects
-the `runs-on` key outright. The declaration half keeps a `reusable-claude-*.yaml` glob, because
-generalising alone would invert the assertion: a workflow that *drops* the input stops being iterated
-and would pass by not being looked at.
+defaulting to `'["ubuntu-latest"]'`, and reaching every job — resolved from a **declared input** for a
+normal job, or forwarded in `with:` for a job that `uses:` another workflow, where GitHub rejects the
+`runs-on` key outright. The declaration half keeps a `reusable-claude-*.yaml` glob, because generalising
+alone would invert the assertion: a workflow that *drops* the input stops being iterated and would pass
+by not being looked at.
+
+Two edges of that rule are worth stating, because the obvious stricter version of each is wrong. The
+runner must be **caller-selectable**, not literally `inputs.runs_on`: `runs_on` carries one value for
+the whole workflow, so a job on another platform cannot share it, and `flutter-artifacts.yaml` documents
+exactly such a job (an `ipa` build needing macOS) — it must take a second input rather than a pinned
+runner, which is what the check enforces. And the forward is demanded only when the **callee** declares
+`runs_on`: a `with:` key the callee does not declare is rejected by GitHub outright, so demanding it
+unconditionally would be a trap the first time one of these calls something like
+`update-major-version-tag.yaml`.
 
 The eleventh is the **mention responder's trigger guard**, which is an authorization boundary rather
 than a style rule — that job runs with `contents: write` and the repository's secrets. It shipped with
@@ -322,7 +331,10 @@ string match: the `if:` is split into its top-level `||` clauses, and each claus
 `author_association` must carry the null-check selecting the payload it belongs to, with the `issue`
 clause additionally excluding comment events — by `github.event.comment == null` or
 `github.event_name == 'issues'`, either spelling, because the invariant is what matters and not the
-idiom.
+idiom. The split assumes each clause is itself parenthesised, and checks that assumption rather than
+documenting it: one clause reading more than one payload's association means a wrapping reformat
+collapsed them, at which point the pairing degrades to "present somewhere in the expression" — a PASS
+that verifies nothing, which is the failure this assertion exists to prevent.
 
 **Secrets reach a build as secrets.** A value passed into a reusable workflow as an *input* loses
 the caller's masking; passed as a *secret* it keeps it. That is why the deployment workflows take

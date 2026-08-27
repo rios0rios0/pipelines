@@ -39,13 +39,14 @@ set -e
 # flow style would slip past them; none is, and one would fail review long
 # before this.
 #
-# Test 10 is the one exception and does need PyYAML, because the key it asserts
-# under is one YAML 1.1 RESOLVES: `on:` parses as the boolean `true`, so
-# `runs_on` sits under no key spelled `on` at all and no indentation rule can
-# reach it. It is written so that a host without PyYAML sees that assertion FAIL
-# BY NAME rather than a traceback -- see the comment there. CI installs
-# `python3-yaml` (`.github/workflows/ci.yaml`), and `make test` already requires
-# it for `test-azure-step-names.sh` and `test-lambda-templates.sh`.
+# Tests 10 and 11 are the exceptions and do need PyYAML. Test 10 asserts under a
+# key YAML 1.1 RESOLVES -- `on:` parses as the boolean `true`, so `runs_on` sits
+# under no key spelled `on` at all and no indentation rule can reach it -- and
+# Test 11 needs the `if:` as ONE expression, which a block scalar spreads over
+# ten physical lines. Both are written so that a host without PyYAML sees the
+# assertion FAIL BY NAME rather than a traceback -- see the comments there. CI
+# installs `python3-yaml` (`.github/workflows/ci.yaml`), and `make test` already
+# requires it for `test-azure-step-names.sh` and `test-lambda-templates.sh`.
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export SCRIPTS_DIR
@@ -402,10 +403,43 @@ def normalized(value):
     return EXPRESSION.sub(r'${{ \1 }}', value) if isinstance(value, str) else value
 
 
-def runs_on_input(document):
+# A job's runner must be CALLER-SELECTABLE; it need not be this exact input.
+# `runs-on` is a hard selector, so a hardcoded runner is what strands a consumer --
+# and a workflow spanning two platforms genuinely cannot express both through one
+# input (`flutter-artifacts.yaml` documents an `ipa` job needing macOS). So the rule
+# is "resolves from a DECLARED input", which rejects every hardcoded runner while
+# leaving a second input available for a hard platform requirement.
+RUNNER = re.compile(r'^\$\{\{ fromJSON\(inputs\.(\w+)\) \}\}$')
+
+
+def declared_inputs(document):
     # YAML 1.1 reads the `on:` key as the boolean `true`.
     trigger = document.get('on', document.get(True)) or {}
-    return ((trigger.get('workflow_call') or {}).get('inputs') or {}).get('runs_on')
+    return (trigger.get('workflow_call') or {}).get('inputs') or {}
+
+
+def runs_on_input(document):
+    return declared_inputs(document).get('runs_on')
+
+
+def takes_runs_on(workflows_dir, uses):
+    """Does the workflow this job CALLS declare a `runs_on` input?
+
+    A `with:` key the callee does not declare is rejected by GitHub outright, so
+    demanding the forward unconditionally would be a trap the day a `runs_on`-
+    declaring workflow calls one without it (`update-major-version-tag.yaml` is the
+    callable example here, and `release.yaml` already calls it). Only a sibling in
+    this directory can be resolved; anything else is assumed to take it, which is
+    the status quo rather than a new silence.
+    """
+    path = os.path.join(workflows_dir, os.path.basename(str(uses).split('@')[0]))
+    if not os.path.isfile(path):
+        return True
+    try:
+        with open(path, encoding='utf-8') as handle:
+            return runs_on_input(yaml.safe_load(handle) or {}) is not None
+    except (OSError, yaml.YAMLError):
+        return True
 
 
 # DECLARATION half: these must offer the input at all.
@@ -444,10 +478,18 @@ for path in sorted(glob.glob(os.path.join(workflows_dir, '*.yaml'))):
             # asserting anything about it would let half a migration through, the
             # shape `test-dart-pipeline.sh` calls out on the Dart children.
             if 'uses' in body:
+                if not takes_runs_on(workflows_dir, body['uses']):
+                    continue
                 if normalized((body.get('with') or {}).get('runs_on')) != '${{ inputs.runs_on }}':
                     problems.append(f'job {job} calls a workflow without forwarding runs_on')
-            elif normalized(body.get('runs-on')) != '${{ fromJSON(inputs.runs_on) }}':
-                problems.append(f'job {job} does not consume fromJSON(inputs.runs_on)')
+                continue
+            selector = RUNNER.match(normalized(body.get('runs-on')) or '')
+            if not selector:
+                problems.append(f'job {job} pins a runner instead of resolving one from an '
+                                f'input ({body.get("runs-on")!r})')
+            elif selector.group(1) not in declared_inputs(document):
+                problems.append(f'job {job} resolves its runner from inputs.{selector.group(1)}, '
+                                f'which the workflow does not declare')
     except (OSError, yaml.YAMLError) as error:
         problems.append(f'unreadable ({error})')
     except Exception as error:                      # noqa: BLE001 -- see the note above
@@ -533,6 +575,19 @@ try:
             authors = set(ASSOCIATION.findall(clause))
             if not authors:
                 print(f'{WORKFLOW}: job {job} has a clause reading no author_association: {clause}')
+                continue
+            if len(authors) > 1:
+                # `or_clauses` splits at parenthesis depth 0, which only separates the
+                # clauses while each is itself parenthesised. Wrap the expression --
+                # `github.event_name != 'x' && ( (A) || (B) || (C) )`, or anything a
+                # "tidy these conditions" pass produces -- and every `||` sits at depth
+                # 1, the split returns ONE clause, and every check below degrades from
+                # `paired within a clause` to `present somewhere in the expression`
+                # while still printing PASS. That is this assertion's own threat model,
+                # so the assumption is checked rather than documented.
+                print(f'{WORKFLOW}: job {job} has one clause reading {len(authors)} payload '
+                      f'associations {sorted(authors)} -- the top-level `||` split did not '
+                      f'separate them, so the null-check pairing is unverified')
                 continue
             for author in sorted(authors):
                 if f'github.event.{author} != null' not in clause:

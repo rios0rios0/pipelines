@@ -2,6 +2,12 @@ name: 'Claude Review'
 
 on:
   workflow_call:
+    inputs:
+      runs_on:
+        type: 'string'
+        required: false
+        default: '["ubuntu-latest"]'
+        description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See go.yaml.'
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: true
@@ -10,7 +16,7 @@ on:
 jobs:
   claude-review:
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     permissions:
       contents: 'read'
       pull-requests: 'write'

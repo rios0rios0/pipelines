@@ -2,6 +2,12 @@ name: 'Claude Mention'
 
 on:
   workflow_call:
+    inputs:
+      runs_on:
+        type: 'string'
+        required: false
+        default: '["ubuntu-latest"]'
+        description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See go.yaml.'
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: true
@@ -19,7 +25,7 @@ jobs:
       (github.event.issue != null &&
         (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) &&
         contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association))
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     permissions:
       contents: 'write'
       pull-requests: 'write'

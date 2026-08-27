@@ -22,6 +22,33 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-08-27
+
+### Added
+
+- added `reusable-claude-review.yaml` and `reusable-claude-mention.yaml` as reusable workflows, so the Claude automated PR review and the `@claude` mention responder now live beside every other reusable workflow instead of in `rios0rios0/.github`. The `reusable-` prefix marks the definition: a repository consuming them adds `claude-review.yaml` / `claude-mention.yaml` calling `uses: 'rios0rios0/pipelines/.github/workflows/reusable-claude-review.yaml@main'`, and passes `CLAUDE_CODE_OAUTH_TOKEN` explicitly.
+
+### Changed
+
+- changed every Claude workflow display name to match its file name: `claude-review.yaml` and `reusable-claude-review.yaml` are now `Claude Review`, `claude-mention.yaml` and `reusable-claude-mention.yaml` are `Claude Mention`. `reusable-claude-mention.yaml` had kept `Claude Code` from before the move -- the caller was renamed and the definition was not -- and the review pair read `Claude Code Review`, which broke the symmetry with its `Claude Mention` sibling. The README example is byte-for-byte identical to the shipped caller files again.
+- changed this repository's own Claude callers to `claude-review.yaml` and `claude-mention.yaml`, the same names every consuming repository uses, so this repository is no longer a special case. They call the local `reusable-` definitions and pass `CLAUDE_CODE_OAUTH_TOKEN` explicitly instead of `secrets: inherit`, which fails Semgrep's `yaml.github-actions.security.secrets-inherit` rule.
+
+### Fixed
+
+- changed the Claude workflow callers to single-quote every `types:` sequence entry, per the account YAML standard, and renamed the changelog fragment added by the previous change to chlog's documented `<unix-nanoseconds>-<four hex characters>.yaml` form -- its former suffix was not hexadecimal. The mention workflow is now named `Claude Mention` with a matching `claude-mention` job id.
+- fixed CI never linting most of the shell in this repository. The `Lint Shell Scripts` job iterated `find global/scripts`, so `.github/tests/` -- the largest body of shell here -- was outside its scope entirely, and ten ShellCheck warnings accumulated there unread, visible only to somebody invoking `global/scripts/tools/shellcheck/run.sh` by hand. The job now runs that same runner, which scans from the repository root, so this repository is linted by the tool it ships to consumers rather than by a second implementation maintained beside it
+- guarded the four unchecked `cd` calls in `.github/tests/test-go-validation.sh` (SC2164). That script sets no `set -e`, so a `cd` into a scenario directory that failed to be created carried straight on in the previous working directory and every Go coverage assertion after it measured the wrong tree while still reporting a pass. Also moved the stderr redirection to the end of the examples `find` in `.github/tests/test-supply-chain.sh` (SC2227), where it reads as belonging to the command rather than to the expression, and deleted the unused `YELLOW` colour constant from `.github/tests/test-lambda-templates.sh` (SC2034). The remaining SC2034 reports on `RC_OUT`, `ARGV` and `STDOUT` are false positives -- those variables are read inside the condition string `assert_true` passes to `eval`, which ShellCheck cannot follow -- so each assignment now carries its own suppression with the reason, narrow enough that a genuinely dead variable added later is still reported. The non-constant `.` in `.github/tests/test-sonarqube-auto-derive.sh` (SC1090) names its target through a `source-path=SCRIPTDIR` directive instead. The ShellCheck stage reported ten warnings for long enough that they had become the expected output; at zero, the next one is visible.
+- restored the `.changes/unreleased/` directory with a `.gitkeep`, so the release tooling keeps recognising this project as [chlog](https://github.com/luizjhonata/chlog)-based after a release consumes the last fragment. Git tracks files rather than directories, so the bump commit that removed the final fragment removed the directory too, and the next run read the empty `[Unreleased]` section as "nothing to release"
+- restored the `id-token: write` permission on the Claude reusable workflows and callers. Removing it broke every Claude run with `Could not fetch an OIDC token`: unless a `github_token` is passed explicitly, `anthropics/claude-code-action`'s `setupGitHubToken()` always requests a GitHub OIDC token and exchanges it for a GitHub App token, which is how it posts reviews and comments. That is GitHub authentication and is independent of `claude_code_oauth_token`, which authenticates to Anthropic. The scope is required, not vestigial, and the README now says so.
+
+### Removed
+
+- removed the `id-token: write` permission from the Claude reusable workflows and this repository's own callers. `anthropics/claude-code-action` documents that scope as required only for workload identity federation, or the `use_bedrock` / `use_vertex` / `use_foundry` OIDC paths; these authenticate with `claude_code_oauth_token`, so the scope was granting the ability to mint OIDC tokens for any audience without ever being used. The README example now matches the shipped files byte for byte.
+
+### Security
+
+- pinned the ShellCheck used by this repository own CI. The `Lint Shell Scripts` job installed it with `apt-get install -y shellcheck`, taking whatever version the Ubuntu image shipped that day; it now comes from `global/scripts/tools/shellcheck/run.sh`, which installs a version pinned in `pinned-versions.sh` and verified against a committed SHA-256 by `verify-download.sh`. That is the supply-chain rule this repository documents and enforces on consumers, and the runner own rationale applies to it exactly: a new ShellCheck release adds checks, so an unchanged script could pass in the morning and fail in the afternoon with nothing in the diff to explain it
+
 ## [5.0.0] - 2026-08-26
 
 ### Added

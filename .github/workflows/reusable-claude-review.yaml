@@ -132,7 +132,36 @@ jobs:
           # No `--comment` flag: that belongs to the BUILT-IN `code-review` skill, which is a
           # different command that also resolves under this name. The plugin's command takes the
           # pull request as its argument and posts by itself through `gh pr comment`.
-          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
+          #
+          # Everything after the first line is argument text appended to that command, and it
+          # exists to settle a contradiction in the command itself. Its step 6 says "if there are
+          # no issues that meet this criteria, do not proceed", while its output-format section
+          # supplies a template for the no-issues case -- so a clean pull request posts a comment
+          # or posts nothing depending on which instruction the model resolves toward that run.
+          # Both behaviours were observed here. Silence is the wrong default: a clean review and a
+          # broken workflow then look identical, which is a green job with no comment either way,
+          # and this workflow was debugged twice on exactly that ambiguity before the cause was
+          # found. Asking for the summary is what makes the difference legible -- a run that
+          # describes the change proves it read the diff, where a bare "no issues found" does not.
+          prompt: |
+            /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+
+            Post a comment on every run, including when no finding survives your confidence
+            filter. Never end a review silently: a run that posts nothing is indistinguishable
+            from one that crashed, and a reader cannot tell the two apart from the job status.
+
+            Open the comment with two or three sentences on what you understood this pull request
+            to change and why -- enough that a reader can tell you read the diff rather than that
+            a job merely ran. Then report your findings as your output format defines.
+
+            When nothing survives the filter, say so explicitly rather than falling silent, and
+            include both of these:
+
+            - what you checked and found clean, named specifically, so the reader knows which
+              risks were actually considered;
+            - every finding you raised and then dropped, one line each, with the reason it was
+              judged not relevant. A finding that was rejected is evidence the filter ran; an
+              omitted one is indistinguishable from a check that never happened.
           show_full_output: true
           display_report: true
         env:

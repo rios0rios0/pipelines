@@ -119,22 +119,62 @@ fi
 # against an app this account does not own. `apps list` only ever shows apps the
 # token can actually reach, so a miss means "create it", never "someone else has
 # it and we quietly gave up".
-if [ -n "${FLY_APP_NAME:-}" ] && [ -n "${FLY_ORG:-}" ] && ! deploy_is_dry_run; then
+
+# The app name is resolved BEFORE the guard, because it has two documented
+# sources: FLY_APP_NAME, and `app = "..."` in the committed fly.toml -- the
+# configuration `go-flyio.yaml` describes as making `fly_app_name` optional, and
+# the one `flyctl launch` produces. Gating the creation on FLY_APP_NAME alone
+# made FLY_ORG a SILENT no-op for exactly that setup: the consumer minted the
+# wider org-scoped token to opt in, this block was skipped without a word, and
+# the first deploy still failed with `Could not find App`.
+#
+# The parse stops at the first table header: `app` is a top-level TOML key, so a
+# same-named key inside a later `[section]` is not it.
+FLY_RESOLVED_APP="${FLY_APP_NAME:-}"
+if [ -z "$FLY_RESOLVED_APP" ] && [ -f "$FLY_CONFIG" ]; then
+  FLY_RESOLVED_APP=$(sed -n -e '/^[[:space:]]*\[/q' \
+    -e "s/^[[:space:]]*app[[:space:]]*=[[:space:]]*[\"']\\([^\"']*\\)[\"'].*/\\1/p" \
+    "$FLY_CONFIG" | head -n 1)
+fi
+
+# Never silent: opting in and getting nothing is the failure this whole block
+# exists to remove, so an unresolvable name says so rather than skipping. Not
+# gated on the dry run -- it costs no network and no install, and a dry run is
+# where a consumer would most want to find out.
+if [ -n "${FLY_ORG:-}" ] && [ -z "$FLY_RESOLVED_APP" ]; then
+  echo "WARNING: FLY_ORG is set but no app name could be resolved, so app auto-creation is skipped." >&2
+  echo "Set FLY_APP_NAME, or declare 'app = \"<name>\"' in '$FLY_CONFIG'." >&2
+fi
+
+if [ -n "$FLY_RESOLVED_APP" ] && [ -n "${FLY_ORG:-}" ] && ! deploy_is_dry_run; then
   # `--json` rather than the table: the human table's columns are presentation
   # and may be re-laid-out by any flyctl release, while the JSON key is the
   # API's own name for the field. The trailing quote in the pattern keeps the
   # match exact, so `api-staging` does not match an existing `api-staging-2`.
-  if flyctl apps list --json 2>/dev/null \
-    | grep -qi "\"name\"[[:space:]]*:[[:space:]]*\"${FLY_APP_NAME}\""; then
-    echo "Fly app '$FLY_APP_NAME' already exists; deploying into it."
+  #
+  # flyctl's exit status is read separately from grep's, and its diagnostic is
+  # kept rather than sent to /dev/null. Folding the two together made a FAILED
+  # lookup -- an API 500, an expired token, a renamed subcommand -- identical to
+  # "the app is absent": the script would announce it was creating an app that
+  # already exists, `apps create` would be rejected for the name being taken,
+  # and the job would die advising the operator to widen a token that was never
+  # the problem. A miss only means "create it" once it is proven to be a miss.
+  if ! FLY_APPS_JSON=$(flyctl apps list --json 2>&1); then
+    echo "ERROR: could not list Fly apps to check whether '$FLY_RESOLVED_APP' exists." >&2
+    printf '%s\n' "$FLY_APPS_JSON" >&2
+    exit 1
+  fi
+  if printf '%s\n' "$FLY_APPS_JSON" \
+    | grep -qi "\"name\"[[:space:]]*:[[:space:]]*\"${FLY_RESOLVED_APP}\""; then
+    echo "Fly app '$FLY_RESOLVED_APP' already exists; deploying into it."
   else
-    echo "Fly app '$FLY_APP_NAME' does not exist; creating it in org '$FLY_ORG'..."
+    echo "Fly app '$FLY_RESOLVED_APP' does not exist; creating it in org '$FLY_ORG'..."
     # NOT routed through `deploy_run`: that helper overwrites `command.txt`, and
     # that file must end the job holding the DEPLOY command -- it is the first
     # thing anyone debugging a red deploy reads. Provisioning is not the deploy.
     # No credential is on this argv either; the org slug is not a secret.
-    if ! flyctl apps create "$FLY_APP_NAME" --org "$FLY_ORG"; then
-      echo "ERROR: could not create Fly app '$FLY_APP_NAME' in org '$FLY_ORG'." >&2
+    if ! flyctl apps create "$FLY_RESOLVED_APP" --org "$FLY_ORG"; then
+      echo "ERROR: could not create Fly app '$FLY_RESOLVED_APP' in org '$FLY_ORG'." >&2
       echo "If the token is APP-SCOPED it cannot create apps: mint an org-scoped one with 'flyctl tokens create org --org $FLY_ORG', or create the app by hand and leave FLY_ORG unset." >&2
       exit 1
     fi

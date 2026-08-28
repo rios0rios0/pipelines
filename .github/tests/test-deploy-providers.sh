@@ -448,8 +448,43 @@ assert_no_leak "flyio: the API token is never recorded with FLY_ORG set"
 # thing anyone debugging a red deploy reads. Routing the creation through
 # `deploy_run` would overwrite it with `apps create`, so the creation deliberately
 # calls flyctl directly and this pins that it stays that way.
+#
+# Asserted on the SOURCE, not on command.txt: `run_provider` always exports
+# DEPLOY_DRY_RUN=true and the creation is gated on `! deploy_is_dry_run`, so
+# `apps create` is unreachable under this harness and the file could never hold
+# it however the creation were written. An assertion that reads as functional
+# and cannot fail is worse than none -- it reports coverage the feature does
+# not have.
 assert_true "flyio: creating the app does not overwrite the recorded deploy command" \
-  "! grep -q 'apps create' '$REPORT_DIR/command.txt'"
+  "! grep -q 'deploy_run.*apps create' '$FLYIO_SH'"
+
+# A FAILED lookup must not read as "the app does not exist": swallowing flyctl's
+# status and diagnostic turned an API error into a bogus creation attempt, which
+# fails on the name being taken and advises widening a token that was already
+# wide enough.
+assert_true "flyio: a failed app lookup is not treated as the app being absent" \
+  "grep -q 'could not list Fly apps' '$FLYIO_SH'"
+
+# The app name has TWO documented sources, and gating the creation on
+# FLY_APP_NAME alone made FLY_ORG a silent no-op for the other one: an `app`
+# declared in fly.toml, which is exactly the configuration `go-flyio.yaml`
+# describes as making `fly_app_name` optional. The config lives outside the
+# project directory because `run_provider` wipes that directory before each run.
+printf 'app = "app-from-toml"\nprimary_region = "yyz"\n' > "$WORK_DIR/fly-from-toml.toml"
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_CONFIG="$WORK_DIR/fly-from-toml.toml" FLY_ORG=my-org
+assert_true "flyio: an app name declared in fly.toml resolves, so FLY_ORG is not a no-op" \
+  "! grep -q 'no app name could be resolved' <<< \"\$OUT\""
+# ...and resolving it must not leak into the deploy: fly.toml already carries the
+# name, so an added `--app` would change the deploy of every consumer using it.
+assert_equals "flyio: an app name read from fly.toml does not add --app to the deploy" \
+  "flyctl deploy --remote-only --config $WORK_DIR/fly-from-toml.toml" "$CMD"
+
+# And when neither source yields a name, opting in must SAY so. Skipping in
+# silence is the failure this whole feature exists to remove, now paid for with
+# a wider token.
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_ORG=my-org
+assert_true "flyio: FLY_ORG with no resolvable app name warns instead of skipping silently" \
+  "grep -q 'FLY_ORG is set but no app name could be resolved' <<< \"\$OUT\""
 
 # Both guards, asserted on the source: without FLY_ORG the step is skipped (which
 # is what keeps app-scoped tokens viable), and without the dry-run guard this

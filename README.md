@@ -1452,6 +1452,11 @@ auto-creation requires an org-scoped token (`flyctl tokens create org --org <org
 every app in the organisation. Leave `FLY_ORG` unset to keep the tighter app-scoped token, one per
 environment, and create the apps deliberately.
 
+The app to create is named by `FLY_APP_NAME`, or by `app = "..."` in the committed `fly.toml` when
+that variable is unset — the same two sources the deploy itself uses, so the configuration
+`fly_app_name` documents as optional is not one where `FLY_ORG` quietly does nothing. When neither
+yields a name the step is skipped with a warning rather than in silence.
+
 Prefer Render's **API key** over its deploy hook. A deploy hook is fire-and-forget — Render returns
 success for "request accepted", so the job goes green even when the build that follows fails. With
 an API key the script polls the deploy to a terminal state, and the job's status means something.

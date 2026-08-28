@@ -542,6 +542,16 @@ assert_true "flyio: an explicit fly_app_name still wins over the named variable"
 # fly.toml declares, which for a two-app repository is deliberately nothing.
 assert_true "flyio: a named variable that resolves to nothing fails the job" \
   "grep -q 'which is not set for this deployment' '$GO_FLYIO'"
+# "Opted in and got nothing" must never be silent -- the rule #645 established. The org
+# half warns rather than failing, because an org is genuinely optional; what is not
+# optional is saying so.
+assert_true "flyio: an unresolvable org variable disables auto-creation out loud" \
+  "grep -q 'so app auto-creation is disabled here' '$GO_FLYIO'"
+# A caller-controlled input spliced into a `run:` body is pasted in before bash parses
+# it, so `\$(...)` in the value executes in the job holding FLY_API_TOKEN. Every value
+# these steps read must arrive through `env:`.
+assert_true "flyio: no workflow_call input is interpolated into a run: body" \
+  "! awk '/^ *run:/,/^ *(shell|env|with|if|-|jobs):/' '$GO_FLYIO' | grep -q 'inputs\.'"
 echo ""
 
 # ---------------------------------------------------------------------------

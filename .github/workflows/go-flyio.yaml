@@ -156,7 +156,9 @@ on:
           makes that expressible without a literal in the workflow.
 
           Unlike the app name, an unresolvable name is NOT a failure here: an empty org is the
-          documented "do not auto-create" state, not a misconfiguration.
+          documented "do not auto-create" state. It is not SILENT either, which is a different
+          thing — a name that resolves to nothing warns, because "opted in and got nothing" is not
+          the same state as "did not opt in", and #645 exists to keep that distinction loud.
       fly_config:
         type: 'string'
         required: false
@@ -288,11 +290,37 @@ jobs:
       # no app resolves to whatever `fly.toml` declares, which for a repository deploying two apps
       # is deliberately nothing -- so the alternative to this error is a confusing failure two
       # steps later, or, for a repository that does declare `app`, a deploy to the WRONG one.
-      - if: "inputs.fly_app_name == '' && inputs.fly_app_name_var != '' && vars[inputs.fly_app_name_var] == ''"
+      #
+      # Both values reach the shell through `env:`, never spliced into the script text, per the
+      # convention `terra.yaml` records: an input interpolated into a `run:` body is pasted in
+      # before bash parses it, so `$(…)` or a backtick in a caller-controlled value executes in the
+      # job that holds FLY_API_TOKEN. Wiring `fly_app_name_var` to a `workflow_dispatch` input is
+      # the natural way to make the app selectable, which is exactly how a value stops being
+      # literal. A plain apostrophe is enough to mangle the message with no attacker at all.
+      #
+      # `!vars[...]` rather than `== ''`: falsy covers an unset name (null) and an empty value
+      # alike, so nothing here depends on how the expression language casts null in a comparison.
+      - if: "inputs.fly_app_name == '' && inputs.fly_app_name_var != '' && !vars[inputs.fly_app_name_var]"
         run: |
-          echo "::error::fly_app_name_var names '${{ inputs.fly_app_name_var }}', which is not set for this deployment. Set it as a variable on the '${{ inputs.deployment_environment != '' && inputs.deployment_environment || (github.ref_type == 'tag' && 'production' || 'staging') }}' environment (or on the repository, if both environments share one app)."
+          echo "::error::fly_app_name_var names '$APP_NAME_VAR', which is not set for this deployment. Set it as a variable on the '$DEPLOY_ENVIRONMENT' environment (or on the repository, if both environments share one app)."
           exit 1
         shell: 'bash'
+        env:
+          APP_NAME_VAR: '${{ inputs.fly_app_name_var }}'
+          DEPLOY_ENVIRONMENT: ${{ inputs.deployment_environment != '' && inputs.deployment_environment || (github.ref_type == 'tag' && 'production' || 'staging') }}
+
+      # The org half is a WARNING, not a failure -- an org is genuinely optional, and a caller that
+      # never opts in is inert. But "opted in and got nothing" is a different state from "did not
+      # opt in", and #645 exists to stop the first one being silent: `run.sh` already warns when
+      # FLY_ORG is set and no app name resolves, and this is the mirror of that. Without it, a
+      # consumer that sets FLY_ORG on staging and forgets it on production resolves an app name
+      # (so the guard above stays quiet), resolves an empty org, skips creation, and the first
+      # production tag dies on an app nobody created -- with nothing anywhere naming the variable.
+      - if: "inputs.fly_org == '' && inputs.fly_org_var != '' && !vars[inputs.fly_org_var]"
+        run: 'echo "::warning::fly_org_var names ''$ORG_VAR'', which is not set for this deployment, so app auto-creation is disabled here."'
+        shell: 'bash'
+        env:
+          ORG_VAR: '${{ inputs.fly_org_var }}'
 
       - uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/flyio@main'
         with:

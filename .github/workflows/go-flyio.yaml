@@ -82,16 +82,23 @@ on:
         required: false
         default: 'make swagger'
         description: 'Command that regenerates the document named by `openapi_sync_path`.'
+      # A caller derives this from the ref, which is what keeps one repository's two apps apart
+      # and what stops a stale app id from deploying the wrong one. The example lives in this
+      # comment rather than in `description:` below because GitHub EVALUATES a `${{ }}` sequence
+      # inside an input description, where no context is available -- an expression naming
+      # `github` there does not document the input, it makes the whole file fail to compile, on
+      # every push, as a run with no jobs named after the file path:
+      #
+      #     fly_app_name: "api-${{ github.ref_type == 'tag' && 'production' || 'staging' }}"
       fly_app_name:
         type: 'string'
         required: false
         default: ''
         description: |
           Fly application name the deploy targets. Optional when the committed `fly.toml` already
-          declares `app`, but prefer passing it DERIVED from the ref when one repository deploys
-          two apps (`api-staging` on a branch, `api-production` on a tag):
-
-            fly_app_name: "api-${{ github.ref_type == 'tag' && 'production' || 'staging' }}"
+          declares `app`, but prefer passing it derived from the ref when one repository deploys
+          two apps (`api-staging` on a branch, `api-production` on a tag); see the comment above
+          for the shape.
 
           Named, never identified by a stored id: the name is a value the workflow already knows,
           while a stored id is one more secret to rotate — and a stale id is the worse failure of

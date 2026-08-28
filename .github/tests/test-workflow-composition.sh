@@ -663,6 +663,32 @@ PY
 assert_empty "every trigger clause checks the association of whoever wrote what it matched" "$BAD_TRIGGER"
 echo ""
 
+# A `${{ }}` sequence inside a `workflow_call` input or secret DESCRIPTION is evaluated
+# by GitHub, not treated as documentation -- and the `on:` block has no context, so an
+# example naming `github` makes the whole file fail to compile. It fails in the shape
+# that is hardest to read: the workflow is never triggered, yet every push produces a
+# failed run with no jobs, no logs, and the file PATH where the workflow name belongs.
+# `go-flyio.yaml` shipped exactly that in its `fly_app_name` example. Usage examples
+# belong in a `#` comment, which is never evaluated.
+EVALUATED_DESC=''
+while IFS= read -r file; do
+  result="$(python3 -c "
+import yaml, re
+d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/$file'))
+trigger = d.get('on', d.get(True))
+wc = (trigger or {}).get('workflow_call') or {}
+bad = []
+for kind in ('inputs', 'secrets'):
+    for name, spec in (wc.get(kind) or {}).items():
+        if '\${{' in ((spec or {}).get('description') or ''):
+            bad.append(f'{kind}.{name}')
+print(' '.join(bad))
+")"
+  [[ -n "$result" ]] && EVALUATED_DESC="${EVALUATED_DESC}${file}: expression in the description of ${result}"$'\n'
+done < <(reusable_workflows)
+assert_empty "no workflow_call description contains an evaluated expression" "$EVALUATED_DESC"
+echo ""
+
 echo "================================"
 echo -e "Tests passed: ${GREEN}${TESTS_PASSED}${NC}"
 if [[ $TESTS_FAILED -gt 0 ]]; then

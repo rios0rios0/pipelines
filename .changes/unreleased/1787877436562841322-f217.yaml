@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed `go-flyio.yaml` failing to compile on every push because the `fly_app_name` usage example sat in the input `description:`, where GitHub evaluates `${{ }}` with no context available'
+time: '2026-08-28T00:37:16.562795953Z'

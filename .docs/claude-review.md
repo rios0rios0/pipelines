@@ -190,7 +190,11 @@ verdict from a review session cannot add to that, and can contradict it.
 `.github/tests/test-workflow-composition.sh` Test 13 holds the pairing, because the prose and the
 `--allowedTools` string are edited in different places for different reasons — a granted command
 missing from the prompt re-creates the defect, and a command the prompt calls denied while the
-allowlist grants it is the same drift reversed.
+allowlist grants it is the same drift reversed. Both halves read **sentences**: this review found,
+on the pull request that introduced the assertion, that a paragraph-scoped version was defeated
+twice over by one sentence — the mention prompt's *"`gh` is not granted"* sits in its Tools
+paragraph, so a collision check anchored on `Denied on purpose:` never read it while the naming
+check found the same backticked word and counted a denial as a description.
 
 ### The mention responder needed `track_progress` to take a prompt at all
 

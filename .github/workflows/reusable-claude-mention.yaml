@@ -144,9 +144,10 @@ jobs:
             do not mention it; and never ask for the allowlist to be widened. Never write a
             caveat, a "note on verification" or a limitations section about what you could not
             compile or run -- the permissions are deliberate, whoever asked did not choose
-            them, and the note is noise in an answer that is otherwise about the code. Make the
-            change, commit it, push it, and say what you changed; the pipeline reports whether
-            it builds, on the same pull request, without you claiming either way.
+            them, and the note is noise in an answer that is otherwise about the code. When you do
+            change something: commit it, push it, and say what you changed -- the pipeline
+            reports whether it builds, on the same pull request, without you claiming either
+            way.
         env:
           # Sets the model without touching `claude_args`: parse-sdk-options.ts resolves
           # `model: options.model || modelFromClaudeArgs`, where `options.model` is this

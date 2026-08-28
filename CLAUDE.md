@@ -298,8 +298,8 @@ job and the called workflow's job. Renaming a job renames a check for everyone d
 
 **A `STANDALONE` workflow is exempt from the composition rules, not from every rule.** The two Claude
 reusables are listed there, so the naming, delegation and suffix assertions skip them by design —
-which left their wiring asserted by nothing at all. The last two assertions cover what that exemption
-leaves behind, and both read the PARSED document (YAML 1.1 resolves `on:` to the boolean `true`, so no
+which left their wiring asserted by nothing at all. The last three assertions cover what that exemption
+leaves behind, and all read the PARSED document (YAML 1.1 resolves `on:` to the boolean `true`, so no
 indentation rule can reach under it) — which is why this suite needs PyYAML at all, and why it says so
 by name rather than dying when it is absent.
 
@@ -379,6 +379,17 @@ the prose and the wiring moving together: a granted `Bash(…)` command missing 
 re-creates the defect (the model meets its own tools by being denied them), and a command the
 prompt calls denied while the allowlist grants it is the same drift reversed. A prompt may name
 either the rule (`git add`) or the broader grant covering it (`git`).
+
+Both halves read **sentences**, and the first version read paragraphs — a hole the review of the
+pull request that added it found. A prompt states an exclusion wherever it is clearest: the
+mention responder's sits in its Tools paragraph (*"`gh` is not granted, and neither is `git
+diff`"*), not under `Denied on purpose:`. Scoping the collision check to that one paragraph never
+read the sentence, while the naming check — searching the whole prompt for a backticked `gh` —
+found it there and counted a *denial* as a *description*, so granting `Bash(gh:*)` to the
+responder would have left the assertion green while the prompt called that tool denied. Denial
+sentences are therefore partitioned out of the naming match and scanned for collisions wherever
+they sit, and a widened grant (`Bash(git:*)`) collides with a narrow denial (`git diff`) that a
+`git add` grant correctly does not.
 
 The same assertion pins **`prompt` to `track_progress: true`**, which is the expensive half. A
 `prompt:` on a comment or issue event *selects agent mode* (`src/modes/detector.ts`), where the

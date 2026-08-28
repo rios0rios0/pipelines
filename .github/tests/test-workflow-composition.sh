@@ -754,6 +754,19 @@ echo "Test 13: the Claude prompts describe the tools those jobs actually grant"
 #   - a command the prompt calls denied while the allowlist grants it is the same
 #     drift reversed, and it reads as a rule the model may then break by accident.
 #
+# Both halves read SENTENCES, and the first version of this assertion did not -- which
+# left a hole the review of the pull request that added it found. A prompt states an
+# exclusion wherever it is clearest: the mention responder's sits in its Tools paragraph
+# ("`gh` is not granted, and neither is `git diff`"), not under `Denied on purpose:`. A
+# collision check scoped to that one paragraph never read the sentence, while the naming
+# check -- searching the whole prompt for a backticked `gh` -- found it there and counted
+# a DENIAL as a description. Granting `Bash(gh:*)` to the responder therefore left this
+# assertion green while its prompt told the model that tool was denied: both halves
+# defeated by the same sentence. So denial sentences are partitioned out of the naming
+# match and scanned for collisions wherever they appear, and `covers()` makes a widened
+# grant (`Bash(git:*)`) collide with a narrow denial (`git diff`) that a `git add` grant
+# correctly does not.
+#
 # The `prompt` + `track_progress` pairing is asserted for the same class of reason and
 # is the more expensive half to get wrong: a `prompt:` on a comment or issue event
 # SELECTS AGENT MODE (`src/modes/detector.ts`), where the action's template is replaced
@@ -780,11 +793,26 @@ ACTION = 'anthropics/claude-code-action'
 # plus a push wrapper, named by absolute path rather than by a command. They are part of
 # the surface a prompt has to describe, so they count as granted even though no file here
 # names them.
+# -- with `use_commit_signing` at its default `false`; turning it on swaps these for the
+# MCP file-ops tools, and this set would then demand a prompt name commands it no longer
+# holds. Neither workflow sets it.
 TAG_MODE_BASH = {'git add', 'git commit', 'git rm'}
-# The paragraph a prompt states its exclusions in. Anchoring on the phrase keeps the
-# check on the sentence that carries the meaning, rather than on the whole document
-# where the granted commands are named too.
+# The paragraph where a prompt DECLARES its exclusions. Its presence is required, but it
+# is deliberately not where they are CHECKED: a denial reads as a sentence and can be
+# written anywhere. `reusable-claude-mention.yaml` puts one in its Tools paragraph --
+# "`gh` is not granted, and neither is `git diff`" -- and a paragraph-scoped check both
+# missed that sentence and let it satisfy the naming half below, so granting `Bash(gh:*)`
+# left the assertion green while the prompt called that tool denied.
 DENIED_MARKER = 'Denied on purpose:'
+# A sentence, not a paragraph: `.` and `;` end one, and the prompts wrap at 88 columns, so
+# the text is joined before splitting. `:` is NOT a terminator -- splitting on it would cut
+# "Denied on purpose:" away from the list it introduces, leaving the list unclassified.
+SENTENCE_END = re.compile(r'(?<=[.;])\s+')
+# Phrases that make a sentence a denial. Deliberately narrow: "is refused as a whole"
+# describes a REJECTED PIPE in a sentence that grants seven commands, and matching it
+# would flag every one of them.
+DENIAL = re.compile(r'\b(not granted|neither is|is not|are not|denied|absent)\b',
+                    re.IGNORECASE)
 BASH_RULE = re.compile(r'Bash\(([^)]*)\)')
 BACKTICKED = re.compile(r'`([^`]+)`')
 
@@ -793,6 +821,20 @@ def command_word(rule):
     """`git add:*` / `gh:*` -> the binary the rule permits."""
     head = rule.split(':')[0].strip()
     return head.split()[0] if head else ''
+
+
+def split_sentences(prompt):
+    """Every sentence of the prompt, unwrapped, partitioned by the caller."""
+    return [s for s in SENTENCE_END.split(' '.join(prompt.split())) if s]
+
+
+def covers(rule, token):
+    """Does granting `rule` make a denial of `token` false?
+
+    A granted `git` covers `git diff`; a granted `git add` does not -- which is what
+    keeps the mention responder's true `git diff` sentence from reading as a collision.
+    """
+    return token == rule or token.startswith(rule + ' ')
 
 
 def action_steps(document):
@@ -814,7 +856,9 @@ for workflow in sorted(glob.glob(os.path.join(workflows_dir, 'reusable-claude-*.
                 print(f'{name}: the {ACTION} step declares no prompt -- the action template '
                       f'then tells the model to install dependencies and run builds')
                 continue
-            if inputs.get('track_progress') is not True:
+            # Accepts the string spelling too: GitHub hands every input to the action as
+            # a string, so `'true'` runs identically and must not read as a missing pair.
+            if str(inputs.get('track_progress')).lower() != 'true':
                 print(f'{name}: declares a prompt without `track_progress: true` -- a prompt on '
                       f'a comment or issue event selects AGENT mode, replacing the template that '
                       f'answers the trigger')
@@ -825,24 +869,33 @@ for workflow in sorted(glob.glob(os.path.join(workflows_dir, 'reusable-claude-*.
                 if word:
                     granted.add(word)
 
+            denials, positive = [], []
+            for sentence in split_sentences(prompt):
+                (denials if DENIAL.search(sentence) else positive).append(sentence)
+
             for rule in sorted(granted):
                 # A prompt may name the rule as granted (`git add`) or name the broader
-                # grant that covers it (`git`); either states the surface truthfully.
-                if not any(f'`{spelling}`' in prompt
+                # grant that covers it (`git`); either states the surface truthfully. It
+                # has to do so in a sentence that is not itself a denial -- otherwise
+                # "`gh` is not granted" would count as naming `gh`, which is the reading
+                # that let a stale denial pass for a description.
+                if not any(f'`{spelling}`' in sentence
+                           for sentence in positive
                            for spelling in (rule, rule.split()[0])):
-                    print(f'{name}: grants Bash({rule}:*) but the prompt never names it -- the '
-                          f'model meets its own tools by being denied them')
+                    print(f'{name}: grants Bash({rule}:*) but no sentence of the prompt names it '
+                          f'as held -- the model meets its own tools by being denied them')
 
-            paragraphs = [p for p in re.split(r'\n\s*\n', prompt) if DENIED_MARKER in p]
-            if not paragraphs:
+            if not any(DENIED_MARKER in paragraph
+                       for paragraph in re.split(r'\n\s*\n', prompt)):
                 print(f'{name}: the prompt has no "{DENIED_MARKER}" paragraph -- nothing states '
                       f'that the toolchains are excluded by decision rather than by oversight')
-                continue
-            for paragraph in paragraphs:
-                for word in BACKTICKED.findall(paragraph):
-                    if word in granted:
-                        print(f'{name}: the prompt calls `{word}` denied while the allowlist '
-                              f'grants it')
+
+            for sentence in denials:
+                for token in BACKTICKED.findall(sentence):
+                    for rule in sorted(granted):
+                        if covers(rule, token):
+                            print(f'{name}: the prompt calls `{token}` denied while the allowlist '
+                                  f'grants Bash({rule}:*)')
     except (OSError, yaml.YAMLError) as error:
         print(f'{name}: unreadable ({error})')
     except Exception as error:                      # noqa: BLE001 -- see Test 10's note

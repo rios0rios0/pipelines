@@ -1442,7 +1442,20 @@ stdin instead.
 | Vercel | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `VERCEL_WORKING_DIRECTORY`, `VERCEL_COMMERCIAL`, `VERCEL_PLAN` |
 | Render | `RENDER_API_KEY` + `RENDER_SERVICE_ID`, **or** `RENDER_DEPLOY_HOOK_URL` | `RENDER_POLL_TIMEOUT`, `RENDER_POLL_INTERVAL` |
 | Netlify | `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID` | `NETLIFY_OUTPUT_DIRECTORY`, `NETLIFY_DEPLOY_MESSAGE` |
-| Fly.io | `FLY_API_TOKEN` | `FLY_APP_NAME`, `FLY_CONFIG`, `FLY_STRATEGY` |
+| Fly.io | `FLY_API_TOKEN` | `FLY_APP_NAME`, `FLY_ORG`, `FLY_CONFIG`, `FLY_STRATEGY` |
+
+Set `FLY_ORG` to have the Fly.io deploy **create the app when it does not exist yet** — `flyctl
+deploy` does not create apps, so without it the first pipeline of every new environment is red for a
+reason that is fixed by hand and never written down. It is opt-in because of what it costs in token
+scope: an app-scoped deploy token (`flyctl tokens create deploy --app <app>`) cannot create apps, so
+auto-creation requires an org-scoped token (`flyctl tokens create org --org <org>`) that manages
+every app in the organisation. Leave `FLY_ORG` unset to keep the tighter app-scoped token, one per
+environment, and create the apps deliberately.
+
+The app to create is named by `FLY_APP_NAME`, or by `app = "..."` in the committed `fly.toml` when
+that variable is unset — the same two sources the deploy itself uses, so the configuration
+`fly_app_name` documents as optional is not one where `FLY_ORG` quietly does nothing. When neither
+yields a name the step is skipped with a warning rather than in silence.
 
 Prefer Render's **API key** over its deploy hook. A deploy hook is fire-and-forget — Render returns
 success for "request accepted", so the job goes green even when the build that follows fails. With

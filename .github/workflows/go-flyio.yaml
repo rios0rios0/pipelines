@@ -107,6 +107,21 @@ on:
           while a stored id is one more secret to rotate — and a stale id is the worse failure of
           the two, because it deploys the WRONG app and reports success. This is the same contract
           `render_service_name` carries in `go-render.yaml`.
+      fly_org:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Fly.io organization slug. Setting it lets the deployment CREATE the app when it does not
+          exist yet, so standing up a new environment does not depend on somebody running
+          `flyctl apps create` by hand first -- `flyctl deploy` does not create apps, so without
+          this the first run of every new environment is red.
+
+          It is OPT-IN because of what it costs in token scope. An app-scoped deploy token
+          (`flyctl tokens create deploy --app <app>`) cannot create apps, so auto-creation needs an
+          ORG-SCOPED token (`flyctl tokens create org --org <org>`) that can manage EVERY app in the
+          organisation. Leave this empty to keep the tighter app-scoped token, one per environment,
+          and create the apps deliberately.
       fly_config:
         type: 'string'
         required: false
@@ -152,6 +167,13 @@ on:
           (`flyctl tokens create deploy --app <app>`), over an org-scoped `flyctl auth token`:
           the deploy needs to manage one app, and a token for `api-staging` cannot touch
           `api-production` even though every workflow in the calling repository can read it.
+
+          The ONE exception is `fly_org`. An app-scoped token cannot create apps, so a caller that
+          wants the deployment to create its app on first run must pass an org-scoped token
+          (`flyctl tokens create org --org <org>`) instead, which manages every app in the
+          organisation. That is a deliberate trade of blast radius for not having to provision an
+          app by hand; make it knowingly, and never pass a personal `flyctl auth token`, which is
+          wider than both.
 
           Hold it as a REPOSITORY secret in the caller and pass it explicitly. Environment-scoped
           secrets cannot reach a reusable workflow in another repository — not with
@@ -223,6 +245,7 @@ jobs:
         with:
           fly_api_token: '${{ secrets.fly_api_token }}'
           app_name: '${{ inputs.fly_app_name }}'
+          org: '${{ inputs.fly_org }}'
           config: '${{ inputs.fly_config }}'
           strategy: '${{ inputs.fly_strategy }}'
           environment: ${{ inputs.deployment_environment != '' && inputs.deployment_environment || (github.ref_type == 'tag' && 'production' || 'staging') }}

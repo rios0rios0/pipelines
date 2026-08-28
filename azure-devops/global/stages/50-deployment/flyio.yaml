@@ -5,6 +5,11 @@ parameters:
   - name: 'APP_NAME'
     type: 'string'
     default: ''
+  # Set to create the app when it does not exist yet. Requires an ORG-SCOPED token
+  # (`flyctl tokens create org`); an app-scoped deploy token cannot create apps.
+  - name: 'ORG'
+    type: 'string'
+    default: ''
   - name: 'CONFIG'
     type: 'string'
     default: 'fly.toml'
@@ -33,6 +38,7 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ parameters.FLY_API_TOKEN }}
           FLY_APP_NAME: ${{ parameters.APP_NAME }}
+          FLY_ORG: ${{ parameters.ORG }}
           FLY_CONFIG: ${{ parameters.CONFIG }}
           FLY_STRATEGY: ${{ parameters.STRATEGY }}
           DEPLOY_ENVIRONMENT: ${{ parameters.ENVIRONMENT }}

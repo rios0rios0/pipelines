@@ -8,6 +8,11 @@ include:
 #   FLY_API_TOKEN
 # Optional:
 #   FLY_APP_NAME (when fly.toml does not declare it), FLY_CONFIG, FLY_STRATEGY
+#   FLY_ORG -- set it to have the deploy CREATE the app when it does not exist
+#   yet, so a new environment's first pipeline is not red. It requires an
+#   ORG-SCOPED token (`flyctl tokens create org`), which manages every app in
+#   the organisation; an app-scoped deploy token cannot create apps. Leave it
+#   unset to keep the tighter app-scoped token and create apps by hand.
 #
 # No Docker-in-Docker service: the script passes `--remote-only`, so the image
 # is built on Fly's builder. That is the whole reason this job can run on an

@@ -232,7 +232,7 @@ is a large part of why the rule is a test rather than a review habit.
 
 ### Workflow Composition Standard
 
-**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), twelve
+**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), thirteen
 assertions, every one of them proven to fire against a deliberate violation.** Read this section
 before writing anything under `.github/workflows/`, and before writing a pipeline in a repository
 that consumes this one.
@@ -298,8 +298,8 @@ job and the called workflow's job. Renaming a job renames a check for everyone d
 
 **A `STANDALONE` workflow is exempt from the composition rules, not from every rule.** The two Claude
 reusables are listed there, so the naming, delegation and suffix assertions skip them by design —
-which left their wiring asserted by nothing at all. The last two assertions cover what that exemption
-leaves behind, and both read the PARSED document (YAML 1.1 resolves `on:` to the boolean `true`, so no
+which left their wiring asserted by nothing at all. The last three assertions cover what that exemption
+leaves behind, and all read the PARSED document (YAML 1.1 resolves `on:` to the boolean `true`, so no
 indentation rule can reach under it) — which is why this suite needs PyYAML at all, and why it says so
 by name rather than dying when it is absent.
 
@@ -365,6 +365,42 @@ the class rather than the instance: every workflow file, not only reusable ones 
 including nested `outputs`. Note the linter cannot be relied on here: `actionlint` catches the
 `workflow_call` description case but the repository's own CI passed the broken file for its entire
 life on `main`.
+
+The thirteenth pairs each Claude workflow's **prompt** with the **tools its job actually
+grants**. `anthropics/claude-code-action` ships a template that tells the model to "install
+dependencies, run build commands, etc.", and then — when a linter or test suite is denied — to
+"explain this in your comment so that the user can update your `--allowedTools`". Both are wrong
+here and neither is a model quirk: the pipeline compiles, lints and tests the same commit in its
+own jobs, and the denial is the design. Left alone the template produced review comments carrying
+a *"Note on verification: `go build ./...` and `go vet` were denied by the tool permissions in
+this run"* — a caveat about a decision, addressed to a reader who did not make it. Both prompts
+therefore state their tool surface and name the toolchains they exclude, and the assertion keeps
+the prose and the wiring moving together: a granted `Bash(…)` command missing from the prompt
+re-creates the defect (the model meets its own tools by being denied them), and a command the
+prompt calls denied while the allowlist grants it is the same drift reversed. A prompt may name
+either the rule (`git add`) or the broader grant covering it (`git`).
+
+Both halves read **sentences**, and the first version read paragraphs — a hole the review of the
+pull request that added it found. A prompt states an exclusion wherever it is clearest: the
+mention responder's sits in its Tools paragraph (*"`gh` is not granted, and neither is `git
+diff`"*), not under `Denied on purpose:`. Scoping the collision check to that one paragraph never
+read the sentence, while the naming check — searching the whole prompt for a backticked `gh` —
+found it there and counted a *denial* as a *description*, so granting `Bash(gh:*)` to the
+responder would have left the assertion green while the prompt called that tool denied. Denial
+sentences are therefore partitioned out of the naming match and scanned for collisions wherever
+they sit, and a widened grant (`Bash(git:*)`) collides with a narrow denial (`git diff`) that a
+`git add` grant correctly does not.
+
+The same assertion pins **`prompt` to `track_progress: true`**, which is the expensive half. A
+`prompt:` on a comment or issue event *selects agent mode* (`src/modes/detector.ts`), where the
+action's template — the thing that answers the mention — is replaced by the custom prompt. So
+adding one to `reusable-claude-mention.yaml` without `track_progress: true` would silently stop it
+answering the question it was mentioned for, with every job still green. That is the review's
+original plugin trap (documented in `.docs/claude-review.md`) running in the opposite direction.
+Tag mode's price is an event constraint: `validateTrackProgressEvent` accepts only
+`pull_request`, `issues`, `issue_comment`, `pull_request_review_comment` and
+`pull_request_review`, and **throws** on anything else — so a mention responder wired to another
+event now fails loudly instead of quietly doing nothing.
 
 **Secrets reach a build as secrets.** A value passed into a reusable workflow as an *input* loses
 the caller's masking; passed as a *secret* it keeps it. That is why the deployment workflows take

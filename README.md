@@ -275,6 +275,20 @@ design passes run sequentially in-session, the ≥80 confidence filter applied t
 from every pass with dropped candidates listed, a posted comment on every run, and re-runs
 that verify previous findings instead of hunting new ones.
 
+**Neither workflow builds, compiles, installs or tests anything, on purpose.** Your pipeline
+already does that on the same commit, and it reports on the same pull request. The action's own
+prompt template says the opposite — it tells the model to install dependencies and run build
+commands, and to explain in its comment when a linter or test suite was denied so the allowlist
+can be widened — which is how a review came to end with a *"Note on verification: `go build
+./...` and `go vet` were denied by the tool permissions in this run"*. Both prompts now state the
+tool surface they actually have, name the toolchains they exclude (`go`, `node`, `npm`, `yarn`,
+`pnpm`, `python`, `pip`, `pdm`, `mvn`, `gradle`, `dart`, `flutter`, `dotnet`, `composer`,
+`bundle`, `terraform`, `terragrunt`, `docker`, `make`), and override that instruction: no setup or
+build step is planned, a denied command is not retried or mentioned, and no verification caveat is
+written. The review adds the rule that makes it consistent — a finding that could only be
+established by running something is dropped with its score rather than posted with a disclaimer.
+`make test-workflow-composition` keeps each prompt in step with the tools its job grants.
+
 **`id-token: write` is required.** Unless a `github_token` is passed explicitly, the action's
 `setupGitHubToken()` always requests a GitHub OIDC token and exchanges it for a GitHub App
 token, which is how it posts reviews and comments. That is GitHub authentication and is
@@ -308,6 +322,13 @@ the runner, and a hosted runner discards it with the VM where a persistent self-
 not. One consequence of `CLAUDE.md` being in that set is worth knowing before you rely on a review:
 a pull request that edits `CLAUDE.md` is reviewed against the **base** branch's copy, so the
 instructions it changes are not the ones the reviewing agent read.
+
+**The mention responder's caller must stay on the five events below.** It passes
+`track_progress: true`, which is what keeps it in tag mode now that it carries a prompt (a prompt
+alone would select agent mode and replace the template that answers the `@claude`). The action
+validates that input against `pull_request`, `issues`, `issue_comment`,
+`pull_request_review_comment` and `pull_request_review` and **throws** on any other event, so
+wiring it to something else fails the run by name rather than quietly not answering.
 
 `.github/workflows/claude-review.yaml`:
 

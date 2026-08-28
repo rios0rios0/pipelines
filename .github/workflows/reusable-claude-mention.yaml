@@ -90,6 +90,64 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           additional_permissions: |
             actions: read
+          # `track_progress` and `prompt` are added and removed TOGETHER, and neither is
+          # cosmetic. Tag mode is what makes this a mention responder at all: the action's own
+          # template answers the `@claude` that triggered it, and a `prompt:` is appended to
+          # that template as <custom_instructions>. But a `prompt:` on a comment or issue event
+          # is ALSO what selects agent mode (`src/modes/detector.ts`), where the template is
+          # replaced by these instructions and the question being answered is lost -- the same
+          # mode trap `.docs/claude-review.md` records for the review, in the other direction.
+          # `track_progress: true` forces tag mode back.
+          #
+          # Its price is an event constraint worth knowing before wiring this to anything else:
+          # `validateTrackProgressEvent` accepts `pull_request`, `issues`, `issue_comment`,
+          # `pull_request_review_comment` and `pull_request_review`, and THROWS on every other
+          # event. Those five are what the documented caller subscribes to (README.md); an
+          # exotic event that still satisfies the `if:` above -- `commit_comment` and
+          # `discussion_comment` payloads also carry a `comment` object -- now fails loudly
+          # instead of reaching an action that would not have answered it anyway.
+          track_progress: true
+          # No `claude_args`, so the tool surface is exactly what tag mode grants: the four
+          # write-side git commands, `Read`/`Grep`/`Glob`/`LS`, the comment tool, and the CI
+          # tools that `actions: read` above installs. It is deliberately NOT widened to the
+          # review's read-only `gh`/`git`/text helpers: this job holds `contents: write` and
+          # checks out a fork's branch, so every command added here is added on that side of
+          # the boundary the header comment describes. The prompt below states that surface
+          # rather than leaving the model to discover it by denial -- the action's template
+          # tells it to install dependencies and run builds, then to report the denials as a
+          # permissions problem to be fixed by widening the allowlist.
+          prompt: |
+            Tools. Your Bash surface here is only what the action grants for committing --
+            `git add`, `git commit`, `git rm` and the action's push wrapper. Everything you
+            read comes from `Read`, `Grep`, `Glob` and `LS` over the checked-out tree, plus
+            whatever the context above already carries -- on a pull request, that includes the
+            changed-file list. `gh` is not granted, and neither is `git diff`, `git log` or
+            `git status`, so do not reach for them. On a pull request you can also read the
+            pipeline's own results with the CI tools
+            (`mcp__github_ci__get_ci_status`, `mcp__github_ci__get_workflow_run_details`,
+            `mcp__github_ci__download_job_log`).
+
+            Denied on purpose: every language toolchain and build entry point -- `go`, `node`,
+            `npm`, `yarn`, `pnpm`, `python`, `pip`, `pdm`, `mvn`, `gradle`, `dart`, `flutter`,
+            `dotnet`, `composer`, `bundle`, `terraform`, `terragrunt`, `docker` and `make` --
+            together with installing dependencies and every other binary. That is a decision,
+            not a gap in your permissions: the repository's pipeline compiles, lints,
+            type-checks, scans and tests every push in dedicated jobs, and those jobs -- whose
+            results you can read but must not try to replace -- are the authority on whether a
+            change builds.
+
+            The action's instructions above will tell you to plan repository setup and
+            linting/testing steps, and to report in your comment when a linter or test suite
+            was denied by permissions so that the allowlist can be widened. Both are
+            overridden here: plan no setup, install, build, lint or test step; run none of them
+            to check your own work; if you run one anyway and it is denied, do not retry it and
+            do not mention it; and never ask for the allowlist to be widened. Never write a
+            caveat, a "note on verification" or a limitations section about what you could not
+            compile or run -- the permissions are deliberate, whoever asked did not choose
+            them, and the note is noise in an answer that is otherwise about the code. When you do
+            change something: commit it, push it, and say what you changed -- the pipeline
+            reports whether it builds, on the same pull request, without you claiming either
+            way.
         env:
           # Sets the model without touching `claude_args`: parse-sdk-options.ts resolves
           # `model: options.model || modelFromClaudeArgs`, where `options.model` is this

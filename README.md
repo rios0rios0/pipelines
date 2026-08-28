@@ -259,21 +259,21 @@ resolves `model: options.model || modelFromClaudeArgs` — the variable wins, an
 leaves `claude_args` free to be only about tools. Without it the CLI default applies, which in
 CI resolves to Claude Sonnet, not Opus.
 
-**The review workflow runs three jobs** — `claude-review` (correctness and CLAUDE.md
-compliance), `security-review` (exploitable vulnerabilities only) and `design-review`
-(architecture and API design) — so a consumer gets all three checks from the one caller below,
-as the checks `claude-review / claude-review`, `claude-review / security-review` and
-`claude-review / design-review`. All three run in tag mode with tailored prose prompts, an
-explicit tool allowlist, and no plugin or subagent fan-out. That shape is deliberate and
+**The review workflow runs one job covering three dimensions** — correctness, security, and
+software design — in a single prompt, posting **one comment per pull request** that every
+later push updates in place (`use_sticky_comment`, safe precisely because there is a single
+job). The consumer-visible check is `claude-review / claude-review`. The shape — tag mode, a
+prose prompt, an explicit tool allowlist, no plugin, no subagent fan-out — is deliberate and
 evidence-based: the plugin/agent-mode alternative loses roughly a third of its runs to a known
-upstream session-lifecycle bug and fails silently — a green job with no comment. The full
-forensics, the upstream issue links, and every operational fact about the allowlist live in
-[`.docs/claude-review.md`](.docs/claude-review.md); read it before changing the workflow. The
-design is modelled on [OneRedOak/claude-code-workflows](https://github.com/OneRedOak/claude-code-workflows),
-with its design review re-tailored from UI/UX to software design. Each prompt keeps the
-review disciplines that survived the debugging: the 4-agent pipeline run as sequential
-in-session passes, the ≥80 confidence filter with dropped findings listed, a posted comment on
-every run, and re-runs that verify previous findings instead of hunting new ones.
+upstream session-lifecycle bug and fails silently, and an earlier three-job layout tripled the
+comment volume. The full forensics, upstream issue links, and every operational fact about the
+allowlist live in [`.docs/claude-review.md`](.docs/claude-review.md); read it before changing
+the workflow. The design is modelled on
+[OneRedOak/claude-code-workflows](https://github.com/OneRedOak/claude-code-workflows). The
+prompt keeps the disciplines the debugging proved out: the 4-agent pipeline plus security and
+design passes run sequentially in-session, the ≥80 confidence filter applied to every finding
+from every pass with dropped candidates listed, a posted comment on every run, and re-runs
+that verify previous findings instead of hunting new ones.
 
 **`id-token: write` is required.** Unless a `github_token` is passed explicitly, the action's
 `setupGitHubToken()` always requests a GitHub OIDC token and exchanges it for a GitHub App

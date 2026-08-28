@@ -83,32 +83,45 @@ two of the four debugging cycles were spent lacking. And in every tag-mode run o
 
 ## The resulting design
 
-`reusable-claude-review.yaml` runs **three jobs** — `claude-review`, `security-review`,
-`design-review` — one workflow, one trigger set, three tailored prompts, all inspired by
-OneRedOak's code-review, security-review and design-review prompts (the design review is
-re-tailored from their UI/UX focus to software design, which is what this repository's consumers
-need). All three:
+`reusable-claude-review.yaml` runs **one job**, `claude-review`, whose single prompt covers
+three dimensions — correctness, security, and software design — inspired by OneRedOak's
+code-review, security-review and design-review prompts (the design dimension re-tailored from
+their UI/UX focus to software design, which is what this repository's consumers need). The
+review:
 
-- run in tag mode with prose prompts; no plugin, no background agents, and an explicit
-  instruction to do all analysis passes inline in the session;
-- keep the plugin's two genuinely valuable ideas as *prompt methodology*: the **4-agent
-  pipeline** (four named review passes, run sequentially by the one session) and the **≥80
-  confidence filter** (score every candidate finding 0–100, report only ≥80, list the dropped
-  ones with reasons — a rejected finding is evidence the filter ran);
-- carry the #641 posting discipline: post on every run, open with a short summary of what the
+- runs in tag mode with a prose prompt; no plugin, no background agents, and an explicit
+  instruction to do all passes inline in the session;
+- executes **six sequential passes**: the plugin's **4-agent pipeline** (CLAUDE.md compliance,
+  bug scan, git history, code-comment adherence) plus a security pass and a design pass;
+- applies the **≥80 confidence filter to every finding from every pass** — correctness,
+  security and design alike — with each survivor labeled by dimension and score, and every
+  dropped candidate listed with its score and reason (a rejected finding is evidence the
+  filter ran);
+- carries the posting discipline: post on every run, open with a short summary of what the
   pull request changes, name what was checked when clean;
-- are bounded to the diff: findings on unmodified lines are out of scope, and a re-run on a new
-  push verifies the previous round's findings instead of hunting new ones.
+- is bounded to the diff, and a re-run on a new push verifies the previous round's findings
+  instead of hunting new ones;
+- posts **one comment per pull request**: `use_sticky_comment` updates it in place on every
+  push.
 
-`use_sticky_comment` is **deliberately absent**: its lookup matches the *first* Claude comment
-on the pull request (`create-initial.ts` matches on the bot's identity), so three parallel jobs
-would race to claim and overwrite one tracking comment, losing two reviews nondeterministically.
-Three tracking comments per push is the price of three deterministic reviews; the re-review
-discipline in the prompts is what keeps later pushes cheap and short.
+### Why one job, not three
 
-Cost note: this is three Opus sessions per push. The re-review discipline keeps rounds after
-the first short, but the multiplier is real — if it needs reducing, gate `security-review` and
-`design-review` on `opened`/`ready_for_review` only and leave `claude-review` on every push.
+The first shipped version of this design ran three parallel jobs (`claude-review`,
+`security-review`, `design-review`) with one prompt each. It worked — on its pilot pull
+request all three posted, the disciplines held, and the dimension separation was clean — but
+it posted **three comments per push**: six comments after one review-and-fix round, on top of
+whatever other bots the repository runs. The signal was good and the volume was not.
+
+Merging the dimensions into one prompt fixed the volume twice over. One job means one comment
+per run — and one job is also the precondition for `use_sticky_comment`, whose lookup claims
+the *first* Claude comment on the pull request and therefore races against itself when
+parallel jobs share it (each would claim and overwrite the same tracking comment, losing
+reviews nondeterministically). With a single job the race cannot exist, sticky is safe, and
+the whole pull request converges to one review comment updated in place. Splitting the
+workflow back into parallel jobs requires dropping sticky again — the header comment in the
+workflow says so.
+
+Cost: one Opus session per push (the three-job layout cost three).
 
 ## Operational facts worth not relearning
 

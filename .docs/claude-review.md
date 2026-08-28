@@ -113,13 +113,43 @@ it posted **three comments per push**: six comments after one review-and-fix rou
 whatever other bots the repository runs. The signal was good and the volume was not.
 
 Merging the dimensions into one prompt fixed the volume twice over. One job means one comment
-per run — and one job is also the precondition for `use_sticky_comment`, whose lookup claims
-the *first* Claude comment on the pull request and therefore races against itself when
-parallel jobs share it (each would claim and overwrite the same tracking comment, losing
-reviews nondeterministically). With a single job the race cannot exist, sticky is safe, and
-the whole pull request converges to one review comment updated in place. Splitting the
-workflow back into parallel jobs requires dropping sticky again — the header comment in the
-workflow says so.
+per run — and one job is the first of **three** preconditions for `use_sticky_comment`, whose
+lookup (`create-initial.ts`) claims the first comment from *any* Claude bot on the pull
+request through an unpaginated `issues.listComments` call. The review's own first run caught
+the other two, at confidence 80, reviewing this very change:
+
+1. **A single review job** — parallel jobs race to claim and overwrite one tracking comment,
+   losing reviews nondeterministically.
+2. **No other Claude comment precedes the review's** — the mention responder shares the
+   action and identity, so a `@claude` answer posted before any review comment exists (the
+   realistic order: a *draft* pull request, which the review's `if:` skips, gets a `@claude`
+   question; the answer posts; the PR is marked ready) is claimed and overwritten by the
+   first review run, surviving only in its edit history. On non-draft PRs the review comments
+   first, which is what usually protects this.
+3. **The review's comment sits within the first page (30) of comments** — past that, the
+   lookup misses it and sticky silently degrades back to one comment per push, with nothing
+   reporting it.
+
+None of the three is fixable from the workflow; they are properties of the pinned action.
+
+### Findings post as inline threads, deterministically
+
+Every finding that survives the filter is required by the prompt to be its own inline comment
+thread — anchored to the exact file and line, opening with `**<dimension> (confidence
+<score>)**` — so findings are individually discussable and resolvable, and the tracking
+comment carries the summary, the thread index, the per-dimension clean verdicts, and the
+dropped list. Two mechanics make the threads deterministic rather than model-discretionary:
+
+- the prompt mandates the thread (previously "anchor line-specific findings" was a
+  suggestion, and whether a finding became a thread depended on the run);
+- `classify_inline_comments: false` posts every inline comment immediately. The default
+  buffers any call not carrying `confirmed: true` into `/tmp/inline-comments-buffer.jsonl`
+  and replays it after the session through a Haiku classifier — a path with two open upstream
+  bugs ([#1667](https://github.com/anthropics/claude-code-action/issues/1667): one malformed
+  buffer line discards every buffered comment;
+  [#1679](https://github.com/anthropics/claude-code-action/issues/1679): "Posted 0/N" exits
+  green) — and its purpose, filtering test comments from *subagents*, protects nothing in a
+  prompt that forbids subagents.
 
 Cost: one Opus session per push (the three-job layout cost three).
 

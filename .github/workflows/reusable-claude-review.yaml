@@ -28,11 +28,21 @@ on:
 # prose prompt reviewed inline spawns no Task subagents, so the Action's known mid-turn
 # session-end bug (anthropics/claude-code-action#1515, #1646) has nothing to kill.
 #
-# `use_sticky_comment` is safe here ONLY because there is a single job: its lookup claims
-# the FIRST Claude comment on the pull request, so parallel review jobs would race to
-# overwrite one tracking comment (the layout this file briefly had -- three jobs -- posted
-# three comments per push instead, which is why they were merged). Split this workflow into
-# parallel jobs again and sticky must go with it.
+# `use_sticky_comment` needs THREE preconditions, and the single-job layout is only the
+# first. The action's lookup (create-initial.ts) claims the first comment from ANY Claude
+# bot on the pull request, read through an unpaginated `issues.listComments` call:
+#   1. a single review job -- parallel jobs race to claim and overwrite one tracking
+#      comment (the brief three-job layout posted three comments per push instead, which is
+#      why they were merged; split again and sticky must go);
+#   2. no other Claude comment precedes ours -- `reusable-claude-mention.yaml` runs the
+#      same action with the same identity, so a `@claude` answer posted before the first
+#      review comment exists (e.g. on a DRAFT pull request, which the `if:` below skips)
+#      is claimed and OVERWRITTEN by the first review run, surviving only in the comment's
+#      edit history. The review commenting first on every non-draft PR is what usually
+#      protects this;
+#   3. the review's comment sits in the first page (30) of comments -- past that the
+#      lookup misses it and sticky silently degrades to one comment per push.
+# None of the three is fixable from this file; they are properties of the pinned action.
 #
 # A bare self-hosted runner selected through `runs_on` must be provisioned before this job
 # passes -- and NOT with host Node: the Actions runner ships its own (`externals/node*`) and
@@ -73,8 +83,17 @@ jobs:
           # (a `/plugin:command` here loads and silently never runs; see the doc).
           track_progress: true
           # One comment per pull request, updated in place on every push -- see the header
-          # comment for why this requires the single-job layout.
+          # comment for the three preconditions this rests on.
           use_sticky_comment: true
+          # Post every inline comment IMMEDIATELY. The default (true) buffers any call not
+          # carrying `confirmed: true` into /tmp/inline-comments-buffer.jsonl and replays it
+          # after the session through a Haiku classifier -- a path with two open upstream
+          # bugs (anthropics/claude-code-action#1667: one malformed buffer line discards
+          # every buffered comment; #1679: "Posted 0/N" exits green) and whose purpose,
+          # filtering test comments from SUBAGENTS, protects nothing here since the prompt
+          # forbids subagents. Whether a finding becomes a thread must not depend on the
+          # model remembering `confirmed: true`.
+          classify_inline_comments: false
           # The complete BASH allowlist and the MCP-server selector -- `Read`/`Grep`/`Glob`
           # need no listing, every segment of a pipe must match, and the five text utilities
           # are the read-only ones (`sed`/`awk`/`find`/`sort`/`uniq` can write or execute).
@@ -144,13 +163,24 @@ jobs:
             its dimension (bug / security / design) and its score.
 
             Post ONE review per run -- never end silently; a silent run is indistinguishable
-            from a crashed one. Anchor line-specific findings as inline comments; put the
-            review itself in your tracking comment. Open with two or three sentences on what
-            you understood this pull request to change and why, so a reader can tell the
-            diff was read. Structure the rest as: the findings that survived the filter,
-            grouped by dimension; what you checked and found clean, per dimension; and every
-            finding you raised and then dropped -- one line each with its score and the
-            reason. A rejected finding is evidence the filter ran; an omitted one is
+            from a crashed one.
+
+            EVERY finding that survives the filter MUST be posted as its own inline comment
+            thread, anchored to the exact file and line it is about, using the inline
+            comment tool -- one thread per finding, no exceptions, so each can be discussed
+            and resolved independently. Begin each thread's body with
+            `**<dimension> (confidence <score>)**` -- for example `**bug (confidence 85)**`
+            -- followed by the finding, the concrete failure or exploitation scenario, and
+            the minimal fix. Only a finding with no single anchorable line (a
+            repository-wide or cross-file concern) may live in the tracking comment
+            instead.
+
+            The tracking comment carries everything else. Open it with two or three
+            sentences on what you understood this pull request to change and why, so a
+            reader can tell the diff was read. Then: a one-line index of the inline threads
+            you posted; what you checked and found clean, per dimension; and every finding
+            you raised and then dropped -- one line each with its score and the reason. A
+            rejected finding is evidence the filter ran; an omitted one is
             indistinguishable from a check that never happened.
 
             If you already reviewed this pull request (your earlier review is the comment

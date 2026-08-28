@@ -274,14 +274,24 @@ tracking comment, and with it `use_sticky_comment`, which is unreachable outside
 So a pull request collects one comment per push, bounded by the plugin's guard rather than by
 comment re-use. The two shapes are exclusive; pick by which runaway you would rather cap.
 
-**`claude_args` is not an override of the action's defaults**, and it is not a leftover from
-pinning a model. In agent mode there are no default GitHub tools to override: `prepareAgentMode`
-derives the entire GitHub MCP server set from this one list, so with it empty every `has*Tools`
-flag in `install-mcp-server.ts` is false, `mcpServers` comes back `{}`, no `--mcp-config` is
-emitted, and Claude reviews the pull request and then cannot post — four pull requests in this
-repository's history did exactly that, as full Opus runs with green jobs and no comment. All
-three of the action's own PR-review examples pass the identical string, in both modes. It only
-ever adds; `--disallowedTools` is what takes away.
+**`claude_args` is the complete permission set in agent mode**, not an addition to a default
+one — there is no default. `prepareAgentMode` derives every GitHub MCP server from this list,
+and headless CI has no approval prompt, so any tool the list omits is denied outright rather
+than queued for a human. Do not reason from the interactive CLI here, where the list merely
+pre-approves and `--disallowedTools` subtracts; that is a different mode. Tag mode hides the
+whole issue by building its own broad list.
+
+The consequence is that the four entries the action's examples pass are sized for their prose
+prompts, and are **not** enough for the plugin, whose agents read git history and search the
+tree. The first agent-mode run here logged 22 permission denials — `grep`, `cat`, `git`, `sed`,
+`find`, every `>` redirect, and every pipe — and ended after 18 turns having never read the
+diff, with no comment posted and a green job. Two things follow, and both are easy to get wrong:
+
+- **Every segment of a pipe must be allowed.** `Bash(gh pr diff:*)` permits `gh pr diff`, and
+  `gh pr diff | wc -l` is still refused with *"This Bash command contains multiple operations"*.
+- **Grant the structured tools, not more shell.** `Read`, `Grep` and `Glob` do what `cat`,
+  `grep` and `find` were being reached for, with no shell to segment and no redirect to block.
+  Granting those is what removes most of the pressure to pipe in the first place.
 
 **`id-token: write` is required.** Unless a `github_token` is passed explicitly, the action's
 `setupGitHubToken()` always requests a GitHub OIDC token and exchanges it for a GitHub App

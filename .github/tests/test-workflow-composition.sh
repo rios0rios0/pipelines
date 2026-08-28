@@ -39,11 +39,12 @@ set -e
 # flow style would slip past them; none is, and one would fail review long
 # before this.
 #
-# Tests 10 and 11 are the exceptions and do need PyYAML. Test 10 asserts under a
+# Tests 10, 11 and 12 are the exceptions and do need PyYAML. Test 10 asserts under a
 # key YAML 1.1 RESOLVES -- `on:` parses as the boolean `true`, so `runs_on` sits
 # under no key spelled `on` at all and no indentation rule can reach it -- and
 # Test 11 needs the `if:` as ONE expression, which a block scalar spreads over
-# ten physical lines. Both are written so that a host without PyYAML sees the
+# ten physical lines, and Test 12 walks the whole trigger block for evaluated
+# expressions. All three are written so that a host without PyYAML sees the
 # assertion FAIL BY NAME rather than a traceback -- see the comments there. CI
 # installs `python3-yaml` (`.github/workflows/ci.yaml`), and `make test` already
 # requires it for `test-azure-step-names.sh` and `test-lambda-templates.sh`.
@@ -663,30 +664,71 @@ PY
 assert_empty "every trigger clause checks the association of whoever wrote what it matched" "$BAD_TRIGGER"
 echo ""
 
-# A `${{ }}` sequence inside a `workflow_call` input or secret DESCRIPTION is evaluated
-# by GitHub, not treated as documentation -- and the `on:` block has no context, so an
+echo "Test 12: no trigger-block description or default carries an evaluated expression"
+
+# A `${{ }}` sequence in a `description:` or `default:` under `on:` is EVALUATED by
+# GitHub, not treated as documentation -- and the trigger block has no context, so an
 # example naming `github` makes the whole file fail to compile. It fails in the shape
 # that is hardest to read: the workflow is never triggered, yet every push produces a
 # failed run with no jobs, no logs, and the file PATH where the workflow name belongs.
 # `go-flyio.yaml` shipped exactly that in its `fly_app_name` example. Usage examples
 # belong in a `#` comment, which is never evaluated.
-EVALUATED_DESC=''
-while IFS= read -r file; do
-  result="$(python3 -c "
-import yaml, re
-d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/$file'))
-trigger = d.get('on', d.get(True))
-wc = (trigger or {}).get('workflow_call') or {}
-bad = []
-for kind in ('inputs', 'secrets'):
-    for name, spec in (wc.get(kind) or {}).items():
-        if '\${{' in ((spec or {}).get('description') or ''):
-            bad.append(f'{kind}.{name}')
-print(' '.join(bad))
-")"
-  [[ -n "$result" ]] && EVALUATED_DESC="${EVALUATED_DESC}${file}: expression in the description of ${result}"$'\n'
-done < <(reusable_workflows)
-assert_empty "no workflow_call description contains an evaluated expression" "$EVALUATED_DESC"
+#
+# Scoped to the CLASS, not the instance that was found: every file under `on:` (not
+# only reusable ones -- `workflow_dispatch` inputs evaluate identically), and every
+# `description` AND `default` (a `default:` is the likelier place to write
+# `${{ github.ref_name }}` believing it resolves), including nested `outputs`.
+BAD_ON_EXPRESSION="$(python3 - "$WORKFLOWS_DIR" <<'PY'
+import glob
+import os
+import sys
+
+try:
+    import yaml
+except ImportError:
+    print('PyYAML is required for this assertion '
+          '(CI installs python3-yaml; locally: pip install pyyaml)')
+    sys.exit(0)
+
+workflows_dir = sys.argv[1]
+
+# Only `description` and `default` are documentation-shaped keys a human writes prose
+# into. Every other scalar under `on:` (branch globs, paths, types) is data GitHub
+# reads literally, and none of it would contain `${{` except by the same mistake --
+# so flagging the two keys names the defect precisely instead of pattern-matching text.
+EVALUATED_KEYS = ('description', 'default')
+
+
+def walk(node, path):
+    """Yield (dotted-path, value) for every EVALUATED_KEYS scalar under the trigger block."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            child = f'{path}.{key}' if path else str(key)
+            if key in EVALUATED_KEYS and isinstance(value, str):
+                yield child, value
+            else:
+                yield from walk(value, child)
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            yield from walk(value, f'{path}[{index}]')
+
+
+for workflow in sorted(glob.glob(os.path.join(workflows_dir, '*.yaml'))):
+    name = os.path.basename(workflow)
+    try:
+        document = yaml.safe_load(open(workflow)) or {}
+        # YAML 1.1 resolves `on:` to the boolean True -- the same quirk Test 10 documents.
+        trigger = document.get('on', document.get(True)) or {}
+        for location, value in walk(trigger, ''):
+            if '${{' in value:
+                print(f'{name}: on.{location} contains an evaluated expression')
+    except (OSError, yaml.YAMLError) as error:
+        print(f'{name}: unreadable ({error})')
+    except Exception as error:                      # noqa: BLE001 -- see Test 10's note
+        print(f'{name}: {type(error).__name__}: {error}')
+PY
+)"
+assert_empty "no trigger-block description or default carries an evaluated expression" "$BAD_ON_EXPRESSION"
 echo ""
 
 echo "================================"

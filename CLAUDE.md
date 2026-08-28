@@ -231,7 +231,7 @@ is a large part of why the rule is a test rather than a review habit.
 
 ### Workflow Composition Standard
 
-**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), eleven
+**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), twelve
 assertions, every one of them proven to fire against a deliberate violation.** Read this section
 before writing anything under `.github/workflows/`, and before writing a pipeline in a repository
 that consumes this one.
@@ -349,6 +349,21 @@ clause reads is only half the boundary, so the allowlist is pinned too: every cl
 `contains(fromJSON(…))` must be exactly `OWNER`, `MEMBER`, `COLLABORATOR`. Adding `CONTRIBUTOR` or
 `NONE` is one token in the same free-text block and opens the job to anyone, with every pairing check
 still passing.
+
+The twelfth forbids an **evaluated expression in a trigger-block `description:` or `default:`**.
+GitHub evaluates `${{ }}` in those fields rather than treating them as documentation, and the `on:`
+block has no context — so a usage example naming `github` does not document the input, it stops the
+whole file compiling. The failure is the least legible one this repository has hit: the workflow is
+never triggered, yet every push produces a failed run with **no jobs, no logs, and the file path
+where the workflow name belongs**, which reads like a broken pin rather than a broken file.
+`go-flyio.yaml` shipped exactly that in a `fly_app_name` example and failed on `main` until it was
+found. Usage examples belong in a `#` comment, which is never evaluated. The assertion is scoped to
+the class rather than the instance: every workflow file, not only reusable ones (a
+`workflow_dispatch` input evaluates identically), and `default:` as well as `description:` — a
+`default:` being the likelier place to write `${{ github.ref_name }}` believing it resolves —
+including nested `outputs`. Note the linter cannot be relied on here: `actionlint` catches the
+`workflow_call` description case but the repository's own CI passed the broken file for its entire
+life on `main`.
 
 **Secrets reach a build as secrets.** A value passed into a reusable workflow as an *input* loses
 the caller's masking; passed as a *secret* it keeps it. That is why the deployment workflows take

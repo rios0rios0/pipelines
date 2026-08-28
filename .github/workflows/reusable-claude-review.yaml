@@ -15,11 +15,11 @@ on:
         required: true
         description: 'OAuth token used by the Claude Code action'
 
-# Three reviews, one workflow: `claude-review` (correctness + CLAUDE.md), `security-review`
-# (exploitable vulnerabilities only) and `design-review` (architecture and API design). The
-# shape -- tag mode, prose prompts, an explicit tool allowlist, no plugin and no subagent
-# fan-out -- is DELIBERATE and was paid for with four debugging cycles: the full forensics,
-# the upstream issues that forced it, and the operational facts live in
+# ONE review job covering three dimensions -- correctness, security, and software design --
+# in one prompt, posting ONE comment per pull request that later runs update in place. The
+# shape (tag mode, a prose prompt, an explicit tool allowlist, no plugin, no subagent
+# fan-out, a single job) is DELIBERATE and was paid for with five debugging cycles: the full
+# forensics, the upstream issues that forced it, and the operational facts live in
 # `.docs/claude-review.md`. Read that document before changing this file. Modelled on
 # https://github.com/OneRedOak/claude-code-workflows, re-tailored for this repository.
 #
@@ -28,13 +28,24 @@ on:
 # prose prompt reviewed inline spawns no Task subagents, so the Action's known mid-turn
 # session-end bug (anthropics/claude-code-action#1515, #1646) has nothing to kill.
 #
-# `use_sticky_comment` is deliberately ABSENT: its lookup claims the FIRST Claude comment on
-# the pull request, so three parallel jobs would race to overwrite one tracking comment and
-# lose two reviews nondeterministically. Three comments per push is the price of three
-# deterministic reviews; the re-review discipline in each prompt keeps later pushes short.
+# `use_sticky_comment` needs THREE preconditions, and the single-job layout is only the
+# first. The action's lookup (create-initial.ts) claims the first comment from ANY Claude
+# bot on the pull request, read through an unpaginated `issues.listComments` call:
+#   1. a single review job -- parallel jobs race to claim and overwrite one tracking
+#      comment (the brief three-job layout posted three comments per push instead, which is
+#      why they were merged; split again and sticky must go);
+#   2. no other Claude comment precedes ours -- `reusable-claude-mention.yaml` runs the
+#      same action with the same identity, so a `@claude` answer posted before the first
+#      review comment exists (e.g. on a DRAFT pull request, which the `if:` below skips)
+#      is claimed and OVERWRITTEN by the first review run, surviving only in the comment's
+#      edit history. The review commenting first on every non-draft PR is what usually
+#      protects this;
+#   3. the review's comment sits in the first page (30) of comments -- past that the
+#      lookup misses it and sticky silently degrades to one comment per push.
+# None of the three is fixable from this file; they are properties of the pinned action.
 #
-# A bare self-hosted runner selected through `runs_on` must be provisioned before these jobs
-# pass -- and NOT with host Node: the Actions runner ships its own (`externals/node*`) and
+# A bare self-hosted runner selected through `runs_on` must be provisioned before this job
+# passes -- and NOT with host Node: the Actions runner ships its own (`externals/node*`) and
 # executes every JavaScript action with it, on self-hosted hosts too. What a minimal host
 # lacks is what `anthropics/claude-code-action` shells OUT to. Every step of that composite
 # declares `shell: bash`; `oven-sh/setup-bun` unpacks Bun through `@actions/tool-cache`,
@@ -71,6 +82,18 @@ jobs:
           # not a command it executes -- which is why it is prose, never a slash command
           # (a `/plugin:command` here loads and silently never runs; see the doc).
           track_progress: true
+          # One comment per pull request, updated in place on every push -- see the header
+          # comment for the three preconditions this rests on.
+          use_sticky_comment: true
+          # Post every inline comment IMMEDIATELY. The default (true) buffers any call not
+          # carrying `confirmed: true` into /tmp/inline-comments-buffer.jsonl and replays it
+          # after the session through a Haiku classifier -- a path with two open upstream
+          # bugs (anthropics/claude-code-action#1667: one malformed buffer line discards
+          # every buffered comment; #1679: "Posted 0/N" exits green) and whose purpose,
+          # filtering test comments from SUBAGENTS, protects nothing here since the prompt
+          # forbids subagents. Whether a finding becomes a thread must not depend on the
+          # model remembering `confirmed: true`.
+          classify_inline_comments: false
           # The complete BASH allowlist and the MCP-server selector -- `Read`/`Grep`/`Glob`
           # need no listing, every segment of a pipe must match, and the five text utilities
           # are the read-only ones (`sed`/`awk`/`find`/`sort`/`uniq` can write or execute).
@@ -81,205 +104,94 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
 
-            You are acting as the principal-engineer reviewer for this repository. Your mandate
-            is pragmatic quality: determine whether the change definitively improves the
-            codebase, and block only on what matters. Assume linters, formatters, type checkers
-            and the test suite run as their own CI jobs -- never report what they would catch.
+            You are the principal-engineer reviewer for this repository, conducting ONE
+            review that covers three dimensions: correctness, security, and software design.
+            Your mandate is pragmatic quality -- determine whether the change definitively
+            improves the codebase, and block only on what matters. Assume linters,
+            formatters, type checkers and the test suite run as their own CI jobs; never
+            report what they would catch.
 
-            Run the 4-agent pipeline yourself, as four sequential passes inside this session.
-            Never dispatch background or parallel agents, and never end your turn while any
-            work is pending: this session is not resumed, and anything unfinished when your
-            turn ends is lost.
+            Do every pass yourself, sequentially, inside this session. Never dispatch
+            background or parallel agents, and never end your turn while any work is
+            pending: this session is not resumed, and anything unfinished when your turn
+            ends is lost.
 
-            1. **CLAUDE.md compliance** -- audit the changes against the repository's CLAUDE.md
-               (and any CLAUDE.md in the changed directories). Flag only what those files call
-               out explicitly; they guide code-writing, so not every instruction applies to
-               review.
-            2. **Bug scan** -- read the full diff (`gh pr diff`) and hunt real defects in the
-               changed lines: logic errors, broken edge cases, race conditions, error paths
-               that swallow or mis-handle failures. Large bugs only; no nitpicks.
-            3. **Git history** -- use `git log` and `git blame` on the modified files to catch
-               regressions of earlier fixes and changes that contradict the recorded intent.
-            4. **Code-comment adherence** -- read the comments in the modified files and verify
-               the change honours the constraints and warnings they document.
+            Scope: `gh pr diff` is the boundary of the review. A real problem on a line this
+            pull request did not modify is out of scope -- leave it out, however tempting,
+            and say nothing about files it did not change. Pre-existing issues are out of
+            scope. Intentional behaviour changes that match the pull request's stated
+            purpose are not findings.
 
-            Then apply the >=80 confidence filter to everything the passes produced. Score each
-            candidate finding 0-100: 0 = does not survive scrutiny or is pre-existing; 25 =
-            plausible but unverified; 50 = real but minor or rare; 75 = verified, likely hit in
-            practice, or explicitly required by CLAUDE.md; 100 = certain and frequent. Report
-            only findings scoring >=80. Treat as automatic false positives: pre-existing
-            issues, real issues on lines this pull request did not modify, anything a linter or
-            the test suite would catch, general code-quality preferences CLAUDE.md does not
-            demand, and intentional behaviour changes that match the pull request's stated
-            purpose.
+            Run the review as six sequential passes -- the 4-agent pipeline, then security,
+            then design:
 
-            Post your review on every run -- never end silently; a silent run is
-            indistinguishable from a crashed one. Anchor line-specific findings as inline
-            comments; put the overall review in your tracking comment. Open with two or three
-            sentences on what you understood this pull request to change and why, so a reader
-            can tell the diff was read. When nothing survives the filter, say so explicitly,
-            name what you checked and found clean, and list every finding you raised and then
-            dropped -- one line each with the reason. A rejected finding is evidence the filter
-            ran; an omitted one is indistinguishable from a check that never happened.
+            1. **CLAUDE.md compliance** -- audit the changes against the repository's
+               CLAUDE.md and any CLAUDE.md in the changed directories. Flag only what those
+               files call out explicitly; they guide code-writing, so not every instruction
+               applies to review.
+            2. **Bug scan** -- read the full diff and hunt real defects in the changed
+               lines: logic errors, broken edge cases, race conditions, error paths that
+               swallow or mis-handle failures. Large bugs only; no nitpicks.
+            3. **Git history** -- use `git log` and `git blame` on the modified files to
+               catch regressions of earlier fixes and changes that contradict the recorded
+               intent.
+            4. **Code-comment adherence** -- verify the change honours the constraints and
+               warnings documented in the comments of the files it modifies.
+            5. **Security** -- examine what the diff newly introduces across: injection
+               (SQL/NoSQL, command, template, path traversal), authentication and
+               authorization flaws, hardcoded or leaking secrets (argv, logs, published
+               artifacts), weak or disabled crypto, unsafe deserialization or eval-like
+               execution, downloaded code executed without pinning and checksum
+               verification, and sensitive-data exposure. Report only what is exploitable
+               in practice; do NOT report denial-of-service or rate-limiting issues. An
+               issue only exploitable from the local network can still be HIGH severity.
+            6. **Design** -- judge the change against the repository's established
+               architecture and patterns: does it fit them or fork a second way of doing
+               something the repository already does one way; single responsibility without
+               unnecessary abstraction; coherent, consistently named, backward-compatible
+               public contracts (a breaking change must be flagged as such and follow the
+               repository's breaking-change conventions); naming and documentation that
+               match the repository's vocabulary. Net positive over perfection; prefix
+               minor, optional polish with "Nit:".
 
-            If you already reviewed this pull request (look for your earlier review in
-            `gh pr view --comments`), do not review it again from scratch: verify each of your
-            previous findings -- addressed, not addressed, or declined by the author -- and add
-            nothing new.
+            Then apply the >=80 confidence filter to EVERY candidate finding from EVERY
+            pass -- correctness, security and design alike, no exceptions. Score each
+            candidate 0-100: 0 = does not survive scrutiny, or is pre-existing; 25 =
+            plausible but unverified; 50 = real but minor or unlikely to matter in practice;
+            75 = verified and likely hit in practice, or explicitly required by CLAUDE.md;
+            100 = certain and frequent. Report only findings scoring >=80, each labeled with
+            its dimension (bug / security / design) and its score.
+
+            Post ONE review per run -- never end silently; a silent run is indistinguishable
+            from a crashed one.
+
+            EVERY finding that survives the filter MUST be posted as its own inline comment
+            thread, anchored to the exact file and line it is about, using the inline
+            comment tool -- one thread per finding, no exceptions, so each can be discussed
+            and resolved independently. Begin each thread's body with
+            `**<dimension> (confidence <score>)**` -- for example `**bug (confidence 85)**`
+            -- followed by the finding, the concrete failure or exploitation scenario, and
+            the minimal fix. Only a finding with no single anchorable line (a
+            repository-wide or cross-file concern) may live in the tracking comment
+            instead.
+
+            The tracking comment carries everything else. Open it with two or three
+            sentences on what you understood this pull request to change and why, so a
+            reader can tell the diff was read. Then: a one-line index of the inline threads
+            you posted; what you checked and found clean, per dimension; and every finding
+            you raised and then dropped -- one line each with its score and the reason. A
+            rejected finding is evidence the filter ran; an omitted one is
+            indistinguishable from a check that never happened.
+
+            If you already reviewed this pull request (your earlier review is the comment
+            this run updates -- read it back with `gh pr view --comments` before writing),
+            do not review it again from scratch: verify each of your previous findings --
+            addressed, not addressed, or declined by the author -- keep the dropped-findings
+            history, and add nothing new.
           show_full_output: true
           display_report: true
         env:
           # Pins the model without touching `claude_args`: parse-sdk-options.ts resolves
           # `model: options.model || modelFromClaudeArgs`, so this wins and the allowlist
           # stays purely about tools. Without it the CLI default resolves to Sonnet in CI.
-          ANTHROPIC_MODEL: 'claude-opus-5'
-
-  security-review:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.draft == false
-    runs-on: ${{ fromJSON(inputs.runs_on) }}
-    permissions:
-      contents: 'read'
-      pull-requests: 'write'
-      issues: 'write'
-      id-token: 'write'
-    steps:
-      - name: 'Checkout repository'
-        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
-        with:
-          fetch-depth: 1
-
-      - name: 'Run Claude Security Review'
-        id: 'security-review'
-        uses: 'anthropics/claude-code-action@a60f3e1db3edbceed2b1e6c6a9d34c36b8a15eba' # v1.0.209
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          track_progress: true
-          claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh:*),Bash(git:*),Bash(grep:*),Bash(cat:*),Bash(wc:*),Bash(head:*),Bash(tail:*)"
-          prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
-
-            You are a senior security engineer conducting a focused security review of this
-            pull request. This is not a general code review: examine ONLY the security
-            implications newly introduced by this diff (`gh pr diff` is the boundary), and do
-            not comment on pre-existing concerns.
-
-            Do all analysis yourself, sequentially, inside this session. Never dispatch
-            background or parallel agents, and never end your turn while any work is pending:
-            this session is not resumed, and anything unfinished when your turn ends is lost.
-
-            Apply the >=80 confidence filter throughout: report a finding only when you are at
-            least 80% confident it is real AND exploitable in practice. Minimize false
-            positives; skip theoretical issues, hardening advice, style concerns and
-            low-impact findings. Do NOT report denial-of-service or rate-limiting/resource-
-            exhaustion issues.
-
-            Phase 1 -- context: identify the security patterns this repository already uses
-            (validation, sanitization, secret handling, pinning) so you can spot deviations
-            rather than re-litigate the model.
-            Phase 2 -- examine the diff against these categories:
-
-            - **Injection**: SQL/NoSQL, command injection in shell or subprocess calls,
-              template injection, path traversal, XXE.
-            - **Authentication and authorization**: bypass logic, privilege escalation,
-              session and token handling flaws, missing checks on protected surfaces.
-            - **Secrets and crypto**: hardcoded credentials or tokens, secrets reaching argv
-              or logs or artifacts, weak algorithms, disabled verification.
-            - **Code execution and deserialization**: eval-like constructs, unsafe
-              deserialization, piping a downloaded script straight into a shell, unpinned or
-              checksum-free downloads executed on the runner.
-            - **Data exposure**: sensitive data in logs or errors, PII mishandling, debug
-              surfaces left enabled.
-
-            Even an issue only exploitable from the local network can be HIGH severity.
-
-            Post your review on every run -- never end silently. Anchor findings to their
-            lines as inline comments, each with: severity, the concrete exploitation scenario,
-            and the minimal fix. Put the overall verdict in your tracking comment, opening
-            with two or three sentences on what this pull request changes. When nothing
-            survives the filter, say so explicitly, name the categories you checked against
-            the diff, and list every candidate you raised and then dropped with the reason.
-
-            If you already posted a security review of this pull request (look for it in
-            `gh pr view --comments`), verify each of your previous findings instead of
-            re-reviewing, and add nothing new.
-          show_full_output: true
-          display_report: true
-        env:
-          ANTHROPIC_MODEL: 'claude-opus-5'
-
-  design-review:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.draft == false
-    runs-on: ${{ fromJSON(inputs.runs_on) }}
-    permissions:
-      contents: 'read'
-      pull-requests: 'write'
-      issues: 'write'
-      id-token: 'write'
-    steps:
-      - name: 'Checkout repository'
-        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
-        with:
-          fetch-depth: 1
-
-      - name: 'Run Claude Design Review'
-        id: 'design-review'
-        uses: 'anthropics/claude-code-action@a60f3e1db3edbceed2b1e6c6a9d34c36b8a15eba' # v1.0.209
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          track_progress: true
-          claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh:*),Bash(git:*),Bash(grep:*),Bash(cat:*),Bash(wc:*),Bash(head:*),Bash(tail:*)"
-          prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
-
-            You are an elite software-design reviewer -- a principal engineer judging the
-            design of this change, not its line-level correctness (a separate review covers
-            bugs, and a third covers security; do not duplicate either). Your philosophy is
-            net positive over perfection: approve what definitively improves the design, and
-            raise only what a principal engineer would actually raise. Prefix minor, optional
-            polish with "Nit:".
-
-            Do all analysis yourself, sequentially, inside this session. Never dispatch
-            background or parallel agents, and never end your turn while any work is pending:
-            this session is not resumed, and anything unfinished when your turn ends is lost.
-
-            Review the diff (`gh pr diff` is the boundary) against this hierarchy, using the
-            repository's CLAUDE.md and existing structure as the source of truth for its
-            conventions:
-
-            1. **Architectural integrity** -- does the change fit the repository's established
-               architecture and patterns, or fork a second way of doing something it already
-               does one way? Is new logic placed in the layer and directory the repository
-               says it belongs in?
-            2. **Modularity and simplicity** -- single responsibility, no unnecessary
-               abstraction or premature generality; could a simpler design achieve the same
-               goal? Is the pull request atomic, or does it bundle unrelated changes?
-            3. **Contracts and compatibility** -- are new or changed public interfaces
-               (inputs, outputs, job names, file formats, APIs) coherent, consistently named,
-               and backward compatible? A breaking change must be flagged as such and follow
-               the repository's breaking-change conventions.
-            4. **Consistency of the whole** -- naming that matches the repository's
-               vocabulary, duplication that should reuse an existing mechanism, documentation
-               and examples updated where the repository requires them to move with the code.
-
-            Apply the >=80 confidence filter: raise a design concern only when you are
-            confident it is real, grounded in the codebase or an established engineering
-            principle you can name, and worth an author's time. List what you considered and
-            dropped, one line each with the reason.
-
-            Post your review on every run -- never end silently. Anchor location-specific
-            concerns as inline comments; put the overall design verdict in your tracking
-            comment, opening with two or three sentences on what this pull request changes
-            and the design intent you inferred. When the design is sound, say so explicitly
-            and name what you evaluated.
-
-            If you already posted a design review of this pull request (look for it in
-            `gh pr view --comments`), verify each of your previous findings instead of
-            re-reviewing, and add nothing new.
-          show_full_output: true
-          display_report: true
-        env:
           ANTHROPIC_MODEL: 'claude-opus-5'

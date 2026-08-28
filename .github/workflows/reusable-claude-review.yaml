@@ -89,30 +89,44 @@ jobs:
           #                      6 -> 4 -> 4 -> 6 -> 5 findings, the last of them about three
           #                      files that pull request never touched.
           #
-          # `--allowedTools` is the COMPLETE permission set in agent mode, not an addition to a
-          # default one. There is no default: `prepareAgentMode` derives every GitHub MCP server
-          # from this list, and headless CI has no approval prompt, so any tool the list omits is
-          # denied outright rather than queued for a human. (The interactive CLI, where the list
-          # merely pre-approves and `--disallowedTools` subtracts, behaves differently -- do not
-          # reason from that.) Tag mode hides this by building its own broad list, which is why
-          # this only bites once the prompt is actually executed.
+          # `--allowedTools` is the complete BASH allowlist, and the selector for which GitHub
+          # MCP servers get installed. It is NOT the complete tool set: `Read`, `Grep`, `Glob`,
+          # `Task` and `TodoWrite` are permitted by default and never needed listing -- measured,
+          # not assumed, on the first agent-mode run here, where `Read` executed five times and
+          # `Task` spawned seven subagents while absent from a four-entry list, and where all 22
+          # permission denials were `Bash` and nothing else.
           #
-          # The action's own examples pass four entries, sized for their prose prompts. That is
-          # not enough for the plugin, whose agents read git history and search the tree: the
-          # first agent-mode run here logged 22 permission denials -- `grep`, `cat`, `git`, `sed`,
-          # `find`, every `>` redirect, and every pipe ("This Bash command contains multiple
-          # operations") -- then ended its turn after 18 turns having never read the diff, with
-          # `stop_reason: end_turn` and no comment posted. A pipe is the trap worth remembering:
-          # `Bash(gh pr diff:*)` permits `gh pr diff`, and `gh pr diff | wc -l` is still denied,
-          # because EVERY segment must be allowed.
+          # What Bash gets is nothing at all by default, which is the part with no safe fallback:
+          # drop this input and there is no curated list underneath, so `gh` and `git` are both
+          # denied AND no MCP server is installed, leaving the review unable to read the diff or
+          # to post. Four pull requests in this repository did exactly that -- full Opus runs,
+          # green jobs, zero comments -- and the first agent-mode run repeated it from the other
+          # side, ending after 18 turns with `stop_reason: end_turn` having never read the diff.
           #
-          # So the structured tools come first and carry the weight. `Read`, `Grep` and `Glob` do
-          # what `cat`, `grep` and `find` were being reached for, with no shell to segment and no
-          # redirect to block -- granting them is what removes most of the pressure to pipe. The
-          # `gh` entries match the plugin's own `allowed-tools` frontmatter, and the `git` entries
-          # cover its "read the git blame and history of the code modified" agent.
+          # Prefixes rather than subcommands, deliberately. `Bash(gh:*)` and `Bash(git:*)` cover
+          # everything the plugin's agents do -- the diff, `gh pr comment`, the blame and history
+          # pass -- without enumerating eleven subcommands that drift the moment the plugin adds a
+          # twelfth. They still refuse every other binary: `curl`, `rm`, `bash -c`, a package
+          # manager. That is the line worth holding; the subcommand list was never the thing
+          # providing the safety.
+          #
+          # EVERY segment of a compound command must match, which is why the read-only text
+          # utilities are here: `gh pr diff` alone was allowed on the first run and
+          # `gh pr diff | wc -l` was still refused with "This Bash command contains multiple
+          # operations", so the agent could never size or filter the diff. `Read` and `Grep`
+          # cover reading a FILE, but neither can consume the stdout of a command, which is what
+          # a review of `gh pr diff` output actually needs.
+          #
+          # The five chosen are the ones that cannot write or execute -- `grep` and `cat` (8 and 6
+          # denials on that run), plus `wc`, `head` and `tail`. Deliberately NOT included, and do
+          # not add them without re-reading this: `sed` writes in place with `-i`, `awk` writes
+          # with `print >`, `find` executes with `-exec`, and `sort`/`uniq` both take an output
+          # file as an argument. Those are edits and execution wearing the costume of a filter.
+          #
+          # A redirect (`> /tmp/x`) is refused by the working-directory sandbox rather than by
+          # this list, so no entry here enables one -- which is also what keeps `cat` harmless.
           claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Read,Grep,Glob,Task,TodoWrite,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*),Bash(gh api:*),Bash(git log:*),Bash(git blame:*),Bash(git diff:*),Bash(git show:*)"
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh:*),Bash(git:*),Bash(grep:*),Bash(cat:*),Bash(wc:*),Bash(head:*),Bash(tail:*)"
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
           # No `--comment` flag: that belongs to the BUILT-IN `code-review` skill, which is a

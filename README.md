@@ -274,24 +274,32 @@ tracking comment, and with it `use_sticky_comment`, which is unreachable outside
 So a pull request collects one comment per push, bounded by the plugin's guard rather than by
 comment re-use. The two shapes are exclusive; pick by which runaway you would rather cap.
 
-**`claude_args` is the complete permission set in agent mode**, not an addition to a default
-one — there is no default. `prepareAgentMode` derives every GitHub MCP server from this list,
-and headless CI has no approval prompt, so any tool the list omits is denied outright rather
-than queued for a human. Do not reason from the interactive CLI here, where the list merely
-pre-approves and `--disallowedTools` subtracts; that is a different mode. Tag mode hides the
-whole issue by building its own broad list.
+**`claude_args` is the complete BASH allowlist**, and the selector for which GitHub MCP servers
+get installed — not the complete tool set. `Read`, `Grep`, `Glob`, `Task` and `TodoWrite` are
+permitted by default and need no listing; on the first agent-mode run here `Read` executed five
+times and `Task` spawned seven subagents while absent from a four-entry list, and all 22
+permission denials were `Bash`.
 
-The consequence is that the four entries the action's examples pass are sized for their prose
-prompts, and are **not** enough for the plugin, whose agents read git history and search the
-tree. The first agent-mode run here logged 22 permission denials — `grep`, `cat`, `git`, `sed`,
-`find`, every `>` redirect, and every pipe — and ended after 18 turns having never read the
-diff, with no comment posted and a green job. Two things follow, and both are easy to get wrong:
+Bash, by contrast, gets nothing by default, and there is no curated list underneath to fall back
+on. Drop the input and `gh` and `git` are both denied *and* no MCP server is installed, so the
+review can neither read the diff nor post — four pull requests here did exactly that, as full
+Opus runs with green jobs and no comment.
 
-- **Every segment of a pipe must be allowed.** `Bash(gh pr diff:*)` permits `gh pr diff`, and
-  `gh pr diff | wc -l` is still refused with *"This Bash command contains multiple operations"*.
-- **Grant the structured tools, not more shell.** `Read`, `Grep` and `Glob` do what `cat`,
-  `grep` and `find` were being reached for, with no shell to segment and no redirect to block.
-  Granting those is what removes most of the pressure to pipe in the first place.
+The entries are **prefixes**, not subcommands. `Bash(gh:*)` and `Bash(git:*)` cover everything
+the plugin's agents do while still refusing `curl`, `rm`, `bash -c` and every other binary;
+enumerating subcommands only drifts as the plugin changes, and was never what provided the
+safety. Two things to know before debugging a denial:
+
+- **Every segment of a compound command must match**, which is why the read-only text utilities
+  are listed. `gh pr diff` alone was allowed on the first run and `gh pr diff | wc -l` was still
+  refused, so the agent could never size or filter the diff. `Read` and `Grep` cover reading a
+  *file*; neither can consume a command's stdout, which is what reviewing `gh pr diff` output
+  needs. The five included — `grep`, `cat`, `wc`, `head`, `tail` — are the ones that cannot write
+  or execute. **Do not add `sed`, `awk`, `find`, `sort` or `uniq`**: `sed -i` writes in place,
+  `awk` writes with `print >`, `find -exec` executes, and `sort`/`uniq` both take an output file
+  as an argument. Those are edits and execution wearing the costume of a filter.
+- **A redirect is blocked by the working-directory sandbox, not by this list.** No entry here
+  will enable `> /tmp/x` — which is also what keeps `cat` harmless.
 
 **`id-token: write` is required.** Unless a `github_token` is passed explicitly, the action's
 `setupGitHubToken()` always requests a GitHub OIDC token and exchanges it for a GitHub App

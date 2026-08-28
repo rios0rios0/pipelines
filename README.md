@@ -259,26 +259,29 @@ resolves `model: options.model || modelFromClaudeArgs` — the variable wins, an
 leaves `claude_args` free to be only about tools. Without it the CLI default applies, which in
 CI resolves to Claude Sonnet, not Opus.
 
-**The review mirrors the action's own `examples/pr-review-comprehensive.yml`**, down to passing
-the identical `--allowedTools` string. Three things about that shape are worth knowing, because
-each was got wrong here first and none of them fails loudly:
+**The review runs in agent mode, and that is a deliberate trade-off** — see the comment block
+above `claude_args:` in the workflow for the long form. `detectMode` returns agent mode for a
+`prompt` given without `track_progress`, and the difference decides whether the prompt is
+*executed* or merely *read*: agent mode runs the `/code-review:code-review` slash command, tag
+mode injects it into the action's own template as context, where the plugin installs, appears
+in `slash_commands` and never runs.
 
-- **`claude_args` is not an override of the action's defaults.** There are no default GitHub
-  tools to override: `--allowedTools` is the only thing that installs a GitHub MCP server.
-  Agent mode reads the list from `claude_args` alone, and `github_inline_comment` is gated on
-  it in **tag mode too** — `install-mcp-server.ts` wires that server on
-  `isPR && (hasGitHubMcpTools || hasInlineCommentTools)`, with none of the `!isAgentMode`
-  escape that `github_comment` gets. Drop the list and the review simply cannot post a
-  line-anchored comment, which is why the action's own tag-mode example passes it. It only
-  ever adds; `--disallowedTools` is what takes away.
-- **`track_progress: true` means `prompt` is context, not a command.** Tag mode injects it
-  into the action's own template rather than executing it, so a `/plugin:command` written
-  there is read as prose and never runs — the plugin installs, appears in `slash_commands`,
-  and does nothing. The review is therefore written as prose, with its scope rules stated
-  inline rather than delegated.
-- **`use_sticky_comment: true` keeps a pull request to one review comment.**
-  `create-initial.ts` looks up an existing Claude comment on a `pull_request` event and
-  updates it in place. Without it every `synchronize` adds another, none superseding the last.
+Running the plugin is what bounds the review — its multi-agent pipeline, its ≥80 confidence
+filter, its exclusion of pre-existing issues and of real issues on lines the pull request did
+not modify, and its guard that stops once Claude has already commented. What it costs is the
+tracking comment, and with it `use_sticky_comment`, which is unreachable outside tag mode
+(`createInitialComment` is its only consumer and is called only from `src/modes/tag/index.ts`).
+So a pull request collects one comment per push, bounded by the plugin's guard rather than by
+comment re-use. The two shapes are exclusive; pick by which runaway you would rather cap.
+
+**`claude_args` is not an override of the action's defaults**, and it is not a leftover from
+pinning a model. In agent mode there are no default GitHub tools to override: `prepareAgentMode`
+derives the entire GitHub MCP server set from this one list, so with it empty every `has*Tools`
+flag in `install-mcp-server.ts` is false, `mcpServers` comes back `{}`, no `--mcp-config` is
+emitted, and Claude reviews the pull request and then cannot post — four pull requests in this
+repository's history did exactly that, as full Opus runs with green jobs and no comment. All
+three of the action's own PR-review examples pass the identical string, in both modes. It only
+ever adds; `--disallowedTools` is what takes away.
 
 **`id-token: write` is required.** Unless a `github_token` is passed explicitly, the action's
 `setupGitHubToken()` always requests a GitHub OIDC token and exchanges it for a GitHub App

@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added the `runs_on` input to the Claude mention and review reusable workflows so consumers can route both onto self-hosted runners'
-time: '2026-08-27T22:19:38.053532291Z'

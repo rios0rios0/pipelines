@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added a workflow-composition assertion that no `workflow_call` input or secret description contains an evaluated expression'
-time: '2026-08-28T00:37:16.564722548Z'

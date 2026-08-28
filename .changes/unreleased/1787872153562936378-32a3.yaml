@@ -1,3 +1,0 @@
-kind: 'Security'
-body: 'fixed the `@claude` mention responder starting on any comment to a maintainer-opened thread whose body or title contained `@claude`: an `issue_comment` payload carries both `comment` and `issue`, so the third `if:` clause evaluated on comment events too and read the THREAD AUTHOR''s association instead of the commenter''s. It is now gated on `github.event.comment == null`. Not an escalation -- the action re-checks the actor''s write permission and refuses to act -- but the job started on the runner'
-time: '2026-08-27T23:09:13.562841943Z'

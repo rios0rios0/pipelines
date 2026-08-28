@@ -48,22 +48,69 @@ jobs:
         # Claude Mention" section) describes THIS pin's install chain -- `oven-sh/setup-bun`,
         # `@actions/tool-cache` resolving `unzip`, `$HOME/.bun/bin`, `bun install --production`.
         # `dependency-updates.yaml` exists to make this SHA move; re-read both when it does.
-        uses: 'anthropics/claude-code-action@70fec183852c4f82f3f1969faed7dd60c5149ca7' # v1.0.207
+        uses: 'anthropics/claude-code-action@a60f3e1db3edbceed2b1e6c6a9d34c36b8a15eba' # v1.0.209
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # `track_progress` forces tag mode (detector.ts checks it before the prompt check),
-          # and tag mode builds its own tool list including `mcp__github_comment__update_claude_comment`,
-          # so Claude can post without being handed an `--allowedTools` list. Agent mode -- what a
-          # bare `prompt:` selects -- derives its tools from `claude_args` alone and would leave
-          # Claude with no way to publish the review.
-          track_progress: true
+          # AGENT MODE, deliberately. There is no `track_progress` here and adding one would
+          # silently undo everything below -- read this before you do.
+          #
+          # `detectMode` returns tag mode whenever `track_progress` is set on an entity event,
+          # and agent mode when a `prompt` is given without it. The difference is not
+          # cosmetic: agent mode EXECUTES the prompt, tag mode injects it into the action's own
+          # template as CONTEXT. So the slash command below is a real invocation here and is
+          # inert there -- under `track_progress` the plugin still installs and still appears
+          # in `slash_commands`, it just never runs. That is not theoretical: a tag-mode review
+          # on this repository's PR #636 reported `subagent_stats.spawned: 0` against a command
+          # that mandates roughly seven, and logged its own reading of the prompt as "Custom
+          # instructions say /code-review:code-review ...".
+          #
+          # What running the plugin buys, and what it costs -- the two are exclusive, so the
+          # choice is about WHICH runaway you want bounded:
+          #
+          #   agent mode (here)  the plugin's command runs, so the review inherits its
+          #                      multi-agent pipeline, its >=80 confidence filter, its
+          #                      false-positive list (pre-existing issues, and real issues on
+          #                      lines the pull request did not modify, are both excluded), and
+          #                      its step-1 guard, which STOPS when Claude has already commented
+          #                      on the pull request. That guard is one-and-done: it gives no
+          #                      second round that verifies the first, and it is a Haiku
+          #                      judgement call rather than a hard gate.
+          #                      COST: no tracking comment (`claudeCommentId: undefined`), and
+          #                      `use_sticky_comment` does nothing -- `createInitialComment` is
+          #                      its only consumer and is called only from `src/modes/tag/index.ts`,
+          #                      so it is not merely unused here, it is unreachable. A pull
+          #                      request therefore accumulates one comment per push, bounded by
+          #                      the plugin's guard rather than by comment re-use.
+          #
+          #   tag mode           `use_sticky_comment: true` re-uses the one `claude[bot]`
+          #                      comment, so the pile stays at one -- but the plugin is inert and
+          #                      NOTHING bounds the findings. This repository ran that shape and
+          #                      got seven reviews on one pull request in seventy minutes, at
+          #                      6 -> 4 -> 4 -> 6 -> 5 findings, the last of them about three
+          #                      files that pull request never touched.
+          #
+          # `--allowedTools` is NOT an override of the action's defaults; in agent mode there are
+          # no default GitHub tools to override. `prepareAgentMode` derives the ENTIRE GitHub MCP
+          # server set from this one list: with it empty, every `has*Tools` flag in
+          # install-mcp-server.ts is false, `mcpServers` comes back `{}`, no `--mcp-config` is
+          # emitted, and Claude reviews the pull request and then cannot post. Four pull requests
+          # in this repository's history did exactly that -- full Opus runs, green jobs, zero
+          # comments. The string is copied verbatim from the action's own
+          # `examples/pr-review-filtered-authors.yml`; it only ever ADDS, since
+          # `--disallowedTools` is what takes away.
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
+          # No `--comment` flag: that belongs to the BUILT-IN `code-review` skill, which is a
+          # different command that also resolves under this name. The plugin's command takes the
+          # pull request as its argument and posts by itself through `gh pr comment`.
+          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
           show_full_output: true
           display_report: true
         env:
-          # Sets the model without touching `claude_args`: parse-sdk-options.ts resolves
-          # `model: options.model || modelFromClaudeArgs`, where `options.model` is this
-          # variable -- so it wins over `--model` and leaves the tool wiring alone.
+          # Sets the model without spending a `claude_args` slot on `--model`:
+          # parse-sdk-options.ts resolves `model: options.model || modelFromClaudeArgs`, where
+          # `options.model` is this variable -- so it wins either way, and `claude_args` above
+          # stays purely about which tools exist.
           ANTHROPIC_MODEL: 'claude-opus-5'

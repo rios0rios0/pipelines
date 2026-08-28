@@ -253,13 +253,35 @@ Pass the secret explicitly rather than with `secrets: inherit` — Semgrep's
 `yaml.github-actions.security.secrets-inherit` rule fails `make sast` on the inherited form.
 
 The caller's `permissions:` is a **ceiling** for the workflow it calls, so it must grant at
-least what the definition declares — `id-token: write` included. Neither definition passes
-`claude_args`: the review runs with `track_progress: true`, which puts the action in tag mode,
-where it wires its own posting tool. The model is pinned with the `ANTHROPIC_MODEL`
-environment variable rather than `--model`, because `parse-sdk-options.ts` resolves
-`model: options.model || modelFromClaudeArgs` — the variable wins, and setting it leaves the
-tool wiring untouched. Without it the CLI default applies, which in CI resolves to
-Claude Sonnet, not Opus.
+least what the definition declares — `id-token: write` included. The model is pinned with the
+`ANTHROPIC_MODEL` environment variable rather than `--model`, because `parse-sdk-options.ts`
+resolves `model: options.model || modelFromClaudeArgs` — the variable wins, and setting it
+leaves `claude_args` free to be only about tools. Without it the CLI default applies, which in
+CI resolves to Claude Sonnet, not Opus.
+
+**The review runs in agent mode, and that is a deliberate trade-off** — see the comment block
+above `claude_args:` in the workflow for the long form. `detectMode` returns agent mode for a
+`prompt` given without `track_progress`, and the difference decides whether the prompt is
+*executed* or merely *read*: agent mode runs the `/code-review:code-review` slash command, tag
+mode injects it into the action's own template as context, where the plugin installs, appears
+in `slash_commands` and never runs.
+
+Running the plugin is what bounds the review — its multi-agent pipeline, its ≥80 confidence
+filter, its exclusion of pre-existing issues and of real issues on lines the pull request did
+not modify, and its guard that stops once Claude has already commented. What it costs is the
+tracking comment, and with it `use_sticky_comment`, which is unreachable outside tag mode
+(`createInitialComment` is its only consumer and is called only from `src/modes/tag/index.ts`).
+So a pull request collects one comment per push, bounded by the plugin's guard rather than by
+comment re-use. The two shapes are exclusive; pick by which runaway you would rather cap.
+
+**`claude_args` is not an override of the action's defaults**, and it is not a leftover from
+pinning a model. In agent mode there are no default GitHub tools to override: `prepareAgentMode`
+derives the entire GitHub MCP server set from this one list, so with it empty every `has*Tools`
+flag in `install-mcp-server.ts` is false, `mcpServers` comes back `{}`, no `--mcp-config` is
+emitted, and Claude reviews the pull request and then cannot post — four pull requests in this
+repository's history did exactly that, as full Opus runs with green jobs and no comment. All
+three of the action's own PR-review examples pass the identical string, in both modes. It only
+ever adds; `--disallowedTools` is what takes away.
 
 **`id-token: write` is required.** Unless a `github_token` is passed explicitly, the action's
 `setupGitHubToken()` always requests a GitHub OIDC token and exchanges it for a GitHub App

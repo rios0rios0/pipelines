@@ -259,59 +259,21 @@ resolves `model: options.model || modelFromClaudeArgs` — the variable wins, an
 leaves `claude_args` free to be only about tools. Without it the CLI default applies, which in
 CI resolves to Claude Sonnet, not Opus.
 
-**The review runs in agent mode, and that is a deliberate trade-off** — see the comment block
-above `claude_args:` in the workflow for the long form. `detectMode` returns agent mode for a
-`prompt` given without `track_progress`, and the difference decides whether the prompt is
-*executed* or merely *read*: agent mode runs the `/code-review:code-review` slash command, tag
-mode injects it into the action's own template as context, where the plugin installs, appears
-in `slash_commands` and never runs.
-
-Running the plugin is what bounds the review — its multi-agent pipeline, its ≥80 confidence
-filter, its exclusion of pre-existing issues and of real issues on lines the pull request did
-not modify, and its guard that stops once Claude has already commented. What it costs is the
-tracking comment, and with it `use_sticky_comment`, which is unreachable outside tag mode
-(`createInitialComment` is its only consumer and is called only from `src/modes/tag/index.ts`).
-So a pull request collects one comment per push, bounded by the plugin's guard rather than by
-comment re-use. The two shapes are exclusive; pick by which runaway you would rather cap.
-
-**`claude_args` is the complete BASH allowlist**, and the selector for which GitHub MCP servers
-get installed — not the complete tool set. `Read`, `Grep`, `Glob`, `Task` and `TodoWrite` are
-permitted by default and need no listing; on the first agent-mode run here `Read` executed five
-times and `Task` spawned seven subagents while absent from a four-entry list, and all 22
-permission denials were `Bash`.
-
-Bash, by contrast, gets nothing by default, and there is no curated list underneath to fall back
-on. Drop the input and `gh` and `git` are both denied *and* no MCP server is installed, so the
-review can neither read the diff nor post — four pull requests here did exactly that, as full
-Opus runs with green jobs and no comment.
-
-The entries are **prefixes**, not subcommands. `Bash(gh:*)` and `Bash(git:*)` cover everything
-the plugin's agents do while still refusing `curl`, `rm`, `bash -c` and every other binary;
-enumerating subcommands only drifts as the plugin changes, and was never what provided the
-safety. Two things to know before debugging a denial:
-
-- **Every segment of a compound command must match**, which is why the read-only text utilities
-  are listed. `gh pr diff` alone was allowed on the first run and `gh pr diff | wc -l` was still
-  refused, so the agent could never size or filter the diff. `Read` and `Grep` cover reading a
-  *file*; neither can consume a command's stdout, which is what reviewing `gh pr diff` output
-  needs. The five included — `grep`, `cat`, `wc`, `head`, `tail` — are the ones that cannot write
-  or execute. **Do not add `sed`, `awk`, `find`, `sort` or `uniq`**: `sed -i` writes in place,
-  `awk` writes with `print >`, `find -exec` executes, and `sort`/`uniq` both take an output file
-  as an argument. Those are edits and execution wearing the costume of a filter.
-- **A redirect is blocked by the working-directory sandbox, not by this list.** No entry here
-  will enable `> /tmp/x` — which is also what keeps `cat` harmless.
-
-**The prompt appends instructions to the plugin's command, and they are not decoration.** The
-command contradicts itself on the clean-review case: step 6 says *"if there are no issues that
-meet this criteria, do not proceed"*, while its output-format section supplies a template for
-exactly that case. Both behaviours have been observed here on the same wiring. Silence is the
-wrong way to resolve it — a clean review and a crashed workflow are then the same observation,
-a green job with no comment, and this workflow was debugged twice on that ambiguity before the
-real cause surfaced. So the review is told to post on every run, to open with a short summary of
-what the pull request changes (a run that describes the diff proves it read it, where a bare
-"no issues found" does not), and when nothing survives the filter to name what it checked and
-list every finding it raised and dropped with the reason. A rejected finding is evidence the
-filter ran; an omitted one is indistinguishable from a check that never happened.
+**The review workflow runs three jobs** — `claude-review` (correctness and CLAUDE.md
+compliance), `security-review` (exploitable vulnerabilities only) and `design-review`
+(architecture and API design) — so a consumer gets all three checks from the one caller below,
+as the checks `claude-review / claude-review`, `claude-review / security-review` and
+`claude-review / design-review`. All three run in tag mode with tailored prose prompts, an
+explicit tool allowlist, and no plugin or subagent fan-out. That shape is deliberate and
+evidence-based: the plugin/agent-mode alternative loses roughly a third of its runs to a known
+upstream session-lifecycle bug and fails silently — a green job with no comment. The full
+forensics, the upstream issue links, and every operational fact about the allowlist live in
+[`.docs/claude-review.md`](.docs/claude-review.md); read it before changing the workflow. The
+design is modelled on [OneRedOak/claude-code-workflows](https://github.com/OneRedOak/claude-code-workflows),
+with its design review re-tailored from UI/UX to software design. Each prompt keeps the
+review disciplines that survived the debugging: the 4-agent pipeline run as sequential
+in-session passes, the ≥80 confidence filter with dropped findings listed, a posted comment on
+every run, and re-runs that verify previous findings instead of hunting new ones.
 
 **`id-token: write` is required.** Unless a `github_token` is passed explicitly, the action's
 `setupGitHubToken()` always requests a GitHub OIDC token and exchanges it for a GitHub App

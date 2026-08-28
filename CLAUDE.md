@@ -105,9 +105,10 @@ than the package manager — the same precedent Go sets with `go.yaml`.
 
 When adding a new language or toolchain, always use the toolchain name in the workflow file.
 
-Not every reusable workflow is a language pipeline. `reusable-claude-review.yaml` (automated
-review on every pull request) and `reusable-claude-mention.yaml` (the `@claude`
-mention responder) are standalone, like `dependency-updates.yaml` and
+Not every reusable workflow is a language pipeline. `reusable-claude-review.yaml` (three
+automated reviews on every pull request — correctness, security, and software design; its
+design and forensics live in `.docs/claude-review.md`) and `reusable-claude-mention.yaml`
+(the `@claude` mention responder) are standalone, like `dependency-updates.yaml` and
 `update-major-version-tag.yaml` — `claude` is an agent, not a toolchain, so they
 are listed in `STANDALONE` in `.github/tests/test-workflow-composition.sh` with
 the reason spelled out there. The `reusable-` prefix marks a definition: every

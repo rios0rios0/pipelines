@@ -98,6 +98,13 @@ jobs:
           # need no listing, every segment of a pipe must match, and the five text utilities
           # are the read-only ones (`sed`/`awk`/`find`/`sort`/`uniq` can write or execute).
           # Full semantics: `.docs/claude-review.md`.
+          #
+          # The prompt below RESTATES this list, and names the toolchains it deliberately
+          # excludes, because the action's own template instructs the model to install
+          # dependencies, run builds and then report the resulting denials as a permissions
+          # problem. Keep the two in step when editing either: `make test-workflow-composition`
+          # (Test 13) fails when a granted command is missing from the prompt, or when the
+          # prompt calls a granted command denied.
           claude_args: |
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh:*),Bash(git:*),Bash(grep:*),Bash(cat:*),Bash(wc:*),Bash(head:*),Bash(tail:*)"
           prompt: |
@@ -115,6 +122,41 @@ jobs:
             background or parallel agents, and never end your turn while any work is
             pending: this session is not resumed, and anything unfinished when your turn
             ends is lost.
+
+            Tools. This job hands you exactly: `Read`, `Grep`, `Glob` and `LS` over the
+            checked-out tree; `Bash` restricted to `gh`, `git`, `grep`, `cat`, `wc`, `head`
+            and `tail`, where every segment of a pipe must match, so `gh pr diff | sed ...`
+            is refused as a whole; the inline-comment tool; and the tool that updates the
+            tracking comment. Editing a file is possible and pointless -- this job never
+            pushes, so the working tree dies with the runner. The CI tools are listed in the
+            allowlist but their server is not installed without `actions: read`, which this
+            job does not take, so you cannot read the pipeline's results either.
+
+            Denied on purpose: every language toolchain and build entry point -- `go`,
+            `node`, `npm`, `yarn`, `pnpm`, `python`, `pip`, `pdm`, `mvn`, `gradle`, `dart`,
+            `flutter`, `dotnet`, `composer`, `bundle`, `terraform`, `terragrunt`, `docker`
+            and `make` -- together with installing dependencies and every other binary. That
+            is a decision, not a gap in your permissions. This repository's pipeline
+            compiles, lints, type-checks, scans and tests the change in dedicated jobs that
+            run on the same commit; they are the authority on whether it builds, they report
+            on the pull request where the reader already sees them, and a partial second
+            verdict from a review session would only contradict them at random.
+
+            The action's instructions above will tell you to plan repository setup and
+            linting/testing steps, and to report in your comment when a linter or test suite
+            was denied by permissions so that the allowlist can be widened. Both are
+            overridden here: plan no setup, install, build, lint or test step; run none of
+            them to "verify" a finding; and if you run one anyway and it is denied, do not
+            retry it and do not mention it. Never write a caveat, a "note on verification"
+            or a limitations section about what you could not compile or run -- the
+            permissions are deliberate, the reader did not choose them, and the note is
+            noise in a review that is otherwise about the code.
+
+            Review by reading: the diff, the files around it, the git history, and the
+            contracts the repository documents for itself. A finding you could only
+            establish by executing something is not a finding you can post -- read until it
+            reaches >=80 confidence, or drop it in the tracking comment's dropped list like
+            any other, with its score and reason.
 
             Scope: `gh pr diff` is the boundary of the review. A real problem on a line this
             pull request did not modify is out of scope -- leave it out, however tempting,

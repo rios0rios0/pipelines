@@ -153,6 +153,70 @@ dropped list. Two mechanics make the threads deterministic rather than model-dis
 
 Cost: one Opus session per push (the three-job layout cost three).
 
+### The review does not build, and says so
+
+The action's own tag-mode template ends with an analysis checklist whose last two steps are,
+verbatim:
+
+> e. Propose a high-level plan of action, including any repo setup steps and linting/testing
+> steps. Remember, you are on a fresh checkout of the branch, so you may need to install
+> dependencies, run build commands, etc.
+>
+> f. If you are unable to complete certain steps, such as running a linter or test suite,
+> particularly due to missing permissions, explain this in your comment so that the user can
+> update your `--allowedTools`.
+
+Both are wrong for this design, and the second one *published* the first. A review on a consumer
+repository closed with a **"Note on verification"** explaining that `go build ./...` and `go vet`
+had been denied by the tool permissions — a caveat about a deliberate decision, written to a
+reader who had not made it, occupying the end of a review that was otherwise about the code. The
+model was doing what it had been told; the instruction was the defect. Nothing in the workflow
+contradicted it, because the prompt described the review's *disciplines* and never its *tools*.
+
+Both prompts now do. Each states the surface it actually has, names the toolchains it excludes
+(`go`, `node`, `npm`, `yarn`, `pnpm`, `python`, `pip`, `pdm`, `mvn`, `gradle`, `dart`, `flutter`,
+`dotnet`, `composer`, `bundle`, `terraform`, `terragrunt`, `docker`, `make`), says that the
+exclusion is a decision rather than a gap, and overrides (e) and (f) by name: plan no setup step,
+run none to "verify" a finding, never retry a denied command, and never write a verification
+caveat or limitations section. The review adds the rule that makes it self-consistent — **a
+finding you could only establish by executing something is not a finding you can post**: read
+until it reaches ≥80 confidence, or drop it into the tracking comment's dropped list with its
+score and reason, like any other.
+
+The redirection is not "trust the code": the pipeline compiles, lints, type-checks, scans and
+tests the same commit in dedicated jobs, and reports on the same pull request. A partial second
+verdict from a review session cannot add to that, and can contradict it.
+
+`.github/tests/test-workflow-composition.sh` Test 13 holds the pairing, because the prose and the
+`--allowedTools` string are edited in different places for different reasons — a granted command
+missing from the prompt re-creates the defect, and a command the prompt calls denied while the
+allowlist grants it is the same drift reversed.
+
+### The mention responder needed `track_progress` to take a prompt at all
+
+`reusable-claude-mention.yaml` carries the same contract, and getting it there was not a matter of
+adding a `prompt:`. A prompt on a comment or issue event **selects agent mode**
+(`src/modes/detector.ts`), where the action's template is replaced by the custom prompt — the
+template being the thing that reads the `@claude` and answers it. A bare `prompt:` would therefore
+have turned the mention responder into something that runs those instructions and ignores the
+question, green throughout. `track_progress: true` forces tag mode back, which is the review's
+original plugin trap run in reverse: there, tag mode silently *disabled* the slash command; here,
+its absence would silently *replace* the responder.
+
+Tag mode's price is an event constraint, and it is a loud one: `validateTrackProgressEvent`
+accepts `pull_request`, `issues`, `issue_comment`, `pull_request_review_comment` and
+`pull_request_review`, and throws on everything else. Those five are what the documented caller
+subscribes to; a responder wired to some other event now fails by name instead of quietly not
+answering.
+
+Its tool surface was deliberately **not** widened to match the review's. The responder holds
+`contents: write` and checks a fork's branch out into the workspace, so every command added there
+is added on the exposed side of the boundary the workflow's header comment describes. It keeps
+what tag mode grants — `git add`, `git commit`, `git rm`, the push wrapper, `Read`/`Grep`/`Glob`/
+`LS`, the comment tool, and the CI tools — and the prompt says so, including that `gh`, `git diff`
+and `git log` are absent, so the model reads the pre-fetched `<changed_files>` list and the files
+themselves instead of discovering the gap by denial.
+
 ## Operational facts worth not relearning
 
 - `--allowedTools` only ever *selects*; in headless CI it is the entire Bash surface. Granting
@@ -167,3 +231,16 @@ Cost: one Opus session per push (the three-job layout cost three).
 - The model pin matters: without it the CLI default applies, which in CI resolves to Sonnet.
 - `id-token: write` is required — the action exchanges a GitHub OIDC token for the App token it
   posts with. Removing it fails every run with `Could not fetch an OIDC token`.
+- Tag mode MERGES its own `--allowedTools` with the one in `claude_args` rather than letting the
+  second overwrite the first (`base-action/src/parse-sdk-options.ts` accumulates the flag). So the
+  effective surface is `Glob`, `Grep`, `LS`, `Read`, the comment tool, `Bash(git add|commit|rm)`
+  plus the push wrapper, *and* everything this workflow lists.
+- The review cannot read CI results, and the reason is not the allowlist. Tag mode lists
+  `mcp__github_ci__*` unconditionally, but `prepareMcpConfig` installs that server only after
+  `checkActionsReadPermission` passes — and the review job does not take `actions: read`. Adding it
+  is not free: a called workflow cannot hold a permission its caller did not grant, so it would
+  have to be added to every consumer's caller first. The mention responder does take it, which is
+  why only that prompt offers the CI tools.
+- `--permission-mode acceptEdits` is set by tag mode, so file edits inside the workspace are
+  allowed even though `Edit`/`Write` appear in no list. The review job never pushes, so an edit is
+  discarded with the runner — worth knowing before reading the allowlist as proof of read-only.

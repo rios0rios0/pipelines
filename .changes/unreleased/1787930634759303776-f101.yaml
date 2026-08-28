@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added a thirteenth assertion to `make test-workflow-composition`, pairing each Claude workflow prompt with the tools its job actually grants. A granted `Bash(...)` command missing from the prompt re-creates the defect the prompts exist to fix (the model meets its own tools by being denied them); a command the prompt calls denied while the allowlist grants it is the same drift reversed. The same assertion pins `prompt` to `track_progress: true`, so the mention responder cannot be flipped into agent mode by an edit that looks like adding context. All four failure shapes were proven to fire against deliberate violations.'
+time: '2026-08-28T15:23:54.759243127Z'

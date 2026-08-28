@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'classified a refused Fly `apps create`: a globally-taken app name is reported as its own cause instead of as an app-scoped token, which no credential change can fix'
+time: '2026-08-28T20:40:59.432418414Z'

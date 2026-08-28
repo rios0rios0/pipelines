@@ -645,7 +645,7 @@ The `50-deployment` stage ships jobs for the five platforms most worth using to 
 | **Netlify** | 300 credits/month; deploys cost 15 each, bandwidth 20/GB — roughly **20 deploys/month** | `netlify deploy --no-build` |
 | **Fly.io** | **None.** Withdrawn 2024 (2-hour trial); ~**$2/mo** always-on, ~35 regions | `flyctl deploy --remote-only` |
 
-Five constraints shape this family; do not "simplify" any of them away:
+Six constraints shape this family; do not "simplify" any of them away:
 
 | Constraint | Why |
 |------------|-----|

@@ -253,13 +253,32 @@ Pass the secret explicitly rather than with `secrets: inherit` — Semgrep's
 `yaml.github-actions.security.secrets-inherit` rule fails `make sast` on the inherited form.
 
 The caller's `permissions:` is a **ceiling** for the workflow it calls, so it must grant at
-least what the definition declares — `id-token: write` included. Neither definition passes
-`claude_args`: the review runs with `track_progress: true`, which puts the action in tag mode,
-where it wires its own posting tool. The model is pinned with the `ANTHROPIC_MODEL`
-environment variable rather than `--model`, because `parse-sdk-options.ts` resolves
-`model: options.model || modelFromClaudeArgs` — the variable wins, and setting it leaves the
-tool wiring untouched. Without it the CLI default applies, which in CI resolves to
-Claude Sonnet, not Opus.
+least what the definition declares — `id-token: write` included. The model is pinned with the
+`ANTHROPIC_MODEL` environment variable rather than `--model`, because `parse-sdk-options.ts`
+resolves `model: options.model || modelFromClaudeArgs` — the variable wins, and setting it
+leaves `claude_args` free to be only about tools. Without it the CLI default applies, which in
+CI resolves to Claude Sonnet, not Opus.
+
+**The review mirrors the action's own `examples/pr-review-comprehensive.yml`**, down to passing
+the identical `--allowedTools` string. Three things about that shape are worth knowing, because
+each was got wrong here first and none of them fails loudly:
+
+- **`claude_args` is not an override of the action's defaults.** There are no default GitHub
+  tools to override: `--allowedTools` is the only thing that installs a GitHub MCP server.
+  Agent mode reads the list from `claude_args` alone, and `github_inline_comment` is gated on
+  it in **tag mode too** — `install-mcp-server.ts` wires that server on
+  `isPR && (hasGitHubMcpTools || hasInlineCommentTools)`, with none of the `!isAgentMode`
+  escape that `github_comment` gets. Drop the list and the review simply cannot post a
+  line-anchored comment, which is why the action's own tag-mode example passes it. It only
+  ever adds; `--disallowedTools` is what takes away.
+- **`track_progress: true` means `prompt` is context, not a command.** Tag mode injects it
+  into the action's own template rather than executing it, so a `/plugin:command` written
+  there is read as prose and never runs — the plugin installs, appears in `slash_commands`,
+  and does nothing. The review is therefore written as prose, with its scope rules stated
+  inline rather than delegated.
+- **`use_sticky_comment: true` keeps a pull request to one review comment.**
+  `create-initial.ts` looks up an existing Claude comment on a `pull_request` event and
+  updates it in place. Without it every `synchronize` adds another, none superseding the last.
 
 **`id-token: write` is required.** Unless a `github_token` is passed explicitly, the action's
 `setupGitHubToken()` always requests a GitHub OIDC token and exchanges it for a GitHub App

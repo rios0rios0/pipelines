@@ -22,7 +22,7 @@ on:
 # `shell: bash`; `oven-sh/setup-bun` unpacks Bun through `@actions/tool-cache`, which resolves
 # `unzip` and throws when it is absent; Bun installs into `$HOME/.bun/bin`, so `$HOME` must be
 # writable; `bun install --production` then resolves the action's dependencies from the npm
-# registry; and the checkout -- plus the plugin marketplace cloned below -- needs `git`. So:
+# registry; and the checkout needs `git`. So:
 # `bash`, `git` and `unzip` on `PATH`, a writable `$HOME`, and egress to `github.com`,
 # `registry.npmjs.org`, `api.github.com` and `api.anthropic.com`. A missing one does not fail at
 # job selection -- it fails minutes in, inside the action, with an error that never names the
@@ -48,22 +48,65 @@ jobs:
         # Claude Mention" section) describes THIS pin's install chain -- `oven-sh/setup-bun`,
         # `@actions/tool-cache` resolving `unzip`, `$HOME/.bun/bin`, `bun install --production`.
         # `dependency-updates.yaml` exists to make this SHA move; re-read both when it does.
-        uses: 'anthropics/claude-code-action@70fec183852c4f82f3f1969faed7dd60c5149ca7' # v1.0.207
+        uses: 'anthropics/claude-code-action@a60f3e1db3edbceed2b1e6c6a9d34c36b8a15eba' # v1.0.209
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # This block mirrors the action's own `examples/pr-review-comprehensive.yml`.
           # `track_progress` forces tag mode (detector.ts checks it before the prompt check),
-          # and tag mode builds its own tool list including `mcp__github_comment__update_claude_comment`,
-          # so Claude can post without being handed an `--allowedTools` list. Agent mode -- what a
-          # bare `prompt:` selects -- derives its tools from `claude_args` alone and would leave
-          # Claude with no way to publish the review.
+          # which always installs the `github_comment` server -- but NOT the inline-comment one.
           track_progress: true
-          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
-          plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
+          # NOT an override of the action's defaults, and not a leftover from pinning a model:
+          # `--allowedTools` is the ONLY thing that installs a GitHub MCP server. In agent mode
+          # `prepareAgentMode` reads the list from `claude_args` alone, and in TAG MODE the
+          # inline-comment server is gated on it too -- install-mcp-server.ts wires
+          # `github_inline_comment` on `isPR && (hasGitHubMcpTools || hasInlineCommentTools)`,
+          # with no `!isAgentMode` escape the way `github_comment` has one. Without this list
+          # the review cannot post a line-anchored comment at all, which is why the action's own
+          # tag-mode example passes this identical string. It only ADDS permissions -- taking
+          # them away is `--disallowedTools`.
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+          # Re-uses the one `claude[bot]` comment instead of adding another per push:
+          # create-initial.ts looks up an existing Claude comment on a `pull_request` event and
+          # UPDATES it. Without this a long-lived pull request accumulates one review comment
+          # per `synchronize` -- 7 on one of this repository's own, none of them superseding
+          # the last.
+          use_sticky_comment: true
+          # Prose, in the shape the official example uses -- NOT a slash command. Tag mode
+          # injects `prompt` into its own template as context instead of executing it, so a
+          # `/plugin:command` here is read as text and never runs: the review that ships is
+          # whatever this prompt asks for, and nothing else bounds it. That is why the scope
+          # rules below are spelled out rather than delegated to a plugin.
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Review this pull request. Its branch is already checked out in the working directory.
+
+            Scope -- settle this before reporting anything:
+
+            - Run `gh pr diff` and treat that diff as the boundary of the review.
+            - A real problem on a line this pull request did not touch is OUT OF SCOPE.
+              Leave it out, however tempting; say nothing about files it did not change.
+            - Do not report what a linter, type checker, formatter or the test suite would
+              catch. Those run as their own jobs and are not your job.
+            - Do not report missing tests, missing documentation or general code quality
+              unless the repository's CLAUDE.md requires them for this specific change.
+            - Report only what you checked against the code. Drop anything you are not
+              confident is real -- a short review of certain findings is worth more than a
+              long one padded with maybes.
+
+            If you have already reviewed this pull request -- check `gh pr view` for an earlier
+            comment of your own -- do NOT review it again from scratch. Report only whether each
+            finding in that comment was addressed, and add nothing new.
+
+            Anchor an issue to its line with an inline comment; use one top-level comment for the
+            summary. If you find nothing, say so in one sentence.
           show_full_output: true
           display_report: true
         env:
-          # Sets the model without touching `claude_args`: parse-sdk-options.ts resolves
-          # `model: options.model || modelFromClaudeArgs`, where `options.model` is this
-          # variable -- so it wins over `--model` and leaves the tool wiring alone.
+          # Sets the model without spending a `claude_args` slot on `--model`:
+          # parse-sdk-options.ts resolves `model: options.model || modelFromClaudeArgs`, where
+          # `options.model` is this variable -- so it wins either way, and `claude_args` above
+          # stays purely about which tools exist.
           ANTHROPIC_MODEL: 'claude-opus-5'

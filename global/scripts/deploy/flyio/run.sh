@@ -173,11 +173,36 @@ if [ -n "$FLY_RESOLVED_APP" ] && [ -n "${FLY_ORG:-}" ] && ! deploy_is_dry_run; t
     # that file must end the job holding the DEPLOY command -- it is the first
     # thing anyone debugging a red deploy reads. Provisioning is not the deploy.
     # No credential is on this argv either; the org slug is not a secret.
-    if ! flyctl apps create "$FLY_RESOLVED_APP" --org "$FLY_ORG"; then
+    #
+    # The failure is CLASSIFIED rather than reported with one guess. There are two
+    # unrelated reasons `apps create` is refused, they need opposite fixes, and the
+    # first version of this block advised the token fix for both:
+    #
+    #   * `Name has already been taken` -- Fly app names are GLOBALLY unique across
+    #     every customer, not scoped to an organisation, so no permission change can
+    #     obtain one that is held. Combined with the lookup above, this narrows the
+    #     cause to TWO situations that flyctl's output cannot tell apart, and the
+    #     message names both rather than picking one: a stranger holds the name (the
+    #     likely case for an unprefixed name, since role-shaped names like
+    #     `api-staging`, `web` and `api` are long gone), or the operator's OWN
+    #     account holds it under an organisation `FLY_ORG` does not name -- `apps
+    #     list` only ever shows what the token can reach, so a token scoped to one
+    #     org is blind to an app the same person owns in another. Asserting the
+    #     first would tell that operator to rename a running application when the
+    #     fix was to point FLY_ORG at the org that already owns it.
+    #   * anything else -- most often an app-scoped token, which cannot create apps.
+    if ! FLY_CREATE_LOG=$(flyctl apps create "$FLY_RESOLVED_APP" --org "$FLY_ORG" 2>&1); then
+      printf '%s\n' "$FLY_CREATE_LOG" >&2
       echo "ERROR: could not create Fly app '$FLY_RESOLVED_APP' in org '$FLY_ORG'." >&2
-      echo "If the token is APP-SCOPED it cannot create apps: mint an org-scoped one with 'flyctl tokens create org --org $FLY_ORG', or create the app by hand and leave FLY_ORG unset." >&2
+      if printf '%s\n' "$FLY_CREATE_LOG" | grep -qi 'already been taken'; then
+        echo "The name '$FLY_RESOLVED_APP' is already taken on Fly: app names are GLOBALLY unique, not per-organisation, and the lookup above already proved it is not in '$FLY_ORG' -- so it is held either by another account, or by another organisation of yours that FLY_ORG does not name." >&2
+        echo "This is NOT a token problem -- no credential can claim a name somebody else holds. If the app is yours, point FLY_ORG at the organisation that owns it ('flyctl apps list' under that org). Otherwise choose a name unique to you (prefix it with your org or product) and set FLY_APP_NAME, or 'app = \"<name>\"' in '$FLY_CONFIG', to match." >&2
+      else
+        echo "If the token is APP-SCOPED it cannot create apps: mint an org-scoped one with 'flyctl tokens create org --org $FLY_ORG', or create the app by hand and leave FLY_ORG unset." >&2
+      fi
       exit 1
     fi
+    printf '%s\n' "$FLY_CREATE_LOG"
   fi
 fi
 

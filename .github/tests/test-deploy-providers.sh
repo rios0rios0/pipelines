@@ -500,6 +500,16 @@ assert_true "flyio: app creation is skipped on a dry run" \
 assert_true "flyio: the app is looked up before it is created" \
   "grep -q 'apps list --json' '$FLYIO_SH'"
 
+# A refused `apps create` has two unrelated causes needing opposite fixes, and the
+# first version of this block advised the token fix for both. A globally-taken name
+# is the likelier one for any unprefixed name, and no credential can resolve it.
+assert_true "flyio: a create failure distinguishes a taken name from a narrow token" \
+  "grep -q 'already been taken' '$FLYIO_SH'"
+assert_true "flyio: a taken name is not reported as a token problem" \
+  "grep -q 'NOT a token problem' '$FLYIO_SH'"
+assert_true "flyio: the app-scoped-token hint survives for every other failure" \
+  "grep -q 'tokens create org' '$FLYIO_SH'"
+
 # The cross-platform wiring contract, applied to the new variable: a knob added
 # on one platform and forgotten on the other two leaves three files that are each
 # valid YAML on their own, which nothing else in CI would catch.

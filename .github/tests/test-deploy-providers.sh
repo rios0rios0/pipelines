@@ -114,7 +114,7 @@ run_provider() {
       CLOUDFLARE_PRODUCTION_BRANCH CLOUDFLARE_API_URL \
       NETLIFY_AUTH_TOKEN NETLIFY_SITE_ID NETLIFY_OUTPUT_DIRECTORY NETLIFY_DEPLOY_MESSAGE \
       RENDER_API_KEY RENDER_SERVICE_ID RENDER_SERVICE_NAME RENDER_DEPLOY_HOOK_URL \
-      FLY_API_TOKEN FLY_APP_NAME FLY_CONFIG FLY_STRATEGY \
+      FLY_API_TOKEN FLY_APP_NAME FLY_ORG FLY_CONFIG FLY_STRATEGY \
       DEPLOY_ENVIRONMENT
     export SCRIPTS_DIR
     export DEPLOY_DRY_RUN=true
@@ -428,6 +428,54 @@ assert_true "flyio: a missing token fails the job" "[[ $STATUS -eq 1 ]]"
 # assertion on the very comment explaining why the code does not do it.
 assert_true "flyio: the CLI is not installed by piping a remote script to a shell" \
   "! sed 's/#.*//' '$SCRIPTS_DIR/global/scripts/deploy/flyio/run.sh' | grep -qE 'curl[^|]*\\|[[:space:]]*(ba)?sh'"
+
+# App auto-creation (FLY_ORG). `flyctl deploy` does not create apps, so a new
+# environment's first run is red without this; it is opt-in because it forces an
+# ORG-SCOPED token, an app-scoped one being unable to create apps.
+#
+# The dry run is the assertion that keeps this suite hermetic: FLY_ORG set must
+# still reach the same deploy argv and must not shell out to `flyctl apps` --
+# the harness has no credentials and no network, and a creation attempt here
+# would be the one step in this family that tried to use them.
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_ORG=my-org
+assert_equals "flyio: FLY_ORG does not change the deploy that is performed" \
+  "flyctl deploy --remote-only --app my-mvp" "$CMD"
+assert_true "flyio: a dry run never attempts to create the app" \
+  "! grep -q 'creating it in org' <<< \"\$OUT\""
+assert_no_leak "flyio: the API token is never recorded with FLY_ORG set"
+
+# `command.txt` must end the job holding the DEPLOY command -- it is the first
+# thing anyone debugging a red deploy reads. Routing the creation through
+# `deploy_run` would overwrite it with `apps create`, so the creation deliberately
+# calls flyctl directly and this pins that it stays that way.
+assert_true "flyio: creating the app does not overwrite the recorded deploy command" \
+  "! grep -q 'apps create' '$REPORT_DIR/command.txt'"
+
+# Both guards, asserted on the source: without FLY_ORG the step is skipped (which
+# is what keeps app-scoped tokens viable), and without the dry-run guard this
+# suite could not run offline.
+assert_true "flyio: app creation is gated on FLY_ORG being set" \
+  "grep -q 'FLY_ORG:-' '$FLYIO_SH'"
+assert_true "flyio: app creation is skipped on a dry run" \
+  "grep -q 'deploy_is_dry_run' '$FLYIO_SH'"
+
+# Existence is checked before creating. Fly app names are GLOBALLY unique, so
+# 'create and ignore the error' would report success against an app owned by an
+# unrelated organisation.
+assert_true "flyio: the app is looked up before it is created" \
+  "grep -q 'apps list --json' '$FLYIO_SH'"
+
+# The cross-platform wiring contract, applied to the new variable: a knob added
+# on one platform and forgotten on the other two leaves three files that are each
+# valid YAML on their own, which nothing else in CI would catch.
+assert_true "flyio: GitHub action forwards FLY_ORG" \
+  "grep -q 'FLY_ORG' '$SCRIPTS_DIR/github/global/stages/50-deployment/flyio/action.yaml'"
+assert_true "flyio: Azure template forwards FLY_ORG" \
+  "grep -q 'FLY_ORG' '$SCRIPTS_DIR/azure-devops/global/stages/50-deployment/flyio.yaml'"
+assert_true "flyio: GitLab template documents FLY_ORG" \
+  "grep -q 'FLY_ORG' '$SCRIPTS_DIR/gitlab/global/stages/50-deployment/flyio.yaml'"
+assert_true "flyio: the reusable workflow exposes fly_org" \
+  "grep -q 'fly_org' '$SCRIPTS_DIR/.github/workflows/go-flyio.yaml'"
 echo ""
 
 # ---------------------------------------------------------------------------

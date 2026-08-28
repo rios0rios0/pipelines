@@ -92,6 +92,55 @@ if ! command -v flyctl > /dev/null 2>&1 && ! deploy_is_dry_run; then
   exit 1
 fi
 
+# Create the app on its first deploy, so standing up a new environment does not
+# depend on somebody remembering to run `flyctl apps create` by hand. `flyctl
+# deploy` does NOT create an app -- it fails with `Could not find App "<name>"`
+# -- so without this the first pipeline of every new environment is red, and the
+# fix lives in one person's shell history instead of in this repository.
+#
+# OPT-IN, via FLY_ORG. Left unset the whole step is skipped and nothing changes
+# for a consumer that creates its apps deliberately. That default matters
+# because of the token scope this costs:
+#
+#   * An APP-SCOPED deploy token (`flyctl tokens create deploy --app <app>`)
+#     CANNOT create apps. It is the tighter credential -- a token for
+#     `api-staging` cannot touch `api-production` -- and it is the right choice
+#     when the apps already exist.
+#   * Auto-creation therefore requires an ORG-SCOPED token (`flyctl tokens
+#     create org --org <org>`), which can manage EVERY app in the organisation.
+#
+# That is a real widening of blast radius and it is the consumer's call, not
+# this library's. Setting FLY_ORG is the consumer stating it made that trade.
+#
+# Existence is checked with `apps list` rather than by running `apps create` and
+# swallowing the error. Fly app names are GLOBALLY unique, so a name already
+# taken by an unrelated organisation is rejected with the same "already taken"
+# message as one of ours -- treating that as success would report a green deploy
+# against an app this account does not own. `apps list` only ever shows apps the
+# token can actually reach, so a miss means "create it", never "someone else has
+# it and we quietly gave up".
+if [ -n "${FLY_APP_NAME:-}" ] && [ -n "${FLY_ORG:-}" ] && ! deploy_is_dry_run; then
+  # `--json` rather than the table: the human table's columns are presentation
+  # and may be re-laid-out by any flyctl release, while the JSON key is the
+  # API's own name for the field. The trailing quote in the pattern keeps the
+  # match exact, so `api-staging` does not match an existing `api-staging-2`.
+  if flyctl apps list --json 2>/dev/null \
+    | grep -qi "\"name\"[[:space:]]*:[[:space:]]*\"${FLY_APP_NAME}\""; then
+    echo "Fly app '$FLY_APP_NAME' already exists; deploying into it."
+  else
+    echo "Fly app '$FLY_APP_NAME' does not exist; creating it in org '$FLY_ORG'..."
+    # NOT routed through `deploy_run`: that helper overwrites `command.txt`, and
+    # that file must end the job holding the DEPLOY command -- it is the first
+    # thing anyone debugging a red deploy reads. Provisioning is not the deploy.
+    # No credential is on this argv either; the org slug is not a secret.
+    if ! flyctl apps create "$FLY_APP_NAME" --org "$FLY_ORG"; then
+      echo "ERROR: could not create Fly app '$FLY_APP_NAME' in org '$FLY_ORG'." >&2
+      echo "If the token is APP-SCOPED it cannot create apps: mint an org-scoped one with 'flyctl tokens create org --org $FLY_ORG', or create the app by hand and leave FLY_ORG unset." >&2
+      exit 1
+    fi
+  fi
+fi
+
 # `--remote-only` builds the image on Fly's builder rather than on the CI
 # runner. That is the right default here because it removes the need for a
 # Docker daemon in the job -- GitLab and Azure DevOps agents frequently have

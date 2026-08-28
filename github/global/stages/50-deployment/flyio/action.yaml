@@ -8,6 +8,15 @@ inputs:
     type: 'string'
     required: false
     default: ''
+  org:
+    description: |
+      Fly.io organization slug. Setting it lets the deploy CREATE the app when it does not exist
+      yet, so a new environment's first run is not red. Requires an ORG-SCOPED token
+      (`flyctl tokens create org`) -- an app-scoped deploy token cannot create apps. Leave empty
+      to keep app-scoped tokens and create apps by hand.
+    type: 'string'
+    required: false
+    default: ''
   config:
     description: 'Path to the Fly configuration file.'
     type: 'string'
@@ -46,6 +55,7 @@ runs:
       env:
         FLY_API_TOKEN: '${{ inputs.fly_api_token }}'
         FLY_APP_NAME: '${{ inputs.app_name }}'
+        FLY_ORG: '${{ inputs.org }}'
         FLY_CONFIG: '${{ inputs.config }}'
         FLY_STRATEGY: '${{ inputs.strategy }}'
         DEPLOY_ENVIRONMENT: '${{ inputs.environment }}'

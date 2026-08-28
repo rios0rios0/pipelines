@@ -301,6 +301,18 @@ safety. Two things to know before debugging a denial:
 - **A redirect is blocked by the working-directory sandbox, not by this list.** No entry here
   will enable `> /tmp/x` — which is also what keeps `cat` harmless.
 
+**The prompt appends instructions to the plugin's command, and they are not decoration.** The
+command contradicts itself on the clean-review case: step 6 says *"if there are no issues that
+meet this criteria, do not proceed"*, while its output-format section supplies a template for
+exactly that case. Both behaviours have been observed here on the same wiring. Silence is the
+wrong way to resolve it — a clean review and a crashed workflow are then the same observation,
+a green job with no comment, and this workflow was debugged twice on that ambiguity before the
+real cause surfaced. So the review is told to post on every run, to open with a short summary of
+what the pull request changes (a run that describes the diff proves it read it, where a bare
+"no issues found" does not), and when nothing survives the filter to name what it checked and
+list every finding it raised and dropped with the reason. A rejected finding is evidence the
+filter ran; an omitted one is indistinguishable from a check that never happened.
+
 **`id-token: write` is required.** Unless a `github_token` is passed explicitly, the action's
 `setupGitHubToken()` always requests a GitHub OIDC token and exchanges it for a GitHub App
 token, which is how it posts reviews and comments. That is GitHub authentication and is

@@ -122,6 +122,41 @@ on:
           ORG-SCOPED token (`flyctl tokens create org --org <org>`) that can manage EVERY app in the
           organisation. Leave this empty to keep the tighter app-scoped token, one per environment,
           and create the apps deliberately.
+      fly_app_name_var:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Name of a caller VARIABLE holding the app name, read inside the deployment job — pass
+          `FLY_APP_NAME` to resolve `vars.FLY_APP_NAME`. Takes effect only when `fly_app_name` is
+          empty; the literal input always wins.
+
+          This exists for the same constraint `build_env_vars` documents in the Cloudflare
+          workflows: a job that calls a reusable workflow **cannot declare `environment:`**, so its
+          `with:` block is evaluated with no environment selected and `vars.FLY_APP_NAME` in a
+          caller resolves to the REPOSITORY-level variable rather than to staging's. Anything
+          scoped per environment therefore cannot be passed as an input at all — it has to be named
+          here and read in the job that declares the environment.
+
+          What it buys: one repository deploying two apps stops spelling their names in a workflow
+          file. Renaming an app becomes editing an environment variable, not committing code — and
+          Fly app names are globally unique, so a rename is a thing that genuinely happens.
+
+          A name that resolves to nothing FAILS the job rather than deploying somewhere else: a
+          variable set on one environment and forgotten on the other is the failure this must not
+          make silent.
+      fly_org_var:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Name of a caller VARIABLE holding the organization slug, resolved exactly as
+          `fly_app_name_var` is, and used only when `fly_org` is empty. Separate orgs per
+          environment are a stronger isolation story than one org holding both, and this is what
+          makes that expressible without a literal in the workflow.
+
+          Unlike the app name, an unresolvable name is NOT a failure here: an empty org is the
+          documented "do not auto-create" state, not a misconfiguration.
       fly_config:
         type: 'string'
         required: false
@@ -241,11 +276,29 @@ jobs:
         env:
           FLY_API_TOKEN: '${{ secrets.fly_api_token }}'
 
+      # Resolved HERE because this is the first job with an environment to resolve against --
+      # see `fly_app_name_var` for why a caller cannot pass an environment-scoped value at all.
+      #
+      # `vars[<name>]` indexes the context in the expression, which is enough for a single value;
+      # the Cloudflare workflows need python only because their input carries a LIST of names.
+      # The context is the caller's, merged organization < repository < environment, so a slug
+      # shared by both environments stays a single repository variable.
+      #
+      # Failing here rather than letting an empty name through is the point: `flyctl deploy` with
+      # no app resolves to whatever `fly.toml` declares, which for a repository deploying two apps
+      # is deliberately nothing -- so the alternative to this error is a confusing failure two
+      # steps later, or, for a repository that does declare `app`, a deploy to the WRONG one.
+      - if: "inputs.fly_app_name == '' && inputs.fly_app_name_var != '' && vars[inputs.fly_app_name_var] == ''"
+        run: |
+          echo "::error::fly_app_name_var names '${{ inputs.fly_app_name_var }}', which is not set for this deployment. Set it as a variable on the '${{ inputs.deployment_environment != '' && inputs.deployment_environment || (github.ref_type == 'tag' && 'production' || 'staging') }}' environment (or on the repository, if both environments share one app)."
+          exit 1
+        shell: 'bash'
+
       - uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/flyio@main'
         with:
           fly_api_token: '${{ secrets.fly_api_token }}'
-          app_name: '${{ inputs.fly_app_name }}'
-          org: '${{ inputs.fly_org }}'
+          app_name: "${{ inputs.fly_app_name != '' && inputs.fly_app_name || vars[inputs.fly_app_name_var] }}"
+          org: "${{ inputs.fly_org != '' && inputs.fly_org || vars[inputs.fly_org_var] }}"
           config: '${{ inputs.fly_config }}'
           strategy: '${{ inputs.fly_strategy }}'
           environment: ${{ inputs.deployment_environment != '' && inputs.deployment_environment || (github.ref_type == 'tag' && 'production' || 'staging') }}

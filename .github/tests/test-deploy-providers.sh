@@ -521,6 +521,27 @@ assert_true "flyio: GitLab template documents FLY_ORG" \
   "grep -q 'FLY_ORG' '$SCRIPTS_DIR/gitlab/global/stages/50-deployment/flyio.yaml'"
 assert_true "flyio: the reusable workflow exposes fly_org" \
   "grep -q 'fly_org' '$SCRIPTS_DIR/.github/workflows/go-flyio.yaml'"
+
+# Per-environment app naming. A calling job cannot declare `environment:`, so an
+# environment-scoped variable can only be NAMED by the caller and read inside the
+# job that has the environment -- the same constraint `build_env_vars` carries in
+# the Cloudflare workflows. Structural, because the harness exercises run.sh and
+# not the reusable workflow.
+GO_FLYIO="$SCRIPTS_DIR/.github/workflows/go-flyio.yaml"
+assert_true "flyio: the app name can be named as a caller variable" \
+  "grep -q 'fly_app_name_var' '$GO_FLYIO'"
+assert_true "flyio: the org can be named as a caller variable" \
+  "grep -q 'fly_org_var' '$GO_FLYIO'"
+assert_true "flyio: the named variable is indexed inside the environment-scoped job" \
+  "grep -q 'vars\[inputs.fly_app_name_var\]' '$GO_FLYIO'"
+# A literal input must keep winning, or a caller that passes both silently gets the
+# variable and cannot tell which one it deployed.
+assert_true "flyio: an explicit fly_app_name still wins over the named variable" \
+  "grep -q \"inputs.fly_app_name != '' && inputs.fly_app_name || vars\[\" '$GO_FLYIO'"
+# An unset variable must fail loudly: an empty app name falls through to whatever
+# fly.toml declares, which for a two-app repository is deliberately nothing.
+assert_true "flyio: a named variable that resolves to nothing fails the job" \
+  "grep -q 'which is not set for this deployment' '$GO_FLYIO'"
 echo ""
 
 # ---------------------------------------------------------------------------

@@ -1444,6 +1444,13 @@ stdin instead.
 | Netlify | `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID` | `NETLIFY_OUTPUT_DIRECTORY`, `NETLIFY_DEPLOY_MESSAGE` |
 | Fly.io | `FLY_API_TOKEN` | `FLY_APP_NAME`, `FLY_ORG`, `FLY_CONFIG`, `FLY_STRATEGY` |
 
+On GitHub Actions, `go-flyio.yaml` also accepts `fly_app_name_var` / `fly_org_var` — the *name* of a
+caller variable rather than a value — so one repository can deploy a differently-named app per
+environment without spelling either name in a workflow file. A calling job cannot declare
+`environment:`, so an environment-scoped variable has to be named by the caller and read inside the
+job that has the environment; passing `vars.FLY_APP_NAME` as an input would silently resolve to the
+repository-level value instead. A named variable that resolves to nothing fails the job.
+
 Set `FLY_ORG` to have the Fly.io deploy **create the app when it does not exist yet** — `flyctl
 deploy` does not create apps, so without it the first pipeline of every new environment is red for a
 reason that is fixed by hand and never written down. It is opt-in because of what it costs in token

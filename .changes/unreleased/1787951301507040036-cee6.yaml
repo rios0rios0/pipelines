@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'passed the Fly variable-name inputs to the shell through `env:` instead of splicing them into the script body, and warned when `fly_org_var` names a variable that is not set'
+time: '2026-08-28T21:08:21.506950525Z'

@@ -521,6 +521,37 @@ assert_true "flyio: GitLab template documents FLY_ORG" \
   "grep -q 'FLY_ORG' '$SCRIPTS_DIR/gitlab/global/stages/50-deployment/flyio.yaml'"
 assert_true "flyio: the reusable workflow exposes fly_org" \
   "grep -q 'fly_org' '$SCRIPTS_DIR/.github/workflows/go-flyio.yaml'"
+
+# Per-environment app naming. A calling job cannot declare `environment:`, so an
+# environment-scoped variable can only be NAMED by the caller and read inside the
+# job that has the environment -- the same constraint `build_env_vars` carries in
+# the Cloudflare workflows. Structural, because the harness exercises run.sh and
+# not the reusable workflow.
+GO_FLYIO="$SCRIPTS_DIR/.github/workflows/go-flyio.yaml"
+assert_true "flyio: the app name can be named as a caller variable" \
+  "grep -q 'fly_app_name_var' '$GO_FLYIO'"
+assert_true "flyio: the org can be named as a caller variable" \
+  "grep -q 'fly_org_var' '$GO_FLYIO'"
+assert_true "flyio: the named variable is indexed inside the environment-scoped job" \
+  "grep -q 'vars\[inputs.fly_app_name_var\]' '$GO_FLYIO'"
+# A literal input must keep winning, or a caller that passes both silently gets the
+# variable and cannot tell which one it deployed.
+assert_true "flyio: an explicit fly_app_name still wins over the named variable" \
+  "grep -q \"inputs.fly_app_name != '' && inputs.fly_app_name || vars\[\" '$GO_FLYIO'"
+# An unset variable must fail loudly: an empty app name falls through to whatever
+# fly.toml declares, which for a two-app repository is deliberately nothing.
+assert_true "flyio: a named variable that resolves to nothing fails the job" \
+  "grep -q 'which is not set for this deployment' '$GO_FLYIO'"
+# "Opted in and got nothing" must never be silent -- the rule #645 established. The org
+# half warns rather than failing, because an org is genuinely optional; what is not
+# optional is saying so.
+assert_true "flyio: an unresolvable org variable disables auto-creation out loud" \
+  "grep -q 'so app auto-creation is disabled here' '$GO_FLYIO'"
+# A caller-controlled input spliced into a `run:` body is pasted in before bash parses
+# it, so `\$(...)` in the value executes in the job holding FLY_API_TOKEN. Every value
+# these steps read must arrive through `env:`.
+assert_true "flyio: no workflow_call input is interpolated into a run: body" \
+  "! awk '/^ *run:/,/^ *(shell|env|with|if|-|jobs):/' '$GO_FLYIO' | grep -q 'inputs\.'"
 echo ""
 
 # ---------------------------------------------------------------------------

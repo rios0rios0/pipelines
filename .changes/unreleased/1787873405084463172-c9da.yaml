@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'widened the workflow `runs_on` contract from "resolves from `inputs.runs_on`" to "resolves from a declared input", so a job with a hard platform requirement (the documented Flutter `ipa` build needing macOS) can take a second input instead of a pinned runner, and demanded a `with:` forward only when the called workflow declares `runs_on` -- GitHub rejects an undeclared input key outright'
-time: '2026-08-27T23:30:05.084392594Z'

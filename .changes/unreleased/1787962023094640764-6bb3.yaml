@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added `fly_machine_count` / `fly_machine_count_var` to the Fly.io deploy, pinning how many machines an app runs — a ceiling `fly.toml`''s `min_machines_running` cannot express'
-time: '2026-08-29T00:07:03.094589573Z'

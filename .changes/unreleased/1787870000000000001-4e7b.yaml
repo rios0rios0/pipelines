@@ -1,3 +1,0 @@
-kind: 'Security'
-body: 'removed the `id-token: write` permission from the Claude reusable workflows and this repository''s own callers. `anthropics/claude-code-action` documents that scope as required only for workload identity federation, or the `use_bedrock` / `use_vertex` / `use_foundry` OIDC paths; these authenticate with `claude_code_oauth_token`, so the scope was granting the ability to mint OIDC tokens for any audience without ever being used. The README example now matches the shipped files byte for byte.'
-time: '2026-08-27T21:00:00.000000000Z'

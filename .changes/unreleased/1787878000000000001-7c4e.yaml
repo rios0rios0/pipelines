@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'removed `claude_args` from both Claude reusable workflows. Neither pins a model any more -- they take the Claude Code CLI default, which is `claude-opus-5` as of CLI `2.1.247` -- and the review no longer hands Claude an `--allowedTools` list. Instead it sets `track_progress: true`, which forces tag mode; tag mode builds its own tool list including `mcp__github_comment__update_claude_comment`, so Claude can publish its review without being told which tools exist. The review is now delivered as a tracking comment that Claude updates as it works, rather than line-anchored inline comments.'
-time: '2026-08-27T22:45:00.000000000Z'

@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added a workflow-composition assertion that the mention responder''s `if:` reads the association of whoever wrote the text each clause matched on -- structural, so the guard survives a reformat -- and generalised the `runs_on` assertion from the two Claude reusables to every workflow declaring the input (19 today), while keeping a separate check that the Claude pair declares one at all'
-time: '2026-08-27T23:19:23.568487356Z'

@@ -1,3 +1,0 @@
-kind: 'Security'
-body: 'pinned the ShellCheck used by this repository own CI. The `Lint Shell Scripts` job installed it with `apt-get install -y shellcheck`, taking whatever version the Ubuntu image shipped that day; it now comes from `global/scripts/tools/shellcheck/run.sh`, which installs a version pinned in `pinned-versions.sh` and verified against a committed SHA-256 by `verify-download.sh`. That is the supply-chain rule this repository documents and enforces on consumers, and the runner own rationale applies to it exactly: a new ShellCheck release adds checks, so an unchanged script could pass in the morning and fail in the afternoon with nothing in the diff to explain it'
-time: '2026-08-27T04:58:25.485334594Z'

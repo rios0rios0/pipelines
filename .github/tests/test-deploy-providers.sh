@@ -114,7 +114,7 @@ run_provider() {
       CLOUDFLARE_PRODUCTION_BRANCH CLOUDFLARE_API_URL \
       NETLIFY_AUTH_TOKEN NETLIFY_SITE_ID NETLIFY_OUTPUT_DIRECTORY NETLIFY_DEPLOY_MESSAGE \
       RENDER_API_KEY RENDER_SERVICE_ID RENDER_SERVICE_NAME RENDER_DEPLOY_HOOK_URL \
-      FLY_API_TOKEN FLY_APP_NAME FLY_ORG FLY_CONFIG FLY_STRATEGY \
+      FLY_API_TOKEN FLY_APP_NAME FLY_ORG FLY_MACHINE_COUNT FLY_CONFIG FLY_STRATEGY \
       DEPLOY_ENVIRONMENT
     export SCRIPTS_DIR
     export DEPLOY_DRY_RUN=true
@@ -547,6 +547,36 @@ assert_true "flyio: a named variable that resolves to nothing fails the job" \
 # optional is saying so.
 assert_true "flyio: an unresolvable org variable disables auto-creation out loud" \
   "grep -q 'so app auto-creation is disabled here' '$GO_FLYIO'"
+
+# Machine count. Fly adds a SPARE machine the first time it fills a process group, which is
+# silently wrong -- not broken -- for a process that is not safe to run twice, so it has to
+# be refused rather than noticed.
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_MACHINE_COUNT=1
+assert_equals "flyio: a single-machine app refuses Fly's spare" \
+  "flyctl deploy --remote-only --app my-mvp --ha=false" "$CMD"
+
+# Only for a count of 1: every other value is a deliberate choice to run several, and
+# --ha=false there would fight the caller.
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_MACHINE_COUNT=3
+assert_equals "flyio: a multi-machine app keeps Fly's own HA behaviour" \
+  "flyctl deploy --remote-only --app my-mvp" "$CMD"
+
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp
+assert_equals "flyio: an unset count changes the deploy not at all" \
+  "flyctl deploy --remote-only --app my-mvp" "$CMD"
+
+# The count is a CEILING enforced after the deploy; fly.toml's min_machines_running is a
+# floor and cannot express it. Structural: `scale count` needs a real API.
+assert_true "flyio: the count is enforced with scale count, not just hinted at deploy" \
+  "grep -q 'flyctl scale count' '$FLYIO_SH'"
+assert_true "flyio: scaling is skipped when the deploy itself failed" \
+  "grep -q 'EXIT_CODE:-' '$FLYIO_SH'"
+assert_true "flyio: the count is exposed as a caller variable name too" \
+  "grep -q 'fly_machine_count_var' '$GO_FLYIO'"
+assert_true "flyio: Azure forwards FLY_MACHINE_COUNT" \
+  "grep -q 'FLY_MACHINE_COUNT' '$SCRIPTS_DIR/azure-devops/global/stages/50-deployment/flyio.yaml'"
+assert_true "flyio: GitLab documents FLY_MACHINE_COUNT" \
+  "grep -q 'FLY_MACHINE_COUNT' '$SCRIPTS_DIR/gitlab/global/stages/50-deployment/flyio.yaml'"
 # A caller-controlled input spliced into a `run:` body is pasted in before bash parses
 # it, so `\$(...)` in the value executes in the job holding FLY_API_TOKEN. Every value
 # these steps read must arrive through `env:`.

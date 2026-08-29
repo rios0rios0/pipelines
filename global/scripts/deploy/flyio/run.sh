@@ -223,9 +223,36 @@ if [ -n "${FLY_STRATEGY:-}" ]; then
   set -- "$@" --strategy "$FLY_STRATEGY"
 fi
 
+# `--ha=false` when the app is pinned to a single machine. Fly's deploy creates a SPARE
+# machine the first time a process group is filled -- the log reads "This deployment will:
+# create 2 app machines" -- which is the right default for a stateless app and the wrong
+# one for a process that is not yet safe to run twice. Passed only for a count of 1, so
+# every other value keeps Fly's own behaviour.
+if [ "${FLY_MACHINE_COUNT:-}" = "1" ]; then
+  set -- "$@" --ha=false
+fi
+
 # The token reaches flyctl through `FLY_API_TOKEN` in the environment, never as
 # `--access-token=<value>` on argv.
 deploy_run flyctl "$@" || EXIT_CODE=$?
+
+# Enforced AFTER the deploy and only when it succeeded: scaling around a release that
+# never became healthy resizes the app to an image nobody wants. Idempotent, so a run
+# already at the requested count still proves the ceiling rather than assuming an earlier
+# deploy set it.
+#
+# Why a ceiling is worth expressing at all: an app whose process is not safe to run twice
+# -- an in-process event bus, an in-memory rate limiter, background workers with no leader
+# election -- is silently WRONG on two machines rather than broken, so nothing reports it.
+# `min_machines_running` in fly.toml is a FLOOR and cannot say this.
+if [ -n "${FLY_MACHINE_COUNT:-}" ] && [ -z "${EXIT_CODE:-}" ] && ! deploy_is_dry_run; then
+  echo "Pinning $FLY_RESOLVED_APP to $FLY_MACHINE_COUNT machine(s)..."
+  if ! flyctl scale count "$FLY_MACHINE_COUNT" --app "$FLY_RESOLVED_APP" --yes; then
+    echo "ERROR: deployed, but could not scale '$FLY_RESOLVED_APP' to $FLY_MACHINE_COUNT machine(s)." >&2
+    echo "The release is live and the machine count is NOT what was asked for -- check 'flyctl scale show --app $FLY_RESOLVED_APP'." >&2
+    EXIT_CODE=1
+  fi
+fi
 
 deploy_record "flyio" "${FLY_APP_NAME:-$FLY_CONFIG}"
 

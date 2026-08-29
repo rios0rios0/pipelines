@@ -17,6 +17,22 @@ inputs:
     type: 'string'
     required: false
     default: ''
+  machine_count:
+    description: |
+      Exact number of machines the app runs after a successful deploy, enforced with
+      `flyctl scale count`. `1` also passes `--ha=false`, so the deploy does not create Fly's
+      default spare. Leave empty to let Fly manage the count.
+    type: 'string'
+    required: false
+    default: ''
+  machine_count:
+    description: |
+      Exact number of machines the app runs after a successful deploy, enforced with
+      `flyctl scale count`. `1` also passes `--ha=false`, so the deploy does not create Fly's
+      default spare. Leave empty to let Fly manage the count.
+    type: 'string'
+    required: false
+    default: ''
   config:
     description: 'Path to the Fly configuration file.'
     type: 'string'
@@ -56,6 +72,8 @@ runs:
         FLY_API_TOKEN: '${{ inputs.fly_api_token }}'
         FLY_APP_NAME: '${{ inputs.app_name }}'
         FLY_ORG: '${{ inputs.org }}'
+        FLY_MACHINE_COUNT: '${{ inputs.machine_count }}'
+        FLY_MACHINE_COUNT: '${{ inputs.machine_count }}'
         FLY_CONFIG: '${{ inputs.config }}'
         FLY_STRATEGY: '${{ inputs.strategy }}'
         DEPLOY_ENVIRONMENT: '${{ inputs.environment }}'

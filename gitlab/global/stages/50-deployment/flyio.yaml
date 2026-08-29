@@ -8,6 +8,10 @@ include:
 #   FLY_API_TOKEN
 # Optional:
 #   FLY_APP_NAME (when fly.toml does not declare it), FLY_CONFIG, FLY_STRATEGY
+#   FLY_MACHINE_COUNT -- exact number of machines the app runs after a successful
+#   deploy, enforced with `flyctl scale count`. `1` also passes `--ha=false` so the
+#   deploy does not create Fly's default spare machine, which matters for a process
+#   that is not safe to run twice. Unset leaves the count to Fly.
 #   FLY_ORG -- set it to have the deploy CREATE the app when it does not exist
 #   yet, so a new environment's first pipeline is not red. It requires an
 #   ORG-SCOPED token (`flyctl tokens create org`), which manages every app in

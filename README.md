@@ -1098,7 +1098,6 @@ an external file (`core.excludesFile`, `$GIT_DIR/info/exclude`) are local to a c
 reach CI or a bot running `git add -A`. The block sits first in the file on purpose — gitignore is
 last-match-wins, so your own entries below it, including a `!` negation, still win.
 
-
 ### Security & Analysis Tools
 
 #### SAST (Static Application Security Testing)

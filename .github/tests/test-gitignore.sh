@@ -10,6 +10,8 @@ set -e
 #   * regeneration is idempotent, including over an existing block
 #   * --check exits 0 when current, 1 when stale or absent
 #   * the artifacts the pipeline writes are genuinely ignored, per git itself
+#   * every `makefiles/*.mk` is a recorded decision: it ships a fragment, or is named
+#     as writing nothing outside the default `build/reports/`
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RUN_SH="$SCRIPTS_DIR/global/scripts/tools/gitignore/run.sh"
@@ -106,6 +108,29 @@ for lang in $(grep -rl 'REPORT_PATH *?*= *\./reports' "$SCRIPTS_DIR/makefiles/" 
 done
 
 echo ""
+echo "Every consumable .mk is a recorded decision"
+# Overriding REPORT_PATH is only ONE of the two ways a language escapes `build/reports/`.
+# The other is writing outside REPORT_PATH altogether -- Go's root-level `junit-*.xml`,
+# Dart's `/coverage/`, Terraform's `.terraform/` -- and the property above cannot see that
+# class at all, because it asks only "does this language point REPORT_PATH somewhere else".
+#
+# That blind spot is not merely a missing assertion: `run.sh` skips a language with no
+# fragment SILENTLY (`[ -f "$FRAGMENT_DIR/$name" ] || continue`), so `terra.mk` and
+# `terraform.mk` shipped with none while `make gitignore-check` stayed green in every
+# consumer. Nothing anywhere asked whether they had been considered.
+#
+# So every `.mk` a consumer can include has to be a decision someone wrote down: it either
+# ships a fragment, or is named below as writing nothing outside the default
+# `build/reports/`. A language added later fails here until one of the two is true.
+WRITES_ONLY_REPORTS='dotnet java javascript'
+for mk in "$SCRIPTS_DIR"/makefiles/*.mk; do
+  lang="$(basename "$mk" .mk)"
+  case " $WRITES_ONLY_REPORTS " in *" $lang "*) continue ;; esac
+  assert_true "$lang ships a fragment, or belongs on the writes-only-reports list" \
+    "[ -f '$SCRIPTS_DIR/global/gitignore/$lang' ]"
+done
+
+echo ""
 echo "Idempotency"
 cp "$REPO/.gitignore" "$TEST_DIR/first-run"
 gi "$REPO" > /dev/null
@@ -197,6 +222,33 @@ done
 printf '\n!coverage.xml\n' >> "$REPO/.gitignore"
 assert_true "a project can still re-include a shared entry below the block" \
   "! git -C '$REPO' check-ignore -q --no-index coverage.xml"
+
+echo ""
+echo "Terraform working-tree artifacts"
+# `terraform init` runs from a different directory in each tier, so the artifact appears at
+# three different depths -- per module, per root module, and at the repository root. Asked
+# through `git check-ignore` rather than by matching the fragment text, so the answer is
+# git's own.
+TERRA="$TEST_DIR/terra-project"
+make_repo "$TERRA" terra
+gi "$TERRA" > /dev/null
+for artifact in modules/vpc/.terraform/providers/p stacks/prod/.terraform/modules/m \
+                .terraform/providers/p build/.terraform-plugin-cache/p; do
+  assert_true "a terra project ignores $artifact" \
+    "git -C '$TERRA' check-ignore -q --no-index '$artifact'"
+done
+# The lock file pins provider versions and is meant to be committed, so an over-broad
+# `.terraform*` would be a regression rather than extra safety.
+assert_true "a terra project does NOT ignore .terraform.lock.hcl" \
+  "! git -C '$TERRA' check-ignore -q --no-index .terraform.lock.hcl"
+
+TFMOD="$TEST_DIR/terraform-project"
+make_repo "$TFMOD" terraform
+gi "$TFMOD" > /dev/null
+assert_true "a terraform project ignores .terraform/" \
+  "git -C '$TFMOD' check-ignore -q --no-index .terraform/providers/p"
+assert_true "a terraform project does NOT ignore .terraform.lock.hcl" \
+  "! git -C '$TFMOD' check-ignore -q --no-index .terraform.lock.hcl"
 
 echo ""
 echo "======================================"

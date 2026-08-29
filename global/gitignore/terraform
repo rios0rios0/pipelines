@@ -1,0 +1,14 @@
+# `makefiles/terraform.mk` keeps REPORT_PATH at its default `build/reports/`, which
+# `common` already covers. This is what its `test` target writes besides the JUnit report.
+
+# `terraform.mk:test` runs `terraform init -backend=false` in the module under test, which
+# vendors provider binaries and module sources into `.terraform/`. Unanchored so it matches
+# at any depth, which is also what every published Terraform `.gitignore` does.
+#
+# `.terraform.lock.hcl` is deliberately NOT here: it pins provider versions and is meant
+# to be committed.
+#
+# `/build/.terraform-plugin-cache/` is deliberately not here either -- only the validate
+# tier writes it, and `terra.mk` is the sole `.mk` that exposes that tier
+# (`test-validate`). Fragments follow evidence, not symmetry.
+.terraform/

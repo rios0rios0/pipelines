@@ -44,9 +44,14 @@ FRAGMENT_DIR="$SCRIPTS_DIR/global/gitignore"
 
 # Which language fragments apply is not new configuration to keep in step: the
 # project's Makefile already declares the pipeline it consumes, so the `.mk` files it
-# includes are the answer. A language with no fragment of its own leaves REPORT_PATH at
-# its default `build/reports/`, which `common` covers -- a fragment exists precisely for
-# the languages that override it (golang, dart, python) or write outside it.
+# includes are the answer. A fragment exists for a language that either overrides
+# REPORT_PATH (golang, dart, python -> `./reports`) or writes outside it whatever REPORT_PATH
+# says (golang's root-level JUnit, dart's `/coverage/`, terra and terraform's `.terraform/`).
+# Everything else leaves REPORT_PATH at its default `build/reports/`, which `common` covers.
+#
+# The `[ -f ... ]` below skips an include with no fragment SILENTLY, which is how terra and
+# terraform once shipped with none. `.github/tests/test-gitignore.sh` is what stops that
+# recurring: it requires every `makefiles/*.mk` to ship a fragment or be named as needing none.
 fragments='common'
 if [ -f Makefile ]; then
   # Word-splitting is deliberate and safe: the pattern captures [a-z0-9-] only, so no

@@ -1466,9 +1466,16 @@ stdin instead.
 | Vercel | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `VERCEL_WORKING_DIRECTORY`, `VERCEL_COMMERCIAL`, `VERCEL_PLAN` |
 | Render | `RENDER_API_KEY` + `RENDER_SERVICE_ID`, **or** `RENDER_DEPLOY_HOOK_URL` | `RENDER_POLL_TIMEOUT`, `RENDER_POLL_INTERVAL` |
 | Netlify | `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID` | `NETLIFY_OUTPUT_DIRECTORY`, `NETLIFY_DEPLOY_MESSAGE` |
-| Fly.io | `FLY_API_TOKEN` | `FLY_APP_NAME`, `FLY_ORG`, `FLY_CONFIG`, `FLY_STRATEGY` |
+| Fly.io | `FLY_API_TOKEN` | `FLY_APP_NAME`, `FLY_ORG`, `FLY_MACHINE_COUNT`, `FLY_CONFIG`, `FLY_STRATEGY` |
 
-On GitHub Actions, `go-flyio.yaml` also accepts `fly_app_name_var` / `fly_org_var` — the *name* of a
+Set `FLY_MACHINE_COUNT` to pin how many machines the app runs. Fly adds a spare machine the first
+time it fills a process group, which is right for a stateless app and wrong for a process that is
+not safe to run twice — an in-process event bus, an in-memory rate limiter, background workers with
+no leader election. Such an app is silently *wrong* on two machines rather than broken, so nothing
+reports it, and `min_machines_running` in `fly.toml` is a floor that cannot express a ceiling. A
+count of `1` also passes `--ha=false` so the spare is never created in the first place.
+
+On GitHub Actions, `go-flyio.yaml` also accepts `fly_app_name_var` / `fly_org_var` / `fly_machine_count_var` — the *name* of a
 caller variable rather than a value — so one repository can deploy a differently-named app per
 environment without spelling either name in a workflow file. A calling job cannot declare
 `environment:`, so an environment-scoped variable has to be named by the caller and read inside the

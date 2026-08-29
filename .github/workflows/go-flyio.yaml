@@ -159,6 +159,33 @@ on:
           documented "do not auto-create" state. It is not SILENT either, which is a different
           thing — a name that resolves to nothing warns, because "opted in and got nothing" is not
           the same state as "did not opt in", and #645 exists to keep that distinction loud.
+      fly_machine_count:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Exact number of machines the app runs after a successful deploy, enforced with
+          `flyctl scale count`. `1` additionally passes `--ha=false`, so the deploy does not
+          create the spare machine Fly adds by default when it first fills a process group.
+
+          Set it when the app is NOT safe to run twice — an in-process event bus, an in-memory
+          rate limiter, background workers with no leader election. That app is silently
+          *wrong* on two machines rather than broken, so nothing reports it, and
+          `min_machines_running` in `fly.toml` is a floor that cannot express the ceiling.
+
+          Leave empty to let Fly manage the count.
+      fly_machine_count_var:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Name of a caller VARIABLE holding the machine count, resolved exactly as
+          `fly_app_name_var` is and used only when `fly_machine_count` is empty. This is the
+          form to prefer: raising the ceiling once an app becomes safe to run twice is then a
+          GitHub environment variable, not a commit — and it can differ per environment, so
+          production can stay pinned while staging is widened first.
+
+          An unresolvable name is not a failure: it means the same thing as not setting it.
       fly_config:
         type: 'string'
         required: false
@@ -327,6 +354,7 @@ jobs:
           fly_api_token: '${{ secrets.fly_api_token }}'
           app_name: "${{ inputs.fly_app_name != '' && inputs.fly_app_name || vars[inputs.fly_app_name_var] }}"
           org: "${{ inputs.fly_org != '' && inputs.fly_org || vars[inputs.fly_org_var] }}"
+          machine_count: "${{ inputs.fly_machine_count != '' && inputs.fly_machine_count || vars[inputs.fly_machine_count_var] }}"
           config: '${{ inputs.fly_config }}'
           strategy: '${{ inputs.fly_strategy }}'
           environment: ${{ inputs.deployment_environment != '' && inputs.deployment_environment || (github.ref_type == 'tag' && 'production' || 'staging') }}

@@ -10,6 +10,10 @@ parameters:
   - name: 'ORG'
     type: 'string'
     default: ''
+  # Exact machine count after a successful deploy; `1` also passes `--ha=false`.
+  - name: 'MACHINE_COUNT'
+    type: 'string'
+    default: ''
   - name: 'CONFIG'
     type: 'string'
     default: 'fly.toml'
@@ -39,6 +43,7 @@ jobs:
           FLY_API_TOKEN: ${{ parameters.FLY_API_TOKEN }}
           FLY_APP_NAME: ${{ parameters.APP_NAME }}
           FLY_ORG: ${{ parameters.ORG }}
+          FLY_MACHINE_COUNT: ${{ parameters.MACHINE_COUNT }}
           FLY_CONFIG: ${{ parameters.CONFIG }}
           FLY_STRATEGY: ${{ parameters.STRATEGY }}
           DEPLOY_ENVIRONMENT: ${{ parameters.ENVIRONMENT }}

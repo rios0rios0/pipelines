@@ -565,12 +565,33 @@ run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp
 assert_equals "flyio: an unset count changes the deploy not at all" \
   "flyctl deploy --remote-only --app my-mvp" "$CMD"
 
+# A malformed count is refused UP FRONT rather than at either enforcement point, because
+# those two fail asymmetrically: `1 ` (trailing space, invisible in a settings UI) is not
+# equal to `1`, so `--ha=false` is skipped and Fly creates the spare, and then the deploy
+# SUCCEEDS and `flyctl scale count '1 '` is rejected after the release is already live --
+# leaving the app on two machines, which is the state this feature exists to prevent.
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp "FLY_MACHINE_COUNT=1 "
+assert_true "flyio: a whitespace-padded count fails the job" "[[ $STATUS -eq 1 ]]"
+assert_true "flyio: the rejection names the offending value" \
+  "grep -q 'must be a whole number' <<< \"\$OUT\""
+# Nothing may be recorded, because nothing may be attempted -- a count rejected after the
+# deploy is the failure this check exists to move earlier.
+assert_true "flyio: a rejected count deploys nothing at all" "[[ -z \"\$CMD\" ]]"
+
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_MACHINE_COUNT=one
+assert_true "flyio: a non-numeric count fails the job" "[[ $STATUS -eq 1 ]]"
+
 # The count is a CEILING enforced after the deploy; fly.toml's min_machines_running is a
 # floor and cannot express it. Structural: `scale count` needs a real API.
 assert_true "flyio: the count is enforced with scale count, not just hinted at deploy" \
   "grep -q 'flyctl scale count' '$FLYIO_SH'"
+# Matches the GUARD, not the token: `EXIT_CODE:-` alone also matches the pre-existing
+# final line `exit "${EXIT_CODE:-0}"`, so deleting the whole scale block -- the exact
+# regression this assertion is named for -- still left it green. Nothing else here can
+# observe the guard: the functional cases above are dry runs, and the scale block is
+# deliberately skipped under `deploy_is_dry_run`.
 assert_true "flyio: scaling is skipped when the deploy itself failed" \
-  "grep -q 'EXIT_CODE:-' '$FLYIO_SH'"
+  "grep -qF -- '-z \"\${EXIT_CODE:-}\"' '$FLYIO_SH'"
 assert_true "flyio: the count is exposed as a caller variable name too" \
   "grep -q 'fly_machine_count_var' '$GO_FLYIO'"
 assert_true "flyio: Azure forwards FLY_MACHINE_COUNT" \

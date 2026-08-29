@@ -40,6 +40,28 @@ if [ ! -f "$FLY_CONFIG" ] && [ -z "${FLY_APP_NAME:-}" ] && ! deploy_is_dry_run; 
   exit 1
 fi
 
+# Validated HERE -- before the CLI is downloaded, before the app is created and long
+# before anything is deployed -- because the two enforcement points below fail
+# ASYMMETRICALLY on a malformed value, and the asymmetry produces exactly the state this
+# feature exists to prevent. A value of `1 ` (trailing space, invisible in a settings UI)
+# or `one` is not equal to `1`, so `--ha=false` is NOT passed and Fly creates the spare;
+# the deploy then SUCCEEDS, so the guard below is satisfied and `flyctl scale count` runs
+# with the bad value, is rejected as a bad argument, and the job goes red reporting
+# "deployed, but could not scale". The app is left live on two machines and the operator
+# is pointed at `flyctl scale show` rather than at the value they mistyped.
+#
+# Rejecting up front keeps the failure honest: nothing has been released, so there is no
+# "live but not as asked for" state to explain.
+if [ -n "${FLY_MACHINE_COUNT:-}" ]; then
+  case "$FLY_MACHINE_COUNT" in
+    *[!0-9]*)
+      echo "ERROR: FLY_MACHINE_COUNT must be a whole number, got '$FLY_MACHINE_COUNT'." >&2
+      echo "Nothing has been deployed. Check the value for stray whitespace or quotes." >&2
+      exit 1
+      ;;
+  esac
+fi
+
 # A dry run only resolves and records the command line, so downloading the CLI
 # would be pure cost -- and skipping it is what lets the validation harness run
 # this provider offline.

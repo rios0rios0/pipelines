@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'rejected a malformed `fly_machine_count` before the Fly.io deploy runs, instead of silently skipping `--ha=false` and then failing `flyctl scale count` once the release was already live'
+time: '2026-08-29T01:27:30.867106178Z'

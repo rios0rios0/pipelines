@@ -289,6 +289,29 @@ written. The review adds the rule that makes it consistent — a finding that co
 established by running something is dropped with its score rather than posted with a disclaimer.
 `make test-workflow-composition` keeps each prompt in step with the tools its job grants.
 
+**The review skips the pull requests automation opens.** A `chore/bump-*` or `bump/*` release
+pull request moves a version number and folds the pending changelog fragments into
+`CHANGELOG.md`; a `chore/autoupdate-*` pull request carries a dependency bump. All three are
+generated wholesale by a tool and merged unread, so reviewing one spends a full-diff Claude run
+on a diff nobody reads back. The job's `if:` skips them, and the prefixes are the ones
+`basic-checks` already exempts from the changelog rule — the two bump shapes are literal, and
+the autoupdate prefix is the optional `autoupdate_branch_prefix` input (`chore/autoupdate-` by
+default, the counterpart of `AUTOUPDATE_BRANCH_PREFIX`), so one repository does not have to
+teach two jobs two names for the same automation. Emptying that input gives up the autoupdate
+exemption only — the two bump shapes are still skipped. Drafts and pull requests
+from forks are skipped too, so `claude-review / claude-review` is a check that legitimately does
+not appear on some pull requests — do not make it a required check.
+
+**If you also run Copilot's automatic code review, it cannot be given the same guard.** Its
+ruleset rule takes only `review_draft_pull_requests` and `review_on_push`, and a ruleset's branch
+condition targets the *base* branch, so the feature has no head-branch, author or path filter —
+and neither does the account-wide "Automatic Copilot code review" setting. Nor is a bot identity
+a way out: GitHub documents an Actions- or bot-opened pull request as reviewed like any other,
+with the usage billed to whoever triggered the workflow or to a designated billing owner. The
+only way to exclude automation pull requests is to turn the automatic review off and request it
+per pull request instead — `gh pr edit <number> --add-reviewer @copilot`, or the REST equivalent
+requesting `copilot-pull-request-reviewer[bot]`.
+
 **`id-token: write` is required.** Unless a `github_token` is passed explicitly, the action's
 `setupGitHubToken()` always requests a GitHub OIDC token and exchanges it for a GitHub App
 token, which is how it posts reviews and comments. That is GitHub authentication and is

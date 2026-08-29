@@ -232,7 +232,7 @@ is a large part of why the rule is a test rather than a review habit.
 
 ### Workflow Composition Standard
 
-**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), thirteen
+**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), fourteen
 assertions, every one of them proven to fire against a deliberate violation.** Read this section
 before writing anything under `.github/workflows/`, and before writing a pipeline in a repository
 that consumes this one.
@@ -401,6 +401,45 @@ Tag mode's price is an event constraint: `validateTrackProgressEvent` accepts on
 `pull_request`, `issues`, `issue_comment`, `pull_request_review_comment` and
 `pull_request_review`, and **throws** on anything else — so a mention responder wired to another
 event now fails loudly instead of quietly doing nothing.
+
+The fourteenth asserts **which pull requests the review runs on at all**, and it is the one
+assertion here that exists to save money rather than to prevent a silent failure. A
+`chore/bump-*`, `bump/*` or `chore/autoupdate-*` pull request is generated wholesale by a tool,
+carries a version number or a dependency pin, and is merged unread — so every review of one is a
+full-diff Claude run, at Opus prices, on a diff nobody reads back. The guard that stops it is a
+job-level `if:`: free text, one expression, exactly what a "tidy these conditions" pass eats
+first. It is therefore **evaluated, not matched** — the expression is translated into Python and
+run against nine pull requests whose verdict is known — so it survives a reordering, an input
+rename or a rewrite from `startsWith` to `contains`, and still fails when a prefix is dropped.
+
+Two of the nine are the traps, and both are cases where the obvious guard is worse than none.
+A plain `feat/…` branch must still BE reviewed, or an expression that skips *everything* passes a
+test that only checks the automation branches. And emptying `autoupdate_branch_prefix` must give
+up only the autoupdate exemption: `startsWith(ref, '')` is TRUE, so an input read without a
+non-empty check silently disables every review in the repository that set it — a workflow that
+looks configured and reviews nothing.
+
+The prefixes are spelled exactly as `basic-checks` spells them
+(`github/global/stages/10-code-check/basic-checks/action.yaml`), including the split between two
+literal bump shapes and one configurable autoupdate prefix, which there is `AUTOUPDATE_BRANCH_PREFIX`
+and here is the `autoupdate_branch_prefix` input. That split is forced — `startsWith` takes one
+prefix and the expression language cannot iterate a list — but keeping the two jobs in step is a
+choice: the changelog gate and the review gate exempt the same pull requests, so a repository does
+not have to teach two jobs two different names for the same automation.
+
+**Copilot's automatic code review cannot be given the same guard, and this is not an oversight.**
+Its ruleset rule (`copilot_code_review`) takes exactly two parameters — `review_draft_pull_requests`
+and `review_on_push` — and a ruleset's `ref_name` condition targets the **base** branch, so there
+is no head-branch, author or path filter anywhere in the feature; the same is true of the personal
+"Automatic Copilot code review" setting, which is account-wide. Two plausible-sounding workarounds
+are not ones: an unlicensed author is still reviewed when a policy enables automatic review, and a
+bot or Actions identity is too — GitHub bills that usage to whoever triggered the workflow, or to a
+designated billing owner, rather than skipping the review. So a repository that wants Copilot off
+for automation pull requests has to turn the automatic review off entirely and request it per pull
+request instead (`gh pr edit <n> --add-reviewer @copilot`, or the REST equivalent requesting
+`copilot-pull-request-reviewer[bot]`). That is a decision about an account's settings rather than
+anything this library can ship, which is why nothing here attempts it — and why the two reviewers
+being configured differently is the documented state, not drift.
 
 **Secrets reach a build as secrets.** A value passed into a reusable workflow as an *input* loses
 the caller's masking; passed as a *secret* it keeps it. That is why the deployment workflows take

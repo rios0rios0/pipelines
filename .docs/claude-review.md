@@ -245,6 +245,21 @@ themselves instead of discovering the gap by denial.
   is not free: a called workflow cannot hold a permission its caller did not grant, so it would
   have to be added to every consumer's caller first. The mention responder does take it, which is
   why only that prompt offers the CI tools.
+- The review does not run on `chore/bump-*`, `bump/*` or `chore/autoupdate-*` head branches, on
+  drafts, or on pull requests from forks. The first three are automation output merged unread, so
+  a review of one is a full-diff Opus run nobody reads back; the prefixes match the ones
+  `basic-checks` exempts from the changelog rule, and only the autoupdate one is an input
+  (`autoupdate_branch_prefix`) because `startsWith` takes one prefix and the expression language
+  cannot iterate a list. Emptying that input reviews autoupdate pull requests; it must never be
+  read without the accompanying `!= ''` check, since `startsWith(ref, '')` is true and would skip
+  every pull request in the repository. `make test-workflow-composition` (Test 14) evaluates the
+  expression rather than matching it, against nine pull requests whose verdict is known.
+- Copilot's automatic code review has no equivalent filter — `copilot_code_review` takes only
+  `review_draft_pull_requests` and `review_on_push`, and a ruleset's `ref_name` targets the base
+  branch — so a repository running both reviewers cannot exempt the same pull requests from both
+  without turning Copilot's automatic review off and requesting it per pull request. Moving the
+  automation onto a bot identity does not help either: GitHub documents a bot- or Actions-opened
+  pull request as reviewed like any other, with the usage billed to whoever triggered the workflow.
 - `--permission-mode acceptEdits` is set by tag mode, so file edits inside the workspace are
   allowed even though `Edit`/`Write` appear in no list. The review job never pushes, so an edit is
   discarded with the runner — worth knowing before reading the allowlist as proof of read-only.

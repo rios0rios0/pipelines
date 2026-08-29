@@ -10,6 +10,15 @@ on:
         description: |
           JSON array of runner labels (e.g. '["self-hosted"]'); see the `runs_on` input in
           go.yaml for the shape's rationale.
+      autoupdate_branch_prefix:
+        type: 'string'
+        required: false
+        default: 'chore/autoupdate-'
+        description: |
+          Head-branch prefix identifying a scheduled dependency pull request from
+          autoupdate, which is not reviewed. Mirrors AUTOUPDATE_BRANCH_PREFIX in the
+          basic-checks changelog gate, so one repository exempts the same branches from
+          both. An empty string reviews them like any other pull request.
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: true
@@ -57,7 +66,38 @@ on:
 # it fails minutes in, inside the action, with an error that never names the runner.
 jobs:
   claude-review:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.draft == false
+    # A pull request opened by automation is not reviewed, because there is nothing here
+    # for a reviewer to decide: `chore/bump-*` and `bump/*` move a version number and fold
+    # the pending changelog fragments into CHANGELOG.md, and the autoupdate prefix carries
+    # a dependency bump whose whole content is a version this pipeline's own SCA and
+    # supply-chain jobs judge on the same commit. All three are generated wholesale by a
+    # tool and merged unread, so every review of one is a full-diff Claude run spent on a
+    # diff nobody reads back.
+    #
+    # `basic-checks` already exempts exactly these three shapes from the changelog rule
+    # (`github/global/stages/10-code-check/basic-checks/action.yaml`), which is why they
+    # are spelled the same way here: a repository should not have to teach two jobs two
+    # different names for the same automation.
+    #
+    # It is a job-level `if:` rather than a first step or a gate job for two reasons. A
+    # skipped job costs no runner and no tokens, where a job that starts and decides has
+    # already paid for the runner; and a gate job would add a SECOND consumer-visible
+    # check name to every pull request, where this workflow deliberately publishes one.
+    # (Not a `require-checks` concern: that script reads the check runs recorded against
+    # a `main` or tag commit at deploy time, where a pull-request-only check never
+    # appears at all.) The cost is the expression language:
+    # `startsWith` takes one prefix and there is no way to iterate a list, so the two bump
+    # shapes are literal and only the autoupdate prefix is an input -- the same split
+    # `basic-checks` makes, for the same reason. A consumer that empties the input gets
+    # its autoupdate pull requests reviewed rather than every pull request skipped, which
+    # is what an unguarded `startsWith(ref, '')` would silently do.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.draft == false
+      && !startsWith(github.event.pull_request.head.ref, 'chore/bump-')
+      && !startsWith(github.event.pull_request.head.ref, 'bump/')
+      && !(inputs.autoupdate_branch_prefix != ''
+      && startsWith(github.event.pull_request.head.ref, inputs.autoupdate_branch_prefix))
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     permissions:
       contents: 'read'

@@ -39,17 +39,18 @@ set -e
 # flow style would slip past them; none is, and one would fail review long
 # before this.
 #
-# Tests 10 to 13 are the exceptions and do need PyYAML. Test 10 asserts under a
+# Tests 10 to 14 are the exceptions and do need PyYAML. Test 10 asserts under a
 # key YAML 1.1 RESOLVES -- `on:` parses as the boolean `true`, so `runs_on` sits
 # under no key spelled `on` at all and no indentation rule can reach it -- and
 # Test 11 needs the `if:` as ONE expression, which a block scalar spreads over
 # ten physical lines, Test 12 walks the whole trigger block for evaluated
-# expressions, and Test 13 compares a block-scalar prompt against the tool rules
-# in another block scalar beside it. All four are written so that a host without
-# PyYAML sees the assertion FAIL BY NAME rather than a traceback -- see the
-# comments there. CI installs `python3-yaml` (`.github/workflows/ci.yaml`), and
-# `make test` already requires it for `test-azure-step-names.sh` and
-# `test-lambda-templates.sh`.
+# expressions, Test 13 compares a block-scalar prompt against the tool rules in
+# another block scalar beside it, and Test 14 evaluates a folded-scalar `if:`
+# against input defaults declared under that same resolved `on:` key. All five
+# are written so that a host without PyYAML sees the assertion FAIL BY NAME
+# rather than a traceback -- see the comments there. CI installs `python3-yaml`
+# (`.github/workflows/ci.yaml`), and `make test` already requires it for
+# `test-azure-step-names.sh` and `test-lambda-templates.sh`.
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export SCRIPTS_DIR
@@ -903,6 +904,152 @@ for workflow in sorted(glob.glob(os.path.join(workflows_dir, 'reusable-claude-*.
 PY
 )"
 assert_empty "every Claude prompt matches the tools its job grants and denies" "$BAD_CLAUDE_TOOLS"
+echo ""
+
+echo "Test 14: the review job skips the pull requests automation opens"
+
+# Every `chore/bump-*`, `bump/*` and autoupdate pull request is generated wholesale by a
+# tool and merged unread, so reviewing one spends a full-diff Claude run on a diff nobody
+# reads back. The guard that stops it is a job-level `if:` -- free-text, one expression,
+# and exactly the shape a "tidy these conditions" pass eats first.
+#
+# So it is EVALUATED, not matched. The expression is translated into Python and run
+# against nine pull requests whose verdict is known, which is what makes the assertion
+# survive a reordering, a rename of the input, or a rewrite from `startsWith` to
+# `contains`, while still failing when a prefix is dropped. Two of the nine are the
+# traps: a plain feature branch must still BE reviewed (or "skip everything" passes this
+# test), and emptying the input must not skip everything either -- `startsWith(ref, '')`
+# is TRUE, so an input used without a non-empty check silently disables every review in
+# the repository that set it.
+BAD_REVIEW_GUARD="$(python3 - "$WORKFLOWS_DIR" <<'PY'
+import os
+import re
+import sys
+
+try:
+    import yaml
+except ImportError:
+    print('PyYAML is required for this assertion '
+          '(CI installs python3-yaml; locally: pip install pyyaml)')
+    sys.exit(0)
+
+WORKFLOW = 'reusable-claude-review.yaml'
+JOB = 'claude-review'
+REPOSITORY = 'rios0rios0/pipelines'
+
+# (label, overrides, must the job run?)
+CASES = [
+    ('a feature branch',              {'ref': 'feat/add-logs'},                 True),
+    ('a fix branch',                  {'ref': 'fix/TICKET-990'},                True),
+    ('an autobump release',           {'ref': 'chore/bump-5.1.0'},              False),
+    ('a manual release',              {'ref': 'bump/5.1.0'},                    False),
+    ('an autoupdate run',             {'ref': 'chore/autoupdate-2026-08-28'},   False),
+    ('a fork',                        {'ref': 'feat/x', 'fork': True},          False),
+    ('a draft',                       {'ref': 'feat/x', 'draft': True},         False),
+    # The empty-prefix trap, both directions: emptying the input must give up only the
+    # autoupdate exemption, never review (case below) and never everything (this one).
+    ('a feature branch, prefix off',  {'ref': 'feat/x', 'prefix': ''},          True),
+    ('an autobump release, prefix off', {'ref': 'chore/bump-5.1.0', 'prefix': ''}, False),
+]
+
+STRING = re.compile(r"'(?:[^']|'')*'")
+CONTEXT = re.compile(r"(?<![\w.])((?:github|inputs|vars|env)(?:\.[\w-]+)+)")
+LITERALS = [(re.compile(r'\btrue\b'), 'True'),
+            (re.compile(r'\bfalse\b'), 'False'),
+            (re.compile(r'\bnull\b'), 'None')]
+
+
+def to_python(expression):
+    """Translate the GitHub expression subset an `if:` uses into Python.
+
+    Only the chunks OUTSIDE single-quoted strings are rewritten, so a prefix that
+    happens to contain `&&` or the word `false` is carried through untouched.
+    """
+    pieces, position = [], 0
+    for match in STRING.finditer(expression):
+        pieces.append((expression[position:match.start()], False))
+        # Re-emitted through `repr` rather than patched in place: GitHub escapes a quote
+        # by doubling it, and a naive substitution turns the EMPTY string `''` -- the one
+        # this assertion cares most about -- into a stray escape.
+        pieces.append((repr(match.group(0)[1:-1].replace("''", "'")), True))
+        position = match.end()
+    pieces.append((expression[position:], False))
+
+    out = []
+    for chunk, is_string in pieces:
+        if is_string:
+            out.append(chunk)
+            continue
+        chunk = chunk.replace('&&', ' and ').replace('||', ' or ')
+        chunk = chunk.replace('!=', '\0NE\0')
+        chunk = chunk.replace('!', ' not ').replace('\0NE\0', '!=')
+        for pattern, replacement in LITERALS:
+            chunk = pattern.sub(replacement, chunk)
+        chunk = CONTEXT.sub(lambda m: f'ctx({m.group(1)!r})', chunk)
+        out.append(chunk)
+    return ''.join(out)
+
+
+def evaluate(expression, values):
+    def ctx(path):
+        if path not in values:
+            raise KeyError(f'the expression reads {path}, which this test does not model')
+        return values[path]
+
+    functions = {
+        'ctx': ctx,
+        'startsWith': lambda haystack, needle: str(haystack).startswith(str(needle)),
+        'endsWith': lambda haystack, needle: str(haystack).endswith(str(needle)),
+        'contains': lambda haystack, needle: str(needle) in haystack
+                    if isinstance(haystack, str) else needle in haystack,
+        'format': lambda template, *args: re.sub(
+            r'\{(\d+)\}', lambda m: str(args[int(m.group(1))]), template),
+    }
+    return bool(eval(to_python(expression), {'__builtins__': {}}, functions))  # noqa: S307
+
+
+path = os.path.join(sys.argv[1], WORKFLOW)
+try:
+    with open(path, encoding='utf-8') as handle:
+        document = yaml.safe_load(handle) or {}
+
+    # `on:` resolves to the boolean True under YAML 1.1 -- see Test 10.
+    triggers = document.get('on', document.get(True)) or {}
+    declared = (triggers.get('workflow_call') or {}).get('inputs') or {}
+    default_prefix = str((declared.get('autoupdate_branch_prefix') or {}).get('default', ''))
+
+    condition = ' '.join(str(((document.get('jobs') or {}).get(JOB) or {}).get('if', '')).split())
+    if not condition:
+        print(f'{WORKFLOW}: job {JOB} has no `if:` -- every automation pull request is reviewed')
+    else:
+        for label, overrides, expected in CASES:
+            head_repo = 'someone/fork' if overrides.get('fork') else REPOSITORY
+            values = {
+                'github.repository': REPOSITORY,
+                'github.event.pull_request.head.repo.full_name': head_repo,
+                'github.event.pull_request.draft': bool(overrides.get('draft')),
+                'github.event.pull_request.head.ref': overrides['ref'],
+                'github.head_ref': overrides['ref'],
+                'inputs.autoupdate_branch_prefix': overrides.get('prefix', default_prefix),
+                'inputs.runs_on': '["ubuntu-latest"]',
+            }
+            try:
+                actual = evaluate(condition, values)
+            except Exception as error:              # noqa: BLE001 -- see Test 10's note
+                print(f'{WORKFLOW}: {label} ({overrides["ref"]}) could not be evaluated: '
+                      f'{type(error).__name__}: {error}')
+                continue
+            if actual != expected:
+                verb = 'is reviewed' if actual else 'is not reviewed'
+                want = 'must be' if expected else 'must not be'
+                print(f'{WORKFLOW}: {label} ({overrides["ref"]}) {verb}, but it {want}')
+except (OSError, yaml.YAMLError) as error:
+    print(f'{WORKFLOW}: unreadable ({error})')
+except Exception as error:                          # noqa: BLE001 -- see Test 10's note
+    print(f'{WORKFLOW}: {type(error).__name__}: {error}')
+PY
+)"
+assert_empty "the review runs on human pull requests and on no automated one" "$BAD_REVIEW_GUARD"
 echo ""
 
 echo "================================"

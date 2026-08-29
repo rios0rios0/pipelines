@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added the `go-flyio.yaml` reusable workflow: `go-docker.yaml` plus a `deployment > flyio` fifth-stage job over the existing `50-deployment/flyio` composite action, mirroring `go-render.yaml` — the app is named by ref through `fly_app_name` (never a stored id), `deployment_required_checks` re-asserts the checks on tag builds, and `fly_api_token` is a repository-scope secret checked at runtime with the cross-repository environment-secret cause named in the error'
-time: '2026-08-27T21:03:07.252603339Z'

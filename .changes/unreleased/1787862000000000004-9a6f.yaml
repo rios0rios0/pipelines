@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'changed the Claude workflow callers to single-quote every `types:` sequence entry, per the account YAML standard, and renamed the changelog fragment added by the previous change to chlog''s documented `<unix-nanoseconds>-<four hex characters>.yaml` form -- its former suffix was not hexadecimal. The mention workflow is now named `Claude Mention` with a matching `claude-mention` job id.'
-time: '2026-08-27T20:00:00.000000000Z'

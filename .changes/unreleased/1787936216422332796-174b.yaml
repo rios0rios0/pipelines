@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added opt-in Fly.io app auto-creation via `FLY_ORG`, so a new environment''s first deploy creates its app instead of failing'
-time: '2026-08-28T16:56:56.422275105Z'

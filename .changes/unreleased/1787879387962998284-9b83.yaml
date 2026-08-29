@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'broadened the trigger-block expression guard to every workflow file and to `default:` and `outputs`, and made it fail by name instead of aborting the suite when PyYAML is absent'
-time: '2026-08-28T01:09:47.962946359Z'

@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed `yarn-docker.yaml` and `yarn-library.yaml` stranding every consumer on GitHub-hosted runners: both call `yarn.yaml`, which takes `runs_on`, but neither declared nor forwarded it and both hardcoded `ubuntu-latest` on their delivery jobs -- their npm twins with the input deleted. `yarn-docker.yaml` had dropped `codeql_upload` the same way'
-time: '2026-08-27T23:41:17.082225792Z'

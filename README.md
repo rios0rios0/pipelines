@@ -1080,6 +1080,24 @@ weaker than a tag, far better than a branch. Every example under
 
 ## Available Tools & Scripts
 
+### Shared Ignore Rules
+
+The pipeline writes report files into the consuming repository's working tree, and until now each
+consumer had to know their names and track them by hand — so a script that started writing a new report
+leaked it into every repository at once, silently. `global/gitignore/` is the canonical list.
+
+```bash
+make gitignore         # write/refresh the shared block in this project's .gitignore
+make gitignore-check   # fail when that block is out of date (wire into a PR check)
+```
+
+The block is delimited by `# >>> pipelines:begin` / `# <<< pipelines:end` and everything outside it is
+yours and never touched. It is **generated rather than referenced** because git has no `include`
+directive for ignore files and refuses to follow a symlinked `.gitignore`; the mechanisms that do take
+an external file (`core.excludesFile`, `$GIT_DIR/info/exclude`) are local to a clone, so they never
+reach CI or a bot running `git add -A`. The block sits first in the file on purpose — gitignore is
+last-match-wins, so your own entries below it, including a `!` negation, still win.
+
 ### Security & Analysis Tools
 
 #### SAST (Static Application Security Testing)

@@ -8,7 +8,7 @@
 # Requires: SCRIPTS_DIR to be set. SEMGREP_LANGUAGE and CODEQL_LANGUAGE should be set by a language
 #           .mk file (e.g. golang.mk) or manually before including this file.
 
-.PHONY: setup codeql semgrep hadolint shellcheck gitleaks sast
+.PHONY: setup codeql semgrep hadolint shellcheck gitleaks sast gitignore gitignore-check
 
 # Bootstraps the local checkout of this repository that every other target
 # reads its scripts from.
@@ -67,3 +67,22 @@ gitleaks:
 	-@$(SCRIPTS_DIR)/global/scripts/tools/gitleaks/run.sh
 
 sast: codeql semgrep hadolint shellcheck gitleaks
+
+# Keeps the shared ignore rules in this project's `.gitignore`.
+#
+# The pipeline writes report files into the consumer's working tree, and until now
+# each consumer had to know their names and track them by hand -- so a script that
+# started writing a new report leaked it into every repository at once, silently.
+# These rules are generated from `global/gitignore/` instead. `gitignore` rewrites the
+# delimited block, `gitignore-check` fails when it is stale; wire the latter into a
+# pull request check so drift cannot accumulate again.
+#
+# Git has no `include` for ignore files and refuses to follow a symlinked
+# `.gitignore`, and the mechanisms that do take an external file are local to a clone
+# -- invisible to CI and to any bot that clones and runs `git add -A`. Generating a
+# committed block is what survives that.
+gitignore:
+	@$(SCRIPTS_DIR)/global/scripts/tools/gitignore/run.sh .
+
+gitignore-check:
+	@$(SCRIPTS_DIR)/global/scripts/tools/gitignore/run.sh --check .

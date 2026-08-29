@@ -1,0 +1,16 @@
+# `makefiles/golang.mk` sets `REPORT_PATH ?= ./reports`, so Go projects collect tool
+# reports here rather than under `build/`.
+/reports/
+
+# Written at the repository root by `global/scripts/languages/golang/test/run.sh`.
+# The unit/integration pairs are the per-phase outputs; the unsuffixed files are the
+# merged results the quality gate and the coverage report read.
+/junit-unit.xml
+/junit-integration.xml
+/junit.xml
+/unit_coverage.txt
+/integration_coverage.txt
+/coverage.out
+/coverage.txt
+/coverage.xml
+/cobertura.xml

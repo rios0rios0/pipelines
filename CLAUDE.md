@@ -26,6 +26,7 @@ make test-terraform-validate  # Test the root-module `terraform validate` tier o
 make test-terraform-provider-mirror  # Test the local Terraform provider mirror only
 make test-docker-multi-arch  # Test 40-delivery/docker multi-arch contract only
 make test-basic-checks # Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) only
+make test-gitignore    # Test the shared .gitignore block generator only
 make test-dependency-check  # Test the OWASP Dependency-Check NVD cache / API-key contract only
 make test-dependency-track  # Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, cross-platform wiring) only
 make test-goreleaser-prepare  # Test the GoReleaser main package detection only
@@ -79,6 +80,7 @@ All platforms follow consistent numbered stages:
 - `global/scripts/shared/` — Shared utilities (cleanup.sh, rebase-check.sh, changelog-check.sh, reconcile-releases.sh, terraform-provider-mirror.sh, **pinned-versions.sh**, **verify-download.sh**). The last two are sourced, never executed, and are the supply-chain contract: `pinned-versions.sh` is the single source of truth for every third-party binary version and its SHA-256, and `verify-download.sh` is the only sanctioned way to fetch one — see Supply-Chain Pinning below. `terraform-provider-mirror.sh` is sourced by the `terra-test` and `validate` tiers: it points `terraform init` at provider stores this machine already populated (`TF_PROVIDER_MIRROR_DIR`, `TERRA_PROVIDER_CACHE_DIR`, the terra CLI's `~/.cache/terra/providers`, then the tier's own `TF_PLUGIN_CACHE_DIR`) via a `filesystem_mirror`, so a mirrored provider costs no registry query and no github.com checksum fetch. Falls back to the origin registry per directory, so a cold machine still works and pays one fetch per provider version instead of one per directory. `TF_PROVIDER_MIRROR=off` disables it
 - `global/containers/` — Docker image definitions for CI environments
 - `makefiles/` — Includable `.mk` fragments for downstream projects (`common.mk`, `golang.mk`, `python.mk`, etc.)
+- `global/gitignore/` — Canonical ignore rules for the files the pipeline writes into a consumer's working tree, one fragment per language plus `common`. Git has no `include` for ignore files and refuses to follow a symlinked `.gitignore`, so these are GENERATED into a delimited block in the consumer's own `.gitignore` by `make gitignore`, and `make gitignore-check` fails when that block is stale. See Shared Ignore Rules below
 - `.docs/examples/` — Complete per-platform usage examples
 
 ### Workflow Naming Convention
@@ -712,6 +714,37 @@ Order matters for `dart.mk`: it APPENDS its `sca` target to `common.mk`'s `sast`
 so `common.mk` must be included first.
 
 The `-include` prefix makes includes optional (no error if pipelines not cloned).
+
+### Shared Ignore Rules
+
+`global/gitignore/` holds the canonical list of files the pipeline writes into a consumer's working
+tree; `make gitignore` generates them into a delimited block in that consumer's own `.gitignore`, and
+`make gitignore-check` fails when the block is stale. Both come from `common.mk`, so any project that
+already includes it gets them.
+
+**Why this is generated rather than included, like the makefiles are.** Four mechanisms were tested
+against git 2.53.0 before settling on generation; the first two rule themselves out:
+
+| Mechanism | Result |
+|-----------|--------|
+| an `include` directive inside `.gitignore` | **does not exist** — git has no such feature |
+| `.gitignore` as a symlink to a shared file | **refused** — `warning: unable to access '.gitignore'`, and every ignored file becomes untracked |
+| `core.excludesFile` (accepts a path outside the repo) | works, but is local config, holds one file, and set per-repo it silently replaces the developer's own `~/.gitignore` |
+| `$GIT_DIR/info/exclude` | works, and does not clobber a personal global — but is still per-clone |
+
+Both working mechanisms are **local to a clone**, so they are invisible to CI, to a fresh checkout, and
+to every bot that clones and runs `git add -A` — which is precisely the population that commits a stray
+report file. The rules therefore have to be committed. Generating them keeps one definition, and
+`--check` restores the enforcement an `include` would have given for free.
+
+Four properties are deliberate:
+
+| Property | Why |
+|----------|-----|
+| **The block sits FIRST in the file** | Gitignore resolves last-match-wins, so anything BELOW the block overrides it. Putting the block last would let a shared entry silently defeat a project's own `!` negation — the project must stay able to opt out of a rule it does not want |
+| **Which fragments apply is read from the consumer's Makefile** | It already declares the pipeline it consumes, so the `.mk` files it includes are the answer, and there is no second list to keep in step. An include whose fragment is absent is skipped silently, so "no fragment" must never be reached by omission -- see the last row |
+| **A fragment exists only where a language writes outside `build/reports/`** | There are TWO ways to escape it, and checking only the first is how this was got wrong twice. **Overriding `REPORT_PATH`**: `golang.mk:16`, `dart.mk:26` and `python.mk:16` point it at `./reports`, so each of those three needs `/reports/`, which `common` does not cover. **Writing outside `REPORT_PATH` altogether**: Go also writes JUnit and coverage files at the repository root; Dart leaves `coverage/lcov.info` where `package:coverage` and the IDE plugins expect it; and Terraform -- which DOES keep the default `build/reports/` -- has the largest ones in the repository, because `terraform init` vendors provider binaries into `modules/*/.terraform/` (`terraform/terra-test/run.sh`) and `stacks/*/.terraform/` (`terraform/validate/run.sh`), and that same validate tier points `TF_PLUGIN_CACHE_DIR` at `$(pwd)/build/.terraform-plugin-cache` -- under `build/`, NOT under `build/reports/`. Only Java, JavaScript and .NET genuinely need nothing. Check `grep -rn 'REPORT_PATH *?*=' makefiles/` before concluding a language is covered -- reading a truncated grep of that command is how `dart` and `python` were missed -- and then ask the second question too, because `REPORT_PATH` alone would not have caught Go, Dart or Terraform |
+| **A `.mk` with no fragment is a recorded decision, not a silence** | `run.sh` skips a language with no fragment silently (`[ -f "$FRAGMENT_DIR/$name" ] || continue`), so `terra.mk` and `terraform.mk` shipped with none while `make gitignore-check` stayed green in every consumer -- the failure has no symptom until a `git add -A` stages a few hundred MB of provider binaries. `test-gitignore.sh` therefore requires every `makefiles/*.mk` to either ship a fragment or be named in its `WRITES_ONLY_REPORTS` list, so a new language fails the suite until somebody writes down which of the two it is |
 
 ## Contribution Requirements
 

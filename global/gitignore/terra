@@ -1,0 +1,21 @@
+# `makefiles/terra.mk` keeps REPORT_PATH at its default `build/reports/`, which `common`
+# already covers. These are the two things its test tiers write BESIDES their reports.
+
+# `terraform init` vendors provider binaries and module sources next to the module it
+# initialises, so the directory appears at whatever depth the tree has: `test` /
+# `test-terra-test` run it once per module (`terraform/terra-test/run.sh` ->
+# `modules/*/.terraform/`) and `test-validate` once per root module
+# (`terraform/validate/run.sh` -> `stacks/*/.terraform/`). Unanchored on purpose, which is
+# also what every published Terraform `.gitignore` does.
+#
+# `.terraform.lock.hcl` is deliberately NOT here: it pins provider versions and is meant
+# to be committed.
+.terraform/
+
+# `terraform/validate/run.sh` points TF_PLUGIN_CACHE_DIR at
+# `$(pwd)/build/.terraform-plugin-cache`, inside the checkout on purpose -- Terraform's
+# plugin cache is not safe for concurrent use, and `$HOME` is exactly what is shared when
+# a self-hosted host runs several agents side by side. It sits under `build/`, NOT under
+# `build/reports/`, so `common` does not match it, and it fills with every provider the
+# repository uses.
+/build/.terraform-plugin-cache/

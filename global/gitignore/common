@@ -1,0 +1,11 @@
+# Files every pipeline writes into the working tree, whatever the language.
+#
+# `global/scripts/shared/cleanup.sh` creates REPORT_PATH before each tool runs and
+# defaults it to `build/reports`; a language fragment that overrides REPORT_PATH
+# ships its own entry for the directory it chose instead.
+build/reports/
+
+# CodeQL builds its database inside the project it is analysing
+# (`global/scripts/tools/codeql/run.sh`) and removes it only on the happy path, so
+# an interrupted or failing run leaves it behind.
+.codeql-db/

@@ -216,7 +216,7 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 | `release.yaml`               | Tag and GitHub Release from a bump commit  | any           |
 | `update-major-version-tag.yaml` | Moving `vN` tag for action consumers    | any           |
 | `dependency-updates.yaml`    | Twice-weekly check for stale pinned dependencies | all           |
-| `reusable-claude-review.yaml`  | `Claude Review` — automated review on every pull request | any |
+| `reusable-claude-review.yaml`  | `Claude Review` — automated review on pull requests (not drafts, forks or automation branches) | any |
 | `reusable-claude-mention.yaml` | `Claude Mention` — responds to `@claude` mentions | any  |
 
 #### Usage Example (Go with Docker)
@@ -243,8 +243,9 @@ jobs:
 
 #### Usage Example (Claude Review and Claude Mention)
 
-`reusable-claude-review.yaml` posts an automated review on every pull request;
-`reusable-claude-mention.yaml` answers `@claude` mentions in issues, PR comments, and reviews.
+`reusable-claude-review.yaml` posts an automated review on pull requests — not on drafts, forks
+or automation branches; `reusable-claude-mention.yaml` answers `@claude` mentions in issues, PR
+comments, and reviews.
 The `reusable-` prefix marks the definition; the file you add to your own repository is the
 caller below, named without it. Both need the
 `CLAUDE_CODE_OAUTH_TOKEN` secret, set either on the repository or on the organization.
@@ -298,9 +299,9 @@ on a diff nobody reads back. The job's `if:` skips them, and the prefixes are th
 the autoupdate prefix is the optional `autoupdate_branch_prefix` input (`chore/autoupdate-` by
 default, the counterpart of `AUTOUPDATE_BRANCH_PREFIX`), so one repository does not have to
 teach two jobs two names for the same automation. Emptying that input gives up the autoupdate
-exemption only — the two bump shapes are still skipped. Drafts and pull requests
-from forks are skipped too, so `claude-review / claude-review` is a check that legitimately does
-not appear on some pull requests — do not make it a required check.
+exemption only — the two bump shapes are still skipped. Drafts and pull requests from forks are
+skipped too, so `claude-review / claude-review` legitimately reports as skipped, rather than as
+a completed review, on a whole class of pull requests.
 
 **If you also run Copilot's automatic code review, it cannot be given the same guard.** Its
 ruleset rule takes only `review_draft_pull_requests` and `review_on_push`, and a ruleset's branch

@@ -81,9 +81,11 @@ jobs:
     #
     # It is a job-level `if:` rather than a first step or a gate job for two reasons. A
     # skipped job costs no runner and no tokens, where a job that starts and decides has
-    # already paid for the runner; and a gate job would add a SECOND check to every
-    # consumer's pull request, and the check name `claude-review / claude-review` is an
-    # API that consumers pass to `require-checks`. The cost is the expression language:
+    # already paid for the runner; and a gate job would add a SECOND consumer-visible
+    # check name to every pull request, where this workflow deliberately publishes one.
+    # (Not a `require-checks` concern: that script reads the check runs recorded against
+    # a `main` or tag commit at deploy time, where a pull-request-only check never
+    # appears at all.) The cost is the expression language:
     # `startsWith` takes one prefix and there is no way to iterate a list, so the two bump
     # shapes are literal and only the autoupdate prefix is an input -- the same split
     # `basic-checks` makes, for the same reason. A consumer that empties the input gets

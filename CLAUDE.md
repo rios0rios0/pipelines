@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, docker-multi-arch, basic-checks, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, dart-pipeline, javascript-pipeline, workflow-composition, supply-chain, runner-cache-gating, azure-step-names)
+make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, gitignore, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, workflow-composition, supply-chain, runner-cache-gating, azure-step-names, dependency-updates)
 make test-go-script    # Test Go validation script only
 make test-go-module-toolchain  # Test that every go.mod toolchain directive is readable by the images/analysers that consume it only
 make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves only

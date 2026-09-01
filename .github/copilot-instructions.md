@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, dependency-check, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, memory-detection, dart-pipeline, workflow-composition, supply-chain, dependency-updates, azure-step-names)
+- `make test` - Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, gitignore, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, workflow-composition, supply-chain, runner-cache-gating, dependency-updates, azure-step-names)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-go-module-toolchain` - Test that every `go.mod` toolchain directive is readable by the images/analysers that consume it specifically
 - `make test-go-tool-staleness` - Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves specifically
@@ -24,15 +24,19 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-terraform-provider-mirror` - Test the local Terraform provider mirror specifically
 - `make test-docker-multi-arch` - Test 40-delivery/docker multi-arch contract specifically
 - `make test-basic-checks` - Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) specifically
+- `make test-gitignore` - Test the shared `.gitignore` block generator specifically
 - `make test-dependency-check` - Test the OWASP Dependency-Check NVD cache / API-key contract specifically
+- `make test-dependency-track` - Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, cross-platform wiring) specifically
 - `make test-goreleaser-prepare` - Test the GoReleaser main package detection specifically
 - `make test-release-version-extraction` - Test release version extraction (tag ref + bump commit) specifically
 - `make test-release-reconcile` - Test release reconciliation gap detection specifically
 - `make test-deploy-providers` - Test the MVP hosting deployment providers (Cloudflare, Vercel, Render, Netlify, Fly.io) specifically
 - `make test-memory-detection` - Test the cgroup-aware memory ceiling detection specifically
 - `make test-dart-pipeline` - Test the Dart/Flutter pipeline (scripts, Semgrep rules, cross-platform wiring) specifically
+- `make test-javascript-pipeline` - Test the JavaScript formatting gate (Prettier runner + cross-platform wiring) specifically
 - `make test-workflow-composition` - Test the GitHub Actions workflow composition standard specifically
 - `make test-supply-chain` - Test the supply-chain pinning contract (actions, images, binaries, packages) specifically
+- `make test-runner-cache-gating` - Test that no GitHub Actions cache restores into `$HOME` on a self-hosted runner specifically
 - `make test-dependency-updates` - Test the dependency-update checker specifically
 - `make test-azure-step-names` - Test Azure DevOps step-name uniqueness across expanded templates specifically
 - `make check-dependency-updates` - Report which pinned dependencies have a newer release (hits the network)
@@ -787,15 +791,19 @@ make test-terraform-validate
 make test-terraform-provider-mirror
 make test-docker-multi-arch
 make test-basic-checks
+make test-gitignore
 make test-dependency-check
+make test-dependency-track
 make test-goreleaser-prepare
 make test-release-version-extraction
 make test-release-reconcile
 make test-deploy-providers
 make test-memory-detection
 make test-dart-pipeline
+make test-javascript-pipeline
 make test-workflow-composition
 make test-supply-chain
+make test-runner-cache-gating
 make test-dependency-updates
 make test-azure-step-names
 ```

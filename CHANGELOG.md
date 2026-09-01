@@ -22,6 +22,12 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [5.1.1] - 2026-09-01
+
+### Changed
+
+- refreshed `CLAUDE.md` and `.github/copilot-instructions.md` so the `make test` summary and command references list every sub-test the `test` target actually runs, adding the missing `gitignore`, `dependency-track`, `javascript-pipeline`, `runner-cache-gating`, `terraform-provider-mirror`, `memory-detection`, and `dependency-updates` entries
+
 ## [5.1.0] - 2026-08-29
 
 ### Added

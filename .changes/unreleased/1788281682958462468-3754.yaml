@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'refreshed `CLAUDE.md` and `.github/copilot-instructions.md` so the `make test` summary and command references list every sub-test the `test` target actually runs, adding the missing `gitignore`, `dependency-track`, `javascript-pipeline`, `runner-cache-gating`, `terraform-provider-mirror`, `memory-detection`, and `dependency-updates` entries'
-time: '2026-09-01T16:54:42.958397041Z'

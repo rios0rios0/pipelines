@@ -7,15 +7,35 @@
 # job, so a repository with a build has it by construction. A repository without one --- a
 # documentation, configuration, template or asset repository --- had no way to reach it
 # short of adopting a language pipeline it has no use for, and so ran with no changelog
-# enforcement at all. 44 of the 76 repositories across `rios0rios0`, `medhub-life` and
-# `prefy` were in that state, 42 of them chlog users, which is how a scheduled job that
-# hand-edited a generated `CHANGELOG.md` opened 46 pull requests before anything objected.
+# enforcement at all. Measured on 2026-09-01, that was 44 of the 76 repositories across
+# `rios0rios0`, `medhub-life` and `prefy`, 42 of them chlog users --- which is how a
+# scheduled job that hand-edited a generated `CHANGELOG.md` opened 46 pull requests before
+# anything objected. Treat the figures as the dated observation that motivated the file,
+# not as a count anyone maintains.
 #
 # This is deliberately ONE job and no inputs beyond `runs_on`. It is the floor, not a
 # pipeline: a repository that later grows a build drops this file and calls its toolchain
-# workflow, which runs the identical stage under the identical job name --- so the check
-# name consumers see (`code-check > quality:basic-checks`) does not change across that
-# migration, and any branch protection or `require-checks` entry naming it keeps matching.
+# workflow, which runs the identical stage under the identical JOB NAME.
+#
+# The job name is not the check name, and the difference decides what survives that
+# migration. GitHub composes a check-run name from the whole chain of job names, and the
+# chains are not the same depth:
+#
+#   this file        `<caller job> / code-check > quality:basic-checks`
+#   `go.yaml`        `<caller job> / code-check > quality:basic-checks`
+#   `go-docker.yaml` `<caller job> / go / code-check > quality:basic-checks`
+#
+# Every `-docker` / `-library` / `-binary` / `-<provider>` wrapper adds that extra hop
+# (`go-docker.yaml` names its inner job `go`), and a wrapper is what a repository growing a
+# build usually adopts. So:
+#
+#   - `require-checks` KEEPS MATCHING. It matches exactly or on a whole trailing ` / `
+#     segment, and `code-check > quality:basic-checks` is a trailing segment of both forms.
+#   - Branch protection DOES NOT. A required status check matches the full context string,
+#     so a context recorded against this file is never reported again after a migration to
+#     a wrapper, and every pull request blocks on a check that will never appear.
+#
+# Name the required context after migrating, or require it through `require-checks`.
 on:
   workflow_call:
     inputs:

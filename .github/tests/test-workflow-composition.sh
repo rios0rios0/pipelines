@@ -57,8 +57,8 @@ export SCRIPTS_DIR
 
 WORKFLOWS_DIR="$SCRIPTS_DIR/.github/workflows"
 
-# Reusable workflows that are not a `<toolchain>` pipeline and compose no base.
-# All six are deliberate:
+# Reusable workflows whose name carries a hyphen WITHOUT being `<toolchain>-`
+# anything. All five are deliberate and none composes a base:
 #
 #   flutter-artifacts.yaml        `flutter` is a toolchain in its own right (see
 #                                 the naming table in CLAUDE.md) and Dart's
@@ -80,16 +80,10 @@ WORKFLOWS_DIR="$SCRIPTS_DIR/.github/workflows"
 #                                 and there is no `reusable.yaml` to compose.
 #   reusable-claude-mention.yaml  the `@claude` mention responder, standalone
 #                                 for the same reason.
-#   checks.yaml                   the global `basic-checks` stage on its own,
-#                                 for a repository with no build to attach it
-#                                 to. It is the floor every `<toolchain>.yaml`
-#                                 already runs as its first job, not a pipeline
-#                                 -- so there is no toolchain to name it for and
-#                                 nothing for it to compose.
 #
 # Anything else added here needs a reason of the same kind. "It did not fit the
 # standard" is not one; that is the finding, not the exemption.
-STANDALONE='flutter-artifacts.yaml update-major-version-tag.yaml dependency-updates.yaml reusable-claude-review.yaml reusable-claude-mention.yaml checks.yaml'
+STANDALONE='flutter-artifacts.yaml update-major-version-tag.yaml dependency-updates.yaml reusable-claude-review.yaml reusable-claude-mention.yaml'
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

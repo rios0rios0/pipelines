@@ -213,6 +213,7 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 | `dart-library.yaml`          | Dart package published to pub.dev          | Dart          |
 | `flutter-artifacts.yaml`     | Flutter web bundle and Android APK/AAB     | Flutter       |
 | `terra.yaml`                 | Terra CLI quality, security, and tests     | Terraform/HCL |
+| `checks.yaml`                | Rebase and changelog gate for a repository with no build | any |
 | `release.yaml`               | Tag and GitHub Release from a bump commit  | any           |
 | `update-major-version-tag.yaml` | Moving `vN` tag for action consumers    | any           |
 | `dependency-updates.yaml`    | Twice-weekly check for stale pinned dependencies | all           |

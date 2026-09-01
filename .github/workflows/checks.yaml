@@ -1,0 +1,46 @@
+# The repository-hygiene half of every language pipeline, on its own, for a repository that
+# has no language pipeline to carry it.
+#
+# `basic-checks` (rebase status + the changelog gate) is a *global* stage: it asserts
+# nothing about a toolchain, only that a pull request is rebased on its base and that the
+# change is written down. Every `<toolchain>.yaml` in this directory runs it as its first
+# job, so a repository with a build has it by construction. A repository without one --- a
+# documentation, configuration, template or asset repository --- had no way to reach it
+# short of adopting a language pipeline it has no use for, and so ran with no changelog
+# enforcement at all. 44 of the 76 repositories across `rios0rios0`, `medhub-life` and
+# `prefy` were in that state, 42 of them chlog users, which is how a scheduled job that
+# hand-edited a generated `CHANGELOG.md` opened 46 pull requests before anything objected.
+#
+# This is deliberately ONE job and no inputs beyond `runs_on`. It is the floor, not a
+# pipeline: a repository that later grows a build drops this file and calls its toolchain
+# workflow, which runs the identical stage under the identical job name --- so the check
+# name consumers see (`code-check > quality:basic-checks`) does not change across that
+# migration, and any branch protection or `require-checks` entry naming it keeps matching.
+on:
+  workflow_call:
+    inputs:
+      runs_on:
+        type: 'string'
+        required: false
+        default: '["ubuntu-latest"]'
+        description: |
+          JSON array of runner labels (e.g. '["self-hosted"]'). `runs-on` is a hard selector --
+          GitHub matches it against the runner labels and never substitutes, so there is no
+          fallback to a self-hosted runner when the hosted minutes are exhausted. Naming the
+          runner here rather than in each caller's job list makes moving a whole pipeline one
+          switch. A JSON array rather than a plain string because a reusable-workflow input
+          cannot be typed as a list, and multi-label runners need more than one value.
+
+jobs:
+  # Job name, `target_branch` expression and `if:` are copied verbatim from the first job of
+  # every `<toolchain>.yaml`. That is the point: this file must be indistinguishable from
+  # them at the check-name level, so moving a repository between the two changes nothing a
+  # consumer can observe.
+  code_check-basic_checks:
+    name: 'code-check > quality:basic-checks'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/10-code-check/basic-checks@main'
+        with:
+          target_branch: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch || 'main' }}
+    if: "github.event_name == 'pull_request'"

@@ -109,6 +109,32 @@ runs:
 
               echo "CHANGELOG.md was updated. OK."
               ;;
+            dependabot/*)
+              # Dependabot is exempted OUTRIGHT, which none of the other automation
+              # branches are, and the reason is that it is the only one that cannot
+              # comply. It never writes a changelog fragment and cannot be made to: its
+              # branches carry a read-only token, so nothing running on them can commit
+              # one back, and adding a `pull_request_target` job with a write credential
+              # to auto-append a fragment onto a bot branch buys a changelog line for a
+              # privileged-execution surface --- a bad trade in a fleet that SHA-pins
+              # every action precisely to avoid that class of exposure.
+              #
+              # autoupdate is not a substitute here. It is this organisation's own
+              # updater and it does write fragments, but it deliberately skips SHA pins
+              # ("Requires a v-prefix on the ref to skip SHA pins and branch refs",
+              # `internal/infrastructure/repositories/pipeline/pipeline_updater_repository.go`),
+              # and SHA pins with a trailing `# vX.Y.Z` comment are exactly what these
+              # repositories use. Dependabot is the only mechanism that advances them.
+              #
+              # This records established practice rather than relaxing policy: before the
+              # gate reached these repositories, every merged Dependabot pull request
+              # changed workflow files only and carried no changelog entry of any kind
+              # (`rios0rios0/home-assistant-addons` #26 and #39). Without this case the
+              # gate makes every future one permanently red, and the repository loses the
+              # mechanism that keeps its action pins current --- which is a security
+              # regression dressed as a documentation rule.
+              echo "Dependency-bot branch detected ('$SOURCE_BRANCH'); changelog fragment not required."
+              ;;
             "$AUTOUPDATE_PREFIX"*)
               # autoupdate writes NO entry when the target branch already records the
               # statement it would have written. It runs unattended, on a schedule, against
@@ -186,6 +212,16 @@ runs:
             # The same exemption the chlog path above makes, for a repository that keeps a
             # hand-written CHANGELOG.md: autoupdate suppresses the entry when [Unreleased]
             # on the target branch already states it.
+            # Dependabot cannot write an entry on either path; see the long note on
+            # the `dependabot/*` case in the chlog branch above for why it is exempted
+            # outright rather than conditionally.
+            case "$SOURCE_BRANCH" in
+              dependabot/*)
+                echo "Dependency-bot branch detected ('$SOURCE_BRANCH'); CHANGELOG.md entry not required."
+                exit 0
+                ;;
+            esac
+
             PENDING_ENTRIES=''
             case "$SOURCE_BRANCH" in
               "$AUTOUPDATE_PREFIX"*)

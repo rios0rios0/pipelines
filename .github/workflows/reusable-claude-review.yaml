@@ -68,13 +68,14 @@ jobs:
   claude-review:
     # A pull request opened by automation is not reviewed, because there is nothing here
     # for a reviewer to decide: `chore/bump-*` and `bump/*` move a version number and fold
-    # the pending changelog fragments into CHANGELOG.md, and the autoupdate prefix carries
-    # a dependency bump whose whole content is a version this pipeline's own SCA and
-    # supply-chain jobs judge on the same commit. All three are generated wholesale by a
-    # tool and merged unread, so every review of one is a full-diff Claude run spent on a
-    # diff nobody reads back.
+    # the pending changelog fragments into CHANGELOG.md, the autoupdate prefix carries a
+    # dependency bump whose whole content is a version this pipeline's own SCA and
+    # supply-chain jobs judge on the same commit, and `dependabot/*` carries the same for
+    # the action pins autoupdate deliberately will not touch (it skips SHA pins). All four
+    # are generated wholesale by a tool and merged unread, so every review of one is a
+    # full-diff Claude run spent on a diff nobody reads back.
     #
-    # `basic-checks` already exempts exactly these three shapes from the changelog rule
+    # `basic-checks` already exempts exactly these four shapes from the changelog rule
     # (`github/global/stages/10-code-check/basic-checks/action.yaml`), which is why they
     # are spelled the same way here: a repository should not have to teach two jobs two
     # different names for the same automation.
@@ -96,6 +97,7 @@ jobs:
       && github.event.pull_request.draft == false
       && !startsWith(github.event.pull_request.head.ref, 'chore/bump-')
       && !startsWith(github.event.pull_request.head.ref, 'bump/')
+      && !startsWith(github.event.pull_request.head.ref, 'dependabot/')
       && !(inputs.autoupdate_branch_prefix != ''
       && startsWith(github.event.pull_request.head.ref, inputs.autoupdate_branch_prefix))
     runs-on: ${{ fromJSON(inputs.runs_on) }}

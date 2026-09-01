@@ -75,6 +75,11 @@ if [ -f ".chlog.yaml" ] || [ -f ".chlog.yml" ] || [ -d ".changes/unreleased" ]; 
 
       echo "CHANGELOG.md was updated. OK."
       ;;
+    dependabot/*)
+      # Dependabot never writes an entry and cannot be made to (read-only token on
+      # its branches), and autoupdate cannot take over because it skips SHA pins.
+      echo "Dependency-bot branch detected; changelog fragment not required."
+      ;;
     "$AUTOUPDATE_PREFIX"*)
       # autoupdate writes NO entry when the target branch already records the
       # statement it would have written. It runs unattended, on a schedule, against
@@ -144,6 +149,13 @@ else
     # The same exemption the chlog path above makes, for a repository that keeps a
     # hand-written CHANGELOG.md: autoupdate suppresses the entry when [Unreleased]
     # on the target branch already states it.
+    case "$SOURCE_BRANCH" in
+      dependabot/*)
+        echo "Dependency-bot branch detected; CHANGELOG.md entry not required."
+        exit 0
+        ;;
+    esac
+
     PENDING_ENTRIES=''
     case "$SOURCE_BRANCH" in
       "$AUTOUPDATE_PREFIX"*)
@@ -628,6 +640,73 @@ assert_fail "legacy repo, human branch, pending entry is not a defence"
 assert_script_fail "legacy repo, human branch, pending entry is not a defence" \
   "CHANGELOG.md was NOT modified"
 
+# ── dependency bots ───────────────────────────────────────────────────────────
+#
+# Dependabot is exempted OUTRIGHT, where autoupdate's exemption above is
+# conditional, and the asymmetry is the point: autoupdate can write an entry and
+# merely declines to restate one already pending, while Dependabot cannot write
+# one at all. Its branches carry a read-only token, so nothing running on them
+# can commit a fragment back, and this organisation's own updater is not a
+# substitute --- it deliberately skips SHA pins, which is exactly what these
+# repositories pin with. Before the gate reached them, every merged Dependabot
+# pull request carried no changelog entry of any kind.
+#
+# The fixtures pin both halves, as the autoupdate ones do: the exemption applies
+# on the chlog path and the legacy path, and it does NOT extend to a human
+# branch that merely happens to bump a dependency.
+
+echo ""
+echo "── dependency bots (unconditional exemption) ──"
+
+echo ""
+echo "Test 18: chlog repo, dependabot branch, no fragment -> should pass"
+WORK_DIR="$(setup_repo "dependabot-chlog")"
+cd "$WORK_DIR"
+touch .chlog.yaml
+mkdir -p .changes/unreleased
+touch .changes/unreleased/.gitkeep
+git add .chlog.yaml .changes/unreleased/.gitkeep
+git commit -m "add chlog config" >/dev/null 2>&1
+git push origin main >/dev/null 2>&1
+git checkout -b dependabot/github_actions/github-actions-7a5a078ad4 >/dev/null 2>&1
+mkdir -p .github/workflows
+echo "      - uses: actions/checkout@d23441a # v6.1.0" > .github/workflows/build.yaml
+git add .github/workflows/build.yaml
+git commit -m "chore(deps): bump actions/checkout" >/dev/null 2>&1
+assert_pass "chlog repo, dependabot branch, no fragment"
+assert_script_pass "chlog repo, dependabot branch, no fragment"
+
+echo ""
+echo "Test 19: legacy repo, dependabot branch, no CHANGELOG.md edit -> should pass"
+WORK_DIR="$(setup_repo "dependabot-legacy")"
+cd "$WORK_DIR"
+git checkout -b dependabot/github_actions/github-actions-781e586a15 >/dev/null 2>&1
+mkdir -p .github/workflows
+echo "      - uses: actions/setup-go@924ae3a # v6.5.0" > .github/workflows/build.yaml
+git add .github/workflows/build.yaml
+git commit -m "chore(deps): bump actions/setup-go" >/dev/null 2>&1
+assert_pass "legacy repo, dependabot branch, no CHANGELOG.md edit"
+assert_script_pass "legacy repo, dependabot branch, no CHANGELOG.md edit"
+
+echo ""
+echo "Test 20: chlog repo, HUMAN branch bumping a dependency, no fragment -> should fail"
+WORK_DIR="$(setup_repo "dependabot-human")"
+cd "$WORK_DIR"
+touch .chlog.yaml
+mkdir -p .changes/unreleased
+touch .changes/unreleased/.gitkeep
+git add .chlog.yaml .changes/unreleased/.gitkeep
+git commit -m "add chlog config" >/dev/null 2>&1
+git push origin main >/dev/null 2>&1
+git checkout -b feat/bump-actions-by-hand >/dev/null 2>&1
+mkdir -p .github/workflows
+echo "      - uses: actions/checkout@d23441a # v6.1.0" > .github/workflows/build.yaml
+git add .github/workflows/build.yaml
+git commit -m "chore(deps): bump actions/checkout by hand" >/dev/null 2>&1
+assert_fail "chlog repo, human branch bumping a dependency, no fragment"
+assert_script_fail "chlog repo, human branch bumping a dependency, no fragment" \
+  "No changelog fragment was added"
+
 # ── the four implementations must move together ───────────────────────────────
 #
 # The fixtures above run the rule twice: through the extracted Azure logic and
@@ -660,6 +739,9 @@ for impl in \
   'gitlab/global/stages/10-code-check/basic-checks.yaml' \
   'azure-devops/global/stages/10-code-check/basic-checks.yaml'; do
   assert_contains "$impl" '.chlog.yaml'
+  # The dependency-bot exemption is the newest of the four-way duplications and
+  # so the easiest to drop from one copy while editing another.
+  assert_contains "$impl" 'dependabot/*)'
   assert_contains "$impl" '.changes/unreleased/'
   # `--diff-filter=A` is the load-bearing half of the fragment rule: without it,
   # editing an entry somebody else already recorded counts as this change's entry.

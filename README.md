@@ -293,10 +293,12 @@ established by running something is dropped with its score rather than posted wi
 
 **The review skips the pull requests automation opens.** A `chore/bump-*` or `bump/*` release
 pull request moves a version number and folds the pending changelog fragments into
-`CHANGELOG.md`; a `chore/autoupdate-*` pull request carries a dependency bump. All three are
+`CHANGELOG.md`; a `chore/autoupdate-*` pull request carries a dependency bump, and a `dependabot/*`
+pull request carries the same for the action pins autoupdate will not touch. All four are
 generated wholesale by a tool and merged unread, so reviewing one spends a full-diff Claude run
 on a diff nobody reads back. The job's `if:` skips them, and the prefixes are the ones
 `basic-checks` already exempts from the changelog rule — the two bump shapes are literal, and
+`dependabot/` is literal too, and only
 the autoupdate prefix is the optional `autoupdate_branch_prefix` input (`chore/autoupdate-` by
 default, the counterpart of `AUTOUPDATE_BRANCH_PREFIX`), so one repository does not have to
 teach two jobs two names for the same automation. Emptying that input gives up the autoupdate
@@ -1176,6 +1178,8 @@ Every pipeline includes **basic checks** that run in parallel with linting durin
    Either way the check is skipped when the branch HEAD is already an ancestor of the target branch, since a branch that is already merged has nothing left to gate.
 
    **Automation branches** (`chore/autoupdate-*` by default, `$AUTOUPDATE_BRANCH_PREFIX` to change it) are held to a different requirement: **a new entry, or one already pending on the target branch.** [autoupdate](https://github.com/rios0rios0/autoupdate) deliberately does not restate an entry the target branch already records as pending — it runs unattended on a schedule against the same repositories, so without that check yesterday's bullet is written again verbatim on every run until a release moves it away. A correct scheduled dependency PR therefore carries no fragment and no `CHANGELOG.md` edit, and the strict rule above failed it. This is not a blanket skip: nothing added **and** nothing pending still fails, because then the change is written down nowhere. Only `.yaml`/`.yml` files count as pending, so a `.gitkeep` holding the directory open is not mistaken for an entry.
+
+   **Dependency-bot branches** (`dependabot/*`) are exempt **outright** — no fragment, no `CHANGELOG.md` edit, no condition. The asymmetry with the automation branches above is deliberate: autoupdate *can* write an entry and merely declines to restate a pending one, while Dependabot cannot write one at all. Its branches carry a read-only token, so nothing running on them can commit a fragment back, and auto-appending one would mean a `pull_request_target` job holding a write credential on a bot branch. [autoupdate](https://github.com/rios0rios0/autoupdate) is not a substitute either: it deliberately skips SHA pins, and a SHA pin with a trailing `# vX.Y.Z` comment is exactly what a Dependabot `github-actions` update advances. Without this exemption a repository that adopts the stage makes every Dependabot pull request permanently red and loses the only mechanism that keeps its action pins current.
 
    The exemption does **not** extend to human branches. "Something was already pending" is a defence only for a producer that actually compared before deciding; for a person who forgot the entry it is a coincidence, and catching that is the point of the check.
 

@@ -914,9 +914,9 @@ echo "Test 14: the review job skips the pull requests automation opens"
 # and exactly the shape a "tidy these conditions" pass eats first.
 #
 # So it is EVALUATED, not matched. The expression is translated into Python and run
-# against nine pull requests whose verdict is known, which is what makes the assertion
+# against ten pull requests whose verdict is known, which is what makes the assertion
 # survive a reordering, a rename of the input, or a rewrite from `startsWith` to
-# `contains`, while still failing when a prefix is dropped. Two of the nine are the
+# `contains`, while still failing when a prefix is dropped. Two of the ten are the
 # traps: a plain feature branch must still BE reviewed (or "skip everything" passes this
 # test), and emptying the input must not skip everything either -- `startsWith(ref, '')`
 # is TRUE, so an input used without a non-empty check silently disables every review in
@@ -944,6 +944,7 @@ CASES = [
     ('an autobump release',           {'ref': 'chore/bump-5.1.0'},              False),
     ('a manual release',              {'ref': 'bump/5.1.0'},                    False),
     ('an autoupdate run',             {'ref': 'chore/autoupdate-2026-08-28'},   False),
+    ('a dependabot bump',             {'ref': 'dependabot/github_actions/x'},   False),
     ('a fork',                        {'ref': 'feat/x', 'fork': True},          False),
     ('a draft',                       {'ref': 'feat/x', 'draft': True},         False),
     # The empty-prefix trap, both directions: emptying the input must give up only the

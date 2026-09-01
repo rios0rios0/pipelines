@@ -406,15 +406,15 @@ event now fails loudly instead of quietly doing nothing.
 
 The fourteenth asserts **which pull requests the review runs on at all**, and it is the one
 assertion here that exists to save money rather than to prevent a silent failure. A
-`chore/bump-*`, `bump/*` or `chore/autoupdate-*` pull request is generated wholesale by a tool,
+`chore/bump-*`, `bump/*`, `chore/autoupdate-*` or `dependabot/*` pull request is generated wholesale by a tool,
 carries a version number or a dependency pin, and is merged unread — so every review of one is a
 full-diff Claude run, at Opus prices, on a diff nobody reads back. The guard that stops it is a
 job-level `if:`: free text, one expression, exactly what a "tidy these conditions" pass eats
 first. It is therefore **evaluated, not matched** — the expression is translated into Python and
-run against nine pull requests whose verdict is known — so it survives a reordering, an input
+run against ten pull requests whose verdict is known — so it survives a reordering, an input
 rename or a rewrite from `startsWith` to `contains`, and still fails when a prefix is dropped.
 
-Two of the nine are the traps, and both are cases where the obvious guard is worse than none.
+Two of the ten are the traps, and both are cases where the obvious guard is worse than none.
 A plain `feat/…` branch must still BE reviewed, or an expression that skips *everything* passes a
 test that only checks the automation branches. And emptying `autoupdate_branch_prefix` must give
 up only the autoupdate exemption: `startsWith(ref, '')` is TRUE, so an input read without a
@@ -422,8 +422,8 @@ non-empty check silently disables every review in the repository that set it —
 looks configured and reviews nothing.
 
 The prefixes are spelled exactly as `basic-checks` spells them
-(`github/global/stages/10-code-check/basic-checks/action.yaml`), including the split between two
-literal bump shapes and one configurable autoupdate prefix, which there is `AUTOUPDATE_BRANCH_PREFIX`
+(`github/global/stages/10-code-check/basic-checks/action.yaml`), including the split between three
+literal shapes (the two bump forms and `dependabot/`) and one configurable autoupdate prefix, which there is `AUTOUPDATE_BRANCH_PREFIX`
 and here is the `autoupdate_branch_prefix` input. That split is forced — `startsWith` takes one
 prefix and the expression language cannot iterate a list — but keeping the two jobs in step is a
 choice: the changelog gate and the review gate exempt the same pull requests, so a repository does

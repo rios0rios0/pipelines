@@ -75,6 +75,11 @@ if [ -f ".chlog.yaml" ] || [ -f ".chlog.yml" ] || [ -d ".changes/unreleased" ]; 
 
       echo "CHANGELOG.md was updated. OK."
       ;;
+    dependabot/*)
+      # Dependabot never writes an entry and cannot be made to (read-only token on
+      # its branches), and autoupdate cannot take over because it skips SHA pins.
+      echo "Dependency-bot branch detected; changelog fragment not required."
+      ;;
     "$AUTOUPDATE_PREFIX"*)
       # autoupdate writes NO entry when the target branch already records the
       # statement it would have written. It runs unattended, on a schedule, against
@@ -144,6 +149,13 @@ else
     # The same exemption the chlog path above makes, for a repository that keeps a
     # hand-written CHANGELOG.md: autoupdate suppresses the entry when [Unreleased]
     # on the target branch already states it.
+    case "$SOURCE_BRANCH" in
+      dependabot/*)
+        echo "Dependency-bot branch detected; CHANGELOG.md entry not required."
+        exit 0
+        ;;
+    esac
+
     PENDING_ENTRIES=''
     case "$SOURCE_BRANCH" in
       "$AUTOUPDATE_PREFIX"*)
@@ -311,6 +323,27 @@ assert_script_pass() {
 # invalid ones, for the same reason, and only the positive fixture noticed.
 # Requiring the message pins WHICH branch of the check refused, so a negative
 # assertion cannot be satisfied by the wrong code path.
+# `assert_script_terminal <description> <unexpected-message>` -- passes only if the
+# script exits 0 AND never printed <unexpected-message>. Exit status alone cannot
+# see a `case` arm that falls through into a later block, because the later block
+# reaches the same verdict for a different reason; the arm is then dead for the
+# verdict and a future edit to the later block silently changes the answer. This
+# is what the plain pass assertion above could not distinguish.
+assert_script_terminal() {
+  local description="$1"
+  local unexpected="$2"
+  local source_branch output
+  source_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
+  if output="$(sh "$REAL_SCRIPT" main "$source_branch" 2>&1)" \
+    && ! printf '%s' "$output" | grep -qF -- "$unexpected"; then
+    echo -e "${GREEN}PASS${NC} changelog-check.sh: $description"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  else
+    echo -e "${RED}FAIL${NC} changelog-check.sh: $description (fell through to '$unexpected')"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+  fi
+}
+
 assert_script_fail() {
   local description="$1"
   local expected="$2"
@@ -628,6 +661,79 @@ assert_fail "legacy repo, human branch, pending entry is not a defence"
 assert_script_fail "legacy repo, human branch, pending entry is not a defence" \
   "CHANGELOG.md was NOT modified"
 
+# ── dependency bots ───────────────────────────────────────────────────────────
+#
+# Dependabot is exempted OUTRIGHT, where autoupdate's exemption above is
+# conditional, and the asymmetry is the point: autoupdate can write an entry and
+# merely declines to restate one already pending, while Dependabot cannot write
+# one at all. Its branches carry a read-only token, so nothing running on them
+# can commit a fragment back, and this organisation's own updater is not a
+# substitute --- it deliberately skips SHA pins, which is exactly what these
+# repositories pin with. Before the gate reached them, every merged Dependabot
+# pull request carried no changelog entry of any kind.
+#
+# The fixtures pin both halves, as the autoupdate ones do: the exemption applies
+# on the chlog path and the legacy path, and it does NOT extend to a human
+# branch that merely happens to bump a dependency.
+
+echo ""
+echo "── dependency bots (unconditional exemption) ──"
+
+echo ""
+echo "Test 18: chlog repo, dependabot branch, no fragment -> should pass"
+WORK_DIR="$(setup_repo "dependabot-chlog")"
+cd "$WORK_DIR"
+touch .chlog.yaml
+mkdir -p .changes/unreleased
+touch .changes/unreleased/.gitkeep
+git add .chlog.yaml .changes/unreleased/.gitkeep
+git commit -m "add chlog config" >/dev/null 2>&1
+git push origin main >/dev/null 2>&1
+git checkout -b dependabot/github_actions/github-actions-7a5a078ad4 >/dev/null 2>&1
+mkdir -p .github/workflows
+echo "      - uses: actions/checkout@d23441a # v6.1.0" > .github/workflows/build.yaml
+git add .github/workflows/build.yaml
+git commit -m "chore(deps): bump actions/checkout" >/dev/null 2>&1
+assert_pass "chlog repo, dependabot branch, no fragment"
+assert_script_pass "chlog repo, dependabot branch, no fragment"
+# The chlog arm must be TERMINAL. Without its `exit 0` the script falls out of the
+# `esac` into the legacy CHANGELOG.md block -- whose own dependabot arm reaches the
+# same verdict, so the two assertions above pass either way while the chlog arm is
+# dead. Narrow the legacy arm later and every chlog repo's Dependabot PR goes red.
+assert_script_terminal "chlog repo, dependabot branch, chlog arm is terminal" \
+  "CHANGELOG.md entry not required"
+
+echo ""
+echo "Test 19: legacy repo, dependabot branch, no CHANGELOG.md edit -> should pass"
+WORK_DIR="$(setup_repo "dependabot-legacy")"
+cd "$WORK_DIR"
+git checkout -b dependabot/github_actions/github-actions-781e586a15 >/dev/null 2>&1
+mkdir -p .github/workflows
+echo "      - uses: actions/setup-go@924ae3a # v6.5.0" > .github/workflows/build.yaml
+git add .github/workflows/build.yaml
+git commit -m "chore(deps): bump actions/setup-go" >/dev/null 2>&1
+assert_pass "legacy repo, dependabot branch, no CHANGELOG.md edit"
+assert_script_pass "legacy repo, dependabot branch, no CHANGELOG.md edit"
+
+echo ""
+echo "Test 20: chlog repo, HUMAN branch bumping a dependency, no fragment -> should fail"
+WORK_DIR="$(setup_repo "dependabot-human")"
+cd "$WORK_DIR"
+touch .chlog.yaml
+mkdir -p .changes/unreleased
+touch .changes/unreleased/.gitkeep
+git add .chlog.yaml .changes/unreleased/.gitkeep
+git commit -m "add chlog config" >/dev/null 2>&1
+git push origin main >/dev/null 2>&1
+git checkout -b feat/bump-actions-by-hand >/dev/null 2>&1
+mkdir -p .github/workflows
+echo "      - uses: actions/checkout@d23441a # v6.1.0" > .github/workflows/build.yaml
+git add .github/workflows/build.yaml
+git commit -m "chore(deps): bump actions/checkout by hand" >/dev/null 2>&1
+assert_fail "chlog repo, human branch bumping a dependency, no fragment"
+assert_script_fail "chlog repo, human branch bumping a dependency, no fragment" \
+  "No changelog fragment was added"
+
 # ── the four implementations must move together ───────────────────────────────
 #
 # The fixtures above run the rule twice: through the extracted Azure logic and
@@ -660,6 +766,9 @@ for impl in \
   'gitlab/global/stages/10-code-check/basic-checks.yaml' \
   'azure-devops/global/stages/10-code-check/basic-checks.yaml'; do
   assert_contains "$impl" '.chlog.yaml'
+  # The dependency-bot exemption is the newest of the four-way duplications and
+  # so the easiest to drop from one copy while editing another.
+  assert_contains "$impl" 'dependabot/*)'
   assert_contains "$impl" '.changes/unreleased/'
   # `--diff-filter=A` is the load-bearing half of the fragment rule: without it,
   # editing an entry somebody else already recorded counts as this change's entry.

@@ -123,12 +123,19 @@ if [ -f ".chlog.yaml" ] || [ -f ".chlog.yml" ] || [ -d ".changes/unreleased" ]; 
       exit 0
       ;;
     dependabot/*)
-    # Dependabot is exempted outright, unlike every other automation branch here, because it is
-    # the only one that cannot comply: it never writes a changelog entry and cannot be made to
-    # (its branches carry a read-only token). autoupdate is not a substitute -- it deliberately
-    # skips SHA pins, which is exactly what these repositories use. See the long note in
-    # github/global/stages/10-code-check/basic-checks/action.yaml for the full reasoning.
+      # Dependabot is exempted outright, unlike every other automation branch here,
+      # because it is the only one that cannot comply: it never writes a changelog
+      # entry and cannot be made to (its branches carry a read-only token).
+      # autoupdate is not a substitute -- it deliberately skips SHA pins, which is
+      # exactly what these repositories use. See the long note in
+      # github/global/stages/10-code-check/basic-checks/action.yaml for the reasoning.
+      # `exit 0`, unlike the templates' equivalent arm. They wrap the two paths in
+      # `if chlog ... else legacy ... fi`, so falling out of the `esac` is terminal
+      # there; here line 206 is a bare `fi` and control continues into the legacy
+      # CHANGELOG.md check below -- which is why every other arm in this `case`
+      # carries one too.
       echo "Dependency-bot branch detected ('$SOURCE_BRANCH'); changelog fragment not required."
+      exit 0
       ;;
     "$AUTOUPDATE_PREFIX"*)
       # autoupdate writes NO entry when the target branch already records the

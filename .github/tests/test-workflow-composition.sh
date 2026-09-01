@@ -916,7 +916,7 @@ echo "Test 14: the review job skips the pull requests automation opens"
 # So it is EVALUATED, not matched. The expression is translated into Python and run
 # against ten pull requests whose verdict is known, which is what makes the assertion
 # survive a reordering, a rename of the input, or a rewrite from `startsWith` to
-# `contains`, while still failing when a prefix is dropped. Two of the nine are the
+# `contains`, while still failing when a prefix is dropped. Two of the ten are the
 # traps: a plain feature branch must still BE reviewed (or "skip everything" passes this
 # test), and emptying the input must not skip everything either -- `startsWith(ref, '')`
 # is TRUE, so an input used without a non-empty check silently disables every review in

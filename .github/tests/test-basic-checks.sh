@@ -323,6 +323,27 @@ assert_script_pass() {
 # invalid ones, for the same reason, and only the positive fixture noticed.
 # Requiring the message pins WHICH branch of the check refused, so a negative
 # assertion cannot be satisfied by the wrong code path.
+# `assert_script_terminal <description> <unexpected-message>` -- passes only if the
+# script exits 0 AND never printed <unexpected-message>. Exit status alone cannot
+# see a `case` arm that falls through into a later block, because the later block
+# reaches the same verdict for a different reason; the arm is then dead for the
+# verdict and a future edit to the later block silently changes the answer. This
+# is what the plain pass assertion above could not distinguish.
+assert_script_terminal() {
+  local description="$1"
+  local unexpected="$2"
+  local source_branch output
+  source_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
+  if output="$(sh "$REAL_SCRIPT" main "$source_branch" 2>&1)" \
+    && ! printf '%s' "$output" | grep -qF -- "$unexpected"; then
+    echo -e "${GREEN}PASS${NC} changelog-check.sh: $description"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  else
+    echo -e "${RED}FAIL${NC} changelog-check.sh: $description (fell through to '$unexpected')"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+  fi
+}
+
 assert_script_fail() {
   local description="$1"
   local expected="$2"
@@ -675,6 +696,12 @@ git add .github/workflows/build.yaml
 git commit -m "chore(deps): bump actions/checkout" >/dev/null 2>&1
 assert_pass "chlog repo, dependabot branch, no fragment"
 assert_script_pass "chlog repo, dependabot branch, no fragment"
+# The chlog arm must be TERMINAL. Without its `exit 0` the script falls out of the
+# `esac` into the legacy CHANGELOG.md block -- whose own dependabot arm reaches the
+# same verdict, so the two assertions above pass either way while the chlog arm is
+# dead. Narrow the legacy arm later and every chlog repo's Dependabot PR goes red.
+assert_script_terminal "chlog repo, dependabot branch, chlog arm is terminal" \
+  "CHANGELOG.md entry not required"
 
 echo ""
 echo "Test 19: legacy repo, dependabot branch, no CHANGELOG.md edit -> should pass"

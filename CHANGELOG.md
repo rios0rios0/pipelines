@@ -22,6 +22,20 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [5.2.0] - 2026-09-02
+
+### Added
+
+- added `checks.yaml`, a language-agnostic reusable workflow that runs the global `basic-checks` stage (rebase status plus the changelog gate) on its own, for a repository that has no build to attach it to. Every `<toolchain>.yaml` already runs that stage as its first job, so a repository with a pipeline has it by construction — but 44 of the 76 repositories across `rios0rios0`, `medhub-life` and `prefy` have no language pipeline at all, 42 of them chlog users, and had no changelog enforcement whatsoever. That gap is how a scheduled job that hand-edited a generated `CHANGELOG.md` reached 46 open pull requests before anything objected: the gate caught it on 15 of 15 repositories where it runs, in under ten seconds, and was simply absent everywhere else. The job name, `target_branch` expression and `if:` are copied verbatim from the toolchain workflows, so a `require-checks` entry naming `code-check > quality:basic-checks` keeps matching if that repository later grows a build. A branch-protection required context does not: GitHub composes a check-run name from the whole chain of job names, and every `-docker` / `-library` / `-binary` wrapper adds a hop the standalone form has no equivalent for, so the full context string differs
+
+### Changed
+
+- stopped reviewing Dependabot pull requests. `reusable-claude-review.yaml` already skipped `chore/bump-*`, `bump/*` and the autoupdate prefix as "generated wholesale by a tool and merged unread"; a `dependabot/*` branch carries the same content for the action pins autoupdate will not touch, and was costing a full-diff Claude run per bump
+
+### Fixed
+
+- stopped the changelog gate from failing every Dependabot pull request. `basic-checks` classifies a branch by name and exempted `chore/bump-*`, `bump/*` and the autoupdate prefix; a `dependabot/*` branch fell into the default case, which hard-requires a new fragment (or a `CHANGELOG.md` edit on the legacy path), and Dependabot never writes one. Every repository running the stage was therefore red on Dependabot — `rios0rios0/backstage-plugin-code-health#68` shows exactly that — and the repository lost the only mechanism that advances its action pins, which is a security regression wearing a documentation rule's clothes. Dependabot is exempted **outright**, unlike autoupdate's conditional exemption, because it is the only one that cannot comply: its branches carry a read-only token, so nothing running on them can commit a fragment back, and auto-appending one would mean a `pull_request_target` job with a write credential on a bot branch — a privileged-execution surface bought for a changelog line. AutoBump's updater is not a substitute either: it deliberately skips SHA pins, which is exactly what these repositories pin with. This records established practice rather than relaxing policy — before the gate reached them, every merged Dependabot pull request carried no changelog entry at all. Applied to all four implementations of the rule (the three platform templates and `global/scripts/shared/changelog-check.sh`), with ten new assertions in `test-basic-checks.sh` covering both paths, the human-branch counter-case, and four-way parity
+
 ## [5.1.1] - 2026-09-01
 
 ### Changed

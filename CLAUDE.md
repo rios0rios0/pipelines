@@ -631,6 +631,14 @@ written with it loads cleanly and then matches nothing. When editing that file,
 re-run `make test-dart-pipeline` with Semgrep installed; the suite asserts every
 rule still matches its vulnerable sample and none matches the safe counterpart.
 
+**Terraform has the same CodeQL gap, handled the same way.** CodeQL ships no HCL extractor,
+so `terra.yaml` carries no `sast:codeql` job: the one it used to carry
+(`codeql_language: 'hcl'`) failed at `codeql resolve languages` on every run and
+`continue-on-error` hid it as a red-but-ignored job on every consumer's pull request.
+Semgrep's Terraform rules are the static analysis for HCL, and `terraform.mk` leaves
+`CODEQL_LANGUAGE` unset so `make sast` skips CodeQL. `.github/tests/test-terra-pipeline.sh`
+fails if the job reappears on any platform. Do not "restore consistency" here either.
+
 ### Terra Test Tiers
 
 The Terra CLI pipeline test stage exposes three parallel jobs on every platform (Azure DevOps, GitLab CI, GitHub Actions) — two always on, one opt-in:

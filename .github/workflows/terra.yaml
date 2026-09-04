@@ -559,9 +559,10 @@ jobs:
 #     workflow_dispatch:
 #
 #   permissions:
-#     contents: 'read'        # actions/checkout -- naming `permissions:` at all resets every
-#                             # unlisted scope to none, so this one is never implied
-#     checks: 'write'         # JUnit publication of the test tiers
-#     pull-requests: 'write'  # basic-checks comments on the pull request
+#     contents: 'read' # actions/checkout -- naming `permissions:` at all resets every unlisted
+#                      # scope to none, so this one is never implied
 #     # No `security-events` or `actions` permission: there is no CodeQL job (see the second
-#     # stage above), so nothing here uploads SARIF or reads the Actions API.
+#     # stage above), so nothing here uploads SARIF or reads the Actions API. Nothing needs
+#     # `checks` or `pull-requests` either -- every publication step is
+#     # `actions/upload-artifact`, which requires no additional scope, and basic-checks
+#     # posts nothing.

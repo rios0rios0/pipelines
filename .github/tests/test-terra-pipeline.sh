@@ -13,7 +13,8 @@ set -e
 # every consumer. The gap is handled the way the Dart pipeline handles the same gap: by
 # a deliberate ABSENCE, with Semgrep's Terraform rules as the static analysis for HCL.
 # An absence is exactly what a later "make the languages consistent" edit silently
-# undoes, so this suite defends it on every platform and in the Makefile include.
+# undoes, so this suite defends it on every platform and in both Makefile includes
+# (`terra.mk` pairs with this workflow, `terraform.mk` with the raw Terraform one).
 #
 # Runs OFFLINE with nothing but bash and grep.
 
@@ -75,11 +76,13 @@ done
 [ "$found_template" -eq 1 ] || skip "no GitLab/Azure DevOps Terraform template found to inspect"
 
 echo ""
-echo "--- 2. The Makefile include skips CodeQL for the same reason ---"
-assert_true "terraform.mk leaves CODEQL_LANGUAGE unset so 'make sast' skips CodeQL" \
-  "! grep -qE '^CODEQL_LANGUAGE' '$SCRIPTS_DIR/makefiles/terraform.mk'"
-assert_true "terraform.mk says why, so the omission reads as a decision" \
-  "grep -qi 'CodeQL does not support Terraform' '$SCRIPTS_DIR/makefiles/terraform.mk'"
+echo "--- 2. Both Makefile includes skip CodeQL for the same reason ---"
+for mk in terra terraform; do
+  assert_true "$mk.mk leaves CODEQL_LANGUAGE unset so 'make sast' skips CodeQL" \
+    "! grep -qE '^CODEQL_LANGUAGE' '$SCRIPTS_DIR/makefiles/$mk.mk'"
+  assert_true "$mk.mk says why, so the omission reads as a decision" \
+    "grep -qi 'CodeQL does not support Terraform' '$SCRIPTS_DIR/makefiles/$mk.mk'"
+done
 
 echo ""
 echo "=========================================="

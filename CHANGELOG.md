@@ -22,6 +22,12 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [5.2.1] - 2026-09-04
+
+### Removed
+
+- removed the `sast:codeql` job from the GitHub Terraform workflow (`terra.yaml`): CodeQL ships no HCL extractor, so the job failed at `codeql resolve languages` ("Did not recognize the following languages: hcl") on every run and `continue-on-error` hid it as a red-but-ignored job on every consumer's pull request. The gap is handled as the Dart pipeline handles its own: by a deliberate absence, with Semgrep's Terraform rules as the static analysis for HCL, pinned by the new `test-terra-pipeline` suite on every platform and in `terraform.mk`
+
 ## [5.2.0] - 2026-09-02
 
 ### Added

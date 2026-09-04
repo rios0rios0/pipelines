@@ -559,6 +559,8 @@ jobs:
 #     workflow_dispatch:
 #
 #   permissions:
+#     contents: 'read'        # actions/checkout -- naming `permissions:` at all resets every
+#                             # unlisted scope to none, so this one is never implied
 #     checks: 'write'         # JUnit publication of the test tiers
 #     pull-requests: 'write'  # basic-checks comments on the pull request
 #     # No `security-events` or `actions` permission: there is no CodeQL job (see the second

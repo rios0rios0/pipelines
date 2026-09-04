@@ -60,9 +60,13 @@ assert_true "GitHub: no job asks CodeQL for the hcl language" \
 assert_true "GitHub: the absence is explained where the job used to be, so it survives review" \
   "grep -q 'no HCL extractor' '$GITHUB_WORKFLOW'"
 
+# `**` only recurses with globstar; without it the pattern silently means one level, which
+# is exactly how a stage file two levels down would escape the assertion. Both the raw
+# Terraform trees and the Terra CLI trees are inspected on both platforms, at every depth.
+shopt -s globstar
 found_template=0
-for template in "$SCRIPTS_DIR"/gitlab/terraform/*.yaml "$SCRIPTS_DIR"/azure-devops/terraform/*.yaml \
-                "$SCRIPTS_DIR"/gitlab/terraform/**/*.yaml "$SCRIPTS_DIR"/azure-devops/terraform/**/*.yaml; do
+for template in "$SCRIPTS_DIR"/gitlab/terra/**/*.yaml "$SCRIPTS_DIR"/gitlab/terraform/**/*.yaml \
+                "$SCRIPTS_DIR"/azure-devops/terra/**/*.yaml "$SCRIPTS_DIR"/azure-devops/terraform/**/*.yaml; do
   [ -f "$template" ] || continue
   found_template=1
   assert_true "$(echo "$template" | sed "s|$SCRIPTS_DIR/||"): no CodeQL job is wired for Terraform" \

@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, gitignore, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, workflow-composition, supply-chain, runner-cache-gating, azure-step-names, dependency-updates)
+make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, gitignore, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, supply-chain, runner-cache-gating, azure-step-names, dependency-updates)
 make test-go-script    # Test Go validation script only
 make test-go-module-toolchain  # Test that every go.mod toolchain directive is readable by the images/analysers that consume it only
 make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves only
@@ -35,6 +35,7 @@ make test-release-reconcile  # Test release reconciliation gap detection only
 make test-deploy-providers   # Test the MVP hosting deployment providers (Cloudflare, Vercel, Render, Netlify, Fly.io) only
 make test-memory-detection  # Test the cgroup-aware memory ceiling detection only
 make test-dart-pipeline # Test the Dart/Flutter pipeline (scripts, Semgrep rules, cross-platform wiring) only
+make test-terra-pipeline # Test the Terraform/terra pipeline's CodeQL tool gap (GitHub, GitLab, Azure, terra.mk, terraform.mk) only
 make test-javascript-pipeline  # Test the JavaScript formatting gate (Prettier runner + cross-platform wiring) only
 make test-workflow-composition  # Test the GitHub Actions workflow composition standard only
 make test-supply-chain # Test the supply-chain pinning contract (actions, images, binaries, packages) only
@@ -630,6 +631,14 @@ otherwise), and interpolation must be detected with `metavariable-regex` — the
 written with it loads cleanly and then matches nothing. When editing that file,
 re-run `make test-dart-pipeline` with Semgrep installed; the suite asserts every
 rule still matches its vulnerable sample and none matches the safe counterpart.
+
+**Terraform has the same CodeQL gap, handled the same way.** CodeQL ships no HCL extractor,
+so `terra.yaml` carries no `sast:codeql` job: the one it used to carry
+(`codeql_language: 'hcl'`) failed at `codeql resolve languages` on every run and
+`continue-on-error` hid it as a red-but-ignored job on every consumer's pull request.
+Semgrep's Terraform rules are the static analysis for HCL, and `terraform.mk` leaves
+`CODEQL_LANGUAGE` unset so `make sast` skips CodeQL. `.github/tests/test-terra-pipeline.sh`
+fails if the job reappears on any platform. Do not "restore consistency" here either.
 
 ### Terra Test Tiers
 

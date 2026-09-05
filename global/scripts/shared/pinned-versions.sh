@@ -99,9 +99,9 @@ HADOLINT_SHA256_ARM64="f6198ef8090f404dbb771abfee086eb8c48ac177f30da7fd3510aca35
 # double moving target: a new bundle every few weeks AND no way to state which
 # one a given scan used.
 # upstream: github-release github/codeql-action
-CODEQL_BUNDLE_PINNED_VERSION="codeql-bundle-v2.26.3"
+CODEQL_BUNDLE_PINNED_VERSION="codeql-bundle-v2.26.4"
 CODEQL_BUNDLE_VERSION="${CODEQL_BUNDLE_VERSION:-${CODEQL_BUNDLE_PINNED_VERSION}}"
-CODEQL_BUNDLE_SHA256_LINUX64="77e5be1b550d66662e600e795b6cf2ea1729e853e3dc79e02594f767039d2a29"
+CODEQL_BUNDLE_SHA256_LINUX64="48e1ab8b874d57bd6fd7c90fefee75addc5a45e9bd063982df9beb45a62dd5d3"
 
 # upstream: github-release google/osv-scanner
 OSV_SCANNER_PINNED_VERSION="2.5.1"
@@ -112,23 +112,23 @@ OSV_SCANNER_SHA256_ARM64="3d0f5aa5a6baa8eb32bcef247388e149ef6030a6634ccae6fa0d62
 # --- Language tooling --------------------------------------------------------
 
 # upstream: github-release golangci/golangci-lint
-GOLANGCI_LINT_PINNED_VERSION="2.13.1"
+GOLANGCI_LINT_PINNED_VERSION="2.13.2"
 GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-${GOLANGCI_LINT_PINNED_VERSION}}"
-GOLANGCI_LINT_SHA256_AMD64="b17bfbc9d4aaa48be7f4f1ce3240bc3d8200c870c072bacf15c26219e2cfb9cc"
-GOLANGCI_LINT_SHA256_ARM64="908317c23db18448f924e853b3d8a659fd919614cd438f224810a4053daa2607"
+GOLANGCI_LINT_SHA256_AMD64="2277d43b98ec0054280f2ac26b53268bae97682444678a59a657dd565da021d6"
+GOLANGCI_LINT_SHA256_ARM64="a2a4e0065aa41be71f7c5ac90f271b61751331e5d04314e62afe4027855f0893"
 
 # upstream: github-release Guardsquare/proguard
-PROGUARD_PINNED_VERSION="7.6.1"
+PROGUARD_PINNED_VERSION="7.10.0"
 PROGUARD_VERSION="${PROGUARD_VERSION:-${PROGUARD_PINNED_VERSION}}"
-PROGUARD_SHA256="672ef62a3154474a6172cbfde9a2f09da1642a17a80e1c7b79a6cc58953fbe06"
+PROGUARD_SHA256="fbff4dfe037d0724ff767ad555c06ebd14063ccf99a657cf05a69e6f2610da21"
 
 # GoReleaser is deliberately held at 1.x: the v2 release is a breaking
 # configuration change, so bumping it is a migration for every consumer, not a
 # version bump. Pinning it here does not decide that migration either way.
 # upstream: github-release goreleaser/goreleaser track=1
-GORELEASER_PINNED_VERSION="1.21.2"
+GORELEASER_PINNED_VERSION="1.26.2"
 GORELEASER_VERSION="${GORELEASER_VERSION:-${GORELEASER_PINNED_VERSION}}"
-GORELEASER_SHA256_AMD64_DEB="9b63d670dab507f2b21e811812805f051b720cb781c2b4c3f3c1d656be05c1a6"
+GORELEASER_SHA256_AMD64_DEB="2710e9740185be82b6929c78b695b455a09975e231bddbb8e295f1cc1b591d4b"
 
 # --- Terraform / Terragrunt tooling ------------------------------------------
 
@@ -139,28 +139,28 @@ TFLINT_SHA256_AMD64="cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef9
 TFLINT_SHA256_ARM64="560da89aacf59389d4eb029730dd5b109b7288096c32f2726a0d9e783a5ea8eb"
 
 # upstream: github-release gruntwork-io/terragrunt
-TERRAGRUNT_PINNED_VERSION="1.1.3"
+TERRAGRUNT_PINNED_VERSION="1.1.4"
 TERRAGRUNT_VERSION="${TERRAGRUNT_VERSION:-${TERRAGRUNT_PINNED_VERSION}}"
-TERRAGRUNT_SHA256_AMD64="d5da6a66741f4ee752aa3b502b57e47fd6d5c178942861b2507f14f083e7606e"
-TERRAGRUNT_SHA256_ARM64="5e9b388402ab7075e907e8d8511662e2a828008129746e4e5e23de04c7b78ef4"
+TERRAGRUNT_SHA256_AMD64="a2640da8455fa5f3671167e6373832b0907b9dc972dd01c2093cc7808934e158"
+TERRAGRUNT_SHA256_ARM64="c65d1897446590ebb3c695835cc956c12c5374a9add8312517c83c9fd7a1c06b"
 
 # `rios0rios0/terra` is first-party, which changes nothing about the download:
 # the templates fetched `install.sh` from the `main` BRANCH and piped it into a
 # shell, so a bad commit on that branch reached every consumer's runner
 # immediately, with no release and no review gate in between.
 # upstream: github-release rios0rios0/terra
-TERRA_PINNED_VERSION="1.17.9"
+TERRA_PINNED_VERSION="1.18.6"
 TERRA_VERSION="${TERRA_VERSION:-${TERRA_PINNED_VERSION}}"
-TERRA_SHA256_AMD64="747b2dc190f68e91fed837f9a67a78530315489f2deef11a50d87531fb5e674c"
-TERRA_SHA256_ARM64="363796d502d110e642576bb37beb918976df63ac537930afed02cc84e1124427"
+TERRA_SHA256_AMD64="45f3577ea372ddd1f2ab9ead67c184cda3a9baf75977e383b4912e12778eb2f2"
+TERRA_SHA256_ARM64="9f154449271b0f23dc1147c80f48012c46cdf0c08809d60b3f1331771de4fd72"
 
 # --- Deployment tooling (50-deployment stage) --------------------------------
 
 # upstream: github-release superfly/flyctl
-FLYCTL_PINNED_VERSION="0.4.84"
+FLYCTL_PINNED_VERSION="0.4.99"
 FLYCTL_VERSION="${FLYCTL_VERSION:-${FLYCTL_PINNED_VERSION}}"
-FLYCTL_SHA256_X86_64="5faeeb6806b939540619518be530ad4cf9de090eff1e0e44795e3f09c113b5ce"
-FLYCTL_SHA256_ARM64="677bfad02ea7e44e0c7ef6d0666babc6daa3d468ce97b44d2451d60e97ba3d58"
+FLYCTL_SHA256_X86_64="384a14958b214b18ebda784dee101a633ceae626ac4bcccee0fc7ebb111247a4"
+FLYCTL_SHA256_ARM64="23fcf016fb7812b743674ee06167abbd68ffb74e00f61c45b7e213f0bd4694ab"
 
 # mikefarah/yq, resolved by global/scripts/shared/resolve-yq.sh for the
 # golangci-lint config merge. Four digests rather than the usual two because
@@ -178,12 +178,12 @@ FLYCTL_SHA256_ARM64="677bfad02ea7e44e0c7ef6d0666babc6daa3d468ce97b44d2451d60e97b
 # carries 31 hashes per asset and no header, so reading the wrong column yields
 # a plausible-looking digest that matches nothing.
 # upstream: github-release mikefarah/yq
-YQ_PINNED_VERSION="4.47.1"
+YQ_PINNED_VERSION="4.53.6"
 YQ_VERSION="${YQ_VERSION:-${YQ_PINNED_VERSION}}"
-YQ_SHA256_LINUX_AMD64="0fb28c6680193c41b364193d0c0fc4a03177aecde51cfc04d506b1517158c2fb"
-YQ_SHA256_LINUX_ARM64="b7f7c991abe262b0c6f96bbcb362f8b35429cefd59c8b4c2daa4811f1e9df599"
-YQ_SHA256_DARWIN_AMD64="a9b5ca36f7750576c6ace3cc7193349cd676b3a6bf30193fb2773ff45f5af5c2"
-YQ_SHA256_DARWIN_ARM64="99aae3a7c9ddfe76bb339f0e7acd8224324b6527436fb6a5d890079bf5fcc590"
+YQ_SHA256_LINUX_AMD64="c5f056448f973ae7d39b5401949648a78f2dc1947d6a8eb65be60d5c504b9385"
+YQ_SHA256_LINUX_ARM64="88a1016bc1d657375a35864e4f44b6f333df8ff97b559f51bba0adcb2169df09"
+YQ_SHA256_DARWIN_AMD64="caa513cb04f3804b34d4752f0e0d7904fecb9e7cf1d34081289f83259319a7f6"
+YQ_SHA256_DARWIN_ARM64="cceb0b8d71ea5294334121f8429f33f92b920e7217d904a2f9f35443968ac424"
 
 # The npm-published deploy clients (`wrangler`, `vercel`, `netlify-cli`) talk to
 # a hosted API the vendor versions on their side, so these are the majors this
@@ -239,7 +239,7 @@ GOCOVER_COBERTURA_VERSION="${GOCOVER_COBERTURA_VERSION:-${GOCOVER_COBERTURA_PINN
 GO_JUNIT_REPORT_PINNED_VERSION="v2.1.0"
 GO_JUNIT_REPORT_VERSION="${GO_JUNIT_REPORT_VERSION:-${GO_JUNIT_REPORT_PINNED_VERSION}}"
 # upstream: goproxy github.com/CycloneDX/cyclonedx-gomod
-CYCLONEDX_GOMOD_PINNED_VERSION="v1.10.0"
+CYCLONEDX_GOMOD_PINNED_VERSION="v1.12.0"
 CYCLONEDX_GOMOD_VERSION="${CYCLONEDX_GOMOD_VERSION:-${CYCLONEDX_GOMOD_PINNED_VERSION}}"
 
 # Python and Ruby tools installed from their language registries.
@@ -255,14 +255,14 @@ CYCLONEDX_GOMOD_VERSION="${CYCLONEDX_GOMOD_VERSION:-${CYCLONEDX_GOMOD_PINNED_VER
 # behaviour on the day it landed -- it only stopped the behaviour changing
 # underneath a consumer afterwards.
 # upstream: pypi pdm
-PDM_SPEC="${PDM_SPEC:-pdm==2.28.1}"
+PDM_SPEC="${PDM_SPEC:-pdm==2.29.0}"
 # upstream: pypi vulture
 VULTURE_SPEC="${VULTURE_SPEC:-vulture==2.16}"
 # upstream: pypi semgrep
-SEMGREP_SPEC="${SEMGREP_SPEC:-semgrep==1.173.0}"
+SEMGREP_SPEC="${SEMGREP_SPEC:-semgrep==1.176.1}"
 # upstream: rubygems bundler-audit
 BUNDLER_AUDIT_SPEC="${BUNDLER_AUDIT_SPEC:-bundler-audit:0.9.3}"
 # upstream: rubygems debride
 DEBRIDE_SPEC="${DEBRIDE_SPEC:-debride:1.15.2}"
 # upstream: npm knip
-KNIP_SPEC="${KNIP_SPEC:-knip@6.32.2}"
+KNIP_SPEC="${KNIP_SPEC:-knip@6.34.0}"

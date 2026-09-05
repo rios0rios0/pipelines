@@ -2,7 +2,7 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/40-delivery/sam.yaml'
 
 .delivery:
-  image: 'ghcr.io/rios0rios0/pipelines/golang:1.26-awscli@sha256:12d2bcec409e08ca7bc4a8274a58272b5ec08f4288290c1d52f6b9616e120e84'
+  image: 'ghcr.io/rios0rios0/pipelines/golang:1.26-awscli@sha256:ea5a9bf32d1860f616e87874b0f20416549101820778800ef1c8d46de799e50a'
   script:
     - '[[ -f config.sh ]] && ./config.sh'
     - export BUILD_FLAGS="-ldflags='-w -s'"

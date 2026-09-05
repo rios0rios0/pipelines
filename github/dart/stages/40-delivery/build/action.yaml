@@ -38,7 +38,7 @@ runs:
   using: 'composite'
   steps:
     - name: 'Checkout code'
-      uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+      uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 
@@ -67,7 +67,7 @@ runs:
     # behaviour instead of silently disabling the cache for hosted consumers.
     - name: 'Cache the Dart/Flutter SDK and pub packages'
       if: "runner.environment != 'self-hosted'"
-      uses: 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' # v4.3.0
+      uses: 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' # v6.1.0
       with:
         path: |
           ~/.local/share/flutter

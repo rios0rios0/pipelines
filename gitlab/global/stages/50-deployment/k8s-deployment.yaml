@@ -3,7 +3,7 @@ variables:
   KUBERNETES_SERVICE_ACCOUNT_OVERWRITE_ALLOWED: '^[a-z]+-gitlab-runner$'
 
 deployment:qa:
-  image: 'bitnami/kubectl:latest@sha256:f0c03a7e99bd3b22085328bf747082d8d689f362dac4b1277dc9b6a85c07fce4'
+  image: 'bitnami/kubectl:latest@sha256:b29d8c1665b70817259ceecaea16ab27aab6368b48daf485d19436c809067492'
   stage: 'deployment'
   environment:
     name: 'qa'

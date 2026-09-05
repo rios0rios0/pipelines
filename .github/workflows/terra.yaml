@@ -45,10 +45,10 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - name: 'Checkout code'
-        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
       - name: 'Setup Go'
-        uses: 'actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16' # v6.5.0
+        uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
         with:
           go-version: '1.24'
           # See `github/golang/stages/10-code-check/golangci-lint/action.yaml` for the measured
@@ -82,7 +82,7 @@ jobs:
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 
       - name: 'Checkout pipelines repo for shared scripts'
-        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
         with:
           repository: 'rios0rios0/pipelines'
           ref: ${{ steps.pipelines-ref.outputs.ref }}
@@ -106,7 +106,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     steps:
       - name: 'Checkout code'
-        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
       # Same `job.workflow_ref` derivation the test jobs below use and for the
       # same reason: the shared scripts must come from the ref the consumer
@@ -130,7 +130,7 @@ jobs:
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 
       - name: 'Checkout pipelines repo for shared scripts'
-        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
         with:
           repository: 'rios0rios0/pipelines'
           ref: ${{ steps.pipelines-ref.outputs.ref }}
@@ -159,7 +159,7 @@ jobs:
       REPORT_PATH: 'build/reports'
     steps:
       - name: 'Checkout code'
-        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
       # Pass `inputs.pipelines_ref` via `env:` (not `${{ }}` in `run:`) to
       # avoid script injection, then resolve the ref this reusable workflow
@@ -181,7 +181,7 @@ jobs:
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 
       - name: 'Checkout pipelines repo for shared scripts'
-        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
         with:
           repository: 'rios0rios0/pipelines'
           ref: ${{ steps.pipelines-ref.outputs.ref }}
@@ -256,7 +256,7 @@ jobs:
       REPORT_PATH: 'build/reports'
     steps:
       - name: 'Checkout code'
-        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
       # Mirror the `go-version-file: 'go.mod'` pattern used by every
       # `github/golang/stages/**/action.yaml` in this repo: derive the Go
@@ -280,7 +280,7 @@ jobs:
 
       - name: 'Setup Go (from terratest go.mod)'
         if: "steps.terratest-gomod.outputs.path != ''"
-        uses: 'actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16' # v6.5.0
+        uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
         with:
           go-version-file: ${{ steps.terratest-gomod.outputs.path }}
           # See `github/golang/stages/10-code-check/golangci-lint/action.yaml` for the measured
@@ -294,7 +294,7 @@ jobs:
 
       - name: 'Setup Go (fallback when no terratest go.mod)'
         if: "steps.terratest-gomod.outputs.path == ''"
-        uses: 'actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16' # v6.5.0
+        uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
         with:
           go-version: '1.24'
           # See `github/golang/stages/10-code-check/golangci-lint/action.yaml` for the measured
@@ -356,7 +356,7 @@ jobs:
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 
       - name: 'Checkout pipelines repo for shared scripts'
-        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
         with:
           repository: 'rios0rios0/pipelines'
           ref: ${{ steps.pipelines-ref.outputs.ref }}
@@ -406,7 +406,7 @@ jobs:
       VALIDATE_ROOTS: ${{ inputs.validate_roots }}
     steps:
       - name: 'Checkout code'
-        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
       # Terraform itself — the structural tier is deps-free, this one
       # cannot be. HashiCorp's action rather than the terra CLI installer
@@ -447,7 +447,7 @@ jobs:
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 
       - name: 'Checkout pipelines repo for shared scripts'
-        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
         with:
           repository: 'rios0rios0/pipelines'
           ref: ${{ steps.pipelines-ref.outputs.ref }}
@@ -496,7 +496,7 @@ jobs:
       REPORT_PATH: 'build/reports'
     steps:
       - name: 'Checkout code'
-        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
       # Pass `inputs.pipelines_ref` via the step's `env:` mapping rather
       # than interpolating `${{ }}` directly into the `run:` script. The
@@ -522,7 +522,7 @@ jobs:
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 
       - name: 'Checkout pipelines repo for shared scripts'
-        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
         with:
           repository: 'rios0rios0/pipelines'
           ref: ${{ steps.pipelines-ref.outputs.ref }}

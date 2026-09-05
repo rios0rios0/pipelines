@@ -26,10 +26,10 @@ runs:
     # Checkout has to precede the cache restore: it cleans the workspace, which would take the
     # restored CVE database with it.
     - name: 'Checkout code'
-      uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+      uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
     - name: 'Setup Java'
-      uses: 'actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961' # v5.7.0
+      uses: 'actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c' # v6.0.0
       with:
         distribution: 'temurin'
         java-version: ${{ inputs.java_version }}
@@ -56,7 +56,7 @@ runs:
     # restores from is the one written by the default branch.
     - name: 'Restore NVD database'
       id: 'restore_nvd'
-      uses: 'actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830' # v4.3.0
+      uses: 'actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' # v6.1.0
       with:
         path: '.owasp'
         key: "owasp-nvd-${{ runner.os }}-${{ steps.date.outputs.date }}"
@@ -90,7 +90,7 @@ runs:
     # the next run restored it, Dependency-Check rejected it and restarted the full ~350k-record
     # download, ran out of time, and saved a fresh partial -- a loop the cache could never escape.
     - name: 'Save NVD database'
-      uses: 'actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830' # v4.3.0
+      uses: 'actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' # v6.1.0
       with:
         path: '.owasp'
         key: "owasp-nvd-${{ runner.os }}-${{ steps.date.outputs.date }}"

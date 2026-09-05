@@ -1,6 +1,6 @@
 quality:basic-checks:
   stage: 'code check (style/quality)'
-  image: 'alpine/git:2.54.0@sha256:a299a963fbe31628ab481ca42907bcf0691d004f86734c02638abdf513691d42'
+  image: 'alpine/git:2.54.0@sha256:4f9488b7295baec153a9953479690f835ad4699b1d9f11e3897a4485c224fc3e'
   variables:
     GIT_DEPTH: 0
   script:

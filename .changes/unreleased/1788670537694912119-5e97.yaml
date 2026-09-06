@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'stopped the Container Images workflow from trying to build folders that a push deleted or renamed: the change detection now lives in `global/scripts/tools/containers/detect-changed-folders.sh`, only emits folders that still exist at the pushed commit, and fails a manual dispatch that names a missing folder with the list of valid ones. The merge that renamed `python.3.10-pdm-bullseye` and `python.3.13-pdm-bullseye` to their bookworm folders listed both paths in the diff, so the run tried to build the deleted folders and failed with `unable to prepare context: path ... not found`. Covered by the new `make test-containers-detect` suite'
+time: '2026-09-06T04:55:37.694796598Z'

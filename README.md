@@ -1811,6 +1811,9 @@ Two mechanisms guard against this:
 - Docker (for container builds and security tools)
 - Git (for repository operations)
 - Network access (for downloading tools and dependencies)
+- GitHub Actions runner 2.327.1+ — every third-party action pinned here declares
+  `runs.using: node24`, which older runners cannot execute. GitHub-hosted runners already
+  satisfy this; self-hosted runners must be upgraded before consuming these workflows.
 
 **Language-Specific Requirements:**
 

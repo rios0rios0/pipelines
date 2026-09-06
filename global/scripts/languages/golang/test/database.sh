@@ -30,8 +30,11 @@ DB_NAME='pipelines_test'
 # `::error::` is a GitHub Actions workflow COMMAND, not a message, and the
 # runner parses workflow commands from stdout. Redirected to stderr it stops
 # being an annotation and prints as literal text.
+# `local` is deliberately absent: this is POSIX `sh`, where it is not a keyword
+# (shellcheck SC3043), and no other script in this tree uses it.
 fail() {
-  echo "::error::$1"
+  fail_message="$1"
+  echo "::error::$fail_message"
   exit 1
 }
 

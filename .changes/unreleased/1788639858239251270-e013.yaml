@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the `githubactions:S7637` findings ("Use full commit SHA hash for this dependency") that failed the security conditions of the SonarCloud gate on every consumer for its first-party `<owner>/pipelines/...@main` references: `sonarqube/run.sh` now ignores the rule for a workflow or composite-action file only when every `uses:` in it is first-party, local or pinned to a full commit SHA, logs the reference that blocks a file, and merges its `fp<N>` ids into any `sonar.issue.ignore.multicriteria` list the repository already defines instead of overriding it; the trusted owners come from `SONAR_FIRST_PARTY_OWNERS` or the owner of `GITHUB_REPOSITORY`'
+time: '2026-09-05T20:24:18.239138613Z'

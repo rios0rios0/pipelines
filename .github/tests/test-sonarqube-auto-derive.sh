@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Validation script for SonarQube auto-derivation of projectKey and projectName
 # Tests the normalize_sonar_key function and auto-derivation logic in
-# global/scripts/tools/sonarqube/run.sh
+# global/scripts/tools/sonarqube/run.sh, plus the test-classification defaults
+# and the first-party acceptance of `githubactions:S7637` findings.
 
 set -euo pipefail
 
@@ -40,11 +41,17 @@ eval "$(sed -n '/^normalize_sonar_key()/,/^}/p' "$SONAR_SCRIPT")"
 # CI platform variables that must be scrubbed between tests to prevent the
 # runner's own environment (e.g. GITHUB_REPOSITORY on GitHub Actions) from
 # leaking into the derivation logic.
-CI_VARS="GITHUB_REPOSITORY SYSTEM_TEAMPROJECT BUILD_REPOSITORY_NAME CI_PROJECT_PATH CI_PROJECT_NAME SONAR_PROJECT_KEY SONAR_PROJECT_NAME"
+CI_VARS="GITHUB_REPOSITORY SYSTEM_TEAMPROJECT BUILD_REPOSITORY_NAME CI_PROJECT_PATH CI_PROJECT_NAME SONAR_PROJECT_KEY SONAR_PROJECT_NAME SONAR_FIRST_PARTY_OWNERS"
+
+# Optional directory whose contents are copied into the work directory before
+# the script runs: the `.github/workflows` fixtures of the S7637 tests. Set it
+# through run_with_fixtures rather than by hand.
+FIXTURES_DIR=""
 
 # Run the auto-derivation logic in an isolated subshell with a clean environment.
 # Usage: props=$(run_derivation [starter-properties-file] [-- VAR1=val1 VAR2=val2 ...])
 # All CI_VARS are unset, then only the explicitly passed VAR=val pairs are exported.
+# The script's output lands in run.log next to the returned properties file.
 run_derivation() {
   local workdir
   workdir="$(mktemp -d "$TEST_DIR/workdir-XXXXXX")"
@@ -70,6 +77,11 @@ run_derivation() {
     cp "$props_file" "$workdir/sonar-project.properties"
   else
     touch "$workdir/sonar-project.properties"
+  fi
+
+  # Copy the workflow fixtures, when a test provides them
+  if [ -n "$FIXTURES_DIR" ]; then
+    cp -R "$FIXTURES_DIR/." "$workdir/"
   fi
 
   # Write env pairs to a sidecar file for the subshell to source after scrubbing
@@ -116,10 +128,60 @@ run_derivation() {
     # shellcheck source-path=SCRIPTDIR
     # shellcheck source=../../global/scripts/tools/sonarqube/run.sh
     . "$SONAR_SCRIPT"
-  ) > /dev/null 2>&1
+  ) > "$workdir/run.log" 2>&1
 
   echo "$workdir/sonar-project.properties"
 }
+
+# Same as run_derivation, with the first argument naming a fixture directory
+# copied into the work directory before the script runs.
+# Usage: props=$(run_with_fixtures fixture-dir [starter-properties-file] [-- VAR=val ...])
+run_with_fixtures() {
+  local fixtures=$1
+  shift
+  FIXTURES_DIR="$fixtures" run_derivation "$@"
+}
+
+# Print the path of the log written by the run that produced a properties file.
+run_log() {
+  echo "$(dirname "$1")/run.log"
+}
+
+# Create an empty fixture tree with a `.github/workflows` directory and print its path.
+make_fixtures() {
+  local dir
+  dir="$(mktemp -d "$TEST_DIR/fixtures-XXXXXX")"
+  mkdir -p "$dir/.github/workflows"
+  echo "$dir"
+}
+
+# Number of lines defining exactly the given key (`key=`), as the scanner reads them.
+count_key() {
+  grep -c "^$(printf '%s' "$1" | sed 's/\./\\./g')=" "$2" || true
+}
+
+# The values run.sh derives when sonar-project.properties classifies nothing.
+TEST_PATTERNS='**/*_test.go,**/test/**,**/tests/**,**/test_*.py,**/*_test.py,**/conftest.py,**/*.test.ts,**/*.test.tsx,**/*.spec.ts,**/*.spec.tsx,**/*.test.js,**/*.spec.js,**/__tests__/**,**/src/test/**,**/*Tests/**,**/*.Tests/**,**/spec/**'
+GENERATED_PATTERNS='**/vendor/**,**/node_modules/**,**/build/**,**/dist/**,**/coverage/**,**/.pipelines/**'
+
+# A consumer workflow as the 17 rios0rios0 repositories ship it: a job-level
+# reusable workflow and a step-level composite action, both floating on `main`,
+# in the two quoting styles the repositories use.
+FIRST_PARTY_WORKFLOW=$(cat <<'EOF'
+name: 'default'
+on:
+  push:
+    branches: [ 'main' ]
+jobs:
+  default:
+    uses: 'rios0rios0/pipelines/.github/workflows/go-binary.yaml@main'
+    secrets: inherit
+  scripts:
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: rios0rios0/pipelines/github/global/abstracts/scripts-repo@main
+EOF
+)
 
 # =============================================================================
 # Test 1: normalize_sonar_key replaces '/' with '_'
@@ -280,6 +342,225 @@ if ! grep -q 'sonar.projectKey=' "$props" && ! grep -q 'sonar.projectName=' "$pr
   print_result 0 "no derivation when no CI variables set"
 else
   print_result 1 "unexpected derivation occurred without CI variables"
+fi
+
+# =============================================================================
+# Test 16: Test classification — defaults derived when the file has none
+# =============================================================================
+echo "TEST 16: Test classification — defaults derived when absent"
+props=$(run_derivation -- GITHUB_REPOSITORY=owner/repo)
+if grep -Fxq 'sonar.sources=.' "$props" && \
+   grep -Fxq 'sonar.tests=.' "$props" && \
+   grep -Fxq "sonar.test.inclusions=$TEST_PATTERNS" "$props" && \
+   grep -Fxq "sonar.exclusions=$TEST_PATTERNS,$GENERATED_PATTERNS" "$props" && \
+   grep -Fxq 'sonar.test.exclusions=**/vendor/**,**/node_modules/**' "$props"; then
+  print_result 0 "sources, tests, test.inclusions, exclusions and test.exclusions derived"
+else
+  print_result 1 "test classification defaults missing or wrong (contents: $(grep -E 'sonar\.(sources|tests|test\.inclusions|exclusions|test\.exclusions)=' "$props" 2>/dev/null || echo 'missing'))"
+fi
+
+# =============================================================================
+# Test 17: Test classification — repository values are NOT overridden
+# =============================================================================
+echo "TEST 17: Test classification — existing keys preserved"
+cat > "$TEST_DIR/existing-scope.properties" << 'EOF'
+sonar.sources=src
+sonar.tests=qa
+sonar.test.inclusions=qa/**/*_spec.rb
+sonar.exclusions=src/generated/**
+sonar.test.exclusions=qa/fixtures/**
+EOF
+props=$(run_derivation "$TEST_DIR/existing-scope.properties" -- GITHUB_REPOSITORY=owner/repo)
+if grep -Fxq 'sonar.sources=src' "$props" && [ "$(count_key sonar.sources "$props")" -eq 1 ] && \
+   grep -Fxq 'sonar.tests=qa' "$props" && [ "$(count_key sonar.tests "$props")" -eq 1 ] && \
+   grep -Fxq 'sonar.test.inclusions=qa/**/*_spec.rb' "$props" && [ "$(count_key sonar.test.inclusions "$props")" -eq 1 ] && \
+   grep -Fxq 'sonar.exclusions=src/generated/**' "$props" && [ "$(count_key sonar.exclusions "$props")" -eq 1 ] && \
+   grep -Fxq 'sonar.test.exclusions=qa/fixtures/**' "$props" && [ "$(count_key sonar.test.exclusions "$props")" -eq 1 ]; then
+  print_result 0 "repository-defined classification kept, nothing duplicated"
+else
+  print_result 1 "repository-defined classification overwritten or duplicated (contents: $(grep -E 'sonar\.(sources|tests|test\.inclusions|exclusions|test\.exclusions)=' "$props" 2>/dev/null || echo 'missing'))"
+fi
+
+# =============================================================================
+# Test 18: Test classification — a repository-defined sonar.tests gets no inclusions
+# =============================================================================
+echo "TEST 18: Test classification — sonar.tests alone keeps its whole tree"
+cat > "$TEST_DIR/existing-tests.properties" << 'EOF'
+sonar.tests=qa
+EOF
+props=$(run_derivation "$TEST_DIR/existing-tests.properties" -- GITHUB_REPOSITORY=owner/repo)
+if grep -Fxq 'sonar.tests=qa' "$props" && [ "$(count_key sonar.tests "$props")" -eq 1 ] && \
+   [ "$(count_key sonar.test.inclusions "$props")" -eq 0 ] && \
+   grep -Fxq 'sonar.sources=.' "$props" && \
+   grep -Fxq "sonar.exclusions=$TEST_PATTERNS,$GENERATED_PATTERNS" "$props"; then
+  print_result 0 "no sonar.test.inclusions derived for a repository-defined sonar.tests; the other defaults still are"
+else
+  print_result 1 "sonar.test.inclusions derived against a repository-defined sonar.tests (contents: $(grep -E 'sonar\.(sources|tests|test\.inclusions|exclusions)=' "$props" 2>/dev/null || echo 'missing'))"
+fi
+
+# =============================================================================
+# Test 19: S7637 — a file with only first-party references is accepted
+# =============================================================================
+echo "TEST 19: S7637 — first-party workflow accepted"
+fx=$(make_fixtures)
+printf '%s\n' "$FIRST_PARTY_WORKFLOW" > "$fx/.github/workflows/default.yaml"
+props=$(run_with_fixtures "$fx" -- GITHUB_REPOSITORY=rios0rios0/my-repo)
+if grep -Fxq 'sonar.issue.ignore.multicriteria.fp1.ruleKey=githubactions:S7637' "$props" && \
+   grep -Fxq 'sonar.issue.ignore.multicriteria.fp1.resourceKey=.github/workflows/default.yaml' "$props" && \
+   grep -Fxq 'sonar.issue.ignore.multicriteria=fp1' "$props" && \
+   grep -q 'Accepting .github/workflows/default.yaml for githubactions:S7637: all 2 uses: references' "$(run_log "$props")"; then
+  print_result 0 "fp1 ignore rule written for .github/workflows/default.yaml and logged with its reason"
+else
+  print_result 1 "first-party workflow not accepted (contents: $(grep 'multicriteria' "$props" 2>/dev/null || echo 'missing'); log: $(grep 'S7637' "$(run_log "$props")" 2>/dev/null || echo 'none'))"
+fi
+
+# =============================================================================
+# Test 20: S7637 — one unpinned third-party action rejects the whole file
+# =============================================================================
+echo "TEST 20: S7637 — unpinned third-party action rejected"
+fx=$(make_fixtures)
+{
+  printf '%s\n' "$FIRST_PARTY_WORKFLOW"
+  printf '      - uses: actions/checkout@v4\n'
+} > "$fx/.github/workflows/default.yaml"
+props=$(run_with_fixtures "$fx" -- GITHUB_REPOSITORY=rios0rios0/my-repo)
+if ! grep -q 'sonar.issue.ignore.multicriteria' "$props" && \
+   grep -q "Keeping githubactions:S7637 findings in .github/workflows/default.yaml: 'actions/checkout@v4' is neither first-party, local nor pinned to a commit SHA" "$(run_log "$props")"; then
+  print_result 0 "no ignore rule written; the log names actions/checkout@v4 as the blocker"
+else
+  print_result 1 "file with an unpinned third-party action was accepted (contents: $(grep 'multicriteria' "$props" 2>/dev/null || echo 'none'); log: $(grep 'S7637' "$(run_log "$props")" 2>/dev/null || echo 'none'))"
+fi
+
+# =============================================================================
+# Test 21: S7637 — SHA-pinned third-party and local references are accepted
+# =============================================================================
+echo "TEST 21: S7637 — SHA-pinned third-party action accepted"
+fx=$(make_fixtures)
+{
+  printf '%s\n' "$FIRST_PARTY_WORKFLOW"
+  printf '      - name: %s\n' "'Checkout'"
+  printf '        uses: "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803" # v6.1.0\n'
+  printf '      - uses: ./.github/actions/local-thing\n'
+} > "$fx/.github/workflows/default.yaml"
+props=$(run_with_fixtures "$fx" -- GITHUB_REPOSITORY=rios0rios0/my-repo)
+if grep -Fxq 'sonar.issue.ignore.multicriteria.fp1.resourceKey=.github/workflows/default.yaml' "$props" && \
+   grep -Fxq 'sonar.issue.ignore.multicriteria=fp1' "$props" && \
+   grep -q 'Accepting .github/workflows/default.yaml for githubactions:S7637: all 4 uses: references' "$(run_log "$props")"; then
+  print_result 0 "quoted, commented SHA pin and local action accepted alongside first-party references"
+else
+  print_result 1 "SHA-pinned third-party action rejected (contents: $(grep 'multicriteria' "$props" 2>/dev/null || echo 'none'); log: $(grep 'S7637' "$(run_log "$props")" 2>/dev/null || echo 'none'))"
+fi
+
+# =============================================================================
+# Test 22: S7637 — merged with the multicriteria list the repository defines
+# =============================================================================
+echo "TEST 22: S7637 — existing multicriteria list merged"
+cat > "$TEST_DIR/existing-ignores.properties" << 'EOF'
+sonar.issue.ignore.multicriteria=e1
+sonar.issue.ignore.multicriteria.e1.ruleKey=go:S1192
+sonar.issue.ignore.multicriteria.e1.resourceKey=**/*.go
+EOF
+fx=$(make_fixtures)
+printf '%s\n' "$FIRST_PARTY_WORKFLOW" > "$fx/.github/workflows/default.yaml"
+props=$(run_with_fixtures "$fx" "$TEST_DIR/existing-ignores.properties" -- GITHUB_REPOSITORY=rios0rios0/my-repo)
+if [ "$(count_key sonar.issue.ignore.multicriteria "$props")" -eq 1 ] && \
+   grep -Fxq 'sonar.issue.ignore.multicriteria=e1,fp1' "$props" && \
+   grep -Fxq 'sonar.issue.ignore.multicriteria.e1.ruleKey=go:S1192' "$props" && \
+   grep -Fxq 'sonar.issue.ignore.multicriteria.e1.resourceKey=**/*.go' "$props" && \
+   grep -Fxq 'sonar.issue.ignore.multicriteria.fp1.ruleKey=githubactions:S7637' "$props"; then
+  print_result 0 "single list line reads e1,fp1 and the e1 entries survive"
+else
+  print_result 1 "multicriteria list not merged (contents: $(grep 'multicriteria' "$props" 2>/dev/null || echo 'none'))"
+fi
+
+# =============================================================================
+# Test 23: S7637 — no owner known, nothing ignored
+# =============================================================================
+echo "TEST 23: S7637 — no-op without an owner"
+fx=$(make_fixtures)
+printf '%s\n' "$FIRST_PARTY_WORKFLOW" > "$fx/.github/workflows/default.yaml"
+props=$(run_with_fixtures "$fx")
+if ! grep -q 'sonar.issue.ignore.multicriteria' "$props" && \
+   grep -q 'No first-party owner known' "$(run_log "$props")"; then
+  print_result 0 "no ignore rule without SONAR_FIRST_PARTY_OWNERS or GITHUB_REPOSITORY"
+else
+  print_result 1 "ignore rule written without a known owner (contents: $(grep 'multicriteria' "$props" 2>/dev/null || echo 'none'))"
+fi
+
+# =============================================================================
+# Test 24: S7637 — SONAR_FIRST_PARTY_OWNERS overrides the GITHUB_REPOSITORY owner
+# =============================================================================
+echo "TEST 24: S7637 — SONAR_FIRST_PARTY_OWNERS override"
+fx=$(make_fixtures)
+cat > "$fx/.github/workflows/default.yaml" << 'EOF'
+jobs:
+  default:
+    uses: acme/pipelines/.github/workflows/go.yaml@main
+EOF
+props=$(run_with_fixtures "$fx" -- GITHUB_REPOSITORY=other/repo)
+control_rejected=$(! grep -q 'sonar.issue.ignore.multicriteria' "$props" && echo yes || echo no)
+props=$(run_with_fixtures "$fx" -- GITHUB_REPOSITORY=other/repo "SONAR_FIRST_PARTY_OWNERS=Acme, rios0rios0")
+if [ "$control_rejected" = "yes" ] && \
+   grep -Fxq 'sonar.issue.ignore.multicriteria.fp1.resourceKey=.github/workflows/default.yaml' "$props" && \
+   grep -q 'Trusting first-party owners for githubactions:S7637: Acme, rios0rios0' "$(run_log "$props")"; then
+  print_result 0 "acme/... rejected under owner 'other', accepted once SONAR_FIRST_PARTY_OWNERS lists Acme (case-insensitively)"
+else
+  print_result 1 "SONAR_FIRST_PARTY_OWNERS not honoured (control rejected: $control_rejected; contents: $(grep 'multicriteria' "$props" 2>/dev/null || echo 'none'))"
+fi
+
+# =============================================================================
+# Test 25: S7637 — per-file decisions across workflows and composite actions
+# =============================================================================
+echo "TEST 25: S7637 — mixed files judged one by one"
+fx=$(make_fixtures)
+mkdir -p "$fx/.github/actions/setup"
+printf '%s\n' "$FIRST_PARTY_WORKFLOW" > "$fx/.github/workflows/default.yaml"
+cat > "$fx/.github/workflows/release.yml" << 'EOF'
+jobs:
+  release:
+    uses: rios0rios0/pipelines/.github/workflows/release.yaml@main
+  publish:
+    steps:
+      - uses: actions/setup-go@v5
+EOF
+cat > "$fx/.github/actions/setup/action.yaml" << 'EOF'
+runs:
+  using: composite
+  steps:
+    - uses: rios0rios0/pipelines/github/global/abstracts/scripts-repo@main
+EOF
+printf 'name: no-uses\non: push\n' > "$fx/.github/workflows/empty.yaml"
+props=$(run_with_fixtures "$fx" -- GITHUB_REPOSITORY=rios0rios0/my-repo)
+if grep -Fxq 'sonar.issue.ignore.multicriteria.fp1.resourceKey=.github/actions/setup/action.yaml' "$props" && \
+   grep -Fxq 'sonar.issue.ignore.multicriteria.fp2.resourceKey=.github/workflows/default.yaml' "$props" && \
+   ! grep -q 'resourceKey=.github/workflows/release.yml' "$props" && \
+   ! grep -q 'resourceKey=.github/workflows/empty.yaml' "$props" && \
+   grep -Fxq 'sonar.issue.ignore.multicriteria=fp1,fp2' "$props" && \
+   grep -q "Keeping githubactions:S7637 findings in .github/workflows/release.yml: 'actions/setup-go@v5'" "$(run_log "$props")"; then
+  print_result 0 "composite action and clean workflow accepted; the workflow with actions/setup-go@v5 kept its findings"
+else
+  print_result 1 "per-file decision wrong (contents: $(grep 'multicriteria' "$props" 2>/dev/null || echo 'none'); log: $(grep 'S7637' "$(run_log "$props")" 2>/dev/null || echo 'none'))"
+fi
+
+# =============================================================================
+# Test 26: S7637 — ids never collide with the repository's own
+# =============================================================================
+echo "TEST 26: S7637 — id collision avoided"
+cat > "$TEST_DIR/existing-fp1.properties" << 'EOF'
+sonar.issue.ignore.multicriteria = fp1
+sonar.issue.ignore.multicriteria.fp1.ruleKey=go:S1192
+sonar.issue.ignore.multicriteria.fp1.resourceKey=**/*.go
+EOF
+fx=$(make_fixtures)
+printf '%s\n' "$FIRST_PARTY_WORKFLOW" > "$fx/.github/workflows/default.yaml"
+props=$(run_with_fixtures "$fx" "$TEST_DIR/existing-fp1.properties" -- GITHUB_REPOSITORY=rios0rios0/my-repo)
+if grep -Fxq 'sonar.issue.ignore.multicriteria.fp1.ruleKey=go:S1192' "$props" && \
+   grep -Fxq 'sonar.issue.ignore.multicriteria.fp2.ruleKey=githubactions:S7637' "$props" && \
+   grep -Fxq 'sonar.issue.ignore.multicriteria=fp1,fp2' "$props" && \
+   [ "$(count_key sonar.issue.ignore.multicriteria "$props")" -eq 1 ]; then
+  print_result 0 "repository's fp1 kept, the derived rule became fp2, list normalized to fp1,fp2"
+else
+  print_result 1 "id collision or list not normalized (contents: $(grep 'multicriteria' "$props" 2>/dev/null || echo 'none'))"
 fi
 
 # =============================================================================

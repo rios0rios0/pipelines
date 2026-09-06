@@ -8,6 +8,27 @@ normalize_sonar_key() {
   printf '%s' "$1" | tr '[:space:]/' '_' | sed 's/[^A-Za-z0-9._:-]/_/g'
 }
 
+# Succeed when sonar-project.properties already defines the given key. The key
+# is matched whole -- the `=` has to follow it directly -- so `sonar.tests` does
+# not match `sonar.tests.foo` and `sonar.issue.ignore.multicriteria` does not
+# match its own `.e1.ruleKey` entries.
+has_sonar_property() {
+  grep -Eq "^[[:space:]]*$(printf '%s' "$1" | sed 's/\./\\./g')[[:space:]]*=" sonar-project.properties 2>/dev/null
+}
+
+# Append `key=value` to sonar-project.properties unless the repository already
+# defines the key: the same "only if absent" contract as projectKey and
+# projectName, so declaring a key in the file is how a repository overrides
+# any default derived here.
+set_default_sonar_property() {
+  if has_sonar_property "$1"; then
+    echo "Keeping $1 from sonar-project.properties"
+  else
+    printf '%s=%s\n' "$1" "$2" >> sonar-project.properties
+    echo "Auto-derived $1=$2"
+  fi
+}
+
 # Auto-derive sonar.projectKey if not already in properties file
 if ! grep -Eq '^[[:space:]]*sonar\.projectKey[[:space:]]*=' sonar-project.properties 2>/dev/null; then
   key=""
@@ -116,5 +137,190 @@ else
     echo "sonar.coverage.jacoco.xmlReportPaths=$JACOCO_REPORT_PATH" >> sonar-project.properties
   fi
 fi
+
+# --- Test classification ------------------------------------------------------
+# Without `sonar.tests`, every `*_test.go`, `test_*.py`, `*.spec.ts`... is
+# analyzed as production code, so the table-driven scaffolding that tests
+# legitimately repeat is counted against "Duplication on New Code". SonarSource's
+# pattern for a repository whose sources and tests share one tree is
+# `sonar.sources=.` with `sonar.tests=.`, `sonar.test.inclusions` naming the test
+# files and the same patterns repeated in `sonar.exclusions`, so that no file is
+# indexed as both. Every key is a default the repository overrides by declaring
+# it in sonar-project.properties. The inclusions are only derived together with
+# `sonar.tests`: a repository that names its own test directories means the whole
+# of them, and a pattern list would silently narrow that.
+SONAR_TEST_FILE_PATTERNS='**/*_test.go,**/test/**,**/tests/**,**/test_*.py,**/*_test.py,**/conftest.py,**/*.test.ts,**/*.test.tsx,**/*.spec.ts,**/*.spec.tsx,**/*.test.js,**/*.spec.js,**/__tests__/**,**/src/test/**,**/*Tests/**,**/*.Tests/**,**/spec/**'
+SONAR_GENERATED_PATTERNS='**/vendor/**,**/node_modules/**,**/build/**,**/dist/**,**/coverage/**,**/.pipelines/**'
+
+set_default_sonar_property sonar.sources .
+if has_sonar_property sonar.tests; then
+  echo "Keeping sonar.tests from sonar-project.properties (sonar.test.inclusions is not derived for a repository-defined test scope)"
+else
+  set_default_sonar_property sonar.tests .
+  set_default_sonar_property sonar.test.inclusions "$SONAR_TEST_FILE_PATTERNS"
+fi
+set_default_sonar_property sonar.exclusions "$SONAR_TEST_FILE_PATTERNS,$SONAR_GENERATED_PATTERNS"
+set_default_sonar_property sonar.test.exclusions '**/vendor/**,**/node_modules/**'
+
+# --- githubactions:S7637 ("Use full commit SHA hash for this dependency") -----
+# The rule flags every `uses:` that is not pinned to a 40-character commit SHA,
+# and that includes this repository's own reusable workflows referenced as
+# `<owner>/pipelines/...@main`. Floating on `main` for FIRST-PARTY workflows is
+# deliberate -- the pipelines repository is the single source of truth and pins
+# every third-party action itself -- so the rule is ignored for a workflow file
+# ONLY when every `uses:` in it is first-party, local (`./`) or SHA-pinned. A
+# file with one unpinned third-party action keeps every finding it has, which
+# is the point of the rule. The owners trusted as first-party come from
+# SONAR_FIRST_PARTY_OWNERS (comma separated) or the owner of GITHUB_REPOSITORY.
+
+# Print the `uses:` references of a workflow or action file, one per line,
+# without quotes, trailing comments or carriage returns. Anchored to a YAML key
+# (`^ indent [- ] uses:`) so prose and commented-out lines are not read.
+list_uses_references() {
+  awk '
+    /^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]*/ {
+      sub(/\r$/, "")
+      sub(/^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]*/, "")
+      sub(/[[:space:]]+#.*$/, "")
+      sub(/[[:space:]]+$/, "")
+      sub(/^["'\'']/, "")
+      sub(/["'\'']$/, "")
+      if ($0 != "") print
+    }' "$1"
+}
+
+# Succeed and print why when the reference is exempt from the SHA-pin
+# requirement under this policy; fail silently otherwise. Owners compare
+# case-insensitively because GitHub resolves them that way.
+uses_reference_exemption() {
+  case "$1" in
+    ./*)
+      echo "local"
+      return 0
+      ;;
+  esac
+  _ref_sha=${1##*@}
+  if [ "$_ref_sha" != "$1" ] && printf '%s' "$_ref_sha" | grep -Eq '^[0-9a-f]{40}$'; then
+    echo "SHA-pinned"
+    return 0
+  fi
+  _ref_owner=${1%%/*}
+  [ "$_ref_owner" != "$1" ] || return 1
+  _ref_owner=$(printf '%s' "$_ref_owner" | tr '[:upper:]' '[:lower:]')
+  for _trusted_owner in $SONAR_FIRST_PARTY_OWNER_LIST; do
+    if [ "$_trusted_owner" = "$_ref_owner" ]; then
+      echo "first-party"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Print why the file is accepted (exit 0) or which reference blocks it (exit 1).
+# A file without any `uses:` prints nothing and exits 1: it has no S7637
+# finding to ignore.
+first_party_file_verdict() {
+  _fp_refs=$(list_uses_references "$1")
+  [ -n "$_fp_refs" ] || return 1
+  _fp_count=0
+  while IFS= read -r _fp_ref; do
+    if ! uses_reference_exemption "$_fp_ref" > /dev/null; then
+      echo "'$_fp_ref' is neither first-party, local nor pinned to a commit SHA"
+      return 1
+    fi
+    _fp_count=$((_fp_count + 1))
+  done <<EOF
+$_fp_refs
+EOF
+  echo "all $_fp_count uses: references are first-party, local or SHA-pinned"
+}
+
+# Print the workflow and composite-action files GitHub reads, one per line,
+# as the project-relative paths SonarQube keys them by.
+list_github_workflow_files() {
+  {
+    if [ -d .github/workflows ]; then
+      find .github/workflows -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \)
+    fi
+    if [ -d .github/actions ]; then
+      find .github/actions -type f \( -name 'action.yml' -o -name 'action.yaml' \)
+    fi
+  } | sort
+}
+
+# Print the ids the repository already lists in sonar.issue.ignore.multicriteria
+# (the last definition wins, as the scanner reads it), normalized to `a,b,c`.
+existing_multicriteria_ids() {
+  { grep -E '^[[:space:]]*sonar\.issue\.ignore\.multicriteria[[:space:]]*=' sonar-project.properties 2>/dev/null || true; } \
+    | tail -n 1 | sed 's/^[^=]*=//' | tr -d '[:space:]' | sed 's/,,*/,/g; s/^,//; s/,$//'
+}
+
+# Succeed when the id is already used by the repository's own ignore rules.
+multicriteria_id_taken() {
+  case ",$2," in
+    *",$1,"*) return 0 ;;
+  esac
+  has_sonar_property "sonar.issue.ignore.multicriteria.$1.ruleKey"
+}
+
+# Append one S7637 ignore rule per accepted file, then rewrite the single
+# `sonar.issue.ignore.multicriteria` list so it also keeps every id the
+# repository defined itself -- a second `sonar.issue.ignore.multicriteria=` line
+# would replace the first instead of extending it.
+write_first_party_ignores() {
+  _fp_ids=$(existing_multicriteria_ids)
+  { grep -Ev '^[[:space:]]*sonar\.issue\.ignore\.multicriteria[[:space:]]*=' sonar-project.properties || true; } > sonar-project.properties.tmp
+  mv sonar-project.properties.tmp sonar-project.properties
+  _fp_n=1
+  _fp_new_ids=""
+  while IFS= read -r _fp_file; do
+    [ -n "$_fp_file" ] || continue
+    while multicriteria_id_taken "fp$_fp_n" "$_fp_ids"; do
+      _fp_n=$((_fp_n + 1))
+    done
+    {
+      printf 'sonar.issue.ignore.multicriteria.fp%s.ruleKey=githubactions:S7637\n' "$_fp_n"
+      printf 'sonar.issue.ignore.multicriteria.fp%s.resourceKey=%s\n' "$_fp_n" "$_fp_file"
+    } >> sonar-project.properties
+    _fp_new_ids="${_fp_new_ids:+$_fp_new_ids,}fp$_fp_n"
+    _fp_n=$((_fp_n + 1))
+  done <<EOF
+$1
+EOF
+  _fp_ids="${_fp_ids:+$_fp_ids,}$_fp_new_ids"
+  printf 'sonar.issue.ignore.multicriteria=%s\n' "$_fp_ids" >> sonar-project.properties
+  echo "Updated sonar.issue.ignore.multicriteria=$_fp_ids"
+}
+
+accept_first_party_workflow_references() {
+  _fp_files=$(list_github_workflow_files)
+  [ -n "$_fp_files" ] || return 0
+  if [ -n "${SONAR_FIRST_PARTY_OWNERS:-}" ]; then
+    _fp_owners=$SONAR_FIRST_PARTY_OWNERS
+  elif [ -n "${GITHUB_REPOSITORY:-}" ]; then
+    _fp_owners=${GITHUB_REPOSITORY%%/*}
+  else
+    echo "No first-party owner known (SONAR_FIRST_PARTY_OWNERS and GITHUB_REPOSITORY are unset): githubactions:S7637 findings are left as reported."
+    return 0
+  fi
+  SONAR_FIRST_PARTY_OWNER_LIST=$(printf '%s' "$_fp_owners" | tr '[:upper:]' '[:lower:]' | tr ',' ' ')
+  echo "Trusting first-party owners for githubactions:S7637: $_fp_owners"
+  _fp_accepted=""
+  while IFS= read -r _fp_file; do
+    if _fp_verdict=$(first_party_file_verdict "$_fp_file"); then
+      echo "Accepting $_fp_file for githubactions:S7637: $_fp_verdict"
+      _fp_accepted="$_fp_accepted$_fp_file
+"
+    elif [ -n "$_fp_verdict" ]; then
+      echo "Keeping githubactions:S7637 findings in $_fp_file: $_fp_verdict"
+    fi
+  done <<EOF
+$_fp_files
+EOF
+  [ -n "$_fp_accepted" ] || return 0
+  write_first_party_ignores "$_fp_accepted"
+}
+
+accept_first_party_workflow_references
 
 sonar-scanner

@@ -143,7 +143,7 @@ otherwise shrinks one forgotten annotation at a time while the job stays green. 
 - **codeql/run.sh** - Requires language argument (e.g., go, python, java, javascript, csharp)
 - **hadolint/run.sh** - Auto-discovers Dockerfiles, skips gracefully if none found
 - **dependency-track/run.sh** - Requires `DEPENDENCY_TRACK_TOKEN` and `DEPENDENCY_TRACK_HOST_URL`
-- **sonarqube/run.sh** - Requires `sonar-scanner` installed and SonarQube environment
+- **sonarqube/run.sh** - Requires `sonar-scanner` installed and SonarQube environment; derives project key/name, the test classification (`sonar.tests`, `sonar.test.inclusions`, `sonar.exclusions`...) and the `githubactions:S7637` ignore rules for first-party workflow references (owners from `SONAR_FIRST_PARTY_OWNERS`, else the owner of `GITHUB_REPOSITORY`) for every key absent from `sonar-project.properties`
 - **semgrep/run.sh** - May run for 10+ minutes, installs Semgrep from PyPI into a virtualenv
 - **golang/test/run.sh** - Requires Go project with cmd/, pkg/, or internal/ directories
 

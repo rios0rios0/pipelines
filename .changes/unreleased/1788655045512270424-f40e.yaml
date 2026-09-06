@@ -1,0 +1,3 @@
+kind: 'Security'
+body: 'pinned the ProGuard, BFG, AWS CLI and AWS SAM CLI downloads to HTTPS on every redirect hop with `curl --proto ''=https'' --proto-redir ''=https''`'
+time: '2026-09-06T00:37:25.512195893Z'

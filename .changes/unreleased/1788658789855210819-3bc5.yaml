@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the Azure DevOps Go Lambda SAM deployment steps failing when `STACK_NAME` or `PARAMETER_OVERRIDES` is not defined: an Azure macro that arrives unexpanded is now read as unset, so `go-lambda-sam.yaml` deploys with the stack name from `samconfig.toml` as its comment promises, and parameter overrides stay optional'
+time: '2026-09-06T01:39:49.855210819Z'

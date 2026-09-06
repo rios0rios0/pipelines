@@ -6,7 +6,10 @@ ENV WORK_DIR /code
 
 VOLUME ["${WORK_DIR}"]
 
-RUN wget --quiet --https-only --output-document=/bfg.jar https://repo1.maven.org/maven2/com/madgag/bfg/${BFG_VERSION}/bfg-${BFG_VERSION}.jar
+# `--proto '=https' --proto-redir '=https'` rather than plain `wget`: Maven Central answers
+# this artifact URL directly, and pinning both the initial protocol and any redirect to HTTPS
+# keeps a redirect from ever downgrading the jar this image runs as code to plain HTTP.
+RUN curl -fsSL --proto '=https' --proto-redir '=https' --output /bfg.jar https://repo1.maven.org/maven2/com/madgag/bfg/${BFG_VERSION}/bfg-${BFG_VERSION}.jar
 
 RUN echo "#!/usr/bin/env sh" > /usr/bin/bfg \
     && echo "set -e" >> /usr/bin/bfg \

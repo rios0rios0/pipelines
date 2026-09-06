@@ -109,13 +109,36 @@ def parse(stream) -> list[dict]:
     return diagnostics
 
 
+def within_workdir(raw: str, purpose: str) -> str:
+    """Resolve a command-line path and require it to stay inside the working tree.
+
+    The report directory arrives on argv, and this script CREATES it, so
+    "wherever you point me" is the wrong contract for a CI helper. `run.sh`
+    passes `$DART_TOOL_REPORT_PATH`, which `common.sh` builds from
+    `${PREFIX}${REPORT_PATH}` -- relative to the job's working directory in
+    every runner here -- so confining it costs nothing real and makes a
+    traversal (`dart_analyze_report.py ../../etc`) fail here rather than
+    somewhere surprising. Same shape as `within_workdir` in
+    tools/dependency-updates/check_updates.py.
+
+    Resolved with `realpath` first so a symlink cannot be used to step outside
+    after the check.
+    """
+    base = os.path.realpath(os.getcwd())
+    resolved = os.path.realpath(raw)
+    if resolved != base and not resolved.startswith(base + os.sep):
+        raise SystemExit(
+            "refusing to use '{raw}' as {purpose}: it resolves outside the working "
+            "directory '{base}'".format(raw=raw, purpose=purpose, base=base)
+        )
+    return resolved
+
+
 def report_path(report_dir: str, filename: str) -> str:
     """Join a report file name onto the report directory, refusing to escape it.
 
-    The directory itself is the CALLER's choice and may legitimately be absolute
-    -- `run.sh` passes `$DART_TOOL_REPORT_PATH`, and the validation suite passes
-    a temporary directory -- so this deliberately does not confine it to the
-    working tree. What it does confine is the part this script constructs: the
+    The directory is confined by `within_workdir` before anything is created
+    under it. What THIS confines is the part the script constructs: the
     resolved file must still sit inside the directory it was given, so a name
     carrying `..` cannot write somewhere the caller never named.
     """
@@ -190,7 +213,10 @@ def write_junit(diagnostics: list[dict], path: str, fatal: set[str]) -> None:
 
 
 def main() -> int:
-    report_dir = sys.argv[1] if len(sys.argv) > 1 else "build/reports/dart-analyze"
+    report_dir = within_workdir(
+        sys.argv[1] if len(sys.argv) > 1 else "build/reports/dart-analyze",
+        "the report directory",
+    )
     os.makedirs(report_dir, exist_ok=True)
 
     diagnostics = parse(sys.stdin)

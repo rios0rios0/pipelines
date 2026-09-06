@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the Azure DevOps Go Lambda ZIP deployment steps breaking an argument in two whenever a value held a space (a `Build.SourcesDirectory` such as `/build/my sources` reached `aws` as two arguments), by quoting every expansion in both the service-connection and the environment-variable step'
+time: '2026-09-06T01:39:49.844567069Z'

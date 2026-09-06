@@ -18,7 +18,7 @@ FROM caddy:2.7.4-builder-alpine@sha256:ec3ac7eee8b4635cb9336eb4cb201684d2cd54f6f
 RUN xcaddy build \
 	--with github.com/mholt/caddy-l4
 
-FROM alpine:edge@sha256:880fafbab5a7602db21ac37f0d17088a29a9a48f98d581f01ce17312c22ccbb5
+FROM alpine:edge@sha256:020dfcbaaf4cc1078bf2d9c7ba31a8466e334061dcd2f248001d68f79e52c000
 
 ENV TOR_HOME /home/tor
 RUN apk add --no-cache tor supervisor

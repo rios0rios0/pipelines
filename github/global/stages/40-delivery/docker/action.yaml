@@ -33,7 +33,7 @@ runs:
   using: 'composite'
   steps:
     - name: 'Checkout code'
-      uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+      uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
     - name: 'Compute tags from release version'
       id: 'release-tags'
@@ -78,7 +78,7 @@ runs:
     # like `claude.ai/install.sh`) fail at the foreign-arch interpreter
     # exec rather than producing a working image.
     - name: 'Set up QEMU'
-      uses: 'docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130' # v3.7.0
+      uses: 'docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a' # v4.3.0
 
     # `setup-buildx-action` swaps the default Docker builder for the
     # buildx driver, which is what `docker/build-push-action` requires
@@ -87,7 +87,7 @@ runs:
     # the exact failure mode that bit `code-guru` and motivated this
     # change.
     - name: 'Set up Docker Buildx'
-      uses: 'docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f' # v3.12.0
+      uses: 'docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e' # v4.3.0
 
     - name: 'Build and Push'
       uses: 'docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a' # v7.3.0

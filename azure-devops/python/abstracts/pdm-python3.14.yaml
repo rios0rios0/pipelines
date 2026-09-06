@@ -15,6 +15,6 @@ steps:
     displayName: 'Use Python 3.14'
 
   - script: |
-      python -m pip install --only-binary :all: "pdm==2.28.1"
+      python -m pip install --only-binary :all: "pdm==2.29.0"
       pdm install
     displayName: 'Install PDM + Dependencies'

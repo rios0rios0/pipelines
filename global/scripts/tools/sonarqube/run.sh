@@ -82,20 +82,25 @@ echo "Updated sonar.projectVersion to $version"
 # further down does not merely skip in that case, it appends EMPTY
 # `sonar.*.reportPaths` values that override the ones the repository set for
 # itself, silently reporting 0% coverage on new code.
+#
+# The two directories are never joined into one string: a `working_directory` with
+# a space in it would word-split back into two nonexistent paths and drop the
+# consumer straight back into the clobbering branch below, which is precisely the
+# failure this block exists to prevent. Each search is a function called once per
+# directory instead, so the value stays quoted everywhere it is a path and is
+# unquoted only where a glob has to expand.
 SONAR_PROJECT_DIR=${SONAR_PROJECT_DIR:-.}
 SONAR_PROJECT_DIR=${SONAR_PROJECT_DIR%/}
 [ -n "$SONAR_PROJECT_DIR" ] || SONAR_PROJECT_DIR=.
-COVERAGE_DIRS=.
+SONAR_PROJECT_DIR_IS_SEPARATE=false
 if [ "$SONAR_PROJECT_DIR" != "." ] && [ -d "$SONAR_PROJECT_DIR" ]; then
-  COVERAGE_DIRS="$COVERAGE_DIRS $SONAR_PROJECT_DIR"
+  SONAR_PROJECT_DIR_IS_SEPARATE=true
   echo "Looking for coverage under the repository root and $SONAR_PROJECT_DIR"
 fi
 
-# Check if coverage files exist. If no coverage was produced by the test stage,
-# override coverage report paths to avoid sonar-scanner failures when the project's
-# sonar-project.properties references files that don't exist.
-COVERAGE_FOUND=false
-for directory in $COVERAGE_DIRS; do
+# Succeed when $1 holds a coverage report in any of the shapes the test stages of
+# this repository produce.
+coverage_present_in() {
   for pattern in \
     "coverage.out" \
     "coverage.txt" \
@@ -111,12 +116,51 @@ for directory in $COVERAGE_DIRS; do
     "TestResults/*.xml" \
     "TestResults/Cobertura.xml"; do
     # shellcheck disable=SC2086
-    if ls $directory/$pattern 1>/dev/null 2>&1; then
-      COVERAGE_FOUND=true
-      break 2
+    if ls "$1"/$pattern 1>/dev/null 2>&1; then
+      return 0
     fi
   done
-done
+  return 1
+}
+
+# Print the first Go coverage profile under $1, relative to the repository root
+# and without a `./` prefix, or nothing when there is none.
+#
+# The `for` list itself performs the pathname expansion, so each match arrives as
+# one word even when it contains a space, and a pattern that matches nothing
+# arrives literally and fails `[ -f ]`. Re-splitting it in a nested loop would
+# undo exactly that: `my api/coverage.out` would become `my` and `api/coverage.out`.
+find_go_report() {
+  for _cov_file in "$1"/coverage.out "$1"/coverage.txt "$1"/coverage/coverage.out \
+    "$1"/coverage/coverage.txt "$1"/coverage/*.txt "$1"/coverage/*.out; do
+    [ -f "$_cov_file" ] || continue
+    printf '%s\n' "${_cov_file#./}"
+    return 0
+  done
+  return 1
+}
+
+# The same, for the two places Gradle and Maven put a JaCoCo XML report.
+find_jacoco_report() {
+  for _cov_file in "$1"/build/reports/jacoco/test/jacocoTestReport.xml \
+    "$1"/target/site/jacoco/jacoco.xml; do
+    if [ -f "$_cov_file" ]; then
+      printf '%s\n' "${_cov_file#./}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Check if coverage files exist. If no coverage was produced by the test stage,
+# override coverage report paths to avoid sonar-scanner failures when the project's
+# sonar-project.properties references files that don't exist.
+COVERAGE_FOUND=false
+if coverage_present_in .; then
+  COVERAGE_FOUND=true
+elif [ "$SONAR_PROJECT_DIR_IS_SEPARATE" = "true" ] && coverage_present_in "$SONAR_PROJECT_DIR"; then
+  COVERAGE_FOUND=true
+fi
 
 if [ "$COVERAGE_FOUND" = "false" ]; then
   echo "$(date "+%Y-%m-%d %H:%M:%S") - No coverage files found. Running SonarQube without coverage data."
@@ -133,34 +177,23 @@ if [ "$COVERAGE_FOUND" = "false" ]; then
   } >> sonar-project.properties
   echo "Cleared coverage report path properties in sonar-project.properties."
 else
-  # The same root-then-project order as the detection above, and the `./` a root
+  # Root first, then the project, matching the detection above. The `./` a root
   # match picks up is stripped so the derived value keeps the shape it had before
   # a project directory was ever searched.
-  GO_REPORT_PATH=
-  for d in $COVERAGE_DIRS; do
-    for p in "$d"/coverage.out "$d"/coverage.txt "$d"/coverage/coverage.out \
-      "$d"/coverage/coverage.txt "$d"/coverage/*.txt "$d"/coverage/*.out; do
-      for f in $p; do
-        [ -f "$f" ] || continue
-        GO_REPORT_PATH="${f#./}"
-        break 3
-      done
-    done
-  done
+  # `|| true` because `set -e` would exit on the function's "not found" status.
+  GO_REPORT_PATH=$(find_go_report .) || true
+  if [ -z "$GO_REPORT_PATH" ] && [ "$SONAR_PROJECT_DIR_IS_SEPARATE" = "true" ]; then
+    GO_REPORT_PATH=$(find_go_report "$SONAR_PROJECT_DIR") || true
+  fi
   if [ -n "$GO_REPORT_PATH" ]; then
     echo "sonar.go.coverage.reportPaths=$GO_REPORT_PATH" >> sonar-project.properties
   fi
 
   # Auto-detect JaCoCo coverage reports (Gradle and Maven)
-  JACOCO_REPORT_PATH=
-  for d in $COVERAGE_DIRS; do
-    for p in "$d"/build/reports/jacoco/test/jacocoTestReport.xml "$d"/target/site/jacoco/jacoco.xml; do
-      if [ -f "$p" ]; then
-        JACOCO_REPORT_PATH="${p#./}"
-        break 2
-      fi
-    done
-  done
+  JACOCO_REPORT_PATH=$(find_jacoco_report .) || true
+  if [ -z "$JACOCO_REPORT_PATH" ] && [ "$SONAR_PROJECT_DIR_IS_SEPARATE" = "true" ]; then
+    JACOCO_REPORT_PATH=$(find_jacoco_report "$SONAR_PROJECT_DIR") || true
+  fi
   if [ -n "$JACOCO_REPORT_PATH" ]; then
     echo "sonar.coverage.jacoco.xmlReportPaths=$JACOCO_REPORT_PATH" >> sonar-project.properties
   fi

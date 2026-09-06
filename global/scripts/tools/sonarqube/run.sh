@@ -145,21 +145,26 @@ fi
 # pattern for a repository whose sources and tests share one tree is
 # `sonar.sources=.` with `sonar.tests=.`, `sonar.test.inclusions` naming the test
 # files and the same patterns repeated in `sonar.exclusions`, so that no file is
-# indexed as both. Every key is a default the repository overrides by declaring
-# it in sonar-project.properties. The inclusions are only derived together with
-# `sonar.tests`: a repository that names its own test directories means the whole
-# of them, and a pattern list would silently narrow that.
+# indexed as both.
 SONAR_TEST_FILE_PATTERNS='**/*_test.go,**/test/**,**/tests/**,**/test_*.py,**/*_test.py,**/conftest.py,**/*.test.ts,**/*.test.tsx,**/*.spec.ts,**/*.spec.tsx,**/*.test.js,**/*.spec.js,**/__tests__/**,**/src/test/**,**/*Tests/**,**/*.Tests/**,**/spec/**'
 SONAR_GENERATED_PATTERNS='**/vendor/**,**/node_modules/**,**/build/**,**/dist/**,**/coverage/**,**/.pipelines/**'
 
-set_default_sonar_property sonar.sources .
-if has_sonar_property sonar.tests; then
-  echo "Keeping sonar.tests from sonar-project.properties (sonar.test.inclusions is not derived for a repository-defined test scope)"
+# The four keys below are derived as ONE unit. `sonar.sources=.` only yields a
+# disjoint main/test split when `sonar.exclusions` matches the test scope, and
+# an overlap is not a warning: sonar-scanner aborts with "can't be indexed
+# twice". So a repository that declares any part of the classification owns all
+# of it, and nothing is bolted onto its half.
+if has_sonar_property sonar.sources || has_sonar_property sonar.tests \
+  || has_sonar_property sonar.test.inclusions || has_sonar_property sonar.exclusions; then
+  echo "Keeping the test classification from sonar-project.properties (sonar.sources/tests/test.inclusions/exclusions are derived only as a set)"
 else
+  set_default_sonar_property sonar.sources .
   set_default_sonar_property sonar.tests .
   set_default_sonar_property sonar.test.inclusions "$SONAR_TEST_FILE_PATTERNS"
+  set_default_sonar_property sonar.exclusions "$SONAR_TEST_FILE_PATTERNS,$SONAR_GENERATED_PATTERNS"
 fi
-set_default_sonar_property sonar.exclusions "$SONAR_TEST_FILE_PATTERNS,$SONAR_GENERATED_PATTERNS"
+# `sonar.test.exclusions` only ever shrinks the test set, so it cannot create the
+# overlap above and stays an independent default.
 set_default_sonar_property sonar.test.exclusions '**/vendor/**,**/node_modules/**'
 
 # --- githubactions:S7637 ("Use full commit SHA hash for this dependency") -----

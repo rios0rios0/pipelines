@@ -382,20 +382,23 @@ else
 fi
 
 # =============================================================================
-# Test 18: Test classification — a repository-defined sonar.tests gets no inclusions
+# Test 18: Test classification — a repository-defined sonar.tests derives no
+# other classification key. `sonar.sources=.` plus a `sonar.exclusions` that
+# does not cover `qa/**` would make every file under `qa/` main AND test, and
+# sonar-scanner aborts on that with "can't be indexed twice".
 # =============================================================================
-echo "TEST 18: Test classification — sonar.tests alone keeps its whole tree"
+echo "TEST 18: Test classification — sonar.tests alone owns the whole partition"
 cat > "$TEST_DIR/existing-tests.properties" << 'EOF'
 sonar.tests=qa
 EOF
 props=$(run_derivation "$TEST_DIR/existing-tests.properties" -- GITHUB_REPOSITORY=owner/repo)
 if grep -Fxq 'sonar.tests=qa' "$props" && [ "$(count_key sonar.tests "$props")" -eq 1 ] && \
    [ "$(count_key sonar.test.inclusions "$props")" -eq 0 ] && \
-   grep -Fxq 'sonar.sources=.' "$props" && \
-   grep -Fxq "sonar.exclusions=$TEST_PATTERNS,$GENERATED_PATTERNS" "$props"; then
-  print_result 0 "no sonar.test.inclusions derived for a repository-defined sonar.tests; the other defaults still are"
+   [ "$(count_key sonar.sources "$props")" -eq 0 ] && \
+   [ "$(count_key sonar.exclusions "$props")" -eq 0 ]; then
+  print_result 0 "nothing derived against a repository-defined sonar.tests, so the main and test sets cannot overlap"
 else
-  print_result 1 "sonar.test.inclusions derived against a repository-defined sonar.tests (contents: $(grep -E 'sonar\.(sources|tests|test\.inclusions|exclusions)=' "$props" 2>/dev/null || echo 'missing'))"
+  print_result 1 "classification keys derived against a repository-defined sonar.tests (contents: $(grep -E 'sonar\.(sources|tests|test\.inclusions|exclusions)=' "$props" 2>/dev/null || echo 'missing'))"
 fi
 
 # =============================================================================
@@ -561,6 +564,48 @@ if grep -Fxq 'sonar.issue.ignore.multicriteria.fp1.ruleKey=go:S1192' "$props" &&
   print_result 0 "repository's fp1 kept, the derived rule became fp2, list normalized to fp1,fp2"
 else
   print_result 1 "id collision or list not normalized (contents: $(grep 'multicriteria' "$props" 2>/dev/null || echo 'none'))"
+fi
+
+# =============================================================================
+# Test 27: Test classification — a lone sonar.exclusions derives no test set
+# Deriving `sonar.tests=.` next to a repository `sonar.exclusions` that excludes
+# no test pattern makes every `*_test.go` main AND test, and sonar-scanner
+# aborts on that with "can't be indexed twice" — the same failure TEST 18
+# guards from the other half of the partition.
+# =============================================================================
+echo "TEST 27: Test classification — sonar.exclusions alone derives no test set"
+cat > "$TEST_DIR/existing-exclusions.properties" << 'EOF'
+sonar.exclusions=src/generated/**
+EOF
+props=$(run_derivation "$TEST_DIR/existing-exclusions.properties" -- GITHUB_REPOSITORY=owner/repo)
+if grep -Fxq 'sonar.exclusions=src/generated/**' "$props" && [ "$(count_key sonar.exclusions "$props")" -eq 1 ] && \
+   [ "$(count_key sonar.tests "$props")" -eq 0 ] && \
+   [ "$(count_key sonar.sources "$props")" -eq 0 ] && \
+   [ "$(count_key sonar.test.inclusions "$props")" -eq 0 ] && \
+   grep -q 'Keeping the test classification from sonar-project.properties' "$(run_log "$props")"; then
+  print_result 0 "repository sonar.exclusions kept and no test set derived against it"
+else
+  print_result 1 "test set derived against a lone repository sonar.exclusions (contents: $(grep -E 'sonar\.(sources|tests|test\.inclusions|exclusions)=' "$props" 2>/dev/null || echo 'missing'))"
+fi
+
+# =============================================================================
+# Test 28: Test classification — sonar.test.exclusions alone still derives the set
+# It can only shrink the test set, so it cannot produce the overlap TEST 18 and
+# TEST 27 guard, and must not cost the repository the derivation.
+# =============================================================================
+echo "TEST 28: Test classification — sonar.test.exclusions alone still derives the set"
+cat > "$TEST_DIR/existing-test-exclusions.properties" << 'EOF'
+sonar.test.exclusions=qa/fixtures/**
+EOF
+props=$(run_derivation "$TEST_DIR/existing-test-exclusions.properties" -- GITHUB_REPOSITORY=owner/repo)
+if grep -Fxq 'sonar.test.exclusions=qa/fixtures/**' "$props" && [ "$(count_key sonar.test.exclusions "$props")" -eq 1 ] && \
+   grep -Fxq 'sonar.sources=.' "$props" && \
+   grep -Fxq 'sonar.tests=.' "$props" && \
+   grep -Fxq "sonar.test.inclusions=$TEST_PATTERNS" "$props" && \
+   grep -Fxq "sonar.exclusions=$TEST_PATTERNS,$GENERATED_PATTERNS" "$props"; then
+  print_result 0 "the four classification keys derived; the repository's sonar.test.exclusions kept"
+else
+  print_result 1 "derivation skipped for a lone sonar.test.exclusions (contents: $(grep -E 'sonar\.(sources|tests|test\.inclusions|exclusions|test\.exclusions)=' "$props" 2>/dev/null || echo 'missing'))"
 fi
 
 # =============================================================================

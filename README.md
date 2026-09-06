@@ -1137,7 +1137,8 @@ last-match-wins, so your own entries below it, including a `!` negation, still w
 `global/scripts/tools/sonarqube/run.sh` completes the repository's `sonar-project.properties` before it
 runs `sonar-scanner` -- the file is optional, and most repositories ship none. Every key below is a
 **default**: a repository that declares the key in `sonar-project.properties` keeps its own value, and
-that is how any of them is overridden.
+that is how any of them is overridden. The four test-classification keys are the one exception -- they are
+derived only as a set, as **Test classification** below explains.
 
 | Key | Derived value | Derived from |
 |-----|---------------|--------------|
@@ -1145,16 +1146,28 @@ that is how any of them is overridden.
 | `sonar.projectName` | `<repo>` | `SONAR_PROJECT_NAME`, else the same platform variables |
 | `sonar.projectVersion` | the latest tag, or `latest` | `git describe --tags` (always written) |
 | `sonar.*.reportPaths` | the Go or JaCoCo report the test stage left behind, or cleared when there is none | the files under `coverage/`, `build/reports/`, `target/site/jacoco/` and `TestResults/` |
-| `sonar.sources` / `sonar.tests` | `.` / `.` | SonarSource's layout for sources and tests sharing one tree |
-| `sonar.test.inclusions` | `**/*_test.go,**/test/**,**/tests/**,**/test_*.py,**/*_test.py,**/conftest.py,**/*.test.ts,**/*.test.tsx,**/*.spec.ts,**/*.spec.tsx,**/*.test.js,**/*.spec.js,**/__tests__/**,**/src/test/**,**/*Tests/**,**/*.Tests/**,**/spec/**` | the Go, Python, JavaScript/TypeScript, Java, .NET and Ruby test conventions; derived only together with `sonar.tests` |
+| `sonar.sources` / `sonar.tests` | `.` / `.` | SonarSource's layout for sources and tests sharing one tree; derived only as part of the classification set below |
+| `sonar.test.inclusions` | `**/*_test.go,**/test/**,**/tests/**,**/test_*.py,**/*_test.py,**/conftest.py,**/*.test.ts,**/*.test.tsx,**/*.spec.ts,**/*.spec.tsx,**/*.test.js,**/*.spec.js,**/__tests__/**,**/src/test/**,**/*Tests/**,**/*.Tests/**,**/spec/**` | the Go, Python, JavaScript/TypeScript, Java, .NET and Ruby test conventions |
 | `sonar.exclusions` | the test patterns above plus `**/vendor/**,**/node_modules/**,**/build/**,**/dist/**,**/coverage/**,**/.pipelines/**` | a file matched by the test inclusions must not be indexed as a source file as well |
-| `sonar.test.exclusions` | `**/vendor/**,**/node_modules/**` | vendored tests are not the repository's |
+| `sonar.test.exclusions` | `**/vendor/**,**/node_modules/**` | vendored tests are not the repository's; an independent default, because it only ever shrinks the test set |
 
 **Test classification.** Without `sonar.tests`, every `*_test.go`, `test_*.py` or `*.spec.ts` is analyzed
 as production code, and the scaffolding that table-driven tests legitimately repeat is what fails the
-"Duplication on New Code" condition of the quality gate. A repository whose layout the patterns do not
-describe declares its own `sonar.tests` (the whole of the named directories is then tests, and no inclusion
-pattern is derived) or its own `sonar.test.inclusions` and `sonar.exclusions`.
+"Duplication on New Code" condition of the quality gate.
+
+`sonar.sources`, `sonar.tests`, `sonar.test.inclusions` and `sonar.exclusions` are derived **as one unit**,
+and only when `sonar-project.properties` declares none of them: they describe a partition of the tree, and
+they are only valid together. When the main and test sets overlap, sonar-scanner does not warn -- it aborts
+the analysis with `File <path> can't be indexed twice`. So a repository that declares any part of the
+classification owns all of it, and nothing is derived onto its half. Describe your layout with the whole
+set, for example:
+
+```properties
+sonar.sources=src
+sonar.tests=qa
+sonar.test.inclusions=qa/**
+sonar.exclusions=qa/**,src/generated/**
+```
 
 **First-party workflow references (`githubactions:S7637`).** The rule "Use full commit SHA hash for this
 dependency" flags every `uses:` that is not pinned to a 40-character commit, which includes this

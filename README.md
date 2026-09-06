@@ -1132,6 +1132,62 @@ last-match-wins, so your own entries below it, including a `!` negation, still w
 | **SonarQube**        | Code quality & security                 | `global/scripts/tools/sonarqube/`                             | Project settings      |
 | **Dependency Track** | SBOM tracking                           | `global/scripts/tools/dependency-track/`                      | Environment variables |
 
+#### SonarQube configuration
+
+`global/scripts/tools/sonarqube/run.sh` completes the repository's `sonar-project.properties` before it
+runs `sonar-scanner` -- the file is optional, and most repositories ship none. Every key below is a
+**default**: a repository that declares the key in `sonar-project.properties` keeps its own value, and
+that is how any of them is overridden. The four test-classification keys are the one exception -- they are
+derived only as a set, as **Test classification** below explains.
+
+| Key | Derived value | Derived from |
+|-----|---------------|--------------|
+| `sonar.projectKey` | `<owner>_<repo>` (characters outside `A-Za-z0-9._:-` become `_`) | `SONAR_PROJECT_KEY`, else `GITHUB_REPOSITORY`, `SYSTEM_TEAMPROJECT`/`BUILD_REPOSITORY_NAME` (Azure DevOps) or `CI_PROJECT_PATH` (GitLab CI) |
+| `sonar.projectName` | `<repo>` | `SONAR_PROJECT_NAME`, else the same platform variables |
+| `sonar.projectVersion` | the latest tag, or `latest` | `git describe --tags` (always written) |
+| `sonar.*.reportPaths` | the Go or JaCoCo report the test stage left behind, or cleared when there is none | the files under `coverage/`, `build/reports/`, `target/site/jacoco/` and `TestResults/` |
+| `sonar.sources` / `sonar.tests` | `.` / `.` | SonarSource's layout for sources and tests sharing one tree; derived only as part of the classification set below |
+| `sonar.test.inclusions` | `**/*_test.go,**/test/**,**/tests/**,**/test_*.py,**/*_test.py,**/conftest.py,**/*.test.ts,**/*.test.tsx,**/*.spec.ts,**/*.spec.tsx,**/*.test.js,**/*.spec.js,**/__tests__/**,**/src/test/**,**/*Tests/**,**/*.Tests/**,**/spec/**` | the Go, Python, JavaScript/TypeScript, Java, .NET and Ruby test conventions |
+| `sonar.exclusions` | the test patterns above plus `**/vendor/**,**/node_modules/**,**/build/**,**/dist/**,**/coverage/**,**/.pipelines/**` | a file matched by the test inclusions must not be indexed as a source file as well |
+| `sonar.test.exclusions` | `**/vendor/**,**/node_modules/**` | vendored tests are not the repository's; an independent default, because it only ever shrinks the test set |
+
+**Test classification.** Without `sonar.tests`, every `*_test.go`, `test_*.py` or `*.spec.ts` is analyzed
+as production code, and the scaffolding that table-driven tests legitimately repeat is what fails the
+"Duplication on New Code" condition of the quality gate.
+
+`sonar.sources`, `sonar.tests`, `sonar.test.inclusions` and `sonar.exclusions` are derived **as one unit**,
+and only when `sonar-project.properties` declares none of them: they describe a partition of the tree, and
+they are only valid together. When the main and test sets overlap, sonar-scanner does not warn -- it aborts
+the analysis with `File <path> can't be indexed twice`. So a repository that declares any part of the
+classification owns all of it, and nothing is derived onto its half. Describe your layout with the whole
+set, for example:
+
+```properties
+sonar.sources=src
+sonar.tests=qa
+sonar.test.inclusions=qa/**
+sonar.exclusions=qa/**,src/generated/**
+```
+
+**First-party workflow references (`githubactions:S7637`).** The rule "Use full commit SHA hash for this
+dependency" flags every `uses:` that is not pinned to a 40-character commit, which includes this
+repository's own reusable workflows referenced as `<owner>/pipelines/...@main` -- deliberate, because this
+repository is the single source of truth and pins every third-party action itself (see
+[Supply-Chain Pinning](#supply-chain-pinning)). The runner therefore ignores the rule for a workflow or
+composite-action file (`.github/workflows/*.yml|yaml`, `.github/actions/**/action.yml|yaml`) **only when
+every `uses:` in it** is first-party (`<owner>/...` with a trusted owner), local (`./...`) or pinned to a
+commit SHA. A file with one unpinned third-party action keeps every finding it has, and the job log names
+the reference that blocked it. The trusted owners come from `SONAR_FIRST_PARTY_OWNERS` (comma separated),
+else the owner of `GITHUB_REPOSITORY` -- so GitHub Actions needs no configuration, while a pipeline on
+another platform or a repository trusting several organizations sets the variable. Without either, nothing
+is ignored.
+
+The ignore rules are written as `sonar.issue.ignore.multicriteria.fp<N>` entries, and the
+`sonar.issue.ignore.multicriteria` list is **merged** with the ids a repository already declares (a second
+`sonar.issue.ignore.multicriteria=` line would replace the first). Keep per-repository ignore rules in
+`sonar-project.properties` rather than in the SonarQube UI: a list in the file overrides the one on the
+server.
+
 #### Dependency-Track configuration
 
 The uploader is driven entirely by environment variables. Only the first two are required.

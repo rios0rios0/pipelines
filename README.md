@@ -1600,9 +1600,18 @@ Pre-built container images optimized for CI/CD environments:
 # Build and push a custom container
 make build-and-push NAME=awscli TAG=latest
 
+# Build both architectures without publishing anything (the verification mode)
+make build NAME=awscli TAG=latest
+
 # Local build for testing
 docker build -t my-image -f global/containers/awscli.latest/Dockerfile global/containers/awscli.latest/
 ```
+
+The `Container Images` workflow builds these on every push to `main` that touches
+`global/containers/**`, and on demand via `workflow_dispatch` with `container_folder`
+(a folder name such as `tor-proxy.latest`; empty builds all of them). Turn its `push`
+input **off** to verify a Dockerfile from a branch: both architectures are still
+built, and nothing is pushed over the tag `main` publishes.
 
 ## Makefile Integration
 

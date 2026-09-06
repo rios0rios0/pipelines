@@ -10,11 +10,19 @@ on:
     inputs:
       container_folder:
         description: >-
-          Container folder name to build (e.g. "golang.1.25-awscli").
+          Container folder name to build (e.g. "golang.1.26-awscli").
           Leave empty to build ALL containers.
         required: false
         default: ''
         type: 'string'
+      push:
+        description: >-
+          Publish the result to ghcr.io. Turn this OFF to VERIFY a Dockerfile
+          from a branch: both architectures are still built, and nothing is
+          pushed over the tag `main` publishes.
+        required: false
+        default: true
+        type: 'boolean'
 
 permissions:
   contents: 'read'
@@ -27,6 +35,13 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       has_changes: ${{ steps.set-matrix.outputs.has_changes }}
+      # Resolved once, here, so the matrix job reads a plain 'true'/'false'
+      # instead of repeating the trigger test in two places. The `inputs`
+      # context is populated only for `workflow_dispatch` and `workflow_call`;
+      # on a `push` to main `inputs.push` is simply empty, and that absence has
+      # to mean PUBLISH -- the behaviour this workflow has always had. So the
+      # event test comes first, and `||` returns it without needing the input.
+      push: ${{ github.event_name != 'workflow_dispatch' || inputs.push }}
 
     steps:
       - name: 'Checkout code'
@@ -111,16 +126,33 @@ jobs:
       - name: 'Set up Docker Buildx'
         uses: 'docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e' # v4.3.0
 
+      # Skipped for a verification build. Nothing is published, so nothing needs
+      # the token -- and a build-only run that never authenticates cannot
+      # publish by accident, whatever the recipe below turns out to do.
       - name: 'Login to GitHub Container Registry'
+        if: ${{ needs.detect-changes.outputs.push == 'true' }}
         uses: 'docker/login-action@dbcb813823bdd20940b903addbd779551569679f' # v4.6.0
         with:
           registry: 'ghcr.io'
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 'Build and push ${{ matrix.name }}:${{ matrix.tag }}'
+      - name: 'Build ${{ matrix.name }}:${{ matrix.tag }}'
+        env:
+          # Through `env:` rather than interpolated into `run:`, which would let
+          # a crafted value inject shell at YAML-parse time. Compared as a
+          # string because a job output always is one.
+          PUSH: ${{ needs.detect-changes.outputs.push }}
         run: |
-          make build-and-push \
+          # `build` and `build-and-push` share one buildx recipe; the only
+          # difference is whether its output is pushed or discarded.
+          target='build-and-push'
+          if [ "$PUSH" != 'true' ]; then
+            target='build'
+            echo "::notice::Verification build -- linux/amd64 and linux/arm64 are built, nothing is published."
+          fi
+
+          make "$target" \
             NAME="${{ matrix.name }}" \
             TAG="${{ matrix.tag }}" \
             CONTAINER_REGISTRY="ghcr.io/${{ github.repository }}"

@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added a build-only mode to the `Container Images` workflow and the Makefile, so a container change can be PROVEN before review instead of after publication: `make build` runs the same buildx recipe as `make build-and-push` with `--output=type=cacheonly` in place of `--push`, and the workflow''s `workflow_dispatch` gained a `push` boolean (default `true`, so pushes to `main` publish exactly as before) that selects between them and skips the ghcr login entirely when it is off'
+time: '2026-09-06T03:20:00.037815661Z'

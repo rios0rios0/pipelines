@@ -747,9 +747,21 @@ $SCRIPTS_DIR/global/scripts/languages/golang/cyclonedx/run.sh
 # Build specific containers (may fail due to SSL in sandbox environments)
 make build-and-push NAME=awscli TAG=latest
 
+# Build both architectures without publishing anything (the verification mode)
+make build NAME=awscli TAG=latest
+
 # Local build test
 docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/containers/awscli.latest/
 ```
+
+`make build` and `make build-and-push` run the SAME buildx recipe; only the output
+differs (`--output=type=cacheonly` vs `--push`). The `Container Images` workflow
+(`.github/workflows/containers.yaml`) exposes the same choice: it publishes on every
+push to `main` under `global/containers/**`, and its `workflow_dispatch` takes
+`container_folder` (a folder name; empty means all) plus a `push` boolean that
+defaults to `true`. Dispatch a branch with `push=false` to PROVE a container change
+builds on `linux/amd64` and `linux/arm64` before it is reviewed -- the registry login
+is skipped in that mode, so the run cannot publish over a released tag.
 
 ## Validation and Testing
 

@@ -25,22 +25,25 @@ CONTAINER_NAME='pipelines-test-db'
 DB_USER='pipelines'
 DB_NAME='pipelines_test'
 
-# `::error::` lines stay on STDOUT deliberately, here and below. They are
-# GitHub Actions workflow commands, and the runner parses those from stdout
-# only -- redirected to stderr they lose the annotation and print as literal
-# text. That is why they do not follow the usual "errors go to stderr" rule.
-#
-# Both messages name the environment variable AND the action input that sets
-# it. The variable is what this script reads; the input is what the person
-# reading the failed log actually wrote, in `github/golang/stages/30-tests/all`.
-if [ -z "${DATABASE_IMAGE:-}" ]; then
-  echo "::error::DATABASE_IMAGE is empty (the 'database_image' input); nothing to provision"
+# Every exit goes through here, which is also why the one line that breaks the
+# usual "diagnostics go to stderr" rule only has to be explained once:
+# `::error::` is a GitHub Actions workflow COMMAND, not a message, and the
+# runner parses workflow commands from stdout. Redirected to stderr it stops
+# being an annotation and prints as literal text.
+fail() {
+  echo "::error::$1"
   exit 1
+}
+
+# Both messages name the environment variable AND the action input that sets it.
+# The variable is what this script reads; the input is what the person reading
+# the failed log actually wrote, in `github/golang/stages/30-tests/all`.
+if [ -z "${DATABASE_IMAGE:-}" ]; then
+  fail "DATABASE_IMAGE is empty (the 'database_image' input); nothing to provision"
 fi
 
 if [ -z "${DATABASE_URL_ENV:-}" ]; then
-  echo "::error::DATABASE_IMAGE is set but DATABASE_URL_ENV (the 'database_url_env' input) is empty; nothing would read the database"
-  exit 1
+  fail "DATABASE_IMAGE is set but DATABASE_URL_ENV (the 'database_url_env' input) is empty; nothing would read the database"
 fi
 
 # A hosted runner is discarded after the job, but a self-hosted one is not: a container
@@ -56,8 +59,7 @@ docker rm --force "$CONTAINER_NAME" >/dev/null 2>&1 || true
 POSTGRES_PASSWORD="$(openssl rand -hex 24 2>/dev/null \
   || head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 if [ -z "$POSTGRES_PASSWORD" ]; then
-  echo '::error::could not generate a credential for the test database'
-  exit 1
+  fail 'could not generate a credential for the test database'
 fi
 export POSTGRES_PASSWORD
 
@@ -89,9 +91,8 @@ for _ in $(seq 1 60); do
 done
 
 if [ "$(docker inspect --format '{{.State.Health.Status}}' "$CONTAINER_NAME")" != 'healthy' ]; then
-  echo '::error::the test database never became healthy'
   docker logs "$CONTAINER_NAME" || true
-  exit 1
+  fail 'the test database never became healthy'
 fi
 
 # Read the port Docker actually assigned. `docker port` answers `127.0.0.1:49163`, and
@@ -99,8 +100,7 @@ fi
 host_port="$(docker port "$CONTAINER_NAME" '5432/tcp' | head -n 1)"
 host_port="${host_port##*:}"
 if [ -z "$host_port" ]; then
-  echo '::error::could not resolve the published port of the test database'
-  exit 1
+  fail 'could not resolve the published port of the test database'
 fi
 
 # printf rather than interpolation: the Gitleaks "Password in URL" rule matches the

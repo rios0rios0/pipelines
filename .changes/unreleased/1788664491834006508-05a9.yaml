@@ -1,3 +1,0 @@
-kind: 'Security'
-body: 'moved the Go test stage''s database provisioning out of `github/golang/stages/30-tests/all/action.yaml` and into `global/scripts/languages/golang/test/database.sh`. Inside a YAML block scalar the `POSTGRES_PASSWORD` line -- a name the PostgreSQL image fixes and that cannot be renamed away -- reads as a hard-coded credential in a configuration file (SonarQube `yaml:S2068`); in shell it is parsed as shell, where the value is visibly generated per run. The image name and the target variable now also cross into the script through `env:` instead of being substituted into its text'
-time: '2026-09-06T03:14:51.833921977Z'

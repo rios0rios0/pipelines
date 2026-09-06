@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'repinned `ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bookworm` in `gitlab/python/abstracts/pdm.yaml` to the digest published by the `main` rebuild after #664, so the dependency-updates gate stays green on its next scheduled run'
-time: '2026-09-06T04:55:37.709054462Z'

@@ -609,6 +609,99 @@ else
 fi
 
 # =============================================================================
+# Coverage detection
+#
+# Everything above leaves the work directory without a single coverage file, so
+# `COVERAGE_FOUND` is false in every one of those scenarios and the `else` branch
+# holding the Go and JaCoCo derivations never runs. That gap is how two defects
+# reached `main` in consecutive commits: first the detection globbed the
+# workspace root only, so a project in a subfolder was read as having no coverage
+# at all; then the fix for it joined the root and the project directory into one
+# space-separated string and iterated it unquoted, so a `working_directory` of
+# `my app` word-split back into two paths that do not exist.
+#
+# Both failures land in the SAME branch, and that branch does not skip -- it
+# appends an EMPTY `sonar.javascript.lcov.reportPaths=` over whatever the
+# repository declared, which a Java properties file resolves as the last
+# definition winning. SonarQube then reports 0% coverage on new code and fails a
+# default quality gate, from a job that is `continue-on-error` and stays green
+# with one line of log. Nothing about that is visible without an assertion, which
+# is why these four exist.
+# =============================================================================
+
+# An empty fixture tree to seed coverage files into, copied into the work
+# directory before the script runs. `make_fixtures` is not reused because these
+# tests must NOT create `.github/workflows`.
+make_coverage_fixtures() {
+  mktemp -d "$TEST_DIR/coverage-XXXXXX"
+}
+
+# The seven properties the "no coverage" branch clears, as it writes them.
+CLEARED_COVERAGE_KEY='^sonar\.javascript\.lcov\.reportPaths=$'
+
+echo "TEST 29: Coverage detection — a project directory containing a space"
+fx=$(make_coverage_fixtures)
+mkdir -p "$fx/my app/coverage"
+: > "$fx/my app/coverage/lcov.info"
+: > "$fx/my app/coverage.out"
+printf 'sonar.javascript.lcov.reportPaths=my app/coverage/lcov.info\n' \
+  > "$TEST_DIR/spaced-coverage.properties"
+props=$(run_with_fixtures "$fx" "$TEST_DIR/spaced-coverage.properties" -- \
+  GITHUB_REPOSITORY=owner/repo "SONAR_PROJECT_DIR=my app")
+if ! grep -Eq "$CLEARED_COVERAGE_KEY" "$props" \
+  && [ "$(count_key sonar.javascript.lcov.reportPaths "$props")" -eq 1 ] \
+  && grep -Fxq 'sonar.go.coverage.reportPaths=my app/coverage.out' "$props"; then
+  print_result 0 "a spaced SONAR_PROJECT_DIR keeps the repository's report path and derives the Go profile"
+else
+  print_result 1 "a spaced SONAR_PROJECT_DIR word-split back into the clearing branch (contents: $(grep -E 'sonar\.(javascript\.lcov|go\.coverage)' "$props" 2>/dev/null || echo 'missing'))"
+fi
+
+echo "TEST 30: Coverage detection — a project in a plain subfolder"
+fx=$(make_coverage_fixtures)
+mkdir -p "$fx/app/coverage"
+: > "$fx/app/coverage/lcov.info"
+printf 'sonar.javascript.lcov.reportPaths=app/coverage/lcov.info\n' \
+  > "$TEST_DIR/subfolder-coverage.properties"
+props=$(run_with_fixtures "$fx" "$TEST_DIR/subfolder-coverage.properties" -- \
+  GITHUB_REPOSITORY=owner/repo SONAR_PROJECT_DIR=app)
+if ! grep -Eq "$CLEARED_COVERAGE_KEY" "$props" \
+  && [ "$(count_key sonar.javascript.lcov.reportPaths "$props")" -eq 1 ] \
+  && ! grep -q 'No coverage files found' "$(run_log "$props")"; then
+  print_result 0 "a subfolder project keeps the report path it declared"
+else
+  print_result 1 "a subfolder project had its report path cleared (contents: $(grep -E 'sonar\.javascript\.lcov' "$props" 2>/dev/null || echo 'missing'))"
+fi
+
+echo "TEST 31: Coverage detection — a root-only repository derives the same value three ways"
+fx=$(make_coverage_fixtures)
+: > "$fx/coverage.out"
+root_unset=$(run_with_fixtures "$fx" -- GITHUB_REPOSITORY=owner/repo)
+root_dot=$(run_with_fixtures "$fx" -- GITHUB_REPOSITORY=owner/repo SONAR_PROJECT_DIR=.)
+root_missing=$(run_with_fixtures "$fx" -- GITHUB_REPOSITORY=owner/repo SONAR_PROJECT_DIR=nope)
+if grep -Fxq 'sonar.go.coverage.reportPaths=coverage.out' "$root_unset" \
+  && grep -Fxq 'sonar.go.coverage.reportPaths=coverage.out' "$root_dot" \
+  && grep -Fxq 'sonar.go.coverage.reportPaths=coverage.out' "$root_missing"; then
+  print_result 0 "SONAR_PROJECT_DIR unset, '.' and a missing directory all derive the root value unchanged"
+else
+  print_result 1 "the root derivation moved (unset: $(grep -E 'sonar\.go\.coverage' "$root_unset" 2>/dev/null || echo 'missing'), '.': $(grep -E 'sonar\.go\.coverage' "$root_dot" 2>/dev/null || echo 'missing'), missing: $(grep -E 'sonar\.go\.coverage' "$root_missing" 2>/dev/null || echo 'missing'))"
+fi
+
+echo "TEST 32: Coverage detection — an empty tree still clears the report paths"
+fx=$(make_coverage_fixtures)
+printf 'sonar.javascript.lcov.reportPaths=coverage/lcov.info\n' \
+  > "$TEST_DIR/no-coverage.properties"
+props=$(run_with_fixtures "$fx" "$TEST_DIR/no-coverage.properties" -- \
+  GITHUB_REPOSITORY=owner/repo SONAR_PROJECT_DIR=app)
+cleared_count=$(grep -cE '^sonar\.[A-Za-z.]+[Rr]eportsPaths=$|^sonar\.[A-Za-z.]+[Rr]eportPaths=$' "$props" || true)
+if grep -Eq "$CLEARED_COVERAGE_KEY" "$props" \
+  && [ "$cleared_count" -eq 7 ] \
+  && grep -q 'No coverage files found' "$(run_log "$props")"; then
+  print_result 0 "a tree with no coverage anywhere still clears the seven report-path properties"
+else
+  print_result 1 "the no-coverage branch stopped clearing ($cleared_count of 7 empty entries)"
+fi
+
+# =============================================================================
 # Summary
 # =============================================================================
 echo ""

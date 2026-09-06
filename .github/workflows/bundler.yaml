@@ -38,28 +38,39 @@ on:
           literal `default` to hand the resolution to the action itself.
 
           Left empty -- the default -- the version comes from `<working_directory>/.ruby-version`
-          or `<working_directory>/.tool-versions` when either exists, and falls back to `3.3`
-          when neither does. `3.3` is the version this workflow hardcoded before the input
-          existed, so a repository that declares nothing keeps building on exactly the Ruby it
-          built on yesterday, while one that DOES declare a version stops being built on a Ruby
-          it never asked for -- which was the whole failure: a project pinned to 3.4 in
-          `.ruby-version` was tested on 3.3, and only its own Gemfile.lock noticed.
+          when that file exists, and falls back to `3.3` when it does not. `3.3` is the version
+          this workflow hardcoded before the input existed, so a repository that declares nothing
+          keeps building on exactly the Ruby it built on yesterday, while one that DOES declare a
+          version stops being built on a Ruby it never asked for -- which was the whole failure:
+          a project pinned to 3.4 in `.ruby-version` was tested on 3.3, and only its own
+          Gemfile.lock noticed.
 
-          `ruby/setup-ruby` resolves those files relative to its `working-directory`, which is
+          `.tool-versions` is deliberately NOT read here, even though `ruby/setup-ruby` reads it
+          under `default`. It is a MULTI-LANGUAGE file -- asdf and mise write one for `nodejs`,
+          `python`, `terraform`, whatever the repository uses -- so its existence is no evidence
+          that a `ruby` line is in it, and one without a `ruby` line does not make the action
+          fall back to anything: it fails `Setup Ruby` outright. Inferring `default` from the
+          filename would therefore turn a polyglot repository that passes NO input at all from a
+          working `3.3` build into a red pipeline, which is the opposite of the guarantee above.
+
+          `ruby/setup-ruby` resolves `.ruby-version` relative to its `working-directory`, which is
           why the two inputs are read together. A project that declares its version somewhere
-          this does not look (`mise.toml`, the `ruby` directive in the Gemfile) passes `default`
-          here and lets the action find it.
+          this does not look (`.tool-versions`, `mise.toml`, the `ruby` directive in the Gemfile)
+          passes `default` here -- an explicit choice rather than an inference -- and lets the
+          action find it.
         required: false
         type: string
         default: ''
 
 # Resolved once here rather than in four `hashFiles()` calls below. `env` at the workflow level
 # is one of the few places a reusable workflow may read `inputs` outside a job, and the
-# alternative is the same `format()` pair copied into every Setup Ruby step -- where one of the
+# alternative is the same `format()` call copied into every Setup Ruby step -- where one of the
 # four eventually stops matching the other three and nobody can tell which one is right.
+#
+# `.ruby-version` and nothing else: see the `ruby_version` description for why `.tool-versions`
+# is not an input to this decision.
 env:
   RUBY_VERSION_FILE: '${{ inputs.working_directory }}/.ruby-version'
-  RUBY_TOOL_VERSIONS_FILE: '${{ inputs.working_directory }}/.tool-versions'
 
 jobs:
   # first stage
@@ -83,12 +94,12 @@ jobs:
 
       # `working-directory` is what makes `bundler-cache: true` install the project's OWN
       # Gemfile and cache against the project's OWN Gemfile.lock; it is also the directory the
-      # action resolves `.ruby-version` and `.tool-versions` from, which is why the version
-      # expression and this input always move together.
+      # action resolves `.ruby-version` from, which is why the version expression and this input
+      # always move together.
       - name: 'Setup Ruby'
         uses: 'ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b' # v1.321.0
         with:
-          ruby-version: "${{ inputs.ruby_version != '' && inputs.ruby_version || (hashFiles(env.RUBY_VERSION_FILE, env.RUBY_TOOL_VERSIONS_FILE) != '' && 'default' || '3.3') }}"
+          ruby-version: "${{ inputs.ruby_version != '' && inputs.ruby_version || (hashFiles(env.RUBY_VERSION_FILE) != '' && 'default' || '3.3') }}"
           working-directory: '${{ inputs.working_directory }}'
           bundler-cache: true
 
@@ -109,7 +120,7 @@ jobs:
       - name: 'Setup Ruby'
         uses: 'ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b' # v1.321.0
         with:
-          ruby-version: "${{ inputs.ruby_version != '' && inputs.ruby_version || (hashFiles(env.RUBY_VERSION_FILE, env.RUBY_TOOL_VERSIONS_FILE) != '' && 'default' || '3.3') }}"
+          ruby-version: "${{ inputs.ruby_version != '' && inputs.ruby_version || (hashFiles(env.RUBY_VERSION_FILE) != '' && 'default' || '3.3') }}"
           working-directory: '${{ inputs.working_directory }}'
 
       - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
@@ -179,7 +190,7 @@ jobs:
       - name: 'Setup Ruby'
         uses: 'ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b' # v1.321.0
         with:
-          ruby-version: "${{ inputs.ruby_version != '' && inputs.ruby_version || (hashFiles(env.RUBY_VERSION_FILE, env.RUBY_TOOL_VERSIONS_FILE) != '' && 'default' || '3.3') }}"
+          ruby-version: "${{ inputs.ruby_version != '' && inputs.ruby_version || (hashFiles(env.RUBY_VERSION_FILE) != '' && 'default' || '3.3') }}"
           working-directory: '${{ inputs.working_directory }}'
           bundler-cache: true
 
@@ -207,7 +218,7 @@ jobs:
       - name: 'Setup Ruby'
         uses: 'ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b' # v1.321.0
         with:
-          ruby-version: "${{ inputs.ruby_version != '' && inputs.ruby_version || (hashFiles(env.RUBY_VERSION_FILE, env.RUBY_TOOL_VERSIONS_FILE) != '' && 'default' || '3.3') }}"
+          ruby-version: "${{ inputs.ruby_version != '' && inputs.ruby_version || (hashFiles(env.RUBY_VERSION_FILE) != '' && 'default' || '3.3') }}"
           working-directory: '${{ inputs.working_directory }}'
           bundler-cache: true
 

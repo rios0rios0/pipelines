@@ -15,7 +15,7 @@ set -e
 # to prevent: a consumer maintaining a fork of the shared pipeline, drifting from
 # it one input at a time.
 #
-# The input closes that, and it has three properties that all fail QUIETLY if
+# The input closes that, and it has four properties that all fail QUIETLY if
 # they regress, which is why each is asserted here rather than left to review:
 #
 #   - **A step that loses `working-directory:` does not fail; it runs in the
@@ -35,6 +35,15 @@ set -e
 #     project directory would leave every file outside it unscanned and every
 #     job still green. The third assertion group below fails if any of them ever
 #     grows a `working_directory`.
+#
+#   - **A SonarQube runner that cannot see the project's coverage does not skip
+#     the property, it CLEARS it.** `sonarqube/run.sh` globs for coverage relative
+#     to its own directory and, finding none, appends an empty
+#     `sonar.javascript.lcov.reportPaths=` -- last definition wins in a Java
+#     properties file, so the value the repository set for itself is overwritten
+#     and SonarQube reports 0% coverage on new code. That fails a default quality
+#     gate on every pull request while the job, being `continue-on-error`, stays
+#     green with one line of log.
 #
 # WHAT IT DOES NOT DO
 #
@@ -127,6 +136,10 @@ REPOSITORY_WIDE = {
 }
 
 SCOPE = '${{ inputs.working_directory }}'
+
+# The shared SonarQube runner, and the variable that tells it where the project is.
+SONAR_RUNNER = os.path.join('global', 'scripts', 'tools', 'sonarqube', 'run.sh')
+SONAR_PROJECT_DIR = 'SONAR_PROJECT_DIR'
 
 # A `run:` step belongs to the project when its script drives the project's own
 # toolchain. Anchored at the start of a line so the Corepack guard
@@ -221,11 +234,20 @@ for filename, base in sorted(BASES.items()):
                 if with_.get('working-directory') != SCOPE:
                     emit('threaded', '%s: ruby/setup-ruby has no `working-directory`' % where)
                 version = str(with_.get('ruby-version', ''))
-                for needle in ('inputs.ruby_version', 'env.RUBY_VERSION_FILE',
-                               'env.RUBY_TOOL_VERSIONS_FILE', "'3.3'"):
+                for needle in ('inputs.ruby_version', 'env.RUBY_VERSION_FILE', "'3.3'"):
                     if needle not in version:
                         emit('ruby_version',
                              '%s: `ruby-version` does not reference %s' % (where, needle))
+                # `.tool-versions` is multi-language: asdf and mise write one for
+                # `nodejs` or `python` alone, and `ruby/setup-ruby` given `default`
+                # against one with no `ruby` line does not fall back -- it fails the
+                # step. Inferring `default` from that filename would break a polyglot
+                # repository that passes NO input at all, so the guard must never
+                # widen back to it.
+                if 'tool-versions' in version or 'TOOL_VERSIONS' in version:
+                    emit('ruby_version',
+                         '%s: `ruby-version` infers `default` from `.tool-versions`, which '
+                         'says nothing about a `ruby` entry being in it' % where)
 
             if uses.startswith('actions/setup-node@'):
                 path_input = str(with_.get('cache-dependency-path', ''))
@@ -237,6 +259,23 @@ for filename, base in sorted(BASES.items()):
                 if with_.get('working_directory') != SCOPE:
                     emit('threaded', '%s: %s is called without `working_directory`'
                          % (where, uses.split('/stages/')[-1].split('@')[0]))
+
+            # The Sonar scan is the one project-aware step that must KEEP running from
+            # the repository root -- `sonar.sources` is the whole repository -- while
+            # still being told where the project is. It decides whether coverage exists
+            # by globbing relative to its own working directory, and when it finds none
+            # it appends EMPTY `sonar.*.reportPaths` values, which override the ones the
+            # repository set for itself: a subfolder project then reports 0% coverage on
+            # new code, failing a default quality gate with a green job and one line of
+            # log. Both halves are asserted because either alone is a silent no-op.
+            if SONAR_RUNNER in script.replace('\\', '/'):
+                if 'working-directory' in step:
+                    emit('sonar', '%s: the Sonar scan is scoped to the project, so it '
+                                  'stops analysing the rest of the repository' % where)
+                if (step.get('env') or {}).get(SONAR_PROJECT_DIR) != SCOPE:
+                    emit('sonar', '%s: the Sonar runner is not told where the project is '
+                                  '(no `%s`), so a subfolder project is read as having no '
+                                  'coverage' % (where, SONAR_PROJECT_DIR))
 
             if script and (PROJECT_COMMAND.search(script) or PROJECT_SCRIPT in script):
                 if step.get('working-directory') != SCOPE:
@@ -289,6 +328,18 @@ for relative in ACTIONS:
         if script and (PROJECT_COMMAND.search(script) or PROJECT_SCRIPT in script):
             if step.get('working-directory') != action_scope:
                 emit('threaded', '%s: a project command runs in the workspace root' % where)
+
+# The other half of the Sonar contract: the workflow exporting the variable is a
+# no-op unless the runner reads it, and both live in different files.
+sonar_runner = os.path.join(ROOT, SONAR_RUNNER)
+if not os.path.isfile(sonar_runner):
+    emit('sonar', '%s is missing entirely' % SONAR_RUNNER)
+else:
+    with open(sonar_runner, encoding='utf-8') as handle:
+        runner = handle.read()
+    if SONAR_PROJECT_DIR not in runner:
+        emit('sonar', '%s ignores `%s`, so the workflows exporting it change nothing'
+             % (SONAR_RUNNER, SONAR_PROJECT_DIR))
 PY
 
 # `awk` rather than `grep -P`: the group separator is a TAB, and a portable BRE
@@ -330,8 +381,14 @@ echo ""
 
 echo "Test 6: the Ruby version is read from the project rather than hardcoded"
 assert_empty \
-  "every ruby/setup-ruby resolves 'ruby_version', then the project's version files, then '3.3'" \
+  "every ruby/setup-ruby resolves 'ruby_version', then the project's '.ruby-version', then '3.3'" \
   "$(group ruby_version)"
+echo ""
+
+echo "Test 7: the SonarQube scan stays repository-wide but knows where the project is"
+assert_empty \
+  "every Sonar step runs from the repository root and exports 'SONAR_PROJECT_DIR', and the runner reads it" \
+  "$(group sonar)"
 echo ""
 
 assert_empty \

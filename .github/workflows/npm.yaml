@@ -425,12 +425,20 @@ jobs:
       - name: 'Checkout scripts'
         uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 
+      # `SONAR_PROJECT_DIR` is what makes the sentence above true. The runner decides whether
+      # coverage exists by globbing `coverage/*`, `build/reports/coverage*` and friends, and
+      # when it finds none it appends EMPTY `sonar.*.reportPaths` values -- which, this being a
+      # Java properties file where the last definition wins, overrides the path the repository
+      # set for itself. Without this variable a project in a subfolder is read as having no
+      # coverage at all and reports 0% on new code, failing a default quality gate while the
+      # job stays green. `sonar.sources` is untouched: the SCAN is still repository-wide.
       - name: 'Run SonarQube'
         run: '${{ env.SCRIPTS_DIR }}/global/scripts/tools/sonarqube/run.sh'
         shell: 'bash'
         env:
           SONAR_HOST_URL: ${{ inputs.sonar_host }}
           SONAR_TOKEN: ${{ secrets.sonar_token }}
+          SONAR_PROJECT_DIR: '${{ inputs.working_directory }}'
 
 
 # 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations

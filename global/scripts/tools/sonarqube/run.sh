@@ -74,28 +74,48 @@ if [ -z "$version" ]; then version="latest"; echo "No version tag found in the r
 echo "sonar.projectVersion=$version" >> sonar-project.properties
 echo "Updated sonar.projectVersion to $version"
 
+# Directories a coverage report may sit in, repository root first. A project that
+# does not live at the root (`working_directory` on the reusable workflows) writes
+# its coverage beside its OWN manifest and the artifact is unpacked back there, so
+# every pattern below has to be tried under that directory too. Searching only the
+# root would read a subfolder project as "no coverage at all" -- and the block
+# further down does not merely skip in that case, it appends EMPTY
+# `sonar.*.reportPaths` values that override the ones the repository set for
+# itself, silently reporting 0% coverage on new code.
+SONAR_PROJECT_DIR=${SONAR_PROJECT_DIR:-.}
+SONAR_PROJECT_DIR=${SONAR_PROJECT_DIR%/}
+[ -n "$SONAR_PROJECT_DIR" ] || SONAR_PROJECT_DIR=.
+COVERAGE_DIRS=.
+if [ "$SONAR_PROJECT_DIR" != "." ] && [ -d "$SONAR_PROJECT_DIR" ]; then
+  COVERAGE_DIRS="$COVERAGE_DIRS $SONAR_PROJECT_DIR"
+  echo "Looking for coverage under the repository root and $SONAR_PROJECT_DIR"
+fi
+
 # Check if coverage files exist. If no coverage was produced by the test stage,
 # override coverage report paths to avoid sonar-scanner failures when the project's
 # sonar-project.properties references files that don't exist.
 COVERAGE_FOUND=false
-for pattern in \
-  "coverage.out" \
-  "coverage.txt" \
-  "coverage/*.txt" \
-  "coverage/*.xml" \
-  "coverage/*.json" \
-  "coverage/*.lcov" \
-  "build/reports/coverage*" \
-  "build/reports/cobertura.xml" \
-  "build/reports/jacoco/test/jacocoTestReport.xml" \
-  "target/site/jacoco/jacoco.xml" \
-  "TestResults/*.xml" \
-  "TestResults/Cobertura.xml"; do
-  # shellcheck disable=SC2086
-  if ls $pattern 1>/dev/null 2>&1; then
-    COVERAGE_FOUND=true
-    break
-  fi
+for directory in $COVERAGE_DIRS; do
+  for pattern in \
+    "coverage.out" \
+    "coverage.txt" \
+    "coverage/*.txt" \
+    "coverage/*.xml" \
+    "coverage/*.json" \
+    "coverage/*.lcov" \
+    "coverage/*.info" \
+    "build/reports/coverage*" \
+    "build/reports/cobertura.xml" \
+    "build/reports/jacoco/test/jacocoTestReport.xml" \
+    "target/site/jacoco/jacoco.xml" \
+    "TestResults/*.xml" \
+    "TestResults/Cobertura.xml"; do
+    # shellcheck disable=SC2086
+    if ls $directory/$pattern 1>/dev/null 2>&1; then
+      COVERAGE_FOUND=true
+      break 2
+    fi
+  done
 done
 
 if [ "$COVERAGE_FOUND" = "false" ]; then
@@ -113,12 +133,18 @@ if [ "$COVERAGE_FOUND" = "false" ]; then
   } >> sonar-project.properties
   echo "Cleared coverage report path properties in sonar-project.properties."
 else
+  # The same root-then-project order as the detection above, and the `./` a root
+  # match picks up is stripped so the derived value keeps the shape it had before
+  # a project directory was ever searched.
   GO_REPORT_PATH=
-  for p in coverage.out coverage.txt coverage/coverage.out coverage/coverage.txt coverage/*.txt coverage/*.out; do
-    for f in $p; do
-      [ -f "$f" ] || continue
-      GO_REPORT_PATH="$f"
-      break 2
+  for d in $COVERAGE_DIRS; do
+    for p in "$d"/coverage.out "$d"/coverage.txt "$d"/coverage/coverage.out \
+      "$d"/coverage/coverage.txt "$d"/coverage/*.txt "$d"/coverage/*.out; do
+      for f in $p; do
+        [ -f "$f" ] || continue
+        GO_REPORT_PATH="${f#./}"
+        break 3
+      done
     done
   done
   if [ -n "$GO_REPORT_PATH" ]; then
@@ -127,11 +153,13 @@ else
 
   # Auto-detect JaCoCo coverage reports (Gradle and Maven)
   JACOCO_REPORT_PATH=
-  for p in build/reports/jacoco/test/jacocoTestReport.xml target/site/jacoco/jacoco.xml; do
-    if [ -f "$p" ]; then
-      JACOCO_REPORT_PATH="$p"
-      break
-    fi
+  for d in $COVERAGE_DIRS; do
+    for p in "$d"/build/reports/jacoco/test/jacocoTestReport.xml "$d"/target/site/jacoco/jacoco.xml; do
+      if [ -f "$p" ]; then
+        JACOCO_REPORT_PATH="${p#./}"
+        break 2
+      fi
+    done
   done
   if [ -n "$JACOCO_REPORT_PATH" ]; then
     echo "sonar.coverage.jacoco.xmlReportPaths=$JACOCO_REPORT_PATH" >> sonar-project.properties

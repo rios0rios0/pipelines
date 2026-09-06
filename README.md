@@ -266,10 +266,22 @@ the same reason -- a release tag and a Docker build are facts about the reposito
 directory in it.
 
 **Ruby version.** `bundler.yaml` also takes `ruby_version`. Left empty -- the default -- the
-version comes from `<working_directory>/.ruby-version` or `<working_directory>/.tool-versions`
-when either exists, and falls back to `3.3`, the version the workflow hardcoded before the input
-existed. A project declaring its version elsewhere (`mise.toml`, the `ruby` directive in the
-Gemfile) passes `ruby_version: 'default'` and lets `ruby/setup-ruby` find it.
+version comes from `<working_directory>/.ruby-version` when that file exists, and falls back to
+`3.3`, the version the workflow hardcoded before the input existed. `.tool-versions` is not read:
+asdf and mise write one for `nodejs` or `python` alone, so its existence is no evidence that a
+`ruby` line is in it, and `ruby/setup-ruby` handed a `.tool-versions` without one fails the step
+instead of falling back. A project declaring its version anywhere else (`.tool-versions`,
+`mise.toml`, the `ruby` directive in the Gemfile) passes `ruby_version: 'default'` and lets
+`ruby/setup-ruby` find it.
+
+**Coverage and SonarQube.** The coverage artifact is uploaded and unpacked at
+`<working_directory>/coverage/`, so a `sonar-project.properties` naming
+`sonar.javascript.lcov.reportPaths=<working_directory>/coverage/lcov.info` is what the scan reads.
+The scan itself stays repository-wide -- `sonar.sources` is still the whole repository -- and only
+the coverage LOOKUP follows the project, through `SONAR_PROJECT_DIR` on the Sonar step. Without
+that the shared runner would find no coverage at the root and append an empty
+`sonar.*.reportPaths`, overriding the repository's own value and reporting 0% coverage on new
+code.
 
 **Not threaded.** `npm-cloudflare.yaml` and `yarn-cloudflare.yaml` do not take the input. Their
 deployment job builds and uploads through the shared `50-deployment/cloudflare` action, whose

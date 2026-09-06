@@ -11,6 +11,55 @@ on:
         required: false
         type: string
         default: 'always'
+      working_directory:
+        description: |
+          Path of the Ruby project inside the repository, relative to the root and WITHOUT a
+          trailing slash. `.` -- the default -- is the repository root, so a consumer that does
+          not pass this sees no change whatsoever.
+
+          Set it when the Gemfile does not sit at the top of the repository: a Rails API under
+          `api/` beside a frontend under `app/`, a gem under `gem/`, a Jekyll site under `site/`.
+          Everything that reads the project's own manifest then runs there -- `bundle install`
+          (through `ruby/setup-ruby`), RuboCop, debride, bundler-audit and the test task -- and
+          the reports those tools write land under `<working_directory>/build/reports/`.
+
+          The REPOSITORY-WIDE checks deliberately ignore it and keep running from the root:
+          Gitleaks reads the whole history, Semgrep and CodeQL analyse every Ruby file wherever
+          it lives, Hadolint looks for Dockerfiles anywhere, and basic-checks reads the changelog
+          and the branch. Scoping those to a subfolder would silently shrink the security surface
+          of a repository that adopted this input for an unrelated reason -- and a monorepo is
+          precisely the shape where the file nobody scanned is in the other directory.
+        required: false
+        type: string
+        default: '.'
+      ruby_version:
+        description: |
+          Ruby to install, in `ruby/setup-ruby` syntax (`3.4`, `3.4.10`, `jruby-10.0`), or the
+          literal `default` to hand the resolution to the action itself.
+
+          Left empty -- the default -- the version comes from `<working_directory>/.ruby-version`
+          or `<working_directory>/.tool-versions` when either exists, and falls back to `3.3`
+          when neither does. `3.3` is the version this workflow hardcoded before the input
+          existed, so a repository that declares nothing keeps building on exactly the Ruby it
+          built on yesterday, while one that DOES declare a version stops being built on a Ruby
+          it never asked for -- which was the whole failure: a project pinned to 3.4 in
+          `.ruby-version` was tested on 3.3, and only its own Gemfile.lock noticed.
+
+          `ruby/setup-ruby` resolves those files relative to its `working-directory`, which is
+          why the two inputs are read together. A project that declares its version somewhere
+          this does not look (`mise.toml`, the `ruby` directive in the Gemfile) passes `default`
+          here and lets the action find it.
+        required: false
+        type: string
+        default: ''
+
+# Resolved once here rather than in four `hashFiles()` calls below. `env` at the workflow level
+# is one of the few places a reusable workflow may read `inputs` outside a job, and the
+# alternative is the same `format()` pair copied into every Setup Ruby step -- where one of the
+# four eventually stops matching the other three and nobody can tell which one is right.
+env:
+  RUBY_VERSION_FILE: '${{ inputs.working_directory }}/.ruby-version'
+  RUBY_TOOL_VERSIONS_FILE: '${{ inputs.working_directory }}/.tool-versions'
 
 jobs:
   # first stage
@@ -18,6 +67,8 @@ jobs:
     name: 'code-check > quality:basic-checks'
     runs-on: 'ubuntu-latest'
     steps:
+      # Repository-scoped on purpose: it reads the changelog and the branch's ancestry, neither
+      # of which lives inside the project directory.
       - uses: 'rios0rios0/pipelines/github/global/stages/10-code-check/basic-checks@main'
         with:
           target_branch: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch || 'main' }}
@@ -30,14 +81,20 @@ jobs:
       - name: 'Checkout code'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
+      # `working-directory` is what makes `bundler-cache: true` install the project's OWN
+      # Gemfile and cache against the project's OWN Gemfile.lock; it is also the directory the
+      # action resolves `.ruby-version` and `.tool-versions` from, which is why the version
+      # expression and this input always move together.
       - name: 'Setup Ruby'
         uses: 'ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b' # v1.321.0
         with:
-          ruby-version: '3.3'
+          ruby-version: "${{ inputs.ruby_version != '' && inputs.ruby_version || (hashFiles(env.RUBY_VERSION_FILE, env.RUBY_TOOL_VERSIONS_FILE) != '' && 'default' || '3.3') }}"
+          working-directory: '${{ inputs.working_directory }}'
           bundler-cache: true
 
       - run: bundle exec rubocop
         shell: 'bash'
+        working-directory: '${{ inputs.working_directory }}'
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -52,21 +109,32 @@ jobs:
       - name: 'Setup Ruby'
         uses: 'ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b' # v1.321.0
         with:
-          ruby-version: '3.3'
+          ruby-version: "${{ inputs.ruby_version != '' && inputs.ruby_version || (hashFiles(env.RUBY_VERSION_FILE, env.RUBY_TOOL_VERSIONS_FILE) != '' && 'default' || '3.3') }}"
+          working-directory: '${{ inputs.working_directory }}'
 
       - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 
+      # `$SCRIPTS_DIR` is an absolute path outside the workspace, so the runner is reachable
+      # from anywhere; the script itself analyses `.` and writes `$(pwd)/build/reports`, which
+      # is what actually needs to be the project directory.
       - run: $SCRIPTS_DIR/global/scripts/languages/ruby/debride/run.sh
         shell: 'bash'
+        working-directory: '${{ inputs.working_directory }}'
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 
   # second stage
+  #
+  # Every job below scans the REPOSITORY, not the project, and none of them takes
+  # `working_directory` -- see the input's description for why that is deliberate.
   security-sast_codeql:
     name: 'security > sast:codeql'
     runs-on: 'ubuntu-latest'
     steps:
+      # No source root to hint at: the language is named explicitly rather than autodetected,
+      # and the Ruby extractor walks the whole checkout, so a project in a subfolder is already
+      # covered -- and so is every other Ruby file in the repository.
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
         with:
           codeql_language: 'ruby'
@@ -111,14 +179,18 @@ jobs:
       - name: 'Setup Ruby'
         uses: 'ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b' # v1.321.0
         with:
-          ruby-version: '3.3'
+          ruby-version: "${{ inputs.ruby_version != '' && inputs.ruby_version || (hashFiles(env.RUBY_VERSION_FILE, env.RUBY_TOOL_VERSIONS_FILE) != '' && 'default' || '3.3') }}"
+          working-directory: '${{ inputs.working_directory }}'
           bundler-cache: true
 
+      # SCA, not SAST: it audits the resolved dependency graph in THIS project's Gemfile.lock,
+      # so unlike its neighbours above it belongs in the project directory.
       - run: |
           # Pinned; kept in step with global/scripts/shared/pinned-versions.sh.
           gem install bundler-audit -v 0.9.3
           bundle-audit check --update
         shell: 'bash'
+        working-directory: '${{ inputs.working_directory }}'
     needs: [ 'code_check-style_rubocop', 'code_check-quality_debride' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
@@ -135,11 +207,13 @@ jobs:
       - name: 'Setup Ruby'
         uses: 'ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b' # v1.321.0
         with:
-          ruby-version: '3.3'
+          ruby-version: "${{ inputs.ruby_version != '' && inputs.ruby_version || (hashFiles(env.RUBY_VERSION_FILE, env.RUBY_TOOL_VERSIONS_FILE) != '' && 'default' || '3.3') }}"
+          working-directory: '${{ inputs.working_directory }}'
           bundler-cache: true
 
       - run: bundle exec rake test
         shell: 'bash'
+        working-directory: '${{ inputs.working_directory }}'
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_bundle_audit' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -161,3 +235,11 @@ jobs:
 #   permissions:
 #     security-events: 'write' # security-sast_codeql
 #     actions: 'read' # security-sast_codeql (required only on a private repository)
+#
+# A project that does not live at the repository root passes its path once:
+#
+#   jobs:
+#     default:
+#       uses: 'rios0rios0/pipelines/.github/workflows/bundler.yaml@main'
+#       with:
+#         working_directory: 'api'

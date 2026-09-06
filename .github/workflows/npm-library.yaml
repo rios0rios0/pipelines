@@ -28,6 +28,15 @@ on:
         required: false
         default: 'always'
         description: "CodeQL SARIF upload mode ('always', 'failure-only' or 'never'). See npm.yaml."
+      working_directory:
+        type: 'string'
+        required: false
+        default: '.'
+        description: |
+          Path of the JavaScript project inside the repository (`.` -- the default -- is the
+          root). See the toolchain workflow. It scopes the toolchain jobs only: the delivery jobs
+          below stay repository-scoped, because a release tag and a Docker build are facts about
+          the repository rather than about one directory in it.
     secrets:
       sonar_token:
         description: 'SonarQube authentication token'
@@ -37,6 +46,7 @@ jobs:
   npm:
     uses: 'rios0rios0/pipelines/.github/workflows/npm.yaml@main'
     with:
+      working_directory: '${{ inputs.working_directory }}'
       install_run_scripts: ${{ inputs.install_run_scripts }}
       sonar_host: '${{ inputs.sonar_host }}'
       runs_on: ${{ inputs.runs_on }}

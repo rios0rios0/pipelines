@@ -66,10 +66,47 @@ on:
           here hardcoded before this input existed, so leaving it unset changes nothing -- but
           Node 20 reached end of life on 30 April 2026, so a consumer on the default is building
           on an unsupported runtime and should name a supported major.
+      working_directory:
+        type: 'string'
+        required: false
+        default: '.'
+        description: |
+          Path of the JavaScript project inside the repository, relative to the root and WITHOUT
+          a trailing slash. `.` -- the default -- is the repository root, so a consumer that does
+          not pass this sees no change whatsoever.
+
+          Set it when `package.json` does not sit at the top of the repository: a frontend under
+          `app/` beside a Rails API under `api/`, a site under `web/`. Every command that reads
+          the project's own manifest then runs there -- the install, `lint:ci`, Prettier, Knip,
+          the audit, `test:ci` and `build` -- `actions/setup-node` caches against that project's
+          lockfile, and the coverage, JUnit and artifact paths are read from there too.
+
+          The REPOSITORY-WIDE checks deliberately ignore it and keep running from the root:
+          Gitleaks reads the whole history, Semgrep and CodeQL analyse every source file wherever
+          it lives, Hadolint looks for Dockerfiles anywhere, and basic-checks reads the changelog
+          and the branch. Scoping those to a subfolder would silently shrink the security surface
+          of a repository that adopted this input for an unrelated reason -- and a monorepo is
+          precisely the shape where the file nobody scanned is in the other directory.
     secrets:
       sonar_token:
         description: 'SonarQube authentication token'
         required: false
+
+# Resolved once here rather than in nine `format()` calls spread across the report and artifact
+# steps below. `env` at the workflow level is one of the few places a reusable workflow may read
+# `inputs` outside a job, and the alternative is the same path arithmetic copied into every step
+# that names a file -- where one copy eventually stops matching the others.
+#
+# The paths are what a JavaScript project writes BESIDE its own `package.json`, so they follow
+# `working_directory` and nothing else does: the checks that scan the repository read no path
+# from here at all.
+env:
+  COVERAGE_DIR: '${{ inputs.working_directory }}/coverage'
+  COVERAGE_SUMMARY_PATH: '${{ inputs.working_directory }}/coverage/coverage-summary.json'
+  COVERAGE_FINAL_PATH: '${{ inputs.working_directory }}/coverage/coverage-final.json'
+  COVERAGE_INDEX_PATH: '${{ inputs.working_directory }}/coverage/index.html'
+  JUNIT_REPORT_PATH: '${{ inputs.working_directory }}/junit-report.xml'
+  VITE_CONFIG_PATH: '${{ inputs.working_directory }}/vite.config.ts'
 
 # Corepack is what turns `packageManager: yarn@4.x` into a usable `yarn`, and it is enabled
 # BEFORE `actions/setup-node` because that action probes `yarn --version` to decide which cache
@@ -142,6 +179,13 @@ jobs:
         with:
           node-version: '${{ inputs.node_version }}'
           cache: 'yarn'
+          # Named explicitly because the action only looks for a lockfile in the WORKSPACE
+          # ROOT when this is empty, and fails the job outright with "Dependencies lock file
+          # is not found" for a project one directory down -- on its second step, before
+          # anything has run. With `working_directory` left at `.` these are the same files
+          # it would have found on its own.
+          cache-dependency-path: |
+            ${{ inputs.working_directory }}/yarn.lock
 
       - run: |
           # `--mode=skip-build`: Yarn 2+ enables lifecycle scripts by default, so a plain
@@ -153,6 +197,7 @@ jobs:
           fi
           yarn lint:ci
         shell: 'bash'
+        working-directory: '${{ inputs.working_directory }}'
         env:
           INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
     continue-on-error: true
@@ -176,6 +221,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/javascript/stages/10-code-check/format@main'
         with:
           package_manager: 'yarn'
+          working_directory: '${{ inputs.working_directory }}'
           node_version: '${{ inputs.node_version }}'
           install_run_scripts: '${{ inputs.install_run_scripts }}'
     if: "!startsWith(github.ref, 'refs/tags/')"
@@ -188,6 +234,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/javascript/stages/10-code-check/knip@main'
         with:
           package_manager: 'yarn'
+          working_directory: '${{ inputs.working_directory }}'
           install_run_scripts: '${{ inputs.install_run_scripts }}'
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
@@ -254,9 +301,17 @@ jobs:
         with:
           node-version: '${{ inputs.node_version }}'
           cache: 'yarn'
+          # Named explicitly because the action only looks for a lockfile in the WORKSPACE
+          # ROOT when this is empty, and fails the job outright with "Dependencies lock file
+          # is not found" for a project one directory down -- on its second step, before
+          # anything has run. With `working_directory` left at `.` these are the same files
+          # it would have found on its own.
+          cache-dependency-path: |
+            ${{ inputs.working_directory }}/yarn.lock
 
       - run: 'yarn npm audit --recursive --severity high'
         shell: 'bash'
+        working-directory: '${{ inputs.working_directory }}'
     needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
@@ -283,6 +338,13 @@ jobs:
         with:
           node-version: '${{ inputs.node_version }}'
           cache: 'yarn'
+          # Named explicitly because the action only looks for a lockfile in the WORKSPACE
+          # ROOT when this is empty, and fails the job outright with "Dependencies lock file
+          # is not found" for a project one directory down -- on its second step, before
+          # anything has run. With `working_directory` left at `.` these are the same files
+          # it would have found on its own.
+          cache-dependency-path: |
+            ${{ inputs.working_directory }}/yarn.lock
 
       - name: 'Export the build environment'
         if: "inputs.build_env != ''"
@@ -301,6 +363,7 @@ jobs:
           fi
           yarn test:ci
         shell: 'bash'
+        working-directory: '${{ inputs.working_directory }}'
         env:
           INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
 
@@ -308,29 +371,34 @@ jobs:
         if: 'inputs.e2e_typecheck'
         run: 'yarn e2e:typecheck'
         shell: 'bash'
+        working-directory: '${{ inputs.working_directory }}'
 
+      # Every path here is read through `env`, which resolves it against `working_directory`.
+      # A literal `coverage/` would keep the `hashFiles()` guard permanently false for a project
+      # in a subfolder -- so the step would SKIP rather than fail, and the coverage comment would
+      # simply stop appearing with nothing in the log to say why.
       - name: 'Coverage Report'
-        if: "always() && hashFiles('coverage/coverage-summary.json') != '' && hashFiles('coverage/coverage-final.json') != ''"
+        if: "always() && hashFiles(env.COVERAGE_SUMMARY_PATH) != '' && hashFiles(env.COVERAGE_FINAL_PATH) != ''"
         uses: 'davelosert/vitest-coverage-report-action@c4bbc33a89b7ace0e63d35f1f7d4bcee31155a73' # v2.13.0
         with:
-          json-summary-path: 'coverage/coverage-summary.json'
-          json-final-path: 'coverage/coverage-final.json'
-          vite-config-path: 'vite.config.ts'
+          json-summary-path: '${{ env.COVERAGE_SUMMARY_PATH }}'
+          json-final-path: '${{ env.COVERAGE_FINAL_PATH }}'
+          vite-config-path: '${{ env.VITE_CONFIG_PATH }}'
 
       - name: 'Test Results'
-        if: "always() && hashFiles('junit-report.xml') != ''"
+        if: "always() && hashFiles(env.JUNIT_REPORT_PATH) != ''"
         uses: 'dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2' # v3.0.0
         with:
           name: 'Test Results'
-          path: 'junit-report.xml'
+          path: '${{ env.JUNIT_REPORT_PATH }}'
           reporter: 'java-junit'
 
       - name: 'Upload Coverage Report'
-        if: "always() && hashFiles('coverage/index.html') != ''"
+        if: "always() && hashFiles(env.COVERAGE_INDEX_PATH) != ''"
         uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # v7.0.1
         with:
           name: 'coverage-report'
-          path: 'coverage/'
+          path: '${{ env.COVERAGE_DIR }}/'
           retention-days: 30
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_yarn_audit' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
@@ -355,6 +423,13 @@ jobs:
         with:
           node-version: '${{ inputs.node_version }}'
           cache: 'yarn'
+          # Named explicitly because the action only looks for a lockfile in the WORKSPACE
+          # ROOT when this is empty, and fails the job outright with "Dependencies lock file
+          # is not found" for a project one directory down -- on its second step, before
+          # anything has run. With `working_directory` left at `.` these are the same files
+          # it would have found on its own.
+          cache-dependency-path: |
+            ${{ inputs.working_directory }}/yarn.lock
 
       - name: 'Export the build environment'
         if: "inputs.build_env != ''"
@@ -373,6 +448,7 @@ jobs:
           fi
           yarn build
         shell: 'bash'
+        working-directory: '${{ inputs.working_directory }}'
         env:
           INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_yarn_audit' ]
@@ -395,11 +471,13 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
+      # Unpacked where the project wrote it, so a `sonar-project.properties` naming
+      # `<project>/coverage/...` finds it. The scan itself still runs from the repository root.
       - name: 'Download coverage artifact'
         uses: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' # v8.0.1
         with:
           name: 'coverage-report'
-          path: 'coverage/'
+          path: '${{ env.COVERAGE_DIR }}/'
         continue-on-error: true
 
       - name: 'Checkout scripts'

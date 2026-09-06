@@ -21,6 +21,15 @@ on:
         required: false
         type: string
         default: ''
+      working_directory:
+        type: 'string'
+        required: false
+        default: '.'
+        description: |
+          Path of the JavaScript project inside the repository (`.` -- the default -- is the
+          root). See the toolchain workflow. It scopes the toolchain jobs only: the delivery jobs
+          below stay repository-scoped, because a release tag and a Docker build are facts about
+          the repository rather than about one directory in it.
     secrets:
       sonar_token:
         description: 'SonarQube authentication token'
@@ -30,6 +39,7 @@ jobs:
   yarn:
     uses: 'rios0rios0/pipelines/.github/workflows/yarn.yaml@main'
     with:
+      working_directory: '${{ inputs.working_directory }}'
       runs_on: ${{ inputs.runs_on }}
       codeql_upload: ${{ inputs.codeql_upload }}
       install_run_scripts: ${{ inputs.install_run_scripts }}

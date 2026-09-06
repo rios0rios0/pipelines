@@ -346,7 +346,8 @@ PY
 # cannot name one -- `grep -P` is a GNU extension this suite has no reason to
 # require, and `grep $'\t'` reads as a typo the first time somebody edits it.
 group() {
-  awk -F '\t' -v group="$1" '$1 == group { sub(/^[^\t]*\t/, ""); print }' "$FINDINGS"
+  local name="$1"
+  awk -F '\t' -v group="$name" '$1 == group { sub(/^[^\t]*\t/, ""); print }' "$FINDINGS"
 }
 
 echo "Test 1: every workflow and stage in scope declares the input, optional and rooted at '.'"

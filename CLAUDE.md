@@ -38,6 +38,7 @@ make test-dart-pipeline # Test the Dart/Flutter pipeline (scripts, Semgrep rules
 make test-terra-pipeline # Test the Terraform/terra pipeline's CodeQL tool gap (GitHub, GitLab, Azure, terra.mk, terraform.mk) only
 make test-javascript-pipeline  # Test the JavaScript formatting gate (Prettier runner + cross-platform wiring) only
 make test-workflow-composition  # Test the GitHub Actions workflow composition standard only
+make test-working-directory  # Test the `working_directory` threading contract (bundler/npm/yarn and their variants) only
 make test-supply-chain # Test the supply-chain pinning contract (actions, images, binaries, packages) only
 make test-runner-cache-gating  # Test that no GitHub Actions cache restores into $HOME on a self-hosted runner only
 make test-dependency-updates  # Test the dependency-update checker only

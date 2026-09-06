@@ -1,9 +1,29 @@
 on:
   workflow_call:
+    inputs:
+      working_directory:
+        type: 'string'
+        required: false
+        default: '.'
+        description: |
+          Path of the Ruby project inside the repository (`.` -- the default -- is the root).
+          See bundler.yaml. It scopes the toolchain jobs only: the delivery jobs below stay
+          repository-scoped, because a release tag and a Docker build are facts about the
+          repository rather than about one directory in it.
+      ruby_version:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Ruby to install, or empty to read it from `<working_directory>/.ruby-version`.
+          See bundler.yaml.
 
 jobs:
   bundler:
     uses: 'rios0rios0/pipelines/.github/workflows/bundler.yaml@main'
+    with:
+      working_directory: '${{ inputs.working_directory }}'
+      ruby_version: '${{ inputs.ruby_version }}'
 
   # fourth stage
   delivery-release:

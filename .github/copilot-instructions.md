@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, gitignore, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, workflow-composition, supply-chain, runner-cache-gating, dependency-updates, azure-step-names)
+- `make test` - Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, gitignore, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, dependency-updates, azure-step-names)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-go-module-toolchain` - Test that every `go.mod` toolchain directive is readable by the images/analysers that consume it specifically
 - `make test-go-tool-staleness` - Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves specifically
@@ -36,6 +36,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-dart-pipeline` - Test the Dart/Flutter pipeline (scripts, Semgrep rules, cross-platform wiring) specifically
 - `make test-javascript-pipeline` - Test the JavaScript formatting gate (Prettier runner + cross-platform wiring) specifically
 - `make test-workflow-composition` - Test the GitHub Actions workflow composition standard specifically
+- `make test-working-directory` - Test that the `working_directory` input is declared, forwarded and threaded to every project-scoped step -- and kept away from the repository-wide scanners -- specifically
 - `make test-supply-chain` - Test the supply-chain pinning contract (actions, images, binaries, packages) specifically
 - `make test-runner-cache-gating` - Test that no GitHub Actions cache restores into `$HOME` on a self-hosted runner specifically
 - `make test-dependency-updates` - Test the dependency-update checker specifically

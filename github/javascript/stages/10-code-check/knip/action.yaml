@@ -9,6 +9,13 @@ inputs:
     required: false
     default: 'npm'
     description: 'Package manager to use (npm or yarn)'
+  working_directory:
+    required: false
+    default: '.'
+    description: |
+      Path of the JavaScript project inside the repository (`.` -- the default -- is the root).
+      The install and the tool run there, and `actions/setup-node` caches against that project's
+      lockfile. See the `working_directory` input of npm.yaml/yarn.yaml.
 
 runs:
   using: 'composite'
@@ -61,6 +68,15 @@ runs:
       with:
         node-version: '20'
         cache: '${{ inputs.package_manager }}'
+        # Named explicitly because the action only looks for a lockfile in the WORKSPACE ROOT
+        # when this is empty, and fails outright with "Dependencies lock file is not found" for
+        # a project one directory down. All three names are listed because this action serves
+        # both package managers; with `working_directory` left at `.` they are the same files
+        # the action would have found on its own.
+        cache-dependency-path: |
+          ${{ inputs.working_directory }}/package-lock.json
+          ${{ inputs.working_directory }}/npm-shrinkwrap.json
+          ${{ inputs.working_directory }}/yarn.lock
 
     # Installed WITHOUT lifecycle scripts. `npm ci` / `yarn install` otherwise run
     # `postinstall` from every package in the transitive tree, as the CI user, before
@@ -75,6 +91,7 @@ runs:
           npm run prepare --if-present
         fi
       shell: 'bash'
+      working-directory: '${{ inputs.working_directory }}'
       env:
         INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
 
@@ -86,19 +103,23 @@ runs:
           yarn rebuild
         fi
       shell: 'bash'
+      working-directory: '${{ inputs.working_directory }}'
       env:
         INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
 
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 
+    # Knip resolves the import graph from this project's `package.json` and writes its report
+    # to `$(pwd)/build/reports/knip`, which is why the upload path below follows the same input.
     - run: $SCRIPTS_DIR/global/scripts/languages/javascript/knip/run.sh
       shell: 'bash'
+      working-directory: '${{ inputs.working_directory }}'
 
     - name: 'Upload Report'
       uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # v7.0.1
       with:
         name: 'knip'
-        path: 'build/reports/knip/'
+        path: '${{ inputs.working_directory }}/build/reports/knip/'
         if-no-files-found: 'error'
         overwrite: 'true'
         retention-days: 10

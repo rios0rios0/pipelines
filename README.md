@@ -220,6 +220,78 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 | `reusable-claude-review.yaml`  | `Claude Review` — automated review on pull requests (not drafts, forks or automation branches) | any |
 | `reusable-claude-mention.yaml` | `Claude Mention` — responds to `@claude` mentions | any  |
 
+#### Projects in a Subfolder (`working_directory`)
+
+A repository whose project does not live at its root -- a Rails API under `api/` beside a React
+frontend under `app/`, a gem under `gem/`, a site under `web/` -- passes its path once:
+
+```yaml
+jobs:
+  api:
+    uses: 'rios0rios0/pipelines/.github/workflows/bundler.yaml@main'
+    with:
+      working_directory: 'api'
+
+  app:
+    uses: 'rios0rios0/pipelines/.github/workflows/npm.yaml@main'
+    with:
+      working_directory: 'app'
+```
+
+`working_directory` is optional and defaults to `.`, so a consumer that does not pass it sees no
+change at all.
+
+| Workflows                                                     | Inputs                              |
+|---------------------------------------------------------------|-------------------------------------|
+| `bundler.yaml`, `bundler-library.yaml`, `bundler-docker.yaml` | `working_directory`, `ruby_version` |
+| `npm.yaml`, `npm-library.yaml`, `npm-docker.yaml`             | `working_directory`                 |
+| `yarn.yaml`, `yarn-library.yaml`, `yarn-docker.yaml`          | `working_directory`                 |
+
+**What it scopes.** Everything that reads the project's own manifest: `bundle install` (through
+`ruby/setup-ruby`), RuboCop, debride, bundler-audit, the Ruby test task, the npm/Yarn install,
+`lint:ci`, Prettier, Knip, the audit, `test:ci`, `build`, and the coverage, JUnit and artifact
+paths those produce. `actions/setup-node` is pointed at the project's own lockfile, which it
+otherwise looks for in the workspace root only -- failing on its second step with
+"Dependencies lock file is not found".
+
+**What it deliberately does not scope.** Gitleaks, Semgrep, CodeQL, Hadolint and `basic-checks`
+keep running from the repository root. They are repository-wide by design: Gitleaks reads the
+whole git history, Semgrep and CodeQL analyse every source file wherever it lives, Hadolint looks
+for a Dockerfile anywhere, and `basic-checks` reads the changelog and the branch. Scoping them to
+one directory would silently shrink the security surface of a monorepo -- which is exactly the
+shape where the unscanned file is in the other folder. CodeQL needs no source-root hint either:
+the language is named explicitly rather than autodetected, and the extractor walks the whole
+checkout. The delivery jobs of the `-library` and `-docker` variants stay repository-scoped for
+the same reason -- a release tag and a Docker build are facts about the repository, not about one
+directory in it.
+
+**Ruby version.** `bundler.yaml` also takes `ruby_version`. Left empty -- the default -- the
+version comes from `<working_directory>/.ruby-version` when that file exists, and falls back to
+`3.3`, the version the workflow hardcoded before the input existed. `.tool-versions` is not read:
+asdf and mise write one for `nodejs` or `python` alone, so its existence is no evidence that a
+`ruby` line is in it, and `ruby/setup-ruby` handed a `.tool-versions` without one fails the step
+instead of falling back. A project declaring its version anywhere else (`.tool-versions`,
+`mise.toml`, the `ruby` directive in the Gemfile) passes `ruby_version: 'default'` and lets
+`ruby/setup-ruby` find it.
+
+**Coverage and SonarQube.** The coverage artifact is uploaded and unpacked at
+`<working_directory>/coverage/`, so a `sonar-project.properties` naming
+`sonar.javascript.lcov.reportPaths=<working_directory>/coverage/lcov.info` is what the scan reads.
+The scan itself stays repository-wide -- `sonar.sources` is still the whole repository -- and only
+the coverage LOOKUP follows the project, through `SONAR_PROJECT_DIR` on the Sonar step. Without
+that the shared runner would find no coverage at the root and append an empty
+`sonar.*.reportPaths`, overriding the repository's own value and reporting 0% coverage on new
+code.
+
+**Not threaded.** `npm-cloudflare.yaml` and `yarn-cloudflare.yaml` do not take the input. Their
+deployment job builds and uploads through the shared `50-deployment/cloudflare` action, whose
+`build_command` and `output_directory` are repository-root-relative and shared with the GitLab and
+Azure DevOps templates; a subfolder project expresses the path there
+(`build_command: 'cd app && npm ci && npm run build'`, `output_directory: 'app/dist'`) until that
+contract is changed on its own.
+
+`make test-working-directory` fails if any of the above regresses.
+
 #### Usage Example (Go with Docker)
 
 ```yaml
@@ -631,6 +703,8 @@ permissions:
 jobs:
   pipeline:
     uses: 'rios0rios0/pipelines/.github/workflows/bundler-docker.yaml@main'
+    # with:
+    #   working_directory: 'api'   # when the Gemfile is not at the repository root
 ```
 
 ![GitHub Actions Example](.docs/github-golang.png)

@@ -1590,8 +1590,11 @@ Pre-built container images optimized for CI/CD environments:
 |----------------------------|---------------------------------|--------------------------------|
 | `golang.1.26-awscli`       | Go 1.26 + AWS CLI               | `ghcr.io/rios0rios0/pipelines` |
 | `python.3.9-pdm-buster`    | Python 3.9 + PDM                | `ghcr.io/rios0rios0/pipelines` |
-| `python.3.10-pdm-bullseye` | Python 3.10 + PDM               | `ghcr.io/rios0rios0/pipelines` |
+| `python.3.10-pdm-bookworm` | Python 3.10 + PDM               | `ghcr.io/rios0rios0/pipelines` |
+| `python.3.13-pdm-bookworm` | Python 3.13 + PDM               | `ghcr.io/rios0rios0/pipelines` |
 | `awscli.latest`            | AWS CLI tools                   | `ghcr.io/rios0rios0/pipelines` |
+| `bfg.latest`               | BFG Repo-Cleaner                | `ghcr.io/rios0rios0/pipelines` |
+| `mssql-tools18.latest`     | Microsoft SQL Server tools      | `ghcr.io/rios0rios0/pipelines` |
 | `tor-proxy.latest`         | Network proxy with health check | `ghcr.io/rios0rios0/pipelines` |
 
 ### Building Custom Images
@@ -1600,9 +1603,20 @@ Pre-built container images optimized for CI/CD environments:
 # Build and push a custom container
 make build-and-push NAME=awscli TAG=latest
 
+# Build both architectures without publishing anything (the verification mode)
+make build NAME=awscli TAG=latest
+
 # Local build for testing
 docker build -t my-image -f global/containers/awscli.latest/Dockerfile global/containers/awscli.latest/
 ```
+
+The `Container Images` workflow builds these on every push to `main` that touches
+`global/containers/**`, and on demand via `workflow_dispatch` with `container_folder`
+(a folder name such as `tor-proxy.latest`; empty builds all of them). Its `push` input
+is **off** by default, so a dispatch verifies a Dockerfile from a branch: both
+architectures are still built, and nothing is pushed over the tag `main` publishes.
+Turn it **on** only to republish an image by hand — pushes to `main` publish either
+way, since they never read the input.
 
 ## Makefile Integration
 

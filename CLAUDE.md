@@ -44,6 +44,7 @@ make test-dependency-updates  # Test the dependency-update checker only
 make check-dependency-updates # Report which pinned dependencies have a newer release (network)
 make test-azure-step-names  # Test Azure DevOps step-name uniqueness across expanded templates only
 make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
+make build NAME=<image> TAG=<tag>           # Build both architectures, publish nothing (verification)
 ```
 
 Test scripts live in `.github/tests/`. The CI workflow (`.github/workflows/ci.yaml`) validates YAML syntax, script permissions, and runs ShellCheck on all shell scripts.

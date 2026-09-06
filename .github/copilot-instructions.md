@@ -126,6 +126,7 @@ otherwise shrinks one forgotten annotation at a time while the job stays green. 
   ```bash
   # Build specific containers (may fail due to SSL in sandbox environments)
   make build-and-push NAME=awscli TAG=latest  # Requires Docker registry authentication
+  make build NAME=awscli TAG=latest           # Build both architectures, publish nothing (no authentication)
 
   # Local build test (will likely fail on SSL certificate issues in sandbox)
   docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/containers/awscli.latest/
@@ -246,8 +247,8 @@ The Terra CLI pipeline test stage exposes parallel jobs on every platform (Azure
 |-----------------------------|---------------------------------|--------------------------------|
 | `golang.1.26-awscli`        | Go 1.26 + AWS CLI               | `ghcr.io/rios0rios0/pipelines` |
 | `python.3.9-pdm-buster`     | Python 3.9 + PDM                | `ghcr.io/rios0rios0/pipelines` |
-| `python.3.10-pdm-bullseye`  | Python 3.10 + PDM               | `ghcr.io/rios0rios0/pipelines` |
-| `python.3.13-pdm-bullseye`  | Python 3.13 + PDM               | `ghcr.io/rios0rios0/pipelines` |
+| `python.3.10-pdm-bookworm`  | Python 3.10 + PDM               | `ghcr.io/rios0rios0/pipelines` |
+| `python.3.13-pdm-bookworm`  | Python 3.13 + PDM               | `ghcr.io/rios0rios0/pipelines` |
 | `awscli.latest`             | AWS CLI tools                   | `ghcr.io/rios0rios0/pipelines` |
 | `bfg.latest`                | BFG Repo-Cleaner                | `ghcr.io/rios0rios0/pipelines` |
 | `mssql-tools18.latest`      | Microsoft SQL Server tools      | `ghcr.io/rios0rios0/pipelines` |
@@ -747,9 +748,23 @@ $SCRIPTS_DIR/global/scripts/languages/golang/cyclonedx/run.sh
 # Build specific containers (may fail due to SSL in sandbox environments)
 make build-and-push NAME=awscli TAG=latest
 
+# Build both architectures without publishing anything (the verification mode)
+make build NAME=awscli TAG=latest
+
 # Local build test
 docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/containers/awscli.latest/
 ```
+
+`make build` and `make build-and-push` run the SAME buildx recipe; only the output
+differs (`--output=type=cacheonly` vs `--push`). The `Container Images` workflow
+(`.github/workflows/containers.yaml`) exposes the same choice: it publishes on every
+push to `main` under `global/containers/**`, and its `workflow_dispatch` takes
+`container_folder` (a folder name; empty means all) plus a `push` boolean that
+defaults to `false`. So dispatching a branch PROVES a container change builds on
+`linux/amd64` and `linux/arm64` before it is reviewed -- the registry login is
+skipped in that mode, so the run cannot publish over a released tag. Tick `push`
+only to republish by hand; pushes to `main` never read the input and publish either
+way.
 
 ## Validation and Testing
 

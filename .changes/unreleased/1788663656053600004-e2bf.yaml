@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the two container image digests the Dependency Updates gate still reported as stale after the previous bump: `awscli:latest` and `golang:1.26-awscli` are built by this repository, and the `containers.yaml` runs that followed the bump merge rebuilt and republished both, so the digests pinned by `gitlab/global/stages/50-deployment/sam.yaml` and `gitlab/golang/stages/40-delivery/sam.yaml` were already superseded by the time they landed on `main` -- re-resolved both from the registry so the gate reports every pin current'
+time: '2026-09-06T03:00:56.053600004Z'

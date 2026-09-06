@@ -191,6 +191,7 @@ jobs:
         with:
           package_manager: 'npm'
           working_directory: '${{ inputs.working_directory }}'
+          node_version: '${{ inputs.node_version }}'
           install_run_scripts: '${{ inputs.install_run_scripts }}'
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"

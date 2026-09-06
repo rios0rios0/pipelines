@@ -37,7 +37,10 @@ assert_true() {
 cleanup() { rm -rf "$TEST_DIR"; }
 trap cleanup EXIT
 
-oc() { REPORT_PATH="$(mktemp -d)/reports" python3 "$OC" "$@"; }
+# A RELATIVE REPORT_PATH, because the checker confines its report directory to the
+# repository it was pointed at: `build/reports` resolves under `--repo-dir`, which is a
+# throwaway tree per test, and is also what every runner in this repo passes.
+oc() { REPORT_PATH="build/reports" python3 "$OC" "$@"; }
 
 # Build a correct, in-standard repo at $1.
 make_clean_repo() {

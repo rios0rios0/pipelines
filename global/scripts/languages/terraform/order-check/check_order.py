@@ -1020,12 +1020,36 @@ def run(repo: Path, cfg: Config, fix: bool) -> list[FileResult]:
 # --------------------------------------------------------------------------- #
 # JUnit + human output
 # --------------------------------------------------------------------------- #
-def write_junit(results: list[FileResult], report_dir: Path) -> None:
-    # `--report` may legitimately be absolute (the flag documents it), so the
-    # directory itself is not confined. The file name this function appends is,
-    # which is what keeps a constructed path from escaping the directory the
-    # caller actually named.
-    report_dir = Path(os.path.realpath(report_dir))
+def within_repo(raw: Path, repo: Path, purpose: str) -> Path:
+    """Resolve a command-line path and require it to stay inside the repository.
+
+    `--report` arrives on argv and this tool CREATES it, so "wherever you point
+    me" is the wrong contract for a CI checker. A relative `--report` already
+    resolves against `--repo-dir`, and every runner here passes a relative
+    `REPORT_PATH` (`build/reports`), so confining an absolute one to the same
+    tree costs nothing real and makes a traversal (`--report ../../etc`) fail
+    here rather than somewhere surprising. Same shape as `within_workdir` in
+    tools/dependency-updates/check_updates.py.
+
+    Resolved with `realpath` first so a symlink cannot be used to step outside
+    after the check.
+    """
+    base = Path(os.path.realpath(repo))
+    resolved = Path(os.path.realpath(raw))
+    if resolved != base and base not in resolved.parents:
+        raise SystemExit(
+            "refusing to use '{raw}' as {purpose}: it resolves outside the "
+            "repository '{base}'".format(raw=raw, purpose=purpose, base=base)
+        )
+    return resolved
+
+
+def write_junit(results: list[FileResult], report_dir: Path, repo: Path) -> None:
+    # The directory is confined to the repository before anything is created
+    # under it. The file name this function appends is confined too, which is
+    # what keeps a constructed path from escaping the directory the caller
+    # actually named.
+    report_dir = within_repo(report_dir, repo, "the report directory")
     report_dir.mkdir(parents=True, exist_ok=True)
     cases = []
     total = failures = 0
@@ -1077,7 +1101,7 @@ def main(argv: list[str]) -> int:
 
     results = run(repo, cfg, fix=args.fix)
     report_dir = (repo / args.report) if not os.path.isabs(args.report) else Path(args.report)
-    write_junit(results, report_dir)
+    write_junit(results, report_dir, repo)
 
     errors = warnings = fixed = 0
     for r in results:

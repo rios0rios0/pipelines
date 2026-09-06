@@ -554,8 +554,10 @@ INFO|LINT|PREFER_CONST|lib/widgets/card.dart|7|5|9|Use 'a \| b' instead of a pip
 Analyzing project...
 EOF
 
+# Run from inside $WORK_DIR: the helper confines its report directory to the working
+# directory, so the argument is a path relative to it rather than an absolute one.
 STATUS=0
-python3 "$DART_DIR/analyze/dart_analyze_report.py" "$WORK_DIR/an" < "$WORK_DIR/machine.txt" > /dev/null 2>&1 || STATUS=$?
+(cd "$WORK_DIR" && python3 "$DART_DIR/analyze/dart_analyze_report.py" "an" < "machine.txt") > /dev/null 2>&1 || STATUS=$?
 assert_true "the default gate fails on an ERROR" "[[ $STATUS -eq 1 ]]"
 assert_true "the JUnit report is well-formed XML" \
   "python3 -c \"import xml.dom.minidom as m; m.parse('$WORK_DIR/an/junit-analyze.xml')\""
@@ -578,16 +580,16 @@ assert_true "non-fatal findings stay visible as JUnit skips" \
 
 head -1 "$WORK_DIR/machine.txt" > "$WORK_DIR/infos.txt"
 STATUS=0
-python3 "$DART_DIR/analyze/dart_analyze_report.py" "$WORK_DIR/an2" < "$WORK_DIR/infos.txt" > /dev/null 2>&1 || STATUS=$?
+(cd "$WORK_DIR" && python3 "$DART_DIR/analyze/dart_analyze_report.py" "an2" < "infos.txt") > /dev/null 2>&1 || STATUS=$?
 assert_true "INFO findings alone do not fail by default" "[[ $STATUS -eq 0 ]]"
 
 STATUS=0
-DART_FATAL_INFOS=true python3 "$DART_DIR/analyze/dart_analyze_report.py" "$WORK_DIR/an3" \
-  < "$WORK_DIR/infos.txt" > /dev/null 2>&1 || STATUS=$?
+(cd "$WORK_DIR" && DART_FATAL_INFOS=true python3 "$DART_DIR/analyze/dart_analyze_report.py" "an3" \
+  < "infos.txt") > /dev/null 2>&1 || STATUS=$?
 assert_true "DART_FATAL_INFOS=true makes INFO findings fatal" "[[ $STATUS -eq 1 ]]"
 
 STATUS=0
-python3 "$DART_DIR/analyze/dart_analyze_report.py" "$WORK_DIR/an4" < /dev/null > /dev/null 2>&1 || STATUS=$?
+(cd "$WORK_DIR" && python3 "$DART_DIR/analyze/dart_analyze_report.py" "an4" < /dev/null) > /dev/null 2>&1 || STATUS=$?
 assert_true "a clean analysis passes and still writes a valid JUnit report" \
   "[[ $STATUS -eq 0 ]] && python3 -c \"import xml.dom.minidom as m; m.parse('$WORK_DIR/an4/junit-analyze.xml')\""
 

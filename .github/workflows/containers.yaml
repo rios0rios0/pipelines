@@ -17,11 +17,12 @@ on:
         type: 'string'
       push:
         description: >-
-          Publish the result to ghcr.io. Turn this OFF to VERIFY a Dockerfile
-          from a branch: both architectures are still built, and nothing is
-          pushed over the tag `main` publishes.
+          Publish the result to ghcr.io. Left OFF, a dispatch only VERIFIES the
+          Dockerfile: both architectures are still built, and nothing is pushed
+          over the tag `main` publishes. Turn it ON to republish an image by
+          hand.
         required: false
-        default: true
+        default: false
         type: 'boolean'
 
 permissions:
@@ -41,6 +42,11 @@ jobs:
       # on a `push` to main `inputs.push` is simply empty, and that absence has
       # to mean PUBLISH -- the behaviour this workflow has always had. So the
       # event test comes first, and `||` returns it without needing the input.
+      #
+      # That short-circuit is also why the input DEFAULTS TO FALSE: `main` never
+      # reads it, so the default governs the dispatch form ALONE, and there the
+      # two mistakes are not the same size. Publishing a branch over a released
+      # tag cannot be undone; forgetting to tick the box costs one re-dispatch.
       push: ${{ github.event_name != 'workflow_dispatch' || inputs.push }}
 
     steps:

@@ -126,6 +126,7 @@ otherwise shrinks one forgotten annotation at a time while the job stays green. 
   ```bash
   # Build specific containers (may fail due to SSL in sandbox environments)
   make build-and-push NAME=awscli TAG=latest  # Requires Docker registry authentication
+  make build NAME=awscli TAG=latest           # Build both architectures, publish nothing (no authentication)
 
   # Local build test (will likely fail on SSL certificate issues in sandbox)
   docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/containers/awscli.latest/
@@ -759,9 +760,11 @@ differs (`--output=type=cacheonly` vs `--push`). The `Container Images` workflow
 (`.github/workflows/containers.yaml`) exposes the same choice: it publishes on every
 push to `main` under `global/containers/**`, and its `workflow_dispatch` takes
 `container_folder` (a folder name; empty means all) plus a `push` boolean that
-defaults to `true`. Dispatch a branch with `push=false` to PROVE a container change
-builds on `linux/amd64` and `linux/arm64` before it is reviewed -- the registry login
-is skipped in that mode, so the run cannot publish over a released tag.
+defaults to `false`. So dispatching a branch PROVES a container change builds on
+`linux/amd64` and `linux/arm64` before it is reviewed -- the registry login is
+skipped in that mode, so the run cannot publish over a released tag. Tick `push`
+only to republish by hand; pushes to `main` never read the input and publish either
+way.
 
 ## Validation and Testing
 

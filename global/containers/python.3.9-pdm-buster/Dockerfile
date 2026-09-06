@@ -40,9 +40,9 @@ FROM python:3.9-slim-buster@sha256:320a7a4250aba4249f458872adecf92eea88dc6abd2d7
 # deleted at the end, so anything split into a later layer would either restore
 # what was just removed or run against a half-dismantled system.
 #
-# The pdm pin is held at 2.26.9 rather than the 2.28.1 the other two images use,
+# The pdm pin is held at 2.26.9 rather than the 2.29.0 the other two images use,
 # and rather than the version in global/scripts/shared/pinned-versions.sh: PDM
-# dropped Python 3.9 in 2.27, so 2.28.1 declares `requires_python >=3.10` and
+# dropped Python 3.9 in 2.27, so 2.29.0 declares `requires_python >=3.10` and
 # pip would refuse it on this image. 2.26.9 is the last release that still
 # supports 3.9. It is installed binary-only because an sdist runs its
 # `setup.py` during the build, and pinned because an unversioned install bakes

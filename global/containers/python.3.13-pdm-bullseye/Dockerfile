@@ -4,6 +4,6 @@ FROM python:3.13-slim-bullseye@sha256:e98b521460ee75bca92175c16247bdf7275637a8fa
 # Pinned and binary-only, matching global/scripts/shared/pinned-versions.sh.
 # An unversioned install bakes whatever PyPI served on build day into the
 # image, and an sdist runs its `setup.py` during the build.
-RUN pip install --only-binary :all: "pdm==2.28.1"
+RUN pip install --only-binary :all: "pdm==2.29.0"
 RUN groupadd --system -g 1001 app_user \
   && useradd --system --create-home -g 1001 --no-user-group -u 1001 app_user

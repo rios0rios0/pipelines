@@ -1,0 +1,4 @@
+kind: 'Security'
+breaking: true
+body: '**BREAKING CHANGE:** removed the `build_env_secret_names` input from `dart-cloudflare.yaml`, `npm-cloudflare.yaml` and `yarn-cloudflare.yaml`. It resolved `KEY=SECRET_NAME` lines against a whole-context dump of the `secrets` context, so one step was handed EVERY secret the caller passed in order to use two of them (SonarQube `githubactions:S7634`). Name the values through the `build_env_secrets` secret instead, which is masked the same way and passes only what the build needs'
+time: '2026-09-06T03:14:51.823379321Z'

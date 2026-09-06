@@ -123,22 +123,6 @@ on:
           that resolves to nothing fails the step, so a variable set on one environment and
           forgotten on the other is a named error rather than a bundle built against an empty
           string.
-      build_env_secret_names:
-        type: 'string'
-        required: false
-        default: ''
-        description: |
-          `KEY=SECRET_NAME` lines, resolved from whatever secrets reached this workflow and exported
-          like `build_env_secrets`, but MASKED.
-
-          For callers using `secrets: inherit`, which passes secrets under THEIR names and therefore
-          cannot populate a declared input like `build_env_secrets`. That only works inside one
-          organization; a cross-organization caller should use `build_env_secrets` instead.
-
-          **It cannot reach an environment-scoped secret**, because nothing can -- see
-          `build_env_vars` for the variable case, which does cross. Unlike `build_env_vars` an
-          unresolvable name is NOT a failure: a value like a Sentry DSN is legitimately optional and
-          the key is simply left unset.
       deployment_environment:
         type: 'string'
         required: false
@@ -183,10 +167,15 @@ on:
           secret keeps its masking when it is passed into a reusable workflow as a secret, and loses
           it when it is passed as an input.
 
-          This is the one to reach for. Its counterpart `build_env_secret_names` exists for a caller
-          using `secrets: inherit`, which passes secrets under THEIR names and so can never populate
-          a declared input -- but `inherit` only carries secrets within a single organization, and
-          this library is a different owner from most consumers. Explicit is what works.
+          This is the only route, and naming the values here is the point of it. A
+          `build_env_secret_names` input used to sit beside it for callers using `secrets: inherit`:
+          it took `KEY=SECRET_NAME` lines and picked them out of a whole-context `toJSON` dump of
+          the secrets inside the step, which handed that one step EVERY secret the caller had
+          passed in order to use two of them. It was removed -- a step gets the secrets it needs
+          and no others.
+
+          `inherit` was never the way in regardless: it only carries secrets within a single
+          organization, and this library is a different owner from most consumers.
 
 jobs:
   npm:
@@ -233,11 +222,11 @@ jobs:
         with:
           required_checks: '${{ inputs.deployment_required_checks }}'
 
-      # The three `build_env*` inputs all write to `$GITHUB_ENV`, which lives outside the workspace
+      # The `build_env*` values all write to `$GITHUB_ENV`, which lives outside the workspace
       # -- so they survive the deploy action's own checkout, and `build_command` sees them.
       #
       # **They are applied in this order and the LAST one wins**: `build_env`, then
-      # `build_env_vars`, then `build_env_secret_names`. That is deliberate and load-bearing for
+      # `build_env_secrets`, then `build_env_vars`. That is deliberate and load-bearing for
       # one shape in particular: a caller whose `build_env` also feeds the toolchain workflow's
       # test and build jobs (`yarn.yaml` takes the same input) passes a PLACEHOLDER API origin
       # there, because those jobs prove the bundle compiles and never publish it. The real,
@@ -293,55 +282,6 @@ jobs:
         env:
           ALL_VARS: ${{ toJSON(vars) }}
           BUILD_ENV_VARS: '${{ inputs.build_env_vars }}'
-
-      # Secrets named rather than declared, for callers using `secrets: inherit` -- which passes the
-      # caller's secrets under THEIR own names, so a declared `build_env_secrets` input is never
-      # populated by it. This reaches repository and organization secrets only; an ENVIRONMENT
-      # secret cannot cross a repository boundary by any route, unlike the variables above.
-      #
-      # `toJSON(secrets)` is a considered exception to "only pass required secrets to this step",
-      # not an oversight -- static analysis flags it and is right to in general. Selecting the
-      # named ones in the expression is impossible: an input carries a LIST of names and the
-      # `secrets` context cannot be iterated in a workflow expression, so either every requested
-      # secret is a separate declared input (which `inherit` cannot populate, which is the whole
-      # problem) or the selection happens in the step.
-      #
-      # What bounds it: the exposure is one step, running an inline script from this repository
-      # with no third-party action in it; the values go straight into `$GITHUB_ENV` and are never
-      # echoed; every one of them stays masked in the log; and the step is skipped entirely unless
-      # the caller asked for something. The job already holds the deployment credentials, so this
-      # widens nothing it did not already have. **Do not add a `print` of a resolved value here.**
-      - if: "inputs.build_env_secret_names != ''"
-        run: |
-          python3 - <<'RESOLVE'
-          import json
-          import os
-
-          available = json.loads(os.environ['ALL_SECRETS'])
-          resolved = []
-          skipped = []
-          for line in os.environ['BUILD_ENV_SECRET_NAMES'].splitlines():
-              line = line.strip()
-              if not line:
-                  continue
-              key, _, name = line.partition('=')
-              value = available.get(name.strip())
-              if not value:
-                  skipped.append(key.strip())
-                  continue
-              resolved.append('%s=%s' % (key.strip(), value))
-
-          if resolved:
-              with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as handle:
-                  handle.write('\n'.join(resolved) + '\n')
-          print('resolved %d secret(s) for the build' % len(resolved))
-          if skipped:
-              print('left unset (not present for this environment): %s' % ', '.join(skipped))
-          RESOLVE
-        shell: 'bash'
-        env:
-          ALL_SECRETS: ${{ toJSON(secrets) }}
-          BUILD_ENV_SECRET_NAMES: '${{ inputs.build_env_secret_names }}'
 
       # Refused here rather than by `wrangler`, which reports a missing token as an authentication
       # failure against an account it could not identify.

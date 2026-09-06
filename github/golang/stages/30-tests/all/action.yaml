@@ -34,82 +34,30 @@ runs:
     - name: 'Checkout code'
       uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
+    # Hoisted above the database step, which runs one of the scripts it fetches.
+    # `SCRIPTS_DIR` is written to `$GITHUB_ENV`, so it is only readable from the
+    # steps that come AFTER this one.
+    - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
     # Started here with `docker run` rather than declared as a job-level `services:` block,
     # because a service block cannot be omitted by expression -- declaring one unconditionally
     # would force a database on every consumer that does not want one.
+    #
+    # The script rather than an inline `run:` block: the provisioning has to name
+    # `POSTGRES_PASSWORD`, which is the PostgreSQL image's documented contract and cannot be
+    # renamed away, and inside a YAML block scalar that name reads as a hard-coded credential
+    # in a configuration file to every analyser that parses YAML. In shell it is parsed as
+    # shell, where the value is plainly generated rather than written down.
+    #
+    # Both inputs cross through `env:` rather than being substituted into the script's text,
+    # so a consumer's image name is data to the shell and never a fragment of it.
     - name: 'Start the test database'
       if: "inputs.database_image != ''"
       shell: 'bash'
-      run: |
-        set -euo pipefail
-
-        if [ -z "${{ inputs.database_url_env }}" ]; then
-          echo "::error::database_image is set but database_url_env is empty; nothing would read the database"
-          exit 1
-        fi
-
-        # A hosted runner is discarded after the job, but a self-hosted one is not: a container
-        # left behind by a cancelled or crashed run still holds the name, and `docker run`
-        # refuses to start a second one with it.
-        docker rm --force 'pipelines-test-db' >/dev/null 2>&1 || true
-
-        # `127.0.0.1::5432` rather than `5432:5432`: the empty host port asks Docker for a free
-        # ephemeral one, so a machine already running PostgreSQL on 5432 -- the normal state of
-        # a developer box or a long-lived self-hosted runner -- does not collide; and binding
-        # the published port to loopback keeps the database off every other interface, since
-        # the default `0.0.0.0` would put an instance with well-known credentials on the
-        # network the runner sits in.
-        # Generated per run rather than a literal. The old hard-coded value was
-        # only ever reachable on loopback, so this is not a leaked credential --
-        # but a well-known password is still a well-known password, and every
-        # secret scanner reads one in a template as a finding it cannot tell
-        # apart from a real one. A random value costs nothing here because
-        # nothing outside this step ever needs to know it.
-        db_password="$(openssl rand -hex 24 2>/dev/null \
-          || head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-        if [ -z "$db_password" ]; then
-          echo '::error::could not generate a password for the test database'
-          exit 1
-        fi
-
-        docker run --detach --name 'pipelines-test-db' \
-          --env POSTGRES_USER='pipelines' \
-          --env POSTGRES_PASSWORD="$db_password" \
-          --env POSTGRES_DB='pipelines_test' \
-          --publish '127.0.0.1::5432' \
-          --health-cmd 'pg_isready -U pipelines' \
-          --health-interval '5s' \
-          --health-timeout '5s' \
-          --health-retries '20' \
-          '${{ inputs.database_image }}'
-
-        for _ in $(seq 1 60); do
-          state="$(docker inspect --format '{{.State.Health.Status}}' 'pipelines-test-db' 2>/dev/null || echo 'starting')"
-          [ "$state" = 'healthy' ] && break
-          sleep 2
-        done
-
-        if [ "$(docker inspect --format '{{.State.Health.Status}}' 'pipelines-test-db')" != 'healthy' ]; then
-          echo '::error::the test database never became healthy'
-          docker logs 'pipelines-test-db' || true
-          exit 1
-        fi
-
-        # Read the port Docker actually assigned. `docker port` answers `127.0.0.1:49163`, and
-        # an IPv6 host would answer `[::1]:49163`, so take the field after the LAST colon.
-        host_port="$(docker port 'pipelines-test-db' '5432/tcp' | head -n 1)"
-        host_port="${host_port##*:}"
-        if [ -z "$host_port" ]; then
-          echo '::error::could not resolve the published port of the test database'
-          exit 1
-        fi
-
-        # printf rather than interpolation: the Gitleaks "Password in URL" rule matches the
-        # literal `://<something>:<something>@` shape, and an interpolated user:password@ still
-        # reads as that shape even though it holds no credential. A format string does not.
-        url="$(printf 'postgres://%s:%s@%s:%s/%s?sslmode=disable' \
-          'pipelines' "$db_password" '127.0.0.1' "$host_port" 'pipelines_test')"
-        echo "${{ inputs.database_url_env }}=${url}" >> "$GITHUB_ENV"
+      run: '$SCRIPTS_DIR/global/scripts/languages/golang/test/database.sh'
+      env:
+        DATABASE_IMAGE: '${{ inputs.database_image }}'
+        DATABASE_URL_ENV: '${{ inputs.database_url_env }}'
 
     - name: 'Setup Go'
       id: 'setup-go'
@@ -168,8 +116,6 @@ runs:
         restore-keys: |
           ${{ runner.os }}-${{ runner.arch }}-go-${{ steps.setup-go.outputs.go-version }}-test-tools-
           ${{ runner.os }}-${{ runner.arch }}-go-test-tools-
-
-    - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 
     - run: $SCRIPTS_DIR/global/scripts/languages/golang/test/run.sh
       shell: 'bash'

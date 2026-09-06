@@ -25,13 +25,21 @@ CONTAINER_NAME='pipelines-test-db'
 DB_USER='pipelines'
 DB_NAME='pipelines_test'
 
+# `::error::` lines stay on STDOUT deliberately, here and below. They are
+# GitHub Actions workflow commands, and the runner parses those from stdout
+# only -- redirected to stderr they lose the annotation and print as literal
+# text. That is why they do not follow the usual "errors go to stderr" rule.
+#
+# Both messages name the environment variable AND the action input that sets
+# it. The variable is what this script reads; the input is what the person
+# reading the failed log actually wrote, in `github/golang/stages/30-tests/all`.
 if [ -z "${DATABASE_IMAGE:-}" ]; then
-  echo "::error::DATABASE_IMAGE is empty; nothing to provision"
+  echo "::error::DATABASE_IMAGE is empty (the 'database_image' input); nothing to provision"
   exit 1
 fi
 
 if [ -z "${DATABASE_URL_ENV:-}" ]; then
-  echo "::error::database_image is set but database_url_env is empty; nothing would read the database"
+  echo "::error::DATABASE_IMAGE is set but DATABASE_URL_ENV (the 'database_url_env' input) is empty; nothing would read the database"
   exit 1
 fi
 

@@ -244,8 +244,9 @@ change at all.
 | Workflows                                                     | Inputs                              |
 |---------------------------------------------------------------|-------------------------------------|
 | `bundler.yaml`, `bundler-library.yaml`, `bundler-docker.yaml` | `working_directory`, `ruby_version` |
-| `npm.yaml`, `npm-library.yaml`, `npm-docker.yaml`             | `working_directory`                 |
-| `yarn.yaml`, `yarn-library.yaml`, `yarn-docker.yaml`          | `working_directory`                 |
+| `npm.yaml`, `yarn.yaml`                                       | `working_directory`, `node_version` |
+| `npm-library.yaml`, `npm-docker.yaml`                         | `working_directory`                 |
+| `yarn-library.yaml`, `yarn-docker.yaml`                       | `working_directory`                 |
 
 **What it scopes.** Everything that reads the project's own manifest: `bundle install` (through
 `ruby/setup-ruby`), RuboCop, debride, bundler-audit, the Ruby test task, the npm/Yarn install,
@@ -273,6 +274,18 @@ asdf and mise write one for `nodejs` or `python` alone, so its existence is no e
 instead of falling back. A project declaring its version anywhere else (`.tool-versions`,
 `mise.toml`, the `ruby` directive in the Gemfile) passes `ruby_version: 'default'` and lets
 `ruby/setup-ruby` find it.
+
+**Node version.** `npm.yaml` and `yarn.yaml` also take `node_version`, which is handed to
+`actions/setup-node` by every job in those pipelines -- ESLint, Prettier, Knip, the audit, the
+tests and the build. It defaults to `'20'`, the value each of those jobs hardcoded before the
+input existed, so a consumer that does not set it sees no change at all -- but Node 20 reached
+end of life on 30 April 2026, so the default is an unsupported runtime and a project on a
+supported major should name it. npm makes the mismatch quiet rather than loud: a project whose
+`engines` say `>=24` still installs on Node 20, because `npm ci` only WARNS `EBADENGINE` unless
+`engine-strict` is set, so it surfaces two jobs later as a test run that dies on an API the
+runtime does not have. The composed variants -- `npm-library.yaml`, `npm-docker.yaml`,
+`yarn-library.yaml`, `yarn-docker.yaml` -- do not expose the input and run the base pipeline on
+its default.
 
 **Coverage and SonarQube.** The coverage artifact is uploaded and unpacked at
 `<working_directory>/coverage/`, so a `sonar-project.properties` naming

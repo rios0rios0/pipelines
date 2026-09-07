@@ -628,6 +628,7 @@ on:
 permissions:
   contents: 'write'
   checks: 'write'
+  pull-requests: 'write' # the coverage comment on every pull request
   # No `security-events: write` is needed: that permission exists for CodeQL,
   # which has no Dart extractor and is not part of the Dart pipeline.
 
@@ -652,6 +653,16 @@ The toolchain is detected from `pubspec.yaml`, so the same workflows serve a
 Flutter app and a pure Dart package. See
 [.docs/examples/github-flutter-artifacts](.docs/examples/github-flutter-artifacts)
 for a complete project.
+
+**Coverage on a pull request.** `tests > test:all` posts one sticky comment per pull request --
+the totals table, the floor it was judged against and the coverage of every source file the change
+touches -- updated in place on every push, and writes the same table to the job summary of every
+run. It is the parity the JavaScript pipelines carry through `vitest-coverage-report-action`. Dart
+emits LCOV only, so the runner's own `lcov_to_markdown.py` renders it from the very parse the
+`coverage_minimum` gate evaluates, which is what keeps the comment and the gate agreeing to the
+decimal and keeps whatever `coverage_exclude` drops out of both. The caller grants
+`pull-requests: write`, as above. GitLab CI and Azure DevOps need nothing of the kind: their
+merge-request widget and Code Coverage tab read the Cobertura report the same runner writes.
 
 #### Usage Example (Java/Maven with Docker)
 

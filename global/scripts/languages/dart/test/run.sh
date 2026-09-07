@@ -4,11 +4,15 @@ set -e
 # Test + coverage runner for the `30-tests` stage, for both toolchains.
 #
 # Produces the same three artefacts every other language runner in this
-# repository produces, so the platform templates publish them identically:
+# repository produces, so the platform templates publish them identically,
+# plus a Markdown rendering of the coverage for the one platform that has no
+# native widget for it:
 #
 #   build/reports/junit.xml       -- JUnit XML (Tests tab on all three platforms)
 #   build/reports/cobertura.xml   -- Cobertura (Azure DevOps + GitLab coverage)
 #   build/reports/lcov.info       -- raw LCOV (SonarQube reads this one directly)
+#   build/reports/coverage.md     -- Markdown summary (the GitHub pull-request
+#                                    comment and job summary; lcov_to_markdown.py)
 #
 # `coverage/lcov.info` is left in place as well, because that is the path
 # SonarQube's `sonar.dart.lcov.reportPaths` and the community `sonar-flutter`
@@ -38,6 +42,7 @@ mkdir -p "$REPORT_ROOT"
 
 JUNIT_FILE="$REPORT_ROOT/junit.xml"
 COBERTURA_FILE="$REPORT_ROOT/cobertura.xml"
+MARKDOWN_FILE="$REPORT_ROOT/coverage.md"
 LCOV_FILE="coverage/lcov.info"
 EVENTS_FILE="$DART_TOOL_REPORT_PATH/test-events.json"
 
@@ -136,6 +141,15 @@ if [ -s "$LCOV_FILE" ]; then
   cp "$LCOV_FILE" "$REPORT_ROOT/lcov.info"
   python3 "$SCRIPTS_DIR/global/scripts/languages/dart/test/lcov_to_cobertura.py" \
     "$LCOV_FILE" "$COBERTURA_FILE" "." || COVERAGE_EXIT=$?
+  # The same tracefile, the same exclusions and the same floor rendered as the
+  # Markdown the GitHub workflow posts on a pull request and writes to the job
+  # summary -- from THIS parse rather than from a third-party action reading the
+  # raw LCOV, so the comment cannot disagree with the gate above it. A report,
+  # never a gate: the converter already holds the verdict, and a summary that
+  # could not be written must not turn a green suite red.
+  python3 "$SCRIPTS_DIR/global/scripts/languages/dart/test/lcov_to_markdown.py" \
+    "$LCOV_FILE" "$MARKDOWN_FILE" \
+    || echo "WARNING: could not render the coverage summary; continuing without it." >&2
 else
   echo "WARNING: no coverage tracefile at '$LCOV_FILE'; skipping the Cobertura report." >&2
 fi
@@ -144,6 +158,7 @@ echo ""
 echo "JUnit:     $JUNIT_FILE"
 [ -f "$COBERTURA_FILE" ] && echo "Cobertura: $COBERTURA_FILE"
 [ -f "$REPORT_ROOT/lcov.info" ] && echo "LCOV:      $REPORT_ROOT/lcov.info"
+[ -f "$MARKDOWN_FILE" ] && echo "Summary:   $MARKDOWN_FILE"
 
 # The suite's own verdict wins over the coverage gate's: a failing test is the
 # more important thing to report, and reporting the coverage shortfall instead

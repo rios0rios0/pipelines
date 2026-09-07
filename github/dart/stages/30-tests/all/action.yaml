@@ -1,10 +1,14 @@
 # Tests and coverage for both toolchains.
 #
-# Produces `build/reports/junit.xml`, `build/reports/cobertura.xml` and
-# `build/reports/lcov.info`. Dart emits coverage as LCOV and nothing else, so the
-# Cobertura report is produced by the runner's own stdlib-Python converter --
-# see `global/scripts/languages/dart/test/lcov_to_cobertura.py` for why that is
-# a converter here rather than a `pip install`.
+# Produces `build/reports/junit.xml`, `build/reports/cobertura.xml`,
+# `build/reports/lcov.info` and `build/reports/coverage.md`. Dart emits coverage
+# as LCOV and nothing else, so the Cobertura report is produced by the runner's
+# own stdlib-Python converter -- see
+# `global/scripts/languages/dart/test/lcov_to_cobertura.py` for why that is a
+# converter here rather than a `pip install` -- and the Markdown summary the
+# reusable workflow posts on a pull request comes from the same parse
+# (`lcov_to_markdown.py`), which is what keeps the comment and the gate from
+# ever disagreeing about what was measured.
 inputs:
   flutter_version:
     required: false
@@ -26,6 +30,12 @@ inputs:
     required: false
     default: ''
     description: "Glob patterns dropped from the report and the gate (e.g. '*.g.dart *.freezed.dart')."
+  coverage_diff_base:
+    required: false
+    default: ''
+    description: >-
+      Commit the change is measured against -- a pull request's base SHA. When set, the Markdown
+      summary lists the coverage of every source file the change touches; empty omits that section.
   require_tests:
     required: false
     default: 'false'
@@ -86,6 +96,7 @@ runs:
         DART_TOOLCHAIN: '${{ inputs.toolchain }}'
         DART_COVERAGE_MINIMUM: '${{ inputs.coverage_minimum }}'
         DART_COVERAGE_EXCLUDE: '${{ inputs.coverage_exclude }}'
+        DART_COVERAGE_DIFF_BASE: '${{ inputs.coverage_diff_base }}'
         DART_REQUIRE_TESTS: '${{ inputs.require_tests }}'
         DART_TEST_ARGS: '${{ inputs.test_args }}'
 

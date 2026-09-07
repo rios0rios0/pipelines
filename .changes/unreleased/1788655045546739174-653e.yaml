@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added `sonar-project.properties` recording the SonarCloud findings accepted for this repository, each scoped to a single rule and file with the reason a fix would remove required behaviour'
-time: '2026-09-06T00:37:25.54666433Z'

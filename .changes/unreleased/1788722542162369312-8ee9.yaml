@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the SonarQube runner reading a project directory that contains a space. `SONAR_PROJECT_DIR` and the repository root were joined into one space-separated string and then iterated unquoted, so a `working_directory` like `my app` word-split into two paths that do not exist -- putting that consumer back in the branch this variable was added to avoid, where an empty `sonar.*.reportPaths` overrides the value the repository set for itself and SonarQube reports 0% coverage on new code. Each directory is now searched by a function called once per directory, and the Go profile lookup no longer re-splits the path its own `for` list had already expanded correctly'
-time: '2026-09-06T19:22:22.162240874Z'

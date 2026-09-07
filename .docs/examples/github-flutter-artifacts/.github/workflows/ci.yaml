@@ -11,6 +11,7 @@ on:
 permissions:
   contents: 'write' # required for releases
   checks: 'write' # required for test results
+  pull-requests: 'write' # required for the coverage comment on pull requests
   # NOTE: no `security-events: write` here, unlike the Go/Python/Java examples.
   # That permission exists for CodeQL, which has no Dart extractor and is
   # therefore not part of the Dart pipeline. See the workflow's own header.

@@ -206,7 +206,7 @@ assert_true "common.sh is NOT executable (it is sourced, never run)" \
 assert_true "common.sh is not named run.sh (so the CI permission check skips it)" \
   "[[ ! -f '$DART_DIR/common.sh/run.sh' ]]"
 
-for helper in analyze/dart_analyze_report.py test/lcov_to_cobertura.py; do
+for helper in analyze/dart_analyze_report.py test/lcov_to_cobertura.py test/lcov_to_markdown.py; do
   assert_true "$helper exists" "[[ -f '$DART_DIR/$helper' ]]"
   assert_true "$helper is valid Python" \
     "python3 -m py_compile '$DART_DIR/$helper'"
@@ -540,6 +540,138 @@ assert_true "an unset DART_COVERAGE_EXCLUDE prints no exclusion line at all" \
 
 # ---------------------------------------------------------------------------
 echo ""
+echo "--- 7b. LCOV to Markdown summary (the pull-request comment) ---"
+# ---------------------------------------------------------------------------
+
+# The JavaScript pipelines post a coverage table on every pull request; Dart
+# emits LCOV only, so the runner renders its own from the SAME parse the
+# converter above uses. Every assertion here is about agreement: the comment
+# must show the number the gate evaluated, over the files the gate counted, or
+# it sends the reader looking for a discrepancy that is only a second
+# implementation.
+MD="$DART_DIR/test/lcov_to_markdown.py"
+
+assert_true "test/run.sh renders the Markdown summary beside the Cobertura report" \
+  "grep -q 'lcov_to_markdown.py' '$DART_DIR/test/run.sh'"
+assert_true "test/run.sh treats a summary it could not render as a warning, not a failure" \
+  "grep -A2 'lcov_to_markdown.py' '$DART_DIR/test/run.sh' | grep -q 'WARNING: could not render the coverage summary'"
+
+STATUS=0
+DART_COVERAGE_MINIMUM=80 python3 "$MD" "$WORK_DIR/lcov.info" "$WORK_DIR/cov80.md" > /dev/null 2>&1 || STATUS=$?
+assert_true "markdown: the summary is written and the script exits 0" \
+  "[[ $STATUS -eq 0 && -s '$WORK_DIR/cov80.md' ]]"
+assert_true "markdown: the Lines row carries the converter's percentage and counts" \
+  "grep -q '| Lines | 83.33% (🎯 80%) | 5 / 6 |' '$WORK_DIR/cov80.md'"
+assert_true "markdown: a total at or above the floor is marked green" \
+  "grep -q '| 🟢 | Lines |' '$WORK_DIR/cov80.md'"
+assert_true "markdown: branch coverage is a row of its own when BRDA rows exist" \
+  "grep -q '| Branches | 50.00% | 1 / 2 |' '$WORK_DIR/cov80.md'"
+assert_true "markdown: the branch row carries no threshold marker (the gate is lines only)" \
+  "! grep -q '| Branches | 50.00% (' '$WORK_DIR/cov80.md'"
+
+# A report, not a gate: the converter already fails the job below the floor,
+# and a second exit code for the same fact would report one shortfall twice.
+STATUS=0
+DART_COVERAGE_MINIMUM=90 python3 "$MD" "$WORK_DIR/lcov.info" "$WORK_DIR/cov90.md" > /dev/null 2>&1 || STATUS=$?
+assert_true "markdown: a total below the floor is marked red" \
+  "grep -q '| 🔴 | Lines | 83.33% (🎯 90%) |' '$WORK_DIR/cov90.md'"
+assert_true "markdown: a total below the floor still exits 0 (the converter holds the gate)" \
+  "[[ $STATUS -eq 0 ]]"
+
+python3 "$MD" "$WORK_DIR/lcov.info" "$WORK_DIR/covnone.md" > /dev/null 2>&1
+assert_true "markdown: with no floor the row is blue and carries no target" \
+  "grep -q '| 🔵 | Lines | 83.33% | 5 / 6 |' '$WORK_DIR/covnone.md'"
+
+# The exclusions the gate applies must be the exclusions the comment shows.
+DART_COVERAGE_EXCLUDE='*.g.dart *.freezed.dart' python3 "$MD" \
+  "$WORK_DIR/lcov-generated.info" "$WORK_DIR/covgen.md" > /dev/null 2>&1
+assert_true "markdown: DART_COVERAGE_EXCLUDE drops generated sources from the total" \
+  "grep -q '| Lines | 75.00% | 3 / 4 |' '$WORK_DIR/covgen.md'"
+assert_true "markdown: the exclusion is stated with its count and its patterns" \
+  "grep -q '2 file(s) excluded by \`DART_COVERAGE_EXCLUDE\` (\`\*.g.dart \*.freezed.dart\`)' '$WORK_DIR/covgen.md'"
+assert_true "markdown: a tracefile with no BRDA rows has no branch row and says why" \
+  "! grep -q '| Branches |' '$WORK_DIR/covgen.md' && grep -q 'Branch coverage is not in the tracefile' '$WORK_DIR/covgen.md'"
+assert_true "markdown: a push build (no diff base) carries no file section" \
+  "! grep -q '<details>' '$WORK_DIR/covgen.md'"
+
+# The file section is what a reviewer reads: the coverage of what is being
+# merged. It is built from a diff of two TREES rather than a history, because a
+# CI checkout is shallow, and from repository paths mapped back onto the
+# package's, because the two differ in a monorepo -- which the fixture is.
+#
+# No global git configuration reaches these commits: a `commit.gpgsign = true`
+# in the developer's own config, with a signer that needs an unlocked agent,
+# would otherwise fail the fixture rather than the code under test.
+MD_REPO="$WORK_DIR/md-repo"
+md_git() {
+  GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    git -C "$MD_REPO" -c user.email='test@example.com' -c user.name='test' \
+    -c commit.gpgsign=false "$@"
+}
+rm -rf "$MD_REPO"
+mkdir -p "$MD_REPO/app/lib/src" "$MD_REPO/app/test"
+md_git init --quiet
+printf 'int answer() => 41;\n' > "$MD_REPO/app/lib/main.dart"
+printf 'int util() => 1;\n' > "$MD_REPO/app/lib/src/util.dart"
+printf '// covers answer()\n' > "$MD_REPO/app/test/main_test.dart"
+printf 'base\n' > "$MD_REPO/README.md"
+md_git add -A
+md_git commit --quiet -m 'base'
+MD_BASE="$(md_git rev-parse HEAD)"
+printf 'int answer() => 42;\n' > "$MD_REPO/app/lib/main.dart"
+printf '// covers answer() and util()\n' > "$MD_REPO/app/test/main_test.dart"
+printf 'changed\n' > "$MD_REPO/README.md"
+md_git add -A
+md_git commit --quiet -m 'change'
+cp "$WORK_DIR/lcov.info" "$MD_REPO/app/lcov.info"
+
+STATUS=0
+(cd "$MD_REPO/app" && DART_COVERAGE_MINIMUM=80 DART_COVERAGE_DIFF_BASE="$MD_BASE" \
+  python3 "$MD" lcov.info changed.md > /dev/null 2>&1) || STATUS=$?
+assert_true "markdown: a diff base adds a collapsed file section" \
+  "[[ $STATUS -eq 0 ]] && grep -q '<details>' '$MD_REPO/app/changed.md'"
+assert_true "markdown: a changed, instrumented file is listed with its own coverage and uncovered lines" \
+  "grep -q '| \`lib/main.dart\` | 🔴 | 75.00% | 3 / 4 | 4 |' '$MD_REPO/app/changed.md'"
+assert_true "markdown: an instrumented file the change did not touch is not listed" \
+  "! grep -q 'util.dart' '$MD_REPO/app/changed.md'"
+assert_true "markdown: a repository path is mapped onto the package's (the 'app/' prefix is stripped)" \
+  "! grep -q 'app/lib/main.dart' '$MD_REPO/app/changed.md'"
+assert_true "markdown: a changed file outside the tracefile is counted, and one outside the package is not" \
+  "grep -q '^1 more changed file(s) are not in the tracefile' '$MD_REPO/app/changed.md'"
+
+# Listing the files is the one step that can fail for reasons that have nothing
+# to do with the code -- no network for the fetch, a base the checkout never
+# saw -- and none of them is a reason to fail a green suite.
+STATUS=0
+(cd "$MD_REPO/app" && DART_COVERAGE_DIFF_BASE=0123456789012345678901234567890123456789 \
+  python3 "$MD" lcov.info nobase.md > "$WORK_DIR/nobase.log" 2>&1) || STATUS=$?
+assert_true "markdown: an unresolvable diff base exits 0 and still writes the totals" \
+  "[[ $STATUS -eq 0 ]] && grep -q '| Lines | 83.33% |' '$MD_REPO/app/nobase.md'"
+assert_true "markdown: the missing file section says why instead of appearing empty" \
+  "grep -q 'is unavailable: fatal: bad object' '$MD_REPO/app/nobase.md'"
+assert_true "markdown: the cause is also printed as a warning for the job log" \
+  "grep -q 'WARNING: could not list the files changed since' '$WORK_DIR/nobase.log'"
+
+# Uncovered lines are folded into ranges; a column of every number would be the
+# file again.
+cat > "$MD_REPO/app/ranges.info" <<'EOF'
+SF:lib/main.dart
+DA:10,0
+DA:11,0
+DA:12,0
+DA:13,1
+DA:20,0
+DA:30,0
+DA:31,0
+end_of_record
+EOF
+(cd "$MD_REPO/app" && DART_COVERAGE_DIFF_BASE="$MD_BASE" \
+  python3 "$MD" ranges.info ranges.md > /dev/null 2>&1)
+assert_true "markdown: consecutive uncovered lines are folded into ranges" \
+  "grep -q '| 1 / 7 | 10-12, 20, 30-31 |' '$MD_REPO/app/ranges.md'"
+
+# ---------------------------------------------------------------------------
+echo ""
 echo "--- 8. dart analyze machine-format parsing and severity gate ---"
 # ---------------------------------------------------------------------------
 
@@ -834,7 +966,8 @@ print('yes' if '$input' in step.get('with', {}) else 'no')
 ")"
 done
 
-for pair in 'test_args:DART_TEST_ARGS' 'coverage_exclude:DART_COVERAGE_EXCLUDE'; do
+for pair in 'test_args:DART_TEST_ARGS' 'coverage_exclude:DART_COVERAGE_EXCLUDE' \
+            'coverage_diff_base:DART_COVERAGE_DIFF_BASE'; do
   assert_equals "GitHub: the 30-tests/all action maps ${pair%%:*} onto ${pair##*:}" \
     "yes" \
     "$(python3 -c "
@@ -844,6 +977,72 @@ steps = [s for s in d['runs']['steps'] if '${pair##*:}' in s.get('env', {})]
 print('yes' if steps and 'inputs.${pair%%:*}' in steps[0]['env']['${pair##*:}'] else 'no')
 ")"
 done
+
+
+# The pull request's base reaches the renderer the same way, but from the EVENT
+# rather than from a consumer input: `github.event.pull_request.base.sha` on a
+# pull request, empty on a push, and nothing a caller could usefully override.
+assert_equals "GitHub: dart.yaml hands the pull request's base SHA to the 30-tests/all action" \
+  "yes" \
+  "$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
+step = d['jobs']['tests-test_all']['steps'][0]
+print('yes' if 'github.event.pull_request.base.sha' in str(step.get('with', {}).get('coverage_diff_base', '')) else 'no')
+")"
+
+# The comment is the parity the JavaScript pipelines already have, and every
+# clause of the step is load-bearing: `always()` reports on a red suite, which
+# is when the number matters most; the event guard keeps a push from trying to
+# comment on a pull request that does not exist; the `hashFiles` guard keeps a
+# project whose suite produced no tracefile from failing on a missing file
+# rather than on the cause; and `continue-on-error` keeps a refused post -- a
+# caller that granted no `pull-requests: write`, or a pull request from a fork,
+# whose token is read-only whatever the caller grants -- a yellow step rather
+# than a red test job, which is what makes the change additive for every
+# existing consumer. The posting is a THIRD-PARTY action, so it is pinned like
+# every other one -- test-supply-chain.sh holds that edge.
+assert_equals "GitHub: tests-test_all posts the coverage summary as a sticky pull-request comment" \
+  "yes" \
+  "$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
+steps = [s for s in d['jobs']['tests-test_all']['steps']
+         if s.get('uses', '').startswith('marocchino/sticky-pull-request-comment@')]
+ok = (len(steps) == 1
+      and steps[0]['with'].get('path') == 'build/reports/coverage.md'
+      and 'always()' in steps[0].get('if', '')
+      and \"github.event_name == 'pull_request'\" in steps[0].get('if', '')
+      and \"hashFiles('build/reports/coverage.md')\" in steps[0].get('if', ''))
+print('yes' if ok else 'no')
+")"
+assert_equals "GitHub: a refused comment (no grant, or a fork's read-only token) never fails tests-test_all" \
+  "yes" \
+  "$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
+steps = [s for s in d['jobs']['tests-test_all']['steps']
+         if s.get('uses', '').startswith('marocchino/sticky-pull-request-comment@')]
+print('yes' if steps and steps[0].get('continue-on-error') is True else 'no')
+")"
+assert_equals "GitHub: tests-test_all writes the same summary to the job summary of every run" \
+  "yes" \
+  "$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
+steps = [s for s in d['jobs']['tests-test_all']['steps']
+         if 'GITHUB_STEP_SUMMARY' in s.get('run', '')]
+ok = (len(steps) == 1
+      and 'build/reports/coverage.md' in steps[0]['run']
+      and 'always()' in steps[0].get('if', '')
+      and \"hashFiles('build/reports/coverage.md')\" in steps[0].get('if', ''))
+print('yes' if ok else 'no')
+")"
+# A consumer that grants no `pull-requests: write` sees the step fail by name.
+# The footer is where every workflow here records what a caller must grant, so
+# the requirement is asserted there rather than assumed.
+assert_true "GitHub: dart.yaml's permissions note names pull-requests: write for the comment" \
+  "grep -q \"^#   pull-requests: 'write' # tests-test_all\" '$SCRIPTS_DIR/.github/workflows/dart.yaml'"
 
 for action in 10-code-check/format 10-code-check/analyze 10-code-check/unused \
               20-security/osv-scanner 30-tests/all \

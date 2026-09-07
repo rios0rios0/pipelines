@@ -186,6 +186,49 @@ jobs:
           test_args: ${{ inputs.test_args }}
           coverage_minimum: ${{ inputs.coverage_minimum }}
           coverage_exclude: ${{ inputs.coverage_exclude }}
+          # The commit the change is measured against, so the summary can name the coverage of
+          # the files this pull request touches. Empty on a push, where there is nothing to diff
+          # against and the section is omitted.
+          coverage_diff_base: ${{ github.event.pull_request.base.sha }}
+
+      # The coverage table on EVERY run's summary page, pull request or not. The runner writes the
+      # Markdown beside its JUnit, Cobertura and LCOV, from the same parse the `coverage_minimum`
+      # gate evaluates -- see `lcov_to_markdown.py` for why it is rendered there rather than by an
+      # action reading the raw tracefile.
+      #
+      # `always()`, like every reporting step in this repository: a red suite is exactly when
+      # someone needs to see what the coverage was. The `hashFiles` guard is what keeps a project
+      # with no tests, or a suite that never produced a tracefile, from failing on a missing file
+      # here rather than on the cause.
+      - name: 'Coverage Summary'
+        if: "always() && hashFiles('build/reports/coverage.md') != ''"
+        run: 'cat build/reports/coverage.md >> "$GITHUB_STEP_SUMMARY"'
+        shell: 'bash'
+
+      # The same table as one sticky comment per pull request, updated in place on every push --
+      # the parity `yarn.yaml` and `npm.yaml` have carried through `vitest-coverage-report-action`
+      # since their coverage landed. Dart emits LCOV only, and no LCOV comment action fits this
+      # library (an `lcov` binary the runner cannot `apt-get`, or a Docker action the fleet cannot
+      # start), so the rendering is the runner's and only the posting is a third party's.
+      #
+      # Needs `pull-requests: write` from the CALLER to post -- see the permissions note at the foot
+      # of this file -- and does NOT fail the job without it. Two reasons, and the second is the one
+      # no consumer can fix: `marocchino/sticky-pull-request-comment` turns a refused post into
+      # `setFailed`, where the JavaScript pipelines' `vitest-coverage-report-action` only warns on a
+      # 403, so a hard failure here would not be the parity it looks like; and on a pull request
+      # FROM A FORK GitHub makes `GITHUB_TOKEN` read-only for every scope regardless of what the
+      # caller grants, so the post is refused on a green suite with nothing anyone can change. The
+      # comment is a report, like the summary above it: a refused post is a yellow step with the
+      # cause in its log, never a red `tests > test:all`. That is also what keeps this change
+      # additive -- a consumer that grants nothing sees a warning and no comment, not a failing
+      # required check.
+      - name: 'Coverage Report'
+        if: "always() && github.event_name == 'pull_request' && hashFiles('build/reports/coverage.md') != ''"
+        continue-on-error: true
+        uses: 'marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88' # v3.0.5
+        with:
+          header: 'coverage'
+          path: 'build/reports/coverage.md'
     needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_osv_scanner' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -214,6 +257,7 @@ jobs:
 #
 # permissions:
 #   contents: 'read'
+#   pull-requests: 'write' # tests-test_all (coverage report comment)
 #
 # There is no `security-events: write` requirement here, unlike the other
 # language workflows: that permission exists for CodeQL, which does not support

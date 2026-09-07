@@ -611,15 +611,15 @@ md_git() {
 rm -rf "$MD_REPO"
 mkdir -p "$MD_REPO/app/lib/src" "$MD_REPO/app/test"
 md_git init --quiet
-printf 'void main() {}\n' > "$MD_REPO/app/lib/main.dart"
+printf 'int answer() => 41;\n' > "$MD_REPO/app/lib/main.dart"
 printf 'int util() => 1;\n' > "$MD_REPO/app/lib/src/util.dart"
-printf 'void main() {}\n' > "$MD_REPO/app/test/main_test.dart"
+printf '// covers answer()\n' > "$MD_REPO/app/test/main_test.dart"
 printf 'base\n' > "$MD_REPO/README.md"
 md_git add -A
 md_git commit --quiet -m 'base'
 MD_BASE="$(md_git rev-parse HEAD)"
-printf 'void main() { print(1); }\n' > "$MD_REPO/app/lib/main.dart"
-printf 'void main() { /* changed */ }\n' > "$MD_REPO/app/test/main_test.dart"
+printf 'int answer() => 42;\n' > "$MD_REPO/app/lib/main.dart"
+printf '// covers answer() and util()\n' > "$MD_REPO/app/test/main_test.dart"
 printf 'changed\n' > "$MD_REPO/README.md"
 md_git add -A
 md_git commit --quiet -m 'change'
@@ -996,8 +996,12 @@ print('yes' if 'github.event.pull_request.base.sha' in str(step.get('with', {}).
 # is when the number matters most; the event guard keeps a push from trying to
 # comment on a pull request that does not exist; the `hashFiles` guard keeps a
 # project whose suite produced no tracefile from failing on a missing file
-# rather than on the cause. The posting is a THIRD-PARTY action, so it is
-# pinned like every other one -- test-supply-chain.sh holds that edge.
+# rather than on the cause; and `continue-on-error` keeps a refused post -- a
+# caller that granted no `pull-requests: write`, or a pull request from a fork,
+# whose token is read-only whatever the caller grants -- a yellow step rather
+# than a red test job, which is what makes the change additive for every
+# existing consumer. The posting is a THIRD-PARTY action, so it is pinned like
+# every other one -- test-supply-chain.sh holds that edge.
 assert_equals "GitHub: tests-test_all posts the coverage summary as a sticky pull-request comment" \
   "yes" \
   "$(python3 -c "
@@ -1011,6 +1015,15 @@ ok = (len(steps) == 1
       and \"github.event_name == 'pull_request'\" in steps[0].get('if', '')
       and \"hashFiles('build/reports/coverage.md')\" in steps[0].get('if', ''))
 print('yes' if ok else 'no')
+")"
+assert_equals "GitHub: a refused comment (no grant, or a fork's read-only token) never fails tests-test_all" \
+  "yes" \
+  "$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
+steps = [s for s in d['jobs']['tests-test_all']['steps']
+         if s.get('uses', '').startswith('marocchino/sticky-pull-request-comment@')]
+print('yes' if steps and steps[0].get('continue-on-error') is True else 'no')
 ")"
 assert_equals "GitHub: tests-test_all writes the same summary to the job summary of every run" \
   "yes" \

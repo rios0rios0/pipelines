@@ -661,7 +661,9 @@ run. It is the parity the JavaScript pipelines carry through `vitest-coverage-re
 emits LCOV only, so the runner's own `lcov_to_markdown.py` renders it from the very parse the
 `coverage_minimum` gate evaluates, which is what keeps the comment and the gate agreeing to the
 decimal and keeps whatever `coverage_exclude` drops out of both. The caller grants
-`pull-requests: write`, as above. GitLab CI and Azure DevOps need nothing of the kind: their
+`pull-requests: write`, as above; without it, or on a pull request from a fork (whose token is
+read-only whatever the caller grants), the posting step is a warning rather than a failure and the
+table still lands in the job summary. GitLab CI and Azure DevOps need nothing of the kind: their
 merge-request widget and Code Coverage tab read the Cobertura report the same runner writes.
 
 #### Usage Example (Java/Maven with Docker)

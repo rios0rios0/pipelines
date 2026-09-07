@@ -25,6 +25,7 @@ make test-var-catalog  # Test the shared variable-declaration generator only
 make test-terraform-validate  # Test the root-module `terraform validate` tier only
 make test-terraform-provider-mirror  # Test the local Terraform provider mirror only
 make test-docker-multi-arch  # Test 40-delivery/docker multi-arch contract only
+make test-containers-detect  # Test the Container Images change detection (deleted/renamed folders, dispatch inputs) only
 make test-basic-checks # Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) only
 make test-gitignore    # Test the shared .gitignore block generator only
 make test-dependency-check  # Test the OWASP Dependency-Check NVD cache / API-key contract only

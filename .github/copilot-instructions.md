@@ -821,6 +821,7 @@ make test-dart-pipeline
 make test-javascript-pipeline
 make test-terra-pipeline
 make test-workflow-composition
+make test-working-directory
 make test-supply-chain
 make test-runner-cache-gating
 make test-dependency-updates

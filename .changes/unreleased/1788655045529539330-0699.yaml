@@ -1,3 +1,0 @@
-kind: 'Security'
-body: 'confined the report directory of the Terragrunt `order-check` tool to the repository it checks, and the Dart analyze reporter''s to the working directory, so a directory named on the command line can no longer be created outside them (an absolute `REPORT_PATH` pointing outside now fails loudly)'
-time: '2026-09-06T00:37:25.529446362Z'

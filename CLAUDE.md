@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, gitignore, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, supply-chain, runner-cache-gating, azure-step-names, dependency-updates)
+make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, gitignore, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, azure-step-names, dependency-updates, containers-detect)
 make test-go-script    # Test Go validation script only
 make test-go-module-toolchain  # Test that every go.mod toolchain directive is readable by the images/analysers that consume it only
 make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves only
@@ -25,6 +25,7 @@ make test-var-catalog  # Test the shared variable-declaration generator only
 make test-terraform-validate  # Test the root-module `terraform validate` tier only
 make test-terraform-provider-mirror  # Test the local Terraform provider mirror only
 make test-docker-multi-arch  # Test 40-delivery/docker multi-arch contract only
+make test-containers-detect  # Test the Container Images change detection (deleted/renamed folders, dispatch inputs) only
 make test-basic-checks # Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) only
 make test-gitignore    # Test the shared .gitignore block generator only
 make test-dependency-check  # Test the OWASP Dependency-Check NVD cache / API-key contract only

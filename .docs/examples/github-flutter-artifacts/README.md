@@ -36,7 +36,8 @@ make build      # flutter build apk (override with DART_BUILD_TARGETS)
 1. **Code Check** -- `dart format`, `dart analyze`, unused-code/files scan
 2. **Security** -- Semgrep, Gitleaks, Hadolint, OSV-Scanner
 3. **Tests** -- `flutter test` with coverage, published as JUnit + Cobertura,
-   plus a coverage comment on every pull request (needs `pull-requests: write`)
+   a `Test Results` check run on every run (needs `checks: write`) and a
+   coverage comment on every pull request (needs `pull-requests: write`)
 4. **Management** -- CycloneDX SBOM published as a job artifact
 5. **Delivery** -- web bundle and Android APK/AAB as downloadable artifacts
 

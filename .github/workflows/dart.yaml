@@ -191,6 +191,34 @@ jobs:
           # against and the section is omitted.
           coverage_diff_base: ${{ github.event.pull_request.base.sha }}
 
+      # The suite as a check run -- every test listed, every failure annotated at the line its
+      # stack trace names -- which is what `go.yaml` and `yarn.yaml` publish through this same
+      # action and Dart never had. GitLab CI and Azure DevOps read `junit.xml` for the same purpose;
+      # this reads the runner's FILTERED event stream through the action's own Dart parser rather
+      # than that JUnit through its `java-junit` one, because `tojunit` records each suite's class
+      # name as the runner's absolute path with every separator turned into a dot
+      # (`.opt.actions_runner.1._work...test.chat_datetime`), which the JUnit parser can neither
+      # read as a file nor show as a name, while the Dart parser takes the suite's real path and the
+      # failing line straight from the stream. Filtered, because `flutter test --machine` shares
+      # stdout with pub's progress lines and flutter_tools' array-shaped events and the parser fails
+      # the whole report on the first line it cannot parse -- `filter_test_events.py` says what it
+      # dropped, and writes nothing when nothing is left, which is what the `hashFiles` guard reads.
+      #
+      # Needs `checks: write` from the CALLER -- see the permissions note at the foot of this file --
+      # and does not fail the job without it, for the reason the coverage comment below gives: a
+      # pull request from a fork has a read-only token whatever the caller grants, and a check that
+      # could not be published is a yellow step, never a red `tests > test:all`. The action's own
+      # `fail-on-error` still marks the check run failed when the suite is, which is the signal a
+      # reader wants; the job's verdict comes from the tests themselves, one step up.
+      - name: 'Test Results'
+        if: "always() && hashFiles('build/reports/test-results.json') != ''"
+        continue-on-error: true
+        uses: 'dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2' # v3.0.0
+        with:
+          name: 'Test Results'
+          path: 'build/reports/test-results.json'
+          reporter: 'dart-json'
+
       # The coverage table on EVERY run's summary page, pull request or not. The runner writes the
       # Markdown beside its JUnit, Cobertura and LCOV, from the same parse the `coverage_minimum`
       # gate evaluates -- see `lcov_to_markdown.py` for why it is rendered there rather than by an
@@ -257,6 +285,7 @@ jobs:
 #
 # permissions:
 #   contents: 'read'
+#   checks: 'write' # tests-test_all (test results annotations)
 #   pull-requests: 'write' # tests-test_all (coverage report comment)
 #
 # There is no `security-events: write` requirement here, unlike the other

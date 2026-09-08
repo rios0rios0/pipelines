@@ -206,7 +206,8 @@ assert_true "common.sh is NOT executable (it is sourced, never run)" \
 assert_true "common.sh is not named run.sh (so the CI permission check skips it)" \
   "[[ ! -f '$DART_DIR/common.sh/run.sh' ]]"
 
-for helper in analyze/dart_analyze_report.py test/lcov_to_cobertura.py test/lcov_to_markdown.py; do
+for helper in analyze/dart_analyze_report.py test/lcov_to_cobertura.py test/lcov_to_markdown.py \
+              test/filter_test_events.py; do
   assert_true "$helper exists" "[[ -f '$DART_DIR/$helper' ]]"
   assert_true "$helper is valid Python" \
     "python3 -m py_compile '$DART_DIR/$helper'"
@@ -694,6 +695,63 @@ assert_true "markdown: consecutive uncovered lines are folded into ranges" \
 
 # ---------------------------------------------------------------------------
 echo ""
+echo "--- 7c. Test event stream filter (the GitHub Test Results check) ---"
+# ---------------------------------------------------------------------------
+
+# `flutter test --machine` shares stdout with pub's progress lines and with
+# flutter_tools' own array-shaped events, and the Dart parser behind the GitHub
+# `Test Results` check fails the whole report on the first line it cannot
+# parse. `tojunit` tolerates the noise, which is why the JUnit report never
+# showed it. The fixture is the shape one real run produced.
+FILTER="$DART_DIR/test/filter_test_events.py"
+cat > "$WORK_DIR/events.raw" <<'EOF'
+Resolving dependencies...
+Got dependencies!
+[{"event":"test.startedProcess","params":{"vmServiceUri":"http://127.0.0.1:1/"}}]
+{"protocolVersion":"0.1.1","runnerVersion":"1.25.0","pid":1,"type":"start","time":0}
+{"suite":{"id":0,"platform":"vm","path":"/w/test/sample_test.dart"},"type":"suite","time":1}
+
+{"test":{"id":1,"name":"adds","suiteID":0,"groupIDs":[],"metadata":{"skip":false,"skipReason":null},"line":3,"column":3,"url":"file:///w/test/sample_test.dart"},"type":"testStart","time":2}
+{"testID":1,"result":"success","skipped":false,"hidden":false,"type":"testDone","time":3}
+{"success":true,"type":"done","time":4}
+EOF
+STATUS=0
+FILTER_OUT="$(python3 "$FILTER" "$WORK_DIR/events.raw" "$WORK_DIR/test-results.json" 2>&1)" || STATUS=$?
+assert_true "events: the filter exits 0 and writes the filtered stream" \
+  "[[ $STATUS -eq 0 && -s '$WORK_DIR/test-results.json' ]]"
+assert_equals "events: pub's progress lines, the array event and the blank line are dropped" \
+  "5" "$(wc -l < "$WORK_DIR/test-results.json" | tr -d ' ')"
+assert_true "events: every kept line is a JSON object carrying a type" \
+  "python3 -c \"import json; [json.loads(l)['type'] for l in open('$WORK_DIR/test-results.json')]\""
+assert_true "events: kept lines are written verbatim" \
+  "grep -qF '{\"suite\":{\"id\":0,\"platform\":\"vm\",\"path\":\"/w/test/sample_test.dart\"},\"type\":\"suite\",\"time\":1}' '$WORK_DIR/test-results.json'"
+assert_true "events: what was kept and dropped is printed for the job log" \
+  "grep -q 'TEST_EVENTS_KEPT=5 (dropped 3 non-event line(s))' <<< \"\$FILTER_OUT\""
+
+# A stream that is all noise must leave NO output: the workflow's `hashFiles`
+# guard is what turns "nothing to report" into a skipped step rather than an
+# empty check, and a stale file from an earlier run must not be read as this
+# run's suite.
+printf 'Resolving dependencies...\n' > "$WORK_DIR/noise.raw"
+cp "$WORK_DIR/test-results.json" "$WORK_DIR/stale.json"
+STATUS=0
+FILTER_OUT="$(python3 "$FILTER" "$WORK_DIR/noise.raw" "$WORK_DIR/stale.json" 2>&1)" || STATUS=$?
+assert_true "events: a stream with no test event exits 0, warns, and removes a stale output" \
+  "[[ $STATUS -eq 0 && ! -f '$WORK_DIR/stale.json' ]] && grep -q 'WARNING' <<< \"\$FILTER_OUT\""
+
+assert_true "test/run.sh filters the event stream for the Test Results check" \
+  "grep -q 'filter_test_events.py' '$DART_DIR/test/run.sh'"
+assert_true "test/run.sh treats a stream it could not filter as a warning, not a failure" \
+  "grep -A2 'filter_test_events.py' '$DART_DIR/test/run.sh' | grep -q 'WARNING: could not filter'"
+# The raw stream's location is a contract the filter reads; a rename would make
+# the check silently skip through `hashFiles` rather than fail.
+assert_true "test/run.sh keeps the raw stream where the filter reads it" \
+  "grep -q 'EVENTS_FILE=\"\$DART_TOOL_REPORT_PATH/test-events.json\"' '$DART_DIR/test/run.sh'"
+assert_true "test/run.sh writes the filtered stream as build/reports/test-results.json" \
+  "grep -q 'TEST_RESULTS_FILE=\"\$REPORT_ROOT/test-results.json\"' '$DART_DIR/test/run.sh'"
+
+# ---------------------------------------------------------------------------
+echo ""
 echo "--- 8. dart analyze machine-format parsing and severity gate ---"
 # ---------------------------------------------------------------------------
 
@@ -1065,6 +1123,30 @@ print('yes' if ok else 'no')
 # the requirement is asserted there rather than assumed.
 assert_true "GitHub: dart.yaml's permissions note names pull-requests: write for the comment" \
   "grep -q \"^#   pull-requests: 'write' # tests-test_all\" '$SCRIPTS_DIR/.github/workflows/dart.yaml'"
+
+# The Test Results check is the parity `go.yaml` and `yarn.yaml` have through the
+# same action. `dart-json` over the FILTERED stream rather than `java-junit` over
+# the JUnit, because `tojunit`'s class names are the runner's absolute path with
+# the separators turned into dots; `always()` and the `hashFiles` guard as on
+# the coverage steps; `continue-on-error` because a fork's token cannot create
+# a check run whatever the caller grants.
+assert_equals "GitHub: tests-test_all publishes the suite as a Test Results check from the filtered stream" \
+  "yes" \
+  "$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
+steps = [s for s in d['jobs']['tests-test_all']['steps']
+         if s.get('uses', '').startswith('dorny/test-reporter@')]
+ok = (len(steps) == 1
+      and steps[0]['with'].get('reporter') == 'dart-json'
+      and steps[0]['with'].get('path') == 'build/reports/test-results.json'
+      and 'always()' in steps[0].get('if', '')
+      and \"hashFiles('build/reports/test-results.json')\" in steps[0].get('if', '')
+      and steps[0].get('continue-on-error') is True)
+print('yes' if ok else 'no')
+")"
+assert_true "GitHub: dart.yaml's permissions note names checks: write for the Test Results check" \
+  "grep -q \"^#   checks: 'write' # tests-test_all\" '$SCRIPTS_DIR/.github/workflows/dart.yaml'"
 
 for action in 10-code-check/format 10-code-check/analyze 10-code-check/unused \
               20-security/osv-scanner 30-tests/all \

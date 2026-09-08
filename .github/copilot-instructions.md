@@ -211,7 +211,7 @@ One set of scripts serves both toolchains: `dart_detect_toolchain` reads the pro
 | **setup**        | Installs the Dart or Flutter SDK                            | `global/scripts/languages/dart/setup/run.sh`     |
 | **format**       | `dart format` gate (`--fix` rewrites in place)              | `global/scripts/languages/dart/format/run.sh`    |
 | **analyze**      | `dart analyze` → JUnit + JSON, configurable severity gate    | `global/scripts/languages/dart/analyze/run.sh`   |
-| **test**         | Tests + coverage → JUnit, Cobertura, LCOV, Markdown summary | `global/scripts/languages/dart/test/run.sh`      |
+| **test**         | Tests + coverage → JUnit, Cobertura, LCOV, Markdown summary, filtered test events | `global/scripts/languages/dart/test/run.sh` |
 | **unused**       | Unused code and unused file detection                        | `global/scripts/languages/dart/unused/run.sh`    |
 | **sca**          | OSV-Scanner over `pubspec.lock`                              | `global/scripts/languages/dart/sca/run.sh`       |
 | **build**        | Release artifacts (APK, AAB, web, exe, …)                    | `global/scripts/languages/dart/build/run.sh`     |

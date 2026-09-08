@@ -33,7 +33,7 @@ development practices, refer to the **[Development Guide](https://github.com/rio
    ```
 8. Add a changelog fragment — never edit `CHANGELOG.md`, which is generated from them:
    ```bash
-   chlog new --kind Added --body "added the thing that was not there before"
+   chlog new --kind Added --body 'added the thing that was not there before'
    ```
 9. Commit following the [commit conventions](https://github.com/rios0rios0/guide/wiki/Life-Cycle/Git-Flow)
 10. Open a pull request against `main`

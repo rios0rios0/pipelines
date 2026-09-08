@@ -119,7 +119,7 @@ See [Documentation & Change Control](https://github.com/rios0rios0/guide/wiki/Do
 This repository uses **chlog fragments**. `CHANGELOG.md` is generated and is never edited by
 hand.
 
-- Every change ships a fragment created with `chlog new --kind <Kind> --body "…"`, staged in
+- Every change ships a fragment created with `chlog new --kind <Kind> --body '…'`, staged in
   the **same commit** as the code. Kinds: `Added`, `Changed`, `Deprecated`, `Removed`,
   `Fixed`, `Security`.
 - A backward-incompatible change to the public interface additionally carries `--breaking`.

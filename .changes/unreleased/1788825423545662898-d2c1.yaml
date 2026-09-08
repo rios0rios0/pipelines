@@ -1,3 +1,3 @@
 kind: 'Changed'
 body: 'refreshed `CLAUDE.md` so the `make test` summary lists the `working-directory` and `containers-detect` targets it actually runs'
-time: '2026-09-07T12:00:00.000000000Z'
+time: '2026-09-07T23:57:03.545584513Z'

@@ -1191,7 +1191,9 @@ print('yes' if ok else 'no')
 # The output is the resolution sections 2 to 4 asserted on the argv, run the
 # way the step runs it: sourced `common.sh`, then `dart_detect_toolchain`.
 resolve_toolchain() {
-  (cd "$1" && shift && env "$@" SCRIPTS_DIR="$SCRIPTS_DIR" \
+  local project="$1"
+  shift
+  (cd "$project" && env "$@" SCRIPTS_DIR="$SCRIPTS_DIR" \
     bash -c '. "$SCRIPTS_DIR/global/scripts/languages/dart/common.sh" && dart_detect_toolchain')
 }
 TC_FLUTTER="$(make_project toolchainflutter flutter)"

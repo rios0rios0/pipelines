@@ -31,7 +31,7 @@ if ! command -v go > /dev/null 2>&1; then
     exit 0
 fi
 
-SANDBOX="$(mktemp -d)"
+SANDBOX="$(mktemp -d)" || exit 1
 trap 'rm -rf "$SANDBOX"' EXIT
 
 pass() { PASSED=$((PASSED + 1)); echo "[test-go-integration-scope] PASS: $1" >&2; }

@@ -8,7 +8,7 @@ set -e
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 GEN="$SCRIPTS_DIR/global/scripts/languages/terraform/tftest-gen/gen_smoke_tests.py"
 RUN_SH="$SCRIPTS_DIR/global/scripts/languages/terraform/tftest-gen/run.sh"
-TEST_DIR="$(mktemp -d)"
+TEST_DIR="$(mktemp -d)" || exit 1
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

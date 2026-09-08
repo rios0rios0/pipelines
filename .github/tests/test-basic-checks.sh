@@ -34,7 +34,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Create a standalone script that mirrors the changelog validation logic from
 # azure-devops/global/stages/10-code-check/basic-checks.yaml. The script expects
 # TARGET_BRANCH to be set and is executed from the repo root.
-CHANGELOG_SCRIPT="$(mktemp)"
+CHANGELOG_SCRIPT="$(mktemp)" || exit 1
 
 # Scratch space for the fixture repositories, from `mktemp -d` so it lands wherever TMPDIR points.
 # It used to be a hardcoded `/tmp/basic-checks-test-<name>`, which assumes both that `/tmp` exists
@@ -42,7 +42,7 @@ CHANGELOG_SCRIPT="$(mktemp)"
 # user and mode 771 -- so every fixture failed to be created, and the consequences are in
 # `setup_repo` below. The old cleanup was `rm -rf /tmp/basic-checks-test-*`, an unquoted glob over
 # a directory shared with every other process on the host; this removes only what this run made.
-TEST_TMPDIR="$(mktemp -d)"
+TEST_TMPDIR="$(mktemp -d)" || { echo "could not create a scratch directory; is TMPDIR writable?" >&2; exit 1; }
 trap 'rm -f "$CHANGELOG_SCRIPT"; rm -rf "$TEST_TMPDIR"' EXIT
 
 cat > "$CHANGELOG_SCRIPT" << 'EXTRACTED'

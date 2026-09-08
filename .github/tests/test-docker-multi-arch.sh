@@ -42,7 +42,7 @@ ACTION_FILE="$SCRIPTS_DIR/github/global/stages/40-delivery/docker/action.yaml"
 . "$SCRIPTS_DIR/global/scripts/shared/resolve-yq.sh"
 
 YQ=""
-YQ_DIR="$(mktemp -d)"
+YQ_DIR="$(mktemp -d)" || exit 1
 trap 'rm -rf "$YQ_DIR"' EXIT
 resolve_yq "$YQ_DIR" || { echo "could not resolve mikefarah/yq; cannot run this suite" >&2; exit 1; }
 

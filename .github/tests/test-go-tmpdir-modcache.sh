@@ -21,7 +21,7 @@ if [ ! -f "$LIB" ]; then
     exit 1
 fi
 
-SANDBOX="$(mktemp -d)"
+SANDBOX="$(mktemp -d)" || exit 1
 trap 'chmod -R u+w "$SANDBOX" 2>/dev/null || true; rm -rf "$SANDBOX"' EXIT
 
 pass() { PASSED=$((PASSED + 1)); echo "[test-go-tmpdir-modcache] PASS: $1" >&2; }

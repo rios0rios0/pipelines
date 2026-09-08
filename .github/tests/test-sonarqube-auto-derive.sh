@@ -31,7 +31,7 @@ print_result() {
   fi
 }
 
-TEST_DIR="$(mktemp -d)"
+TEST_DIR="$(mktemp -d)" || exit 1
 cleanup() { rm -rf "$TEST_DIR"; }
 trap cleanup EXIT
 
@@ -54,7 +54,7 @@ FIXTURES_DIR=""
 # The script's output lands in run.log next to the returned properties file.
 run_derivation() {
   local workdir
-  workdir="$(mktemp -d "$TEST_DIR/workdir-XXXXXX")"
+  workdir="$(mktemp -d "$TEST_DIR/workdir-XXXXXX")" || exit 1
 
   # Parse arguments: optional properties file, then optional -- VAR=val pairs
   local props_file=""
@@ -150,7 +150,7 @@ run_log() {
 # Create an empty fixture tree with a `.github/workflows` directory and print its path.
 make_fixtures() {
   local dir
-  dir="$(mktemp -d "$TEST_DIR/fixtures-XXXXXX")"
+  dir="$(mktemp -d "$TEST_DIR/fixtures-XXXXXX")" || exit 1
   mkdir -p "$dir/.github/workflows"
   echo "$dir"
 }

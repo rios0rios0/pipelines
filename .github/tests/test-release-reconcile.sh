@@ -29,7 +29,7 @@ assert_eq() {
   fi
 }
 
-FIXTURE="$(mktemp -d)"
+FIXTURE="$(mktemp -d)" || exit 1
 trap 'rm -rf "$FIXTURE"' EXIT
 cd "$FIXTURE" || exit 1
 

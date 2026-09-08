@@ -36,7 +36,7 @@ print_result() {
   fi
 }
 
-TEST_DIR="$(mktemp -d)"
+TEST_DIR="$(mktemp -d)" || exit 1
 cleanup() { rm -rf "$TEST_DIR"; }
 trap cleanup EXIT
 

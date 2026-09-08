@@ -19,7 +19,7 @@ FAIL=0
 pass() { echo "[test-containers-detect] PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "[test-containers-detect] FAIL: $1"; FAIL=$((FAIL + 1)); }
 
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d)" || exit 1
 trap 'rm -rf "$WORK"' EXIT
 
 # given: a repository with two image folders, then a push that renames one of them

@@ -119,14 +119,42 @@ for script in "$TESTS_DIR"/*.sh; do
       text="${text%\\}$(sed -n "${number_next}p" "$script")"
       number=$number_next
     done
-    [[ "$text" == *'||'* || "$text" == *'&&'* ]] && continue
+    # The guard has to end the flow, not merely react. `cd "$x" && cmd` protects `cmd` and
+    # nothing after it, and `cd "$x" || echo …` protects nothing at all -- both leave every
+    # following line running in the inherited directory, which is the whole of what went wrong.
+    # So `&&` is deliberately not accepted, and the `||` branch must reach `exit` or `return`.
+    [[ "$text" =~ \|\|[[:space:]]*(exit|return)|\|\|[[:space:]]*\{[^}]*(exit|return) ]] && continue
     FINDINGS="${FINDINGS}${name}:${number}: unguarded cd -- add '|| exit 1', so a missing directory stops the suite instead of redirecting it at the repository"$'\n'
   done < <(grep -nE '^[[:space:]]*cd[[:space:]]' "$script" || true)
 done
 assert_empty "no suite continues in the wrong directory after a failed cd" "$FINDINGS"
 
 echo ""
-echo "Test 3: the suite that caused the incident carries both fixes"
+echo "Test 3: every mktemp is checked"
+
+# `mktemp` is the one call the fix depends on, and it fails on exactly the hosts this suite is
+# about: TMPDIR unset over an unwritable /tmp, or TMPDIR pointing somewhere that no longer exists.
+# Unchecked, the variable is empty and every path built on it collapses to the filesystem root --
+# `rm -rf "$bare_dir"` becomes `rm -rf /chlog-pass-bare`, and as root (which is how `make test`
+# runs inside this repository's own CI images) the whole suite would run out of `/` while its
+# cleanup trap removed nothing. "Scratch space comes from mktemp" is only half the habit; noticing
+# when it did not is the other half.
+FINDINGS=''
+for script in "$TESTS_DIR"/*.sh; do
+  name="$(basename "$script")"
+  while IFS= read -r hit; do
+    [[ -z "$hit" ]] && continue
+    number="${hit%%:*}"
+    text="${hit#*:}"
+    [[ "$text" =~ ^[[:space:]]*# ]] && continue
+    [[ "$text" =~ \|\|[[:space:]]*(exit|return)|\|\|[[:space:]]*\{[^}]*(exit|return) ]] && continue
+    FINDINGS="${FINDINGS}${name}:${number}: unchecked mktemp -- add '|| exit 1', so an empty value cannot put the fixture paths at the filesystem root"$'\n'
+  done < <(grep -nE '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*="?\$\(mktemp' "$script" || true)
+done
+assert_empty "no suite builds paths on a scratch directory it failed to create" "$FINDINGS"
+
+echo ""
+echo "Test 4: the suite that caused the incident carries the fixes"
 
 BASIC="$TESTS_DIR/test-basic-checks.sh"
 assert_true "test-basic-checks.sh roots its fixtures in mktemp -d" \
@@ -135,6 +163,8 @@ assert_true "...cleans up only what it created, not a shared glob" \
   "grep -q 'rm -rf \"\$TEST_TMPDIR\"' '$BASIC' && ! grep -v '^[[:space:]]*#' '$BASIC' | grep -q 'rm -rf /tmp/basic-checks-test-'"
 assert_true "...refuses an empty fixture path, which a bare cd would accept" \
   "grep -q 'WORK_DIR:?' '$BASIC'"
+assert_true "...stops when the scratch directory cannot be created" \
+  "grep -q 'is TMPDIR writable' '$BASIC'"
 assert_true "...checks the git calls that build the fixture" \
   "grep -q 'setup_repo: could not create the bare fixture' '$BASIC' && grep -q 'setup_repo: could not clone the fixture' '$BASIC'"
 

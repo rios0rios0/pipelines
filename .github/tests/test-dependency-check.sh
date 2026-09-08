@@ -38,7 +38,7 @@ assert_true() {
   fi
 }
 
-WORK_DIR="$(mktemp -d)"
+WORK_DIR="$(mktemp -d)" || exit 1
 cleanup() {
   rm -rf "$WORK_DIR"
 }

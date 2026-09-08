@@ -51,7 +51,7 @@ assert_not_contains() {
   else fail "$description" "unexpectedly found '$needle'"; fi
 }
 
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d)" || exit 1
 trap 'rm -rf "$WORK"' EXIT
 # The checker confines `--report` and `--fixture` to the working directory, so
 # the suite runs from inside its sandbox and addresses both relatively. That is

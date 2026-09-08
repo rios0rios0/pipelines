@@ -26,7 +26,7 @@ fi
 # rather than assuming a writable `/tmp` -- which is not a given (Termux/Android owns `/tmp` as
 # another user), and where the failure is silent until something downstream runs in the wrong
 # directory. See `test-fixture-isolation.sh`.
-TEST_TMPDIR="$(mktemp -d)"
+TEST_TMPDIR="$(mktemp -d)" || { echo "could not create a scratch directory; is TMPDIR writable?" >&2; exit 1; }
 trap 'rm -rf "$TEST_TMPDIR"' EXIT
 
 echo "=== Testing Go Test Script with Comprehensive Coverage ==="

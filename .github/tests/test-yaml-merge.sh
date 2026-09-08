@@ -12,7 +12,7 @@ SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export SCRIPTS_DIR
 RUN_SH="$SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/run.sh"
 DEFAULT_CONFIG="$SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/.golangci.yml"
-TEST_DIR="$(mktemp -d)"
+TEST_DIR="$(mktemp -d)" || exit 1
 
 # `yq` is two unrelated programs sharing a name, and which one answers is decided by the machine:
 # GitHub's `ubuntu-latest` preinstalls mikefarah/yq, while Debian and Ubuntu's own `yq` package
@@ -68,7 +68,7 @@ merge_yaml() {
   # Created under TEST_DIR so the EXIT trap reclaims it. A standalone mktemp would leak on every
   # failure path, because `set -e` aborts the script before the explicit cleanup below is reached.
   local workdir
-  workdir="$(mktemp -d "$TEST_DIR/work.XXXXXX")"
+  workdir="$(mktemp -d "$TEST_DIR/work.XXXXXX")" || exit 1
   if [[ -f "$repo_file" ]]; then
     cp "$repo_file" "$workdir/.golangci.yml"
   fi
@@ -119,7 +119,7 @@ assert_true "default linters present" \
 # With no config there is nothing to merge and `$YQ` is never read, so the script must not reach
 # for a binary at all. Asserted with the unusable shim first on PATH: if the resolution were not
 # gated, that shim would force a download, and `./bin/yq` would exist afterwards.
-noconfig_dir="$(mktemp -d "$TEST_DIR/noconfig.XXXXXX")"
+noconfig_dir="$(mktemp -d "$TEST_DIR/noconfig.XXXXXX")" || exit 1
 (
   cd "$noconfig_dir" || exit 1
   export PATH="$TEST_DIR/fakebin:$PATH"

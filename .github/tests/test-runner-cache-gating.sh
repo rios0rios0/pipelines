@@ -124,8 +124,8 @@ assert_reports_n() {
 # The checker. Prints one `<file>:<line>: <finding>` per violation and nothing
 # at all when the tree is clean, so the same program serves the real tree and
 # the deliberate-violation fixtures below.
-CHECKER="$(mktemp)"
-FIXTURES="$(mktemp -d)"
+CHECKER="$(mktemp)" || exit 1
+FIXTURES="$(mktemp -d)" || exit 1
 trap 'rm -rf "$CHECKER" "$FIXTURES"' EXIT
 
 cat > "$CHECKER" <<'PY'

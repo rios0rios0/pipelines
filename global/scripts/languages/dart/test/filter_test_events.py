@@ -18,8 +18,10 @@ check run would have failed on line 1.
 This keeps exactly the lines that are JSON objects carrying a string `type`,
 which is the whole protocol, writes them verbatim, and reports what it dropped
 -- so a stream that turns out to be all noise is a warning in the log and no
-output file, rather than an empty check.  A report, never a gate: it exits 0
-regardless, because the suite's own verdict was already recorded by the runner.
+output file, rather than an empty check.  A report, never a gate: whatever the
+stream holds it exits 0, because the suite's own verdict was already recorded
+by the runner; only a missing file or a bad invocation is an error, and
+`run.sh` reports even that as a warning.
 """
 
 from __future__ import annotations

@@ -1137,8 +1137,10 @@ import yaml
 d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
 steps = [s for s in d['jobs']['tests-test_all']['steps']
          if s.get('uses', '').startswith('dorny/test-reporter@')]
+r = steps[0]['with'].get('reporter', '') if steps else ''
 ok = (len(steps) == 1
-      and steps[0]['with'].get('reporter') == 'dart-json'
+      and r.startswith('$' + '{{') and 'steps.tests.outputs.toolchain' in r
+      and \"== 'flutter' && 'flutter-json' || 'dart-json'\" in r
       and steps[0]['with'].get('path') == 'build/reports/test-results.json'
       and 'always()' in steps[0].get('if', '')
       and \"hashFiles('build/reports/test-results.json')\" in steps[0].get('if', '')
@@ -1147,6 +1149,59 @@ print('yes' if ok else 'no')
 ")"
 assert_true "GitHub: dart.yaml's permissions note names checks: write for the Test Results check" \
   "grep -q \"^#   checks: 'write' # tests-test_all\" '$SCRIPTS_DIR/.github/workflows/dart.yaml'"
+
+# The reporter follows the toolchain the suite RAN under -- `dorny/test-reporter`
+# reads a Flutter failure's real message and stack frame only under
+# `flutter-json` -- and `inputs.toolchain` cannot supply it: it is `auto` for
+# the consumers that matter. So the action resolves it before the tests, with
+# the same `dart_detect_toolchain` every runner uses, and publishes it as an
+# output the workflow reads by step id. Each link is asserted because a break
+# at any one leaves the others looking correct and the check quietly reverting
+# to the Dart parser.
+assert_equals "GitHub: the 30-tests/all step carries the id its toolchain output is read by" \
+  "tests" \
+  "$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
+print(d['jobs']['tests-test_all']['steps'][0].get('id', ''))
+")"
+assert_equals "GitHub: the 30-tests/all action publishes the resolved toolchain as an output" \
+  "yes" \
+  "$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/github/dart/stages/30-tests/all/action.yaml'))
+print('yes' if 'steps.toolchain.outputs.toolchain' in d.get('outputs', {}).get('toolchain', {}).get('value', '') else 'no')
+")"
+assert_equals "GitHub: the toolchain is resolved BEFORE the tests, from the input, by dart_detect_toolchain" \
+  "yes" \
+  "$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/github/dart/stages/30-tests/all/action.yaml'))
+steps = d['runs']['steps']
+ids = [s.get('id') for s in steps]
+names = [s.get('name') for s in steps]
+ok = ('toolchain' in ids and 'Run tests with coverage' in names
+      and ids.index('toolchain') < names.index('Run tests with coverage'))
+step = steps[ids.index('toolchain')] if 'toolchain' in ids else {}
+ok = ok and 'inputs.toolchain' in step.get('env', {}).get('DART_TOOLCHAIN', '') \
+        and 'dart_detect_toolchain' in step.get('run', '') and 'GITHUB_OUTPUT' in step.get('run', '')
+print('yes' if ok else 'no')
+")"
+
+# The output is the resolution sections 2 to 4 asserted on the argv, run the
+# way the step runs it: sourced `common.sh`, then `dart_detect_toolchain`.
+resolve_toolchain() {
+  (cd "$1" && shift && env "$@" SCRIPTS_DIR="$SCRIPTS_DIR" \
+    bash -c '. "$SCRIPTS_DIR/global/scripts/languages/dart/common.sh" && dart_detect_toolchain')
+}
+TC_FLUTTER="$(make_project toolchainflutter flutter)"
+TC_DART="$(make_project toolchaindart dart)"
+assert_equals "toolchain output: a Flutter pubspec resolves to flutter" \
+  "flutter" "$(resolve_toolchain "$TC_FLUTTER" DART_TOOLCHAIN=auto)"
+assert_equals "toolchain output: a pure Dart pubspec resolves to dart" \
+  "dart" "$(resolve_toolchain "$TC_DART" DART_TOOLCHAIN=auto)"
+assert_equals "toolchain output: an explicit toolchain wins over the pubspec" \
+  "dart" "$(resolve_toolchain "$TC_FLUTTER" DART_TOOLCHAIN=dart)"
 
 for action in 10-code-check/format 10-code-check/analyze 10-code-check/unused \
               20-security/osv-scanner 30-tests/all \

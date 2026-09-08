@@ -178,7 +178,8 @@ jobs:
     name: 'tests > test:all'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
-      - uses: 'rios0rios0/pipelines/github/dart/stages/30-tests/all@main'
+      - id: 'tests'
+        uses: 'rios0rios0/pipelines/github/dart/stages/30-tests/all@main'
         with:
           flutter_version: ${{ inputs.flutter_version }}
           dart_sdk_version: ${{ inputs.dart_sdk_version }}
@@ -194,12 +195,20 @@ jobs:
       # The suite as a check run -- every test listed, every failure annotated at the line its
       # stack trace names -- which is what `go.yaml` and `yarn.yaml` publish through this same
       # action and Dart never had. GitLab CI and Azure DevOps read `junit.xml` for the same purpose;
-      # this reads the runner's FILTERED event stream through the action's own Dart parser rather
-      # than that JUnit through its `java-junit` one, because `tojunit` records each suite's class
-      # name as the runner's absolute path with every separator turned into a dot
+      # this reads the runner's FILTERED event stream through the action's own Dart or Flutter
+      # parser rather than that JUnit through its `java-junit` one, because `tojunit` records each
+      # suite's class name as the runner's absolute path with every separator turned into a dot
       # (`.opt.actions_runner.1._work...test.chat_datetime`), which the JUnit parser can neither
-      # read as a file nor show as a name, while the Dart parser takes the suite's real path and the
-      # failing line straight from the stream. Filtered, because `flutter test --machine` shares
+      # read as a file nor show as a name, while the stream parsers take the suite's real path and
+      # the failing line straight from the events.
+      #
+      # WHICH of the two is picked by the toolchain the action above resolved and published, not
+      # by `inputs.toolchain`, which is `auto` for exactly the consumers that need it. The parsers
+      # differ where it matters: only `flutter-json` reads a Flutter failure's real message out of
+      # the `print` events -- the `error` event carries the literal `Test failed. See exception logs
+      # above.` -- and matches its `#0 ... (file:line:col)` frames, so under `dart-json` every
+      # Flutter failure would say nothing and be annotated at the `testWidgets(` line, greenly.
+      # Filtered, because `flutter test --machine` shares
       # stdout with pub's progress lines and flutter_tools' array-shaped events and the parser fails
       # the whole report on the first line it cannot parse -- `filter_test_events.py` says what it
       # dropped, and writes nothing when nothing is left, which is what the `hashFiles` guard reads.
@@ -217,7 +226,7 @@ jobs:
         with:
           name: 'Test Results'
           path: 'build/reports/test-results.json'
-          reporter: 'dart-json'
+          reporter: "${{ steps.tests.outputs.toolchain == 'flutter' && 'flutter-json' || 'dart-json' }}"
 
       # The coverage table on EVERY run's summary page, pull request or not. The runner writes the
       # Markdown beside its JUnit, Cobertura and LCOV, from the same parse the `coverage_minimum`

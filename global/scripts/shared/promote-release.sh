@@ -85,12 +85,19 @@ trap 'rm -f "$body" "$errors"' EXIT
 
 attempt=1
 while :; do
+  # `--proto '=https' --proto-redir '=https'`, because `GITHUB_API_URL` is overridable and the
+  # bearer token is on this request: without them an `http://` value -- or a redirect into one --
+  # would put the token on the wire in clear. Every other credentialled call in this repository
+  # pins the same pair. The body is JSON and says so: curl's default for `--data` is
+  # `application/x-www-form-urlencoded`, which describes it wrongly.
   status="$(printf 'header = "Authorization: Bearer %s"\n' "$GH_TOKEN" | curl --silent --show-error \
     --config - \
+    --proto '=https' --proto-redir '=https' \
     --output "$body" \
     --write-out '%{http_code}' \
     --request POST \
     --header 'Accept: application/vnd.github+json' \
+    --header 'Content-Type: application/json' \
     --header 'X-GitHub-Api-Version: 2022-11-28' \
     --data "$payload" \
     "$url" 2>> "$errors")" || status='000'
@@ -110,6 +117,10 @@ while :; do
       ;;
     404)
       echo "::error::${workflow_file} was not found in ${GITHUB_REPOSITORY} at ${PROMOTE_TAG} (HTTP 404), or the token cannot see it. The file dispatched is the calling workflow's own, read from GITHUB_WORKFLOW_REF='${GITHUB_WORKFLOW_REF}'." >&2
+      break
+      ;;
+    30*)
+      echo "::error::${GITHUB_REPOSITORY} answered HTTP ${status} (a redirect) for ${workflow_file}. A repository or organisation that has been RENAMED redirects rather than 404s, and this request is deliberately not followed -- a POST that follows a redirect can dispatch twice. Update the repository name, or re-run the dispatch by hand against the new one." >&2
       break
       ;;
     422)

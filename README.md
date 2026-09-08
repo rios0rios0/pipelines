@@ -1880,6 +1880,8 @@ jobs:
       promote_release: true
 ```
 
+`contents: write` is required of **every** caller of these three workflows now, not only of one that promotes: the release job is not gated on `promote_release` -- a bump merge cuts the tag either way, exactly as it does on `go-docker.yaml` -- and creating a GitHub Release needs it. A caller still on `contents: read` fails that job on its next bump merge, which is why this ships as a breaking change.
+
 A refused dispatch fails the release job with the fix spelled out -- `actions: write` not granted, no `workflow_dispatch:` at the tag, the file not found at the tag -- and leaves the release in place; `gh workflow run <file> --ref <tag>` starts the same run by hand. A tag ref is never dispatched again: that run is the promotion.
 
 ## Release Reconciliation

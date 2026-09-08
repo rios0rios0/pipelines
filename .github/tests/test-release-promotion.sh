@@ -157,6 +157,10 @@ assert_true "the summary names the file and the tag" "said 'dispatched default.y
 assert_true "the token travels in the config on stdin" "grep -q 'Authorization: Bearer sentinel-token-3f9a' '$STUB_LOG.config'"
 assert_true "the token never reaches argv" "! grep -q 'sentinel-token-3f9a' '$STUB_LOG.argv'"
 assert_true "the token is not echoed in the output" "! said 'sentinel-token-3f9a'"
+assert_true "the body is declared as JSON, not curl's form-encoded default" \
+  "grep -q -- \"--header Content-Type: application/json\" '$STUB_LOG.argv'"
+assert_true "the transport is pinned to HTTPS, redirects included: the token is on this request" \
+  "grep -q -- \"--proto =https\" '$STUB_LOG.argv' && grep -q -- \"--proto-redir =https\" '$STUB_LOG.argv'"
 
 run_promotion '204' PROMOTE_TAG='v1.2.3' \
   GITHUB_WORKFLOW_REF='acme/widgets/.github/workflows/pipeline.yml@refs/heads/release/2024@q3'
@@ -182,6 +186,11 @@ assert_true "422 says the calling workflow needs 'workflow_dispatch:'" "said 'wo
 
 run_promotion '401'
 assert_equals "401 fails the step" '1' "$RUN_EXIT"
+
+run_promotion '301'
+assert_equals "a redirect fails the step rather than being followed" '1' "$RUN_EXIT"
+assert_true "...naming the rename that causes it" "said 'a redirect' && said 'RENAMED'"
+assert_equals "...and is not retried" '1' "$(calls)"
 
 run_promotion '418'
 assert_equals "an unexpected status fails the step" '1' "$RUN_EXIT"

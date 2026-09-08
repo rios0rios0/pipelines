@@ -13,7 +13,7 @@ GREEN='\033[0;32m'
 NC='\033[0m' # No Color
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR/../.."
+cd "$SCRIPT_DIR/../.." || exit 1
 
 # Test counters
 TESTS_PASSED=0

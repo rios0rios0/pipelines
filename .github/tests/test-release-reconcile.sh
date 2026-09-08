@@ -29,9 +29,9 @@ assert_eq() {
   fi
 }
 
-FIXTURE="$(mktemp -d)"
+FIXTURE="$(mktemp -d)" || exit 1
 trap 'rm -rf "$FIXTURE"' EXIT
-cd "$FIXTURE"
+cd "$FIXTURE" || exit 1
 
 git init -q
 git config user.email "test@example.com"

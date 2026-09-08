@@ -123,7 +123,7 @@ echo ""
 # The fact table every assertion below reads. One pass over the workflows,
 # emitting `<kind>\t<workflow>\t<job>\t<detail>` lines, so the assertions are
 # lookups into a flat file rather than nine separate parses.
-FACTS="$(mktemp)"
+FACTS="$(mktemp)" || exit 1
 trap 'rm -f "$FACTS"' EXIT
 
 python3 - "$WORKFLOWS_DIR" > "$FACTS" <<'PY'

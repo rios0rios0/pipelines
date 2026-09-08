@@ -22,7 +22,7 @@ TESTS_FAILED=0
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PREPARE="$REPO_ROOT/global/scripts/languages/golang/goreleaser/prepare.sh"
-WORKSPACE="$(mktemp -d)"
+WORKSPACE="$(mktemp -d)" || exit 1
 trap 'rm -rf "$WORKSPACE"' EXIT
 
 export SCRIPTS_DIR="$REPO_ROOT"

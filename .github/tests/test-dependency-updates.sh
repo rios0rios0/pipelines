@@ -51,13 +51,13 @@ assert_not_contains() {
   else fail "$description" "unexpectedly found '$needle'"; fi
 }
 
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d)" || exit 1
 trap 'rm -rf "$WORK"' EXIT
 # The checker confines `--report` and `--fixture` to the working directory, so
 # the suite runs from inside its sandbox and addresses both relatively. That is
 # also how the tool is really used: `cleanup.sh` hands it `build/reports/...`
 # relative to wherever the job runs.
-cd "$WORK"
+cd "$WORK" || exit 1
 
 # --------------------------------------------------------------------------- #
 # A miniature repository with one pin of every shape the checker understands.

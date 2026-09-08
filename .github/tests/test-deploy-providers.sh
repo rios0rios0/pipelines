@@ -72,7 +72,7 @@ assert_equals() {
   fi
 }
 
-WORK_DIR="$(mktemp -d)"
+WORK_DIR="$(mktemp -d)" || exit 1
 cleanup() {
   rm -rf "$WORK_DIR"
 }
@@ -104,7 +104,7 @@ run_provider() {
 
   STATUS=0
   (
-    cd "$projectDir"
+    cd "$projectDir" || exit 1
     # Clear every variable this family reads so each case starts from a known
     # state rather than inheriting the previous one's configuration.
     unset VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID VERCEL_WORKING_DIRECTORY \
@@ -742,7 +742,7 @@ run_require_checks() {
   local fixture="$1"
   RC_STATUS=0
   (
-    cd "$RC_DIR"
+    cd "$RC_DIR" || exit 1
     PATH="$RC_DIR/stub:$PATH" \
     GH_STUB_FIXTURE="$RC_DIR/$fixture" \
     REQUIRE_CHECKS_NAMES="$(printf 'tests > test:all\ncode-check > style:golangci-lint')" \
@@ -809,7 +809,7 @@ assert_true "require-checks: a failed required check is refused" "[[ $RC_STATUS 
 # Dry run must reach a verdict without the API, like every other script here.
 RC_STATUS=0
 (
-  cd "$RC_DIR"
+  cd "$RC_DIR" || exit 1
   REQUIRE_CHECKS_NAMES='tests > test:all' REQUIRE_CHECKS_COMMIT=abc \
   REQUIRE_CHECKS_REPOSITORY=o/r DEPLOY_DRY_RUN=true \
   SCRIPTS_DIR="$SCRIPTS_DIR" sh "$REQUIRE_SH"
@@ -835,7 +835,7 @@ done
 
 RC_STATUS=0
 (
-  cd "$RC_DIR"
+  cd "$RC_DIR" || exit 1
   env -i PATH="$RC_BIN" HOME="$RC_DIR" \
     REQUIRE_CHECKS_NAMES='tests > test:all' REQUIRE_CHECKS_COMMIT=abc \
     REQUIRE_CHECKS_REPOSITORY=o/r DEPLOY_DRY_RUN=true SCRIPTS_DIR="$SCRIPTS_DIR" \
@@ -848,7 +848,7 @@ assert_true "require-checks: a dry run needs neither gh nor jq on PATH" "[[ $RC_
 # say so rather than fail somewhere further down with a confusing error.
 RC_STATUS=0
 (
-  cd "$RC_DIR"
+  cd "$RC_DIR" || exit 1
   env -i PATH="$RC_BIN" HOME="$RC_DIR" \
     REQUIRE_CHECKS_NAMES='tests > test:all' REQUIRE_CHECKS_COMMIT=abc \
     REQUIRE_CHECKS_REPOSITORY=o/r SCRIPTS_DIR="$SCRIPTS_DIR" \
@@ -870,7 +870,7 @@ for tool in sh dirname realpath sed rm mkdir tr cat env jq; do
 done
 RC_STATUS=0
 (
-  cd "$RC_DIR"
+  cd "$RC_DIR" || exit 1
   env -i PATH="$RC_NOTRANSPORT_BIN" HOME="$RC_DIR" \
     REQUIRE_CHECKS_NAMES='tests > test:all' REQUIRE_CHECKS_COMMIT=abc \
     REQUIRE_CHECKS_REPOSITORY=o/r SCRIPTS_DIR="$SCRIPTS_DIR" \
@@ -913,7 +913,7 @@ run_require_checks_curl() {
   local fixture="$1"
   RC_STATUS=0
   (
-    cd "$RC_DIR"
+    cd "$RC_DIR" || exit 1
     env -i PATH="$RC_CURL_BIN" HOME="$RC_DIR" \
       CURL_STUB_FIXTURE="$RC_DIR/$fixture" GH_TOKEN=fixture-token-placeholder \
       REQUIRE_CHECKS_NAMES="$(printf 'tests > test:all\ncode-check > style:golangci-lint')" \
@@ -940,7 +940,7 @@ assert_true "require-checks: the curl transport refuses a failed required check"
 # check", i.e. as a commit that failed rather than as a misconfiguration.
 RC_STATUS=0
 (
-  cd "$RC_DIR"
+  cd "$RC_DIR" || exit 1
   env -i PATH="$RC_CURL_BIN" HOME="$RC_DIR" \
     CURL_STUB_FIXTURE="$RC_DIR/rest-green.json" \
     REQUIRE_CHECKS_NAMES='tests > test:all' \

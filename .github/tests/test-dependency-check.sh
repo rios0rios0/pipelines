@@ -38,7 +38,7 @@ assert_true() {
   fi
 }
 
-WORK_DIR="$(mktemp -d)"
+WORK_DIR="$(mktemp -d)" || exit 1
 cleanup() {
   rm -rf "$WORK_DIR"
 }
@@ -73,7 +73,7 @@ EOF
   chmod +x "$projectDir/bin/$stubName"
 
   (
-    cd "$projectDir"
+    cd "$projectDir" || exit 1
     # `env -i` would drop PATH; unset only the variables under test so each case starts clean.
     unset NVD_API_KEY NVD_DATAFEED_URL NVD_VALID_FOR_HOURS DEPENDENCY_CHECK_DATA_DIR
     export PATH="$projectDir/bin:$PATH"
@@ -206,7 +206,7 @@ assert_true "the init script applies after evaluation so it beats the project's 
 # Test 6: the dead configuration knobs are gone from every platform
 # =============================================================================
 echo "TEST 6: no platform relies on configuration the plugins ignore"
-cd "$SCRIPTS_DIR"
+cd "$SCRIPTS_DIR" || exit 1
 # OWASP_PATH was never read by anything; the Gradle plugin has no such setting.
 assert_true "OWASP_PATH is gone repo-wide" \
   "! grep -rq 'OWASP_PATH' .github/workflows github gitlab azure-devops global"

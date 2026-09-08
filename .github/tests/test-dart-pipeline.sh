@@ -96,7 +96,7 @@ skip() {
   TESTS_SKIPPED=$((TESTS_SKIPPED + 1))
 }
 
-WORK_DIR="$(mktemp -d)"
+WORK_DIR="$(mktemp -d)" || exit 1
 cleanup() { rm -rf "$WORK_DIR"; }
 trap cleanup EXIT
 
@@ -160,7 +160,7 @@ run_dart() {
 
   STATUS=0
   (
-    cd "$project"
+    cd "$project" || exit 1
     env DART_DRY_RUN=true SCRIPTS_DIR="$SCRIPTS_DIR" "$@" \
       sh "$DART_DIR/$script/run.sh" > "$WORK_DIR/last.log" 2>&1
   ) || STATUS=$?

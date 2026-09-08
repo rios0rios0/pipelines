@@ -34,8 +34,16 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Create a standalone script that mirrors the changelog validation logic from
 # azure-devops/global/stages/10-code-check/basic-checks.yaml. The script expects
 # TARGET_BRANCH to be set and is executed from the repo root.
-CHANGELOG_SCRIPT="$(mktemp)"
-trap 'rm -f "$CHANGELOG_SCRIPT"; rm -rf /tmp/basic-checks-test-*' EXIT
+CHANGELOG_SCRIPT="$(mktemp)" || exit 1
+
+# Scratch space for the fixture repositories, from `mktemp -d` so it lands wherever TMPDIR points.
+# It used to be a hardcoded `/tmp/basic-checks-test-<name>`, which assumes both that `/tmp` exists
+# and that this user may write to it. On Termux/Android neither holds -- `/tmp` is owned by another
+# user and mode 771 -- so every fixture failed to be created, and the consequences are in
+# `setup_repo` below. The old cleanup was `rm -rf /tmp/basic-checks-test-*`, an unquoted glob over
+# a directory shared with every other process on the host; this removes only what this run made.
+TEST_TMPDIR="$(mktemp -d)" || { echo "could not create a scratch directory; is TMPDIR writable?" >&2; exit 1; }
+trap 'rm -f "$CHANGELOG_SCRIPT"; rm -rf "$TEST_TMPDIR"' EXIT
 
 cat > "$CHANGELOG_SCRIPT" << 'EXTRACTED'
 #!/usr/bin/env bash
@@ -234,14 +242,25 @@ chmod +x "$CHANGELOG_SCRIPT"
 # containing a base CHANGELOG.md. Returns the working repo path.
 setup_repo() {
   local test_name="$1"
-  local bare_dir="/tmp/basic-checks-test-${test_name}-bare"
-  local work_dir="/tmp/basic-checks-test-${test_name}"
+  local bare_dir="$TEST_TMPDIR/${test_name}-bare"
+  local work_dir="$TEST_TMPDIR/${test_name}"
 
   rm -rf "$bare_dir" "$work_dir"
 
-  git init --bare -b main "$bare_dir" >/dev/null 2>&1
-  git clone "$bare_dir" "$work_dir" >/dev/null 2>&1
-  cd "$work_dir"
+  # Every step is checked, and the `cd` most of all. This function runs inside a command
+  # substitution, so a failure here is a failure in a SUBSHELL that inherits the caller's working
+  # directory -- the repository under test. Unguarded, a `/tmp` this user could not write to left
+  # the subshell sitting in that repository while the `git init`, `git config` and `git commit`
+  # calls below ran against it: on 2026-09-08 this suite committed into `rios0rios0/pipelines`
+  # itself, truncating `CHANGELOG.md` to a stub and rewriting the clone's `user.name` to `test`.
+  # `mktemp -d` above removes the cause; these guards make any future variant of it stop here,
+  # loudly, rather than somewhere destructive.
+  git init --bare -b main "$bare_dir" >/dev/null 2>&1 \
+    || { echo "setup_repo: could not create the bare fixture at $bare_dir" >&2; return 1; }
+  git clone "$bare_dir" "$work_dir" >/dev/null 2>&1 \
+    || { echo "setup_repo: could not clone the fixture into $work_dir" >&2; return 1; }
+  cd "$work_dir" \
+    || { echo "setup_repo: could not enter $work_dir" >&2; return 1; }
   git config user.name "test" >/dev/null 2>&1
   git config user.email "test@test" >/dev/null 2>&1
   # Throwaway repos must not inherit the developer's signing config. A machine with
@@ -371,7 +390,7 @@ echo "── chlog mode ──"
 echo ""
 echo "Test 1: chlog repo with fragment added → should pass"
 WORK_DIR="$(setup_repo "chlog-pass")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 git checkout -b feat/test >/dev/null 2>&1
 touch .chlog.yaml
 mkdir -p .changes/unreleased
@@ -384,7 +403,7 @@ assert_script_pass "chlog repo with fragment added"
 echo ""
 echo "Test 2: chlog repo without fragment → should fail"
 WORK_DIR="$(setup_repo "chlog-fail")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 git checkout -b feat/test >/dev/null 2>&1
 touch .chlog.yaml
 echo "some change" > src.txt
@@ -396,7 +415,7 @@ assert_script_fail "chlog repo without fragment" "No changelog fragment was adde
 echo ""
 echo "Test 3: chlog repo with only pre-existing fragment (not newly added) → should fail"
 WORK_DIR="$(setup_repo "chlog-old-fragment")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 touch .chlog.yaml
 mkdir -p .changes/unreleased
 echo "kind: Added" > .changes/unreleased/old-fragment.yaml
@@ -414,7 +433,7 @@ assert_script_fail "chlog repo with only modified (not new) fragment" "No change
 echo ""
 echo "Test 4: chlog repo on bump branch with CHANGELOG.md updated (no fragment) → should pass"
 WORK_DIR="$(setup_repo "chlog-bump-pass")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 touch .chlog.yaml
 mkdir -p .changes/unreleased
 echo "kind: Added" > .changes/unreleased/frag.yaml
@@ -433,7 +452,7 @@ assert_script_pass "chlog repo on bump branch with CHANGELOG.md updated"
 echo ""
 echo "Test 5: chlog repo on bump branch without CHANGELOG.md update → should fail"
 WORK_DIR="$(setup_repo "chlog-bump-fail")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 touch .chlog.yaml
 git add .chlog.yaml
 git commit -m "add chlog config" >/dev/null 2>&1
@@ -448,7 +467,7 @@ assert_script_fail "chlog repo on bump branch without CHANGELOG.md update" "Rele
 echo ""
 echo "Test 6: chlog repo on 'bump/*' branch with CHANGELOG.md updated → should pass"
 WORK_DIR="$(setup_repo "chlog-bump-slash-pass")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 touch .chlog.yaml
 mkdir -p .changes/unreleased
 echo "kind: Added" > .changes/unreleased/frag.yaml
@@ -471,7 +490,7 @@ echo "── legacy mode ──"
 echo ""
 echo "Test 7: legacy repo with CHANGELOG.md modified under [Unreleased] → should pass"
 WORK_DIR="$(setup_repo "legacy-pass")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 git checkout -b feat/test >/dev/null 2>&1
 sed -i 's/## \[Unreleased\]/## [Unreleased]\n\n### Added\n\n- new feature/' CHANGELOG.md
 git add CHANGELOG.md
@@ -482,7 +501,7 @@ assert_script_pass "legacy repo with CHANGELOG.md entry under [Unreleased]"
 echo ""
 echo "Test 8: legacy repo without CHANGELOG.md modification → should fail"
 WORK_DIR="$(setup_repo "legacy-fail")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 git checkout -b feat/test >/dev/null 2>&1
 echo "some change" > src.txt
 git add src.txt
@@ -493,7 +512,7 @@ assert_script_fail "legacy repo without CHANGELOG.md modification" "CHANGELOG.md
 echo ""
 echo "Test 9: legacy repo with entry below version section (not under [Unreleased]) → should fail"
 WORK_DIR="$(setup_repo "legacy-wrong-section")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 git checkout -b feat/test >/dev/null 2>&1
 cat > CHANGELOG.md << 'CHANGELOG'
 # Changelog
@@ -515,7 +534,7 @@ assert_script_fail "legacy repo with entry below version section" "entries are N
 echo ""
 echo "Test 10: legacy repo with CHANGELOG.md missing [Unreleased] section → should fail"
 WORK_DIR="$(setup_repo "legacy-no-unreleased")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 git checkout -b feat/test >/dev/null 2>&1
 cat > CHANGELOG.md << 'CHANGELOG'
 # Changelog
@@ -551,7 +570,7 @@ echo "── automation branches (autoupdate dedupe) ──"
 echo ""
 echo "Test 11: chlog repo, automation branch, no fragment, target has one pending -> should pass"
 WORK_DIR="$(setup_repo "auto-chlog-pending")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 touch .chlog.yaml
 mkdir -p .changes/unreleased
 echo "kind: 'Changed'" > .changes/unreleased/pending.yaml
@@ -568,7 +587,7 @@ assert_script_pass "chlog repo, automation branch, entry already pending on targ
 echo ""
 echo "Test 12: chlog repo, automation branch, no fragment, nothing pending -> should fail"
 WORK_DIR="$(setup_repo "auto-chlog-empty")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 mkdir -p .changes/unreleased
 # A .gitkeep is what holds the directory open in git; it is not an entry, and
 # counting it would wave through every automation branch in such a repository.
@@ -587,7 +606,7 @@ assert_script_fail "chlog repo, automation branch, nothing added and nothing pen
 echo ""
 echo "Test 13: chlog repo, automation branch, fragment added -> should pass"
 WORK_DIR="$(setup_repo "auto-chlog-fragment")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 touch .chlog.yaml
 git add .chlog.yaml
 git commit -m "add chlog config" >/dev/null 2>&1
@@ -603,7 +622,7 @@ assert_script_pass "chlog repo, automation branch, fragment added"
 echo ""
 echo "Test 14: chlog repo, HUMAN branch, no fragment, target has one pending -> should fail"
 WORK_DIR="$(setup_repo "auto-chlog-human")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 touch .chlog.yaml
 mkdir -p .changes/unreleased
 echo "kind: 'Changed'" > .changes/unreleased/pending.yaml
@@ -621,7 +640,7 @@ assert_script_fail "chlog repo, human branch, pending fragment is not a defence"
 echo ""
 echo "Test 15: legacy repo, automation branch, no edit, [Unreleased] has entries -> should pass"
 WORK_DIR="$(setup_repo "auto-legacy-pending")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 sed -i 's/## \[Unreleased\]/## [Unreleased]\n\n### Changed\n\n- changed the Go module dependencies to their latest versions/' CHANGELOG.md
 git add CHANGELOG.md
 git commit -m "record a pending entry" >/dev/null 2>&1
@@ -636,7 +655,7 @@ assert_script_pass "legacy repo, automation branch, entry already under [Unrelea
 echo ""
 echo "Test 16: legacy repo, automation branch, no edit, [Unreleased] empty -> should fail"
 WORK_DIR="$(setup_repo "auto-legacy-empty")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 git checkout -b chore/autoupdate-2026-08-26 >/dev/null 2>&1
 echo "require example.com/x v1.2.3" > go.mod
 git add go.mod
@@ -648,7 +667,7 @@ assert_script_fail "legacy repo, automation branch, nothing recorded anywhere" \
 echo ""
 echo "Test 17: legacy repo, HUMAN branch, no edit, [Unreleased] has entries -> should fail"
 WORK_DIR="$(setup_repo "auto-legacy-human")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 sed -i 's/## \[Unreleased\]/## [Unreleased]\n\n### Changed\n\n- an entry somebody else recorded/' CHANGELOG.md
 git add CHANGELOG.md
 git commit -m "record a pending entry" >/dev/null 2>&1
@@ -682,7 +701,7 @@ echo "── dependency bots (unconditional exemption) ──"
 echo ""
 echo "Test 18: chlog repo, dependabot branch, no fragment -> should pass"
 WORK_DIR="$(setup_repo "dependabot-chlog")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 touch .chlog.yaml
 mkdir -p .changes/unreleased
 touch .changes/unreleased/.gitkeep
@@ -706,7 +725,7 @@ assert_script_terminal "chlog repo, dependabot branch, chlog arm is terminal" \
 echo ""
 echo "Test 19: legacy repo, dependabot branch, no CHANGELOG.md edit -> should pass"
 WORK_DIR="$(setup_repo "dependabot-legacy")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 git checkout -b dependabot/github_actions/github-actions-781e586a15 >/dev/null 2>&1
 mkdir -p .github/workflows
 echo "      - uses: actions/setup-go@924ae3a # v6.5.0" > .github/workflows/build.yaml
@@ -718,7 +737,7 @@ assert_script_pass "legacy repo, dependabot branch, no CHANGELOG.md edit"
 echo ""
 echo "Test 20: chlog repo, HUMAN branch bumping a dependency, no fragment -> should fail"
 WORK_DIR="$(setup_repo "dependabot-human")"
-cd "$WORK_DIR"
+cd "${WORK_DIR:?setup_repo returned no fixture path}" || exit 1
 touch .chlog.yaml
 mkdir -p .changes/unreleased
 touch .changes/unreleased/.gitkeep

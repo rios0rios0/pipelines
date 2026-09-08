@@ -90,7 +90,7 @@ skip() {
   TESTS_SKIPPED=$((TESTS_SKIPPED + 1))
 }
 
-WORK_DIR="$(mktemp -d)"
+WORK_DIR="$(mktemp -d)" || exit 1
 cleanup() { rm -rf "$WORK_DIR"; }
 trap cleanup EXIT
 

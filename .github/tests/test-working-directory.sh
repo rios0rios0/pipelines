@@ -88,7 +88,7 @@ echo ""
 # One pass over every file in scope, emitting `<group>\t<finding>` lines, so each
 # assertion below is a lookup in a flat file rather than a seventh parse of the
 # same nine workflows.
-FINDINGS="$(mktemp)"
+FINDINGS="$(mktemp)" || exit 1
 trap 'rm -f "$FINDINGS"' EXIT
 
 python3 - "$SCRIPTS_DIR" > "$FINDINGS" <<'PY'

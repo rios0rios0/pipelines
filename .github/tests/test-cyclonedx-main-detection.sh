@@ -36,7 +36,7 @@ print_result() {
   fi
 }
 
-TEST_DIR="$(mktemp -d)"
+TEST_DIR="$(mktemp -d)" || exit 1
 cleanup() { rm -rf "$TEST_DIR"; }
 trap cleanup EXIT
 
@@ -89,7 +89,7 @@ run_generator() {
 
 new_module() {
   local workdir
-  workdir="$(mktemp -d "$TEST_DIR/module-XXXXXX")"
+  workdir="$(mktemp -d "$TEST_DIR/module-XXXXXX")" || exit 1
   printf 'module example.test\n\ngo 1.24\n' > "$workdir/go.mod"
   echo "$workdir"
 }

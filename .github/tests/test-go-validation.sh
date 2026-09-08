@@ -22,6 +22,13 @@ if [ ! -x "$GO_TEST_RUN" ]; then
   exit 1
 fi
 
+# Scratch space for the fixture projects, from `mktemp -d` so it lands wherever TMPDIR points
+# rather than assuming a writable `/tmp` -- which is not a given (Termux/Android owns `/tmp` as
+# another user), and where the failure is silent until something downstream runs in the wrong
+# directory. See `test-fixture-isolation.sh`.
+TEST_TMPDIR="$(mktemp -d)" || { echo "could not create a scratch directory; is TMPDIR writable?" >&2; exit 1; }
+trap 'rm -rf "$TEST_TMPDIR"' EXIT
+
 echo "=== Testing Go Test Script with Comprehensive Coverage ==="
 
 # Test 1: Project with build tags and complete coverage
@@ -29,7 +36,7 @@ echo ""
 echo "Test 1: Project with build tags and complete coverage"
 echo "===================================================="
 
-TEST_DIR_COMPLETE="/tmp/go-test-validation-complete"
+TEST_DIR_COMPLETE="$TEST_TMPDIR/go-test-validation-complete"
 rm -rf "$TEST_DIR_COMPLETE"
 mkdir -p "$TEST_DIR_COMPLETE/cmd/app" "$TEST_DIR_COMPLETE/internal/service" "$TEST_DIR_COMPLETE/internal/helpers" "$TEST_DIR_COMPLETE/pkg/utils"
 
@@ -169,7 +176,7 @@ echo ""
 echo "Test 2: Project without build tags + complete coverage"
 echo "====================================================="
 
-TEST_DIR_NO_TAGS="/tmp/go-test-validation-no-tags-complete"
+TEST_DIR_NO_TAGS="$TEST_TMPDIR/go-test-validation-no-tags-complete"
 rm -rf "$TEST_DIR_NO_TAGS"
 mkdir -p "$TEST_DIR_NO_TAGS/cmd/app" "$TEST_DIR_NO_TAGS/internal/service" "$TEST_DIR_NO_TAGS/pkg/utils"
 
@@ -273,7 +280,7 @@ echo ""
 echo "Test 3: Project with no test files (complete coverage)"
 echo "====================================================="
 
-TEST_DIR_NO_TESTS="/tmp/go-test-validation-no-tests-complete"
+TEST_DIR_NO_TESTS="$TEST_TMPDIR/go-test-validation-no-tests-complete"
 rm -rf "$TEST_DIR_NO_TESTS"
 mkdir -p "$TEST_DIR_NO_TESTS/cmd/app" "$TEST_DIR_NO_TESTS/internal/service" "$TEST_DIR_NO_TESTS/pkg/utils"
 
@@ -327,7 +334,7 @@ echo ""
 echo "Test 4: Project with test folder exclusion"
 echo "=========================================="
 
-TEST_DIR_WITH_TEST_FOLDER="/tmp/go-test-validation-with-test-folder"
+TEST_DIR_WITH_TEST_FOLDER="$TEST_TMPDIR/go-test-validation-with-test-folder"
 rm -rf "$TEST_DIR_WITH_TEST_FOLDER"
 mkdir -p "$TEST_DIR_WITH_TEST_FOLDER/cmd/app" "$TEST_DIR_WITH_TEST_FOLDER/internal/service" "$TEST_DIR_WITH_TEST_FOLDER/test/domain/command_doubles" "$TEST_DIR_WITH_TEST_FOLDER/test/domain/entity_builders" "$TEST_DIR_WITH_TEST_FOLDER/test/infrastructure/repository_builders"
 
@@ -441,7 +448,7 @@ echo ""
 echo "Test 5: Non-conventional module layout (./... fallback)"
 echo "======================================================="
 
-TEST_DIR_FLAT="/tmp/go-test-validation-flat-layout"
+TEST_DIR_FLAT="$TEST_TMPDIR/go-test-validation-flat-layout"
 rm -rf "$TEST_DIR_FLAT"
 mkdir -p "$TEST_DIR_FLAT/main"
 
@@ -494,7 +501,7 @@ EOF
 
 cd "$TEST_DIR_FLAT" || exit 1
 echo "Running non-conventional layout test (should fall back to ./...)..."
-FALLBACK_LOG="/tmp/go-test-validation-flat-layout.log"
+FALLBACK_LOG="$TEST_TMPDIR/go-test-validation-flat-layout.log"
 if "$GO_TEST_RUN" > "$FALLBACK_LOG" 2>&1; then
   cat "$FALLBACK_LOG"
   echo "✓ Test 5 PASSED: Non-conventional layout handled via ./... fallback"

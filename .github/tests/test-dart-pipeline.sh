@@ -637,7 +637,29 @@ assert_true "markdown: an instrumented file the change did not touch is not list
 assert_true "markdown: a repository path is mapped onto the package's (the 'app/' prefix is stripped)" \
   "! grep -q 'app/lib/main.dart' '$MD_REPO/app/changed.md'"
 assert_true "markdown: a changed file outside the tracefile is counted, and one outside the package is not" \
-  "grep -q '^1 more changed file(s) are not in the tracefile' '$MD_REPO/app/changed.md'"
+  "grep -q '^1 other changed file(s) are not in the tracefile' '$MD_REPO/app/changed.md'"
+assert_true "markdown: the summary counts the instrumented files against all the changed ones" \
+  "grep -q 'File coverage &mdash; 1 of 2 changed file(s) since' '$MD_REPO/app/changed.md'"
+
+# A change that touches no instrumented source -- a docs or test-only pull
+# request -- must say so, not "0 changed file(s)" over "N more ... are not in
+# the tracefile", as if N were listed above.
+printf '// covers answer() and util(), twice\n' > "$MD_REPO/app/test/main_test.dart"
+# Only the test file: `add -A` would sweep the renderer's own outputs above into
+# this commit and the diff would count them as the change under test.
+md_git add app/test/main_test.dart
+md_git commit --quiet -m 'tests only'
+MD_TESTS_ONLY_BASE="$(md_git rev-parse HEAD~1)"
+(cd "$MD_REPO/app" && DART_COVERAGE_DIFF_BASE="$MD_TESTS_ONLY_BASE" \
+  python3 "$MD" lcov.info testsonly.md > /dev/null 2>&1)
+assert_true "markdown: a change with no instrumented file says so in the summary" \
+  "grep -q 'File coverage &mdash; none of the 1 changed file(s) since' '$MD_REPO/app/testsonly.md'"
+assert_true "markdown: ...and explains it without claiming anything was listed" \
+  "grep -q '^Nothing to list: tests, assets' '$MD_REPO/app/testsonly.md' && ! grep -q 'other changed file' '$MD_REPO/app/testsonly.md'"
+(cd "$MD_REPO/app" && DART_COVERAGE_DIFF_BASE="$(md_git rev-parse HEAD)" \
+  python3 "$MD" lcov.info nochange.md > /dev/null 2>&1)
+assert_true "markdown: a base equal to HEAD reads as no file changed" \
+  "grep -q 'File coverage &mdash; no file changed since' '$MD_REPO/app/nochange.md'"
 
 # Listing the files is the one step that can fail for reasons that have nothing
 # to do with the code -- no network for the fetch, a base the checkout never

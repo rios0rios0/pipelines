@@ -59,6 +59,24 @@ on:
         required: false
         default: 'make swagger'
         description: 'Command that regenerates the document named by `openapi_sync_path`.'
+      promote_release:
+        type: 'boolean'
+        required: false
+        default: false
+        description: |
+          Start the calling workflow again on the tag `delivery > release` cuts from a bump
+          merge, so whatever that workflow does only on a tag -- `go-flyio.yaml`'s and
+          `go-render.yaml`'s production deploy -- runs without anyone pushing the tag by hand.
+
+          The release job creates the tag with its own `GITHUB_TOKEN`, and GitHub starts no
+          workflow run from an event that token caused. `workflow_dispatch` is the one event
+          exempt from that rule, so the release job dispatches the CALLING workflow on
+          `refs/tags/X.Y.Z`: `github.ref_type` is `tag` in the run that starts, and every gate
+          keyed on it behaves exactly as on a pushed tag; only `github.event_name` differs.
+
+          The caller must declare `on: workflow_dispatch:` and grant the job that calls this
+          workflow `actions: write`, beside the `contents: write` the release itself needs. Off by
+          default: a caller that has not granted `actions: write` would fail the release job.
     secrets:
       sonar_token:
         description: 'SonarQube authentication token'
@@ -90,6 +108,8 @@ jobs:
     steps:
       - id: 'release'
         uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
+        with:
+          promote: ${{ inputs.promote_release }}
     needs: [ 'go' ]
     if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore/bump-') || contains(github.event.head_commit.message, 'chore(bump)'))"
 

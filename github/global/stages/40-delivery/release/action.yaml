@@ -3,6 +3,18 @@ inputs:
     required: false
     default: ''
     description: 'Tag prefix to use for this release (e.g., "v", "app/"). Leave empty for no prefix.'
+  promote:
+    required: false
+    default: 'false'
+    description: |
+      `true` dispatches the CALLING workflow on the tag this action has just created, so the tag
+      run -- a production deploy, a versioned image, whatever the caller does only on a tag --
+      starts without anyone pushing the tag by hand. The tag is created with the job's
+      `GITHUB_TOKEN`, and GitHub starts no run from an event that token caused; `workflow_dispatch`
+      is the exception it carves out, and the run it starts has `github.ref_type == 'tag'` exactly
+      as a pushed tag's would. Needs `on: workflow_dispatch:` in the calling workflow and
+      `actions: write` on the calling job. Never dispatches from a tag ref: that run IS the
+      promotion. See `global/scripts/shared/promote-release.sh`.
 
 outputs:
   tag_name:
@@ -62,3 +74,18 @@ runs:
         tag_name: "${{ inputs.tag_prefix }}${{ steps.extract.outputs.tag_name }}"
         generate_release_notes: true
       if: "steps.extract.outputs.skip_release != 'true'"
+
+    # Both steps run only when the caller opted in, and only from a branch ref: on a tag ref this
+    # run IS the promotion (the recovery path above), and dispatching it again would loop. The
+    # scripts checkout is deferred to here so a caller that does not promote pays nothing for it.
+    - name: 'Get Scripts'
+      uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+      if: "inputs.promote == 'true' && steps.extract.outputs.skip_release != 'true' && startsWith(github.ref, 'refs/heads/')"
+
+    - name: 'Promote Release'
+      shell: 'bash'
+      run: $SCRIPTS_DIR/global/scripts/shared/promote-release.sh
+      env:
+        PROMOTE_TAG: '${{ inputs.tag_prefix }}${{ steps.extract.outputs.tag_name }}'
+        GH_TOKEN: '${{ github.token }}'
+      if: "inputs.promote == 'true' && steps.extract.outputs.skip_release != 'true' && startsWith(github.ref, 'refs/heads/')"

@@ -160,7 +160,7 @@ run_dart() {
 
   STATUS=0
   (
-    cd "$project"
+    cd "$project" || exit 1
     env DART_DRY_RUN=true SCRIPTS_DIR="$SCRIPTS_DIR" "$@" \
       sh "$DART_DIR/$script/run.sh" > "$WORK_DIR/last.log" 2>&1
   ) || STATUS=$?

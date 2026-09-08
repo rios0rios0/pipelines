@@ -95,7 +95,7 @@ run_derivation() {
 
   # Initialize a git repo so `git describe` doesn't fail fatally
   (
-    cd "$workdir"
+    cd "$workdir" || exit 1
     git init -q
     git config user.email 'test@test.com'
     git config user.name 'test'
@@ -104,7 +104,7 @@ run_derivation() {
 
   # Run the script in a subshell with a scrubbed environment
   (
-    cd "$workdir"
+    cd "$workdir" || exit 1
 
     # Scrub all CI platform variables
     for v in $CI_VARS; do

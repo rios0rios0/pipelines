@@ -41,7 +41,7 @@ resolve() {
     mkdir -p "$workdir"
     env -i PATH="$PATH" TMPDIR="$tmpdir" HOME="$home" sh -c "
         set -e
-        cd '$workdir'
+        cd '$workdir' || exit 1
         $prelude
         . '$LIB'
         resolve_go_paths

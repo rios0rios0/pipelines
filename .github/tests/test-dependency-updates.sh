@@ -57,7 +57,7 @@ trap 'rm -rf "$WORK"' EXIT
 # the suite runs from inside its sandbox and addresses both relatively. That is
 # also how the tool is really used: `cleanup.sh` hands it `build/reports/...`
 # relative to wherever the job runs.
-cd "$WORK"
+cd "$WORK" || exit 1
 
 # --------------------------------------------------------------------------- #
 # A miniature repository with one pin of every shape the checker understands.

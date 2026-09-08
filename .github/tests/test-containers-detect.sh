@@ -23,7 +23,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 # given: a repository with two image folders, then a push that renames one of them
-cd "$WORK"
+cd "$WORK" || exit 1
 git init --quiet .
 git config user.email test@example.com
 git config user.name test

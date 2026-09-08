@@ -86,7 +86,7 @@ EOF
 
   set +e
   (
-    cd "$projectDir"
+    cd "$projectDir" || exit 1
     # Clear every variable under test so each case starts from a known state;
     # a leaked CI variable from the host would make these results meaningless.
     unset CI_COMMIT_TAG CI_COMMIT_BRANCH CI_DEFAULT_BRANCH CI_MERGE_REQUEST_IID

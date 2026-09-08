@@ -30,7 +30,7 @@ set -e
 # than in whichever consumer happens to run the affected stage first.
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "$SCRIPTS_DIR"
+cd "$SCRIPTS_DIR" || exit 1
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

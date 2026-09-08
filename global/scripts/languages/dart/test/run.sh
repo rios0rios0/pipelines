@@ -13,6 +13,10 @@ set -e
 #   build/reports/lcov.info       -- raw LCOV (SonarQube reads this one directly)
 #   build/reports/coverage.md     -- Markdown summary (the GitHub pull-request
 #                                    comment and job summary; lcov_to_markdown.py)
+#   build/reports/test-results.json -- the package:test event stream with pub's
+#                                    and flutter_tools' non-event lines removed
+#                                    (the GitHub `Test Results` check reads it;
+#                                    filter_test_events.py)
 #
 # `coverage/lcov.info` is left in place as well, because that is the path
 # SonarQube's `sonar.dart.lcov.reportPaths` and the community `sonar-flutter`
@@ -43,6 +47,7 @@ mkdir -p "$REPORT_ROOT"
 JUNIT_FILE="$REPORT_ROOT/junit.xml"
 COBERTURA_FILE="$REPORT_ROOT/cobertura.xml"
 MARKDOWN_FILE="$REPORT_ROOT/coverage.md"
+TEST_RESULTS_FILE="$REPORT_ROOT/test-results.json"
 LCOV_FILE="coverage/lcov.info"
 EVENTS_FILE="$DART_TOOL_REPORT_PATH/test-events.json"
 
@@ -129,6 +134,13 @@ echo "=========================================="
 if [ -s "$EVENTS_FILE" ]; then
   tojunit --input "$EVENTS_FILE" --output "$JUNIT_FILE" \
     || echo "WARNING: 'tojunit' could not convert the test event stream." >&2
+  # The same stream with pub's progress lines and flutter_tools' array-shaped
+  # events removed, for the GitHub `Test Results` check, whose Dart parser fails
+  # the whole report on the first line it cannot parse. `tojunit` above keeps
+  # reading the raw stream it has always read. A report, never a gate.
+  python3 "$SCRIPTS_DIR/global/scripts/languages/dart/test/filter_test_events.py" \
+    "$EVENTS_FILE" "$TEST_RESULTS_FILE" \
+    || echo "WARNING: could not filter the test event stream; continuing without it." >&2
 fi
 
 if [ ! -s "$JUNIT_FILE" ]; then
@@ -159,6 +171,7 @@ echo "JUnit:     $JUNIT_FILE"
 [ -f "$COBERTURA_FILE" ] && echo "Cobertura: $COBERTURA_FILE"
 [ -f "$REPORT_ROOT/lcov.info" ] && echo "LCOV:      $REPORT_ROOT/lcov.info"
 [ -f "$MARKDOWN_FILE" ] && echo "Summary:   $MARKDOWN_FILE"
+[ -f "$TEST_RESULTS_FILE" ] && echo "Events:    $TEST_RESULTS_FILE"
 
 # The suite's own verdict wins over the coverage gate's: a failing test is the
 # more important thing to report, and reporting the coverage shortfall instead

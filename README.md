@@ -627,7 +627,7 @@ on:
 
 permissions:
   contents: 'write'
-  checks: 'write'
+  checks: 'write' # the Test Results check run on every run
   pull-requests: 'write' # the coverage comment on every pull request
   # No `security-events: write` is needed: that permission exists for CodeQL,
   # which has no Dart extractor and is not part of the Dart pipeline.
@@ -665,6 +665,24 @@ decimal and keeps whatever `coverage_exclude` drops out of both. The caller gran
 read-only whatever the caller grants), the posting step is a warning rather than a failure and the
 table still lands in the job summary. GitLab CI and Azure DevOps need nothing of the kind: their
 merge-request widget and Code Coverage tab read the Cobertura report the same runner writes.
+
+**Test results on the Checks tab.** The same job publishes the suite as a `Test Results` check
+run -- every test listed, every failure annotated at the line its stack trace names, on pushes
+and pull requests alike -- which is what `go.yaml` and `yarn.yaml` have published through
+`dorny/test-reporter` all along. It reads the runner's `test-results.json` through the action's
+Dart or Flutter parser (`dart-json` or `flutter-json`, picked by the toolchain the test action
+resolves and publishes as its `toolchain` output) rather than the JUnit through its experimental
+`java-junit` one, because `tojunit` records each suite's class name as the runner's absolute path
+with the separators turned into dots, which that parser can neither read as a file nor show as a
+name. The two stream parsers are not interchangeable either: only the Flutter one reads a Flutter
+failure's real message out of the `print` events and matches its `#0 ... (file:line:col)` frames,
+so under the Dart one every Flutter failure would read `Test failed. See exception logs above.`
+and be annotated at the `testWidgets(` line. The file is the
+package:test event stream with pub's progress lines and flutter_tools' array-shaped events
+removed, since `flutter test --machine` shares stdout with both and the parser fails the whole
+report on the first line it cannot parse. The caller grants `checks: write`; without it, or on a
+pull request from a fork, the step is a warning and the JUnit is still in the `test-results`
+artifact.
 
 #### Usage Example (Java/Maven with Docker)
 

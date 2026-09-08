@@ -45,6 +45,14 @@ inputs:
     default: ''
     description: 'Extra arguments appended to `dart test` / `flutter test`.'
 
+outputs:
+  toolchain:
+    description: >-
+      The toolchain the suite ran under, `dart` or `flutter`, resolved the way every runner in this
+      family resolves it: the `toolchain` input when it is not `auto`, else from `pubspec.yaml`.
+      The reusable workflow's `Test Results` step picks the report parser matching it.
+    value: ${{ steps.toolchain.outputs.toolchain }}
+
 runs:
   using: 'composite'
   steps:
@@ -86,6 +94,21 @@ runs:
           ~/.pub-cache
         key: "dart-${{ runner.os }}-${{ inputs.flutter_version }}-${{ inputs.dart_sdk_version }}-${{ hashFiles('**/pubspec.lock') }}"
         restore-keys: "dart-${{ runner.os }}-${{ inputs.flutter_version }}-${{ inputs.dart_sdk_version }}-"
+
+    # Published as the action's `toolchain` output for the reusable workflow's `Test Results`
+    # step, which has to hand `dorny/test-reporter` the parser matching the toolchain: only under
+    # `flutter-json` does it read a Flutter failure's real message out of the `print` events and
+    # match its `#0 ... (file:line:col)` frames, and `inputs.toolchain` is `auto` for exactly the
+    # consumers that need it. Resolved BEFORE the tests so it is there whether they pass or not,
+    # by the same `dart_detect_toolchain` every runner in this family calls.
+    - name: 'Resolve the toolchain'
+      id: 'toolchain'
+      run: |
+        . "$SCRIPTS_DIR/global/scripts/languages/dart/common.sh"
+        echo "toolchain=$(dart_detect_toolchain)" >> "$GITHUB_OUTPUT"
+      shell: 'bash'
+      env:
+        DART_TOOLCHAIN: '${{ inputs.toolchain }}'
 
     - name: 'Run tests with coverage'
       run: $SCRIPTS_DIR/global/scripts/languages/dart/test/run.sh

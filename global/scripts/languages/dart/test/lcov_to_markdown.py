@@ -244,22 +244,33 @@ def render_files(
         ]
 
     by_path = {entry.path: entry for entry in files}
+    total = len(set(changed))
     touched = sorted(path for path in set(changed) if path in by_path)
-    unmeasured = len(set(changed)) - len(touched)
+    unmeasured = total - len(touched)
 
-    out = [
-        "",
-        "<details>",
-        "<summary>File coverage &mdash; {} changed file(s) since <code>{}</code></summary>".format(
-            len(touched), short_base
-        ),
-        "",
-    ]
-    if unmeasured:
+    # The summary counts the instrumented files AGAINST all the changed ones, and
+    # the explanation never says "more" over an empty table: a docs-only pull
+    # request once read "0 changed file(s)" above "6 more changed file(s) are
+    # not in the tracefile", as if six were listed.
+    if not total:
+        summary = "no file changed since <code>{}</code>".format(short_base)
+    elif touched:
+        summary = "{} of {} changed file(s) since <code>{}</code>".format(
+            len(touched), total, short_base
+        )
+    else:
+        summary = "none of the {} changed file(s) since <code>{}</code> is instrumented".format(
+            total, short_base
+        )
+    not_measured = (
+        "tests, assets, excluded generated sources and anything outside the "
+        "instrumented directories are not measured"
+    )
+
+    out = ["", "<details>", "<summary>File coverage &mdash; {}</summary>".format(summary), ""]
+    if touched and unmeasured:
         out += [
-            "{} more changed file(s) are not in the tracefile: tests, assets, excluded "
-            "generated sources and anything outside the instrumented directories are "
-            "not measured.".format(unmeasured),
+            "{} other changed file(s) are not in the tracefile: {}.".format(unmeasured, not_measured),
             "",
         ]
     if touched:
@@ -284,8 +295,12 @@ def render_files(
             out.append(
                 "| ... and {} more file(s) | | | | |".format(len(touched) - FILE_ROWS_MAX)
             )
+    elif total:
+        out.append(
+            "Nothing to list: {}, and this change touches nothing else.".format(not_measured)
+        )
     else:
-        out.append("No changed file is instrumented, so there is nothing to list.")
+        out.append("Nothing to list.")
     out += ["", "</details>"]
     return out
 

@@ -1854,9 +1854,37 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/your-feature-branch/gitlab/golang/go-docker.yaml'
 ```
 
+## Release Promotion
+
+A bump merged to `main` cuts the tag and the GitHub Release (`delivery > release`), and that is where it used to stop. Every deploy job in this library resolves `production` from `github.ref_type == 'tag'`, so production ships from the **tag run** -- and the tag the release job creates never started one: it is pushed with the job's `GITHUB_TOKEN`, and GitHub creates no workflow run from an event that token caused. A merged bump therefore deployed `staging` from its `main` run and then waited for a human to push the same tag again by hand.
+
+`promote_release: true` closes that gap. `workflow_dispatch` is the one event GitHub exempts from the rule, so the release job dispatches the **calling** workflow on `refs/tags/X.Y.Z` with the same token (`global/scripts/shared/promote-release.sh`). The run that starts has `github.ref_type == 'tag'` -- the deploy resolves `production`, `require-checks` verifies the tagged commit, the quality jobs skip as on any tag -- and differs from a pushed tag's run only in `github.event_name`, which every gate here already accepts.
+
+Available on the workflows that deploy on a tag or feed one that does: `yarn-cloudflare.yaml`, `npm-cloudflare.yaml` and `dart-cloudflare.yaml` (which now carry `delivery > release` as the `*-docker.yaml` family does), `go-docker.yaml`, `go-flyio.yaml` and `go-render.yaml`. Off by default. The caller needs three things:
+
+```yaml
+on:
+  push:
+    branches: [ 'main' ]
+    tags: [ '*' ]
+  workflow_dispatch:        # 1. the promotion IS a dispatch of this file, on the tag
+
+permissions:
+  contents: 'write'         # 2. the release itself
+  actions: 'write'          # 3. the dispatch
+
+jobs:
+  default:
+    uses: 'rios0rios0/pipelines/.github/workflows/yarn-cloudflare.yaml@main'
+    with:
+      promote_release: true
+```
+
+A refused dispatch fails the release job with the fix spelled out -- `actions: write` not granted, no `workflow_dispatch:` at the tag, the file not found at the tag -- and leaves the release in place; `gh workflow run <file> --ref <tag>` starts the same run by hand. A tag ref is never dispatched again: that run is the promotion.
+
 ## Release Reconciliation
 
-Releases are cut by the `delivery-release` job, which runs only on a push to `main` whose commit message is a bump (`chore(bump)` / `chore/bump-`) **and** depends on the quality gate (`go` / `composer` / `maven`). When a bump PR merges but that `main` run fails the gate, the tag and GitHub Release are never created — yet the PR already committed `[X.Y.Z]` to `CHANGELOG.md`. The changelog then runs ahead of the tags: **bumped, but never released.**
+Releases are cut by the `delivery-release` job, which runs only on a push to `main` whose commit message is a bump (`chore(bump)` / `chore/bump-`) **and** depends on the quality gate (`go` / `composer` / `maven` / `yarn` / `npm` / `dart`). When a bump PR merges but that `main` run fails the gate, the tag and GitHub Release are never created — yet the PR already committed `[X.Y.Z]` to `CHANGELOG.md`. The changelog then runs ahead of the tags: **bumped, but never released.**
 
 Two mechanisms guard against this:
 
@@ -1872,7 +1900,7 @@ Two mechanisms guard against this:
    global/scripts/shared/reconcile-releases.sh /path/to/repo
    ```
 
-   It prints one `version<TAB>commit<TAB>status` row per gap (empty output means the changelog and tags agree). A tag re-pushed to recover a release must be pushed with a PAT, not the default `GITHUB_TOKEN`, for it to re-trigger delivery; a `GITHUB_TOKEN`-pushed tag is still created (enough for tag-driven ecosystems such as Go modules and Packagist) but starts no workflow.
+   It prints one `version<TAB>commit<TAB>status` row per gap (empty output means the changelog and tags agree). A tag re-pushed to recover a release must be pushed with a PAT, not the default `GITHUB_TOKEN`, for it to re-trigger delivery; a `GITHUB_TOKEN`-pushed tag is still created (enough for tag-driven ecosystems such as Go modules and Packagist) but starts no workflow. `promote_release` (see Release Promotion above) is the automated form of that hand push: the release job dispatches the workflow on the tag with the same `GITHUB_TOKEN`, which GitHub does allow to start a `workflow_dispatch` run.
 
 ## Troubleshooting
 

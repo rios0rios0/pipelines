@@ -136,6 +136,10 @@ test-release-reconcile:
 	@echo "Running release reconciliation validation..."
 	@./.github/tests/test-release-reconcile.sh
 
+test-release-promotion:
+	@echo "Running release promotion validation..."
+	@./.github/tests/test-release-promotion.sh
+
 test-deploy-providers:
 	@echo "Running MVP hosting deployment provider validation..."
 	@./.github/tests/test-deploy-providers.sh
@@ -190,5 +194,5 @@ test-go-module-toolchain:
 	@echo "Running Go module/builder toolchain agreement validation..."
 	@./.github/tests/test-go-module-toolchain.sh
 
-test: test-dependency-track test-go-module-toolchain test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-go-tool-staleness test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-gitignore test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test-javascript-pipeline test-terra-pipeline test-workflow-composition test-working-directory test-supply-chain test-runner-cache-gating test-azure-step-names test-dependency-updates test-containers-detect
+test: test-dependency-track test-go-module-toolchain test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-go-tool-staleness test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-docker-multi-arch test-basic-checks test-gitignore test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-release-promotion test-deploy-providers test-memory-detection test-dart-pipeline test-javascript-pipeline test-terra-pipeline test-workflow-composition test-working-directory test-supply-chain test-runner-cache-gating test-azure-step-names test-dependency-updates test-containers-detect
 	@echo "All tests completed successfully!"

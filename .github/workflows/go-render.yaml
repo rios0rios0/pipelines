@@ -113,6 +113,17 @@ on:
 
           Write the names bare (`tests > test:all`). The gate matches a whole trailing ` / `
           segment, so it does not matter that GitHub records them prefixed with the calling jobs.
+      promote_release:
+        type: 'boolean'
+        required: false
+        default: false
+        description: |
+          Start this workflow again on the tag `delivery > release` cuts from a bump merge, so the
+          tag run -- the one `deployment > render` resolves `production` on -- starts without anyone
+          pushing the tag by hand. Forwarded to `go-docker.yaml`, whose release job does the
+          dispatch; see the input there for why a dispatch is needed at all and what the caller
+          must grant (`on: workflow_dispatch:`, and `actions: write` beside `contents: write`).
+          Off by default.
     secrets:
       sonar_token:
         required: false
@@ -143,6 +154,7 @@ jobs:
       integration_parallel: ${{ inputs.integration_parallel }}
       openapi_sync_path: ${{ inputs.openapi_sync_path }}
       openapi_sync_command: ${{ inputs.openapi_sync_command }}
+      promote_release: ${{ inputs.promote_release }}
     secrets:
       sonar_token: ${{ secrets.sonar_token }}
 

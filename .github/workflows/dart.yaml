@@ -338,6 +338,26 @@ jobs:
   tests-test_build:
     name: 'tests > test:build'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
+    # LEAST PRIVILEGE, and this job is the one that most needs it: it resolves and runs the whole
+    # dependency tree (`dart_pub_get`, then a real compile, then whatever `test_build_command`
+    # names -- NOT the deployment workflows' `build_command`, which is a different input),
+    # which is the largest amount of third-party code any job in this file executes.
+    #
+    # Without this block it runs with the CALLING job's permissions, which is not a theoretical
+    # ceiling: a consumer whose caller grants `contents: write` and `actions: write` -- what
+    # `promote_release: true` requires -- was measured handing exactly those to this job. That is a
+    # token that can push to the default branch and dispatch a workflow, held by a build, on
+    # `pull_request` runs too, where the branch supplies its own copy of the caller.
+    #
+    # `contents: read` is all it needs: it checks out, installs a toolchain and builds. It writes
+    # no check run, posts no comment and uploads no artifact -- unlike `tests-test_all`, which is
+    # deliberately NOT given a block here. That job does need `checks: write` and
+    # `pull-requests: write`, and a called workflow's job may never request more than its caller
+    # granted -- so hardcoding them would turn every consumer that grants only `contents: read`
+    # into a permissions error rather than a degraded report. `deployment > cloudflare` in
+    # `dart-cloudflare.yaml` narrows itself for the same reason and with the same caveat.
+    permissions:
+      contents: 'read'
     steps:
       - uses: 'rios0rios0/pipelines/github/dart/stages/30-tests/build@main'
         with:

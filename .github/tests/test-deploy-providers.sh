@@ -1043,6 +1043,119 @@ assert_true "require-checks: an empty but well-formed page is still refused as a
   "[[ $RC_STATUS -eq 1 ]] && grep -q 'no successful .tests > test:all.' <<< \"\$RC_OUT\""
 echo ""
 
+# =============================================================================
+# build_env_secrets -- every VALUE is masked, not just the blob
+# =============================================================================
+echo "Testing build_env_secrets value masking..."
+
+# THIRD CLASS OF ASSERTION (SECURITY), and the same rule as the argv cases above
+# read from the other end: a credential must not reach the LOG either. It did.
+# `build_env_secrets` arrives as one multi-line secret, so the runner is taught
+# to redact that blob and its `KEY=VALUE` lines -- never the VALUE alone. Every
+# later step that renders its own `env:` block prints `KEY: VALUE`, which no
+# registered mask matches. medhub-life/frontend-dart runs 34305118198 and
+# 34308128013 show `BUILD_ENV_SECRETS: ***` and, in the same env block, a Sentry
+# auth token in full.
+#
+# The step is EXTRACTED FROM THE WORKFLOW AND EXECUTED rather than grepped for
+# the shape of its loop. A second copy of that loop living here would keep
+# passing after the workflow's own copy was edited, and this is a failure nobody
+# sees until the credential is already in a retained log.
+MASK_DIR="$WORK_DIR/build-env-secrets"
+mkdir -p "$MASK_DIR"
+
+# PyYAML rather than reading the indented text, for the reason the
+# workflow-composition and azure-step-names suites already state: the body is a
+# block scalar, and re-deriving its indentation by hand is a parser.
+extract_secrets_step() {
+  /usr/bin/env python3 - "$1" <<'EXTRACT'
+import sys
+
+try:
+    import yaml
+except ImportError:
+    sys.stderr.write("PyYAML is required to read the deployment workflows\n")
+    raise SystemExit(2)
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    document = yaml.safe_load(handle)
+
+for job in (document.get("jobs") or {}).values():
+    for step in (job.get("steps") or []):
+        if "BUILD_ENV_SECRETS" in str(step.get("if", "")):
+            sys.stdout.write(step.get("run", ""))
+            raise SystemExit(0)
+
+sys.stderr.write("no step gated on BUILD_ENV_SECRETS was found\n")
+raise SystemExit(1)
+EXTRACT
+}
+
+# Runs the real step against $1, leaving its stdout in MASK_OUT and the file it
+# appended to in MASK_ENV.
+run_secrets_step() {
+  local workflow="$1"
+  local payload="$2"
+  MASK_STATUS=0
+  : > "$MASK_DIR/github_env"
+  extract_secrets_step "$SCRIPTS_DIR/$workflow" > "$MASK_DIR/step.sh" || return 1
+  (
+    cd "$MASK_DIR" || exit 1
+    BUILD_ENV_SECRETS="$payload" GITHUB_ENV="$MASK_DIR/github_env" \
+      bash "$MASK_DIR/step.sh"
+  ) > "$MASK_DIR/out.txt" 2>&1 || MASK_STATUS=$?
+  # Read by `eval` inside assert_true, which shellcheck cannot follow. The RC_*
+  # pair above escapes the same warning only because it is also assigned at top
+  # level; being honest about it costs one directive.
+  # shellcheck disable=SC2034
+  MASK_OUT="$(cat "$MASK_DIR/out.txt")"
+  # shellcheck disable=SC2034
+  MASK_ENV="$(cat "$MASK_DIR/github_env")"
+}
+
+# Every workflow that ACCEPTS the input must also mask it. One added without the
+# mask is the regression this pins, and it is invisible in the file on its own.
+for workflow in dart-cloudflare yarn-cloudflare npm-cloudflare; do
+  assert_true "$workflow: the build_env_secrets step masks each value" \
+    "extract_secrets_step '$SCRIPTS_DIR/.github/workflows/$workflow.yaml' | grep -q '::add-mask::'"
+done
+
+# The real shape a caller sends, with the trap in it: the Sentry auth token is
+# base64 and carries its own `=`, so a split on the LAST one registers a mask for
+# a truncated string that never appears and leaves the secret printed in full.
+SENTRY_SHAPED='sntrys_eyJvcmciOiJtZWRodWItbGlmZSJ9=_/QwjaEI+c8QE6bPdwTIhD'
+run_secrets_step ".github/workflows/dart-cloudflare.yaml" \
+  "$(printf 'SENTRY_DSN=https://abc@o123.ingest.us.sentry.io/456\nSENTRY_AUTH_TOKEN=%s\n' "$SENTRY_SHAPED")"
+
+assert_true "build_env_secrets: the step succeeds on a two-line payload" \
+  "[[ $MASK_STATUS -eq 0 ]]"
+assert_true "build_env_secrets: the first value is masked" \
+  "grep -qF '::add-mask::https://abc@o123.ingest.us.sentry.io/456' <<< \"\$MASK_OUT\""
+assert_true "build_env_secrets: a base64 value is masked WHOLE, not truncated at its own '='" \
+  "grep -qF '::add-mask::$SENTRY_SHAPED' <<< \"\$MASK_OUT\""
+assert_true "build_env_secrets: no mask is registered for a truncated prefix of the token" \
+  "! grep -qE '::add-mask::sntrys_[A-Za-z0-9]+$' <<< \"\$MASK_OUT\""
+
+# The masking must not cost the step its original job.
+assert_true "build_env_secrets: the payload still reaches GITHUB_ENV" \
+  "grep -qF 'SENTRY_AUTH_TOKEN=$SENTRY_SHAPED' <<< \"\$MASK_ENV\""
+assert_true "build_env_secrets: every line reaches GITHUB_ENV" \
+  "grep -qF 'SENTRY_DSN=https://abc@o123.ingest.us.sentry.io/456' <<< \"\$MASK_ENV\""
+
+# Nothing that is not an assignment, and nothing empty: `::add-mask::` on an
+# empty string is a runner error, and masking a bare word would redact an
+# ordinary English token everywhere it appeared in the log.
+run_secrets_step ".github/workflows/dart-cloudflare.yaml" \
+  "$(printf 'NOT_AN_ASSIGNMENT\nEMPTY=\n\nREAL=value-here\n')"
+
+assert_true "build_env_secrets: a line with no '=' registers no mask" \
+  "! grep -q 'NOT_AN_ASSIGNMENT' <<< \"\$MASK_OUT\""
+assert_true "build_env_secrets: an empty value registers no mask" \
+  "! grep -qE '::add-mask::\s*$' <<< \"\$MASK_OUT\""
+assert_true "build_env_secrets: the real value beside them is still masked" \
+  "grep -qF '::add-mask::value-here' <<< \"\$MASK_OUT\""
+echo ""
+
 echo "================================"
 echo -e "Tests passed: ${GREEN}${TESTS_PASSED}${NC}"
 if [[ $TESTS_FAILED -gt 0 ]]; then

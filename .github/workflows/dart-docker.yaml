@@ -22,16 +22,36 @@ on:
         required: false
         default: '["ubuntu-latest"]'
         description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See dart.yaml.'
+      test_build_targets:
+        required: false
+        type: 'string'
+        default: ''
+        description: |
+          Forwarded to `dart.yaml`: build targets for `tests > test:build` (e.g. 'web'), empty
+          auto-detecting from the project's shape. The GitHub spelling of the
+          `DART_TEST_BUILD_TARGETS` the GitLab and Azure DevOps templates take.
+
+          Forwarded rather than dropped for the reason the composition standard gives about
+          `runs_on` -- an input a composed workflow does not declare is an input its consumers
+          cannot reach at all, and the pipeline then looks identical to the base one while
+          silently offering less.
+      test_build_mode:
+        required: false
+        type: 'string'
+        default: '--debug'
+        description: "Forwarded to `dart.yaml`: Flutter build mode for `tests > test:build`."
+      test_build_args:
+        required: false
+        type: 'string'
+        default: ''
+        description: 'Forwarded to `dart.yaml`: extra arguments for the `tests > test:build` build.'
       test_build_command:
         required: false
         type: 'string'
         default: ''
         description: |
-          Forwarded to `dart.yaml`: the command `tests > test:build` runs to compile the release
-          artifact, empty skipping the job. Forwarded rather than dropped for the reason the
-          composition standard gives about `runs_on` -- an input a composed workflow does not
-          declare is an input its consumers cannot reach at all, and the pipeline then looks
-          identical to the base one while silently offering less.
+          Forwarded to `dart.yaml`: escape hatch running this command instead of the shared build
+          runner, for a build that is a command rather than a target.
       test_build_node_version:
         required: false
         type: 'string'
@@ -46,6 +66,9 @@ jobs:
       dart_sdk_version: ${{ inputs.dart_sdk_version }}
       toolchain: ${{ inputs.toolchain }}
       runs_on: ${{ inputs.runs_on }}
+      test_build_targets: ${{ inputs.test_build_targets }}
+      test_build_mode: ${{ inputs.test_build_mode }}
+      test_build_args: ${{ inputs.test_build_args }}
       test_build_command: ${{ inputs.test_build_command }}
       test_build_node_version: ${{ inputs.test_build_node_version }}
 

@@ -1,24 +1,25 @@
-# Compiles the project's release artifact, as a CHECK rather than as a delivery.
+# Compiles the project as a CHECK, the third-stage twin of `test:build` in the GitLab and Azure
+# DevOps Dart templates.
 #
-# `30-tests/all` runs the suite on the Dart VM, so it never reaches dart2js, dart2wasm or the
-# AOT compiler: a `dart:io` import reachable from web code, an icon tree-shake, a const the
-# release compiler cannot evaluate and a plugin with no web implementation are all invisible to
-# it and all fail the first time somebody builds. This is the job that builds, so a pull request
-# carries that verdict before it merges rather than the deployment discovering it.
+# `dart analyze` resolves and type-checks but never runs a compiler back end, and `test:all` runs
+# the suite on the Dart VM -- so a defect only the AOT or web compiler rejects (a const evaluation
+# failure, a deferred-loading mistake, a tree-shaking error on a non-constant icon, a plugin with
+# no implementation for the target) passes both and fails at release time. That is the same
+# reasoning `gitlab/dart/stages/30-tests/dart.yaml` and
+# `azure-devops/dart/stages/30-tests/dart.yaml` already carry, and this closes the gap that left
+# GitHub Actions the one platform of the three without the job.
 #
-# It is the Dart twin of `tests > test:build` in `npm.yaml` and `yarn.yaml`, which have run
-# `npm run build` in the third stage since those pipelines existed. The difference is what
-# "build" means: every `package.json` declares a `build` script, and Dart has no such
-# convention -- a Flutter app builds an APK, an app bundle, a web bundle or six desktop targets,
-# a pure Dart package builds an executable, and a library builds nothing at all. So the command
-# is the CONSUMER's, and an empty one skips the job rather than guessing a target and adding
-# minutes to every pipeline that adopts this file.
+# It therefore delegates to the SAME runner they do,
+# `global/scripts/languages/dart/build/run.sh`, in the same `--debug` mode: debug keeps the check
+# fast, and the `40-delivery` stage builds the real release artifact. Targets are the runner's --
+# empty auto-detects (`apk` for a Flutter app, `exe` for a package with `bin/`, nothing at all for
+# a library) -- so a consumer moving between platforms keeps one contract rather than learning a
+# second one here.
 #
-# `40-delivery/build` is the target-driven builder for a project that only needs
-# `flutter build web --release`, and a consumer wanting exactly that should reach for
-# `flutter-artifacts.yaml` instead. This exists for the case that one cannot express: a build
-# that is a command rather than a target -- flags derived from an environment, a generated
-# `_headers` beside the bundle, an artifact assertion that runs against what was just built.
+# `build_command` is the ESCAPE HATCH, and the reason it exists is that some builds are a command
+# rather than a target: flags derived from an environment, a generated file written beside the
+# bundle, an artifact assertion that runs against what was just built. `DART_TEST_BUILD_COMMAND`
+# is the same hatch on the other two platforms. Set it and the runner is not called at all.
 inputs:
   flutter_version:
     required: false
@@ -32,18 +33,36 @@ inputs:
     required: false
     default: 'auto'
     description: "Force the toolchain: 'dart', 'flutter', or 'auto' to detect it from pubspec.yaml."
-  build_command:
-    required: true
+  targets:
+    required: false
+    default: ''
     description: >-
-      The command that produces the release artifact. Runs with the toolchain on `PATH` and
-      dependencies already resolved, so it starts at the build itself.
+      Space-separated build targets (e.g. 'web'), the GitHub spelling of `DART_TEST_BUILD_TARGETS`.
+      Empty auto-detects from the project's own shape, exactly as it does on GitLab and Azure.
+  build_mode:
+    required: false
+    default: '--debug'
+    description: >-
+      Flutter build mode flag. `--debug` here rather than the `--release` of `40-delivery/build`:
+      this is a compile CHECK on every pull request, and the delivery stage builds the artifact
+      that ships.
+  build_args:
+    required: false
+    default: ''
+    description: 'Extra arguments appended to the build command.'
+  build_command:
+    required: false
+    default: ''
+    description: >-
+      Escape hatch: run this command instead of the shared build runner, with the toolchain on
+      `PATH` and dependencies resolved. For a build that is a command rather than a target. The
+      equivalent of `DART_TEST_BUILD_COMMAND` on GitLab and Azure DevOps.
   node_version:
     required: false
     default: ''
     description: >-
-      Install Node.js before the build when the command needs it -- a bundle assertion that
-      parses its own output, a JavaScript step in the build. Empty installs nothing rather than
-      relying on whatever the runner happens to ship, which on a self-hosted fleet is not
+      Install Node.js before the build when the command needs it. Empty installs nothing rather
+      than relying on whatever the runner happens to ship, which on a self-hosted fleet is not
       knowable from here.
 
 runs:
@@ -75,13 +94,28 @@ runs:
       with:
         node-version: '${{ inputs.node_version }}'
 
-    # The SDK is installed HERE and exported through `$GITHUB_PATH`, not left for the build
-    # command to arrange. `dart_ensure_sdk` prepends to `PATH` in the shell it runs in, and a
-    # composite action's steps are separate shells -- so a consumer's command would find no
-    # `flutter` at all unless the two shared one. Exporting instead of merging the two steps is
-    # what keeps `build_command` a plain command rather than a fragment spliced into somebody
-    # else's script.
+    # THE DEFAULT PATH: the same runner, the same mode and the same target semantics as the
+    # GitLab and Azure templates. It installs the SDK and resolves dependencies itself.
+    - name: 'Compile the project'
+      if: "inputs.build_command == ''"
+      run: $SCRIPTS_DIR/global/scripts/languages/dart/build/run.sh
+      shell: 'bash'
+      env:
+        FLUTTER_VERSION: '${{ inputs.flutter_version }}'
+        DART_SDK_VERSION: '${{ inputs.dart_sdk_version }}'
+        DART_TOOLCHAIN: '${{ inputs.toolchain }}'
+        DART_BUILD_TARGETS: '${{ inputs.targets }}'
+        DART_BUILD_MODE: '${{ inputs.build_mode }}'
+        DART_BUILD_ARGS: '${{ inputs.build_args }}'
+        DART_BUILD_NUMBER: '${{ github.run_number }}'
+
+    # THE ESCAPE HATCH, and the SDK is exported through `$GITHUB_PATH` for it rather than left for
+    # the command to arrange. `dart_ensure_sdk` prepends to `PATH` in the shell it runs in, and a
+    # composite action's steps are separate shells, so a consumer's command finds no `flutter` at
+    # all unless the two share one. Exporting instead of merging the two steps is what keeps
+    # `build_command` a plain command rather than a fragment spliced into somebody else's script.
     - name: 'Install the toolchain'
+      if: "inputs.build_command != ''"
       shell: 'bash'
       run: |
         . "$SCRIPTS_DIR/global/scripts/languages/dart/common.sh"
@@ -103,5 +137,6 @@ runs:
         DART_TOOLCHAIN: '${{ inputs.toolchain }}'
 
     - name: 'Build'
+      if: "inputs.build_command != ''"
       shell: 'bash'
       run: '${{ inputs.build_command }}'

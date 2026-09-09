@@ -654,6 +654,26 @@ Flutter app and a pure Dart package. See
 [.docs/examples/github-flutter-artifacts](.docs/examples/github-flutter-artifacts)
 for a complete project.
 
+**Compiling the project.** `tests > test:build` runs beside `test:all` -- same stage, same
+`needs:` -- and compiles through `global/scripts/languages/dart/build/run.sh` in `--debug` mode.
+It covers what neither of its neighbours can: `quality:analyze` resolves and type-checks but never
+runs a compiler back end, and `test:all` runs the suite on the Dart VM and never reaches dart2js,
+dart2wasm or the AOT compiler -- so a const evaluation failure, a deferred-loading mistake, a
+tree-shaking error on a non-constant icon or a plugin with no implementation for the target passes
+both and fails at release time.
+
+This job closes a PLATFORM GAP rather than adding a new idea: `test:build` has shipped in the
+GitLab and Azure DevOps Dart templates all along, and GitHub Actions was the one platform of the
+three without it -- so a consumer migrating from GitLab silently lost its compile check. It calls
+the same runner with the same defaults. `test_build_targets` is the GitHub spelling of
+`DART_TEST_BUILD_TARGETS` (empty auto-detects: `apk` for a Flutter app, `exe` for a package with
+`bin/`, nothing at all for a library), `test_build_mode` of `DART_BUILD_MODE`, and
+`test_build_command` of the new `DART_TEST_BUILD_COMMAND` -- the escape hatch, on all three
+platforms, for a build that is a command rather than a target: flags derived from an environment,
+a generated file written beside the bundle, an artifact assertion that runs against what was just
+built. Set `test_build_node_version` when that command needs Node.js. The `40-delivery` stage goes
+on building the real release artifact; this is a check.
+
 **Coverage on a pull request.** `tests > test:all` posts one sticky comment per pull request --
 the totals table, the floor it was judged against and the coverage of every source file the change
 touches -- updated in place on every push, and writes the same table to the job summary of every

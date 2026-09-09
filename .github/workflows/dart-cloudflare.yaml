@@ -180,6 +180,41 @@ on:
           The caller must declare `on: workflow_dispatch:` and grant the job that calls this
           workflow `actions: write`, beside the `contents: write` the release itself needs. Off by
           default: a caller that has not granted `actions: write` would fail the release job.
+      test_build_targets:
+        required: false
+        type: 'string'
+        default: ''
+        description: |
+          Forwarded to `dart.yaml`: build targets for `tests > test:build` (e.g. 'web'), empty
+          auto-detecting from the project's shape. The GitHub spelling of the
+          `DART_TEST_BUILD_TARGETS` the GitLab and Azure DevOps templates take.
+
+          Forwarded rather than dropped for the reason the composition standard gives about
+          `runs_on` -- an input a composed workflow does not declare is an input its consumers
+          cannot reach at all, and the pipeline then looks identical to the base one while
+          silently offering less.
+      test_build_mode:
+        required: false
+        type: 'string'
+        default: '--debug'
+        description: "Forwarded to `dart.yaml`: Flutter build mode for `tests > test:build`."
+      test_build_args:
+        required: false
+        type: 'string'
+        default: ''
+        description: 'Forwarded to `dart.yaml`: extra arguments for the `tests > test:build` build.'
+      test_build_command:
+        required: false
+        type: 'string'
+        default: ''
+        description: |
+          Forwarded to `dart.yaml`: escape hatch running this command instead of the shared build
+          runner, for a build that is a command rather than a target.
+      test_build_node_version:
+        required: false
+        type: 'string'
+        default: ''
+        description: 'Forwarded to `dart.yaml`: Node.js version for `test_build_command`, empty installing none.'
     secrets:
       cloudflare_api_token:
         required: false
@@ -221,6 +256,11 @@ jobs:
       test_args: ${{ inputs.test_args }}
       coverage_minimum: ${{ inputs.coverage_minimum }}
       coverage_exclude: ${{ inputs.coverage_exclude }}
+      test_build_targets: ${{ inputs.test_build_targets }}
+      test_build_mode: ${{ inputs.test_build_mode }}
+      test_build_args: ${{ inputs.test_build_args }}
+      test_build_command: ${{ inputs.test_build_command }}
+      test_build_node_version: ${{ inputs.test_build_node_version }}
 
   # fourth stage
   delivery-release:

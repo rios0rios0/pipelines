@@ -34,7 +34,21 @@ test:build:
     # Debug keeps this fast; the delivery stage builds the real release artifact.
     DART_BUILD_MODE: '--debug'
   script:
-    - $SCRIPTS_DIR/global/scripts/languages/dart/build/run.sh ${DART_TEST_BUILD_TARGETS:-}
+    # `DART_TEST_BUILD_COMMAND` is the escape hatch for a build that is a COMMAND rather than a
+    # target -- flags derived from an environment, a generated file written beside the bundle, an
+    # artifact assertion that runs against what was just built. The GitHub action takes the same
+    # hatch as its `build_command` input, so `test:build` is one contract on all three platforms
+    # rather than "targets here, a command there".
+    #
+    # `sh -c`, not `eval`: the command is one program to run, and `eval` would additionally expand
+    # whatever the command's own output happens to look like.
+    - |
+      if [ -n "${DART_TEST_BUILD_COMMAND:-}" ]; then
+        sh -c "$DART_TEST_BUILD_COMMAND"
+      else
+        # shellcheck disable=SC2086 # word splitting is intended: one argument per build target
+        $SCRIPTS_DIR/global/scripts/languages/dart/build/run.sh ${DART_TEST_BUILD_TARGETS:-}
+      fi
   rules:
     - if: "$CI_MERGE_REQUEST_IID"
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"

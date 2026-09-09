@@ -44,5 +44,19 @@ stages:
           DART_BUILD_MODE: '--debug'
         steps:
           - template: '../../abstracts/dart.yaml'
-          - script: $(Scripts.Directory)/global/scripts/languages/dart/build/run.sh $(DART_TEST_BUILD_TARGETS)
+          # `DART_TEST_BUILD_COMMAND` is the escape hatch for a build that is a COMMAND rather
+          # than a target -- flags derived from an environment, a generated file written beside
+          # the bundle, an artifact assertion that runs against what was just built. The GitHub
+          # action takes the same hatch as its `build_command` input, so `test:build` is one
+          # contract on all three platforms rather than "targets here, a command there".
+          #
+          # `sh -c`, not `eval`: the command is one program to run, and `eval` would additionally
+          # expand whatever the command's own output happens to look like.
+          - script: |
+              if [ -n "$(DART_TEST_BUILD_COMMAND)" ]; then
+                sh -c "$(DART_TEST_BUILD_COMMAND)"
+              else
+                # shellcheck disable=SC2086 # word splitting is intended: one argument per build target
+                $(Scripts.Directory)/global/scripts/languages/dart/build/run.sh $(DART_TEST_BUILD_TARGETS)
+              fi
             displayName: 'Compile the project'

@@ -74,7 +74,50 @@ on:
           generator that emits one string literal per line moves the total by tens of points
           without saying anything about whether the project is tested -- a floor a code generator
           can move is not measuring what it was put there to protect.
+      test_build_targets:
+        required: false
+        type: 'string'
+        default: ''
+        description: |
+          Space-separated build targets for `tests > test:build` (e.g. 'web'). Empty auto-detects
+          from the project's own shape -- `apk` for a Flutter app, `exe` for a package with `bin/`,
+          nothing at all for a library.
 
+          This is the GitHub spelling of `DART_TEST_BUILD_TARGETS`, the variable the GitLab and
+          Azure DevOps Dart templates have taken all along. Same runner, same semantics, so a
+          consumer moving between platforms keeps one contract.
+      test_build_mode:
+        required: false
+        type: 'string'
+        default: '--debug'
+        description: |
+          Flutter build mode for `tests > test:build`. `--debug` keeps the check fast; the delivery
+          stage builds the release artifact. Matches `DART_BUILD_MODE` on the other two platforms.
+      test_build_args:
+        required: false
+        type: 'string'
+        default: ''
+        description: 'Extra arguments appended to the `tests > test:build` build command.'
+      test_build_command:
+        required: false
+        type: 'string'
+        default: ''
+        description: |
+          Escape hatch for `tests > test:build`: run this command instead of the shared build
+          runner. For a build that is a command rather than a target -- flags derived from an
+          environment, a generated file written beside the bundle, an artifact assertion that runs
+          against what was just built. The equivalent of `DART_TEST_BUILD_COMMAND` on GitLab and
+          Azure DevOps.
+
+          Named `test_build_*` rather than `build_*` so it cannot be confused with the
+          `build_command` the deployment workflows take: that one runs at deploy time against the
+          real environment, and this one runs on every pull request.
+      test_build_node_version:
+        required: false
+        type: 'string'
+        default: ''
+        description: |
+          Install Node.js before `test_build_command` when it needs one. Empty installs nothing.
 # `ubuntu-latest` carries `curl`, `unzip`, `xz-utils`, `git`, `python3` and `jq`; a bare
 # self-hosted runner selected through `runs_on` carries none of them and must be provisioned
 # before these jobs will pass. The SDK itself is not among them -- the Dart scripts download it
@@ -269,6 +312,45 @@ jobs:
     needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_osv_scanner' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
+  # A SIBLING of `test:all`, not a successor: identical `needs:` and identical `if:`, so the two
+  # run in parallel and a pull request gets both verdicts at once.
+  #
+  # This is the job GitHub Actions was MISSING, not one the Dart family never had. `test:build`
+  # has shipped in `gitlab/dart/stages/30-tests/dart.yaml` and
+  # `azure-devops/dart/stages/30-tests/dart.yaml` all along, delegating to
+  # `global/scripts/languages/dart/build/run.sh` in `--debug` mode and taking its targets from
+  # `DART_TEST_BUILD_TARGETS`. This job calls the same runner with the same defaults, so the three
+  # platforms are one contract rather than three -- a consumer migrating from GitLab keeps its
+  # compile check instead of silently losing it.
+  #
+  # ALWAYS ON, for that reason. Gating it on a non-empty command would mean a GitLab consumer
+  # adopting `dart.yaml` gets a green pipeline with no compile check and nothing to say so. The
+  # runner already answers "what does build mean for this project": a library builds nothing and
+  # exits 0, so an unconfigured consumer pays for a no-op rather than a wrong artifact.
+  #
+  # The two cover disjoint ground. `test:all` runs the suite on the Dart VM and never reaches
+  # dart2js, dart2wasm or the AOT compiler, so every release-only compile failure is invisible to
+  # it. `quality:analyze` resolves and type-checks but never runs a compiler back end either.
+  #
+  # SKIPPED ON TAGS like every other job in this file. That is a GitHub-specific divergence from
+  # the GitLab template, which runs on tags too: here a tag points at a commit whose verdict
+  # already exists, and `require-checks` re-asserts it against that commit rather than rebuilding.
+  tests-test_build:
+    name: 'tests > test:build'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    steps:
+      - uses: 'rios0rios0/pipelines/github/dart/stages/30-tests/build@main'
+        with:
+          flutter_version: ${{ inputs.flutter_version }}
+          dart_sdk_version: ${{ inputs.dart_sdk_version }}
+          toolchain: ${{ inputs.toolchain }}
+          targets: ${{ inputs.test_build_targets }}
+          build_mode: ${{ inputs.test_build_mode }}
+          build_args: ${{ inputs.test_build_args }}
+          build_command: ${{ inputs.test_build_command }}
+          node_version: ${{ inputs.test_build_node_version }}
+    needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_osv_scanner' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
 
   # NOTE: there is no `management > report:sbom` job. Dependency-Track ingests
   # CycloneDX, and pub has no native CycloneDX generator -- `package:sbom` emits

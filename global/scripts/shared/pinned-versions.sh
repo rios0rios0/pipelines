@@ -222,7 +222,7 @@ STOML_SHA256_AMD64="8420ad10d39ca568234186be89a60f8a8ece29bc2a91b4c8ad2e00ef73b6
 # ever proved the bytes matched whatever version it chose -- integrity without
 # identity.
 # upstream: goproxy golang.org/x/vuln
-GOVULNCHECK_PINNED_VERSION="v1.7.0"
+GOVULNCHECK_PINNED_VERSION="v1.8.0"
 GOVULNCHECK_VERSION="${GOVULNCHECK_VERSION:-${GOVULNCHECK_PINNED_VERSION}}"
 # upstream: goproxy gotest.tools/gotestsum
 GOTESTSUM_PINNED_VERSION="v1.13.0"

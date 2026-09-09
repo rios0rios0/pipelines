@@ -50,7 +50,7 @@ jobs:
       - name: 'Setup Go'
         uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
         with:
-          go-version: '1.24'
+          go-version: '1.27.1'
           # See `github/golang/stages/10-code-check/golangci-lint/action.yaml` for the measured
           # reason this is gated: on a self-hosted runner GOMODCACHE and GOCACHE persist on local
           # disk, the restore untars over files that already exist, `tar` exits 2 and the entire
@@ -296,7 +296,7 @@ jobs:
         if: "steps.terratest-gomod.outputs.path == ''"
         uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
         with:
-          go-version: '1.24'
+          go-version: '1.27.1'
           # See `github/golang/stages/10-code-check/golangci-lint/action.yaml` for the measured
           # reason this is gated: on a self-hosted runner GOMODCACHE and GOCACHE persist on local
           # disk, the restore untars over files that already exist, `tar` exits 2 and the entire

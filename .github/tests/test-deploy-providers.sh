@@ -1067,6 +1067,12 @@ mkdir -p "$MASK_DIR"
 # PyYAML rather than reading the indented text, for the reason the
 # workflow-composition and azure-step-names suites already state: the body is a
 # block scalar, and re-deriving its indentation by hand is a parser.
+#
+# A host without PyYAML gets the SIBLING'S degradation -- a named message and
+# exit 0, so the assertions below fail by name and the suite still reaches its
+# summary. Exiting non-zero here would kill the whole file under `set -e`,
+# mid-run and without a count, which is a worse answer to a missing package than
+# the one `test-workflow-composition.sh` already gives.
 extract_secrets_step() {
   /usr/bin/env python3 - "$1" <<'EXTRACT'
 import sys
@@ -1074,8 +1080,9 @@ import sys
 try:
     import yaml
 except ImportError:
-    sys.stderr.write("PyYAML is required to read the deployment workflows\n")
-    raise SystemExit(2)
+    print('PyYAML is required for this assertion '
+          '(CI installs python3-yaml; locally: pip install pyyaml)')
+    raise SystemExit(0)
 
 with open(sys.argv[1], encoding="utf-8") as handle:
     document = yaml.safe_load(handle)
@@ -1086,74 +1093,119 @@ for job in (document.get("jobs") or {}).values():
             sys.stdout.write(step.get("run", ""))
             raise SystemExit(0)
 
-sys.stderr.write("no step gated on BUILD_ENV_SECRETS was found\n")
-raise SystemExit(1)
+print("no step gated on BUILD_ENV_SECRETS was found")
+raise SystemExit(0)
 EXTRACT
 }
 
-# Runs the real step against $1, leaving its stdout in MASK_OUT and the file it
-# appended to in MASK_ENV.
+# Runs the real step against $2, leaving its stdout in MASK_OUT and the file it
+# appended to in MASK_ENV. Both are CLEARED first: a run that cannot produce
+# output must fail its assertions by name rather than pass them against whatever
+# the previous workflow in the loop left behind.
 run_secrets_step() {
   local workflow="$1"
   local payload="$2"
   MASK_STATUS=0
+  # Read by `eval` inside assert_true, which shellcheck cannot follow. The RC_*
+  # pair above escapes the same warning only because it is also assigned at top
+  # level; being honest about it costs one directive.
+  # shellcheck disable=SC2034
+  MASK_OUT=""
+  # shellcheck disable=SC2034
+  MASK_ENV=""
   : > "$MASK_DIR/github_env"
-  extract_secrets_step "$SCRIPTS_DIR/$workflow" > "$MASK_DIR/step.sh" || return 1
+  extract_secrets_step "$workflow" > "$MASK_DIR/step.sh"
   (
     cd "$MASK_DIR" || exit 1
     BUILD_ENV_SECRETS="$payload" GITHUB_ENV="$MASK_DIR/github_env" \
       bash "$MASK_DIR/step.sh"
   ) > "$MASK_DIR/out.txt" 2>&1 || MASK_STATUS=$?
-  # Read by `eval` inside assert_true, which shellcheck cannot follow. The RC_*
-  # pair above escapes the same warning only because it is also assigned at top
-  # level; being honest about it costs one directive.
   # shellcheck disable=SC2034
   MASK_OUT="$(cat "$MASK_DIR/out.txt")"
   # shellcheck disable=SC2034
   MASK_ENV="$(cat "$MASK_DIR/github_env")"
 }
 
-# Every workflow that ACCEPTS the input must also mask it. One added without the
-# mask is the regression this pins, and it is invisible in the file on its own.
-for workflow in dart-cloudflare yarn-cloudflare npm-cloudflare; do
-  assert_true "$workflow: the build_env_secrets step masks each value" \
-    "extract_secrets_step '$SCRIPTS_DIR/.github/workflows/$workflow.yaml' | grep -q '::add-mask::'"
+# THE LIST IS DISCOVERED, NOT WRITTEN DOWN, and that is the difference between
+# pinning the property and pinning today's three files. A fourth workflow taking
+# the input -- another toolchain's `-cloudflare.yaml`, or a `-vercel.yaml` -- is
+# guarded only if it is ITERATED, and a hand-maintained list is the one thing
+# that cannot be relied on to be edited alongside the workflow that needs it. It
+# is the same inversion the workflow-composition suite already names: a file that
+# drops out of the list stops being looked at, and passes by not being checked.
+#
+# `build_env_secrets:` with the colon is the DECLARATION. The bare name also
+# appears in prose in these files ("use `build_env_secrets` for those"), and a
+# future workflow that only documents the input without accepting it would be
+# swept in by the looser pattern and fail for having no step to extract.
+MASK_WORKFLOWS=()
+while IFS= read -r candidate; do
+  MASK_WORKFLOWS+=("$candidate")
+done < <(grep -l 'build_env_secrets:' "$SCRIPTS_DIR"/.github/workflows/*.yaml)
+
+# An empty discovery would otherwise pass every assertion below by running none.
+assert_true "build_env_secrets: the discovery found at least one workflow" \
+  "[[ ${#MASK_WORKFLOWS[@]} -gt 0 ]]"
+
+# INERT, and shaped only where the shape is the thing under test. Secret scanners
+# match a vendor's token PREFIX as a pattern rather than verifying the value, so a
+# fixture wearing a real one fails CI the day a rule is added and normalises
+# token-like strings in the tree meanwhile -- and naming the prefix here to explain
+# that would trip the same rule. What the assertion actually needs is an `=` INSIDE
+# the value, which this keeps.
+TOKEN_SHAPED='fixture-token-placeholder=_/inert+shape'
+TRUNCATED='_/inert+shape'
+
+for workflow in "${MASK_WORKFLOWS[@]}"; do
+  name="$(basename "$workflow")"
+
+  # Every workflow that accepts the input is EXECUTED, not merely grepped for the
+  # literal `::add-mask::`. A copy that drifted to `${line%%=*}` (masking the KEY)
+  # or to `cut -d= -f2` (the truncation below) satisfies a grep and still leaks.
+  run_secrets_step "$workflow" \
+    "$(printf 'FIRST=https://user@o123.ingest.example.invalid/456\nSECOND=%s\n' "$TOKEN_SHAPED")"
+
+  assert_true "$name: the step succeeds on a two-line payload" \
+    "[[ $MASK_STATUS -eq 0 ]]"
+  assert_true "$name: the first value is masked" \
+    "grep -qxF '::add-mask::https://user@o123.ingest.example.invalid/456' <<< \"\$MASK_OUT\""
+  assert_true "$name: a value carrying its own '=' is masked WHOLE" \
+    "grep -qxF '::add-mask::$TOKEN_SHAPED' <<< \"\$MASK_OUT\""
+  assert_true "$name: no mask is registered for the truncated tail" \
+    "! grep -qxF '::add-mask::$TRUNCATED' <<< \"\$MASK_OUT\""
+
+  # The masking must not cost the step its original job.
+  assert_true "$name: the payload still reaches GITHUB_ENV" \
+    "grep -qF 'SECOND=$TOKEN_SHAPED' <<< \"\$MASK_ENV\""
+  assert_true "$name: every line reaches GITHUB_ENV" \
+    "grep -qF 'FIRST=https://user@o123.ingest.example.invalid/456' <<< \"\$MASK_ENV\""
+
+  # WORKFLOW-COMMAND ESCAPING. The runner UNESCAPES `%25`, `%0D` and `%0A` in the
+  # data of a `::` command, so a value containing the literal three characters
+  # `%25` registers a mask for `%` -- a string that never appears -- and the real
+  # value goes on printing. `%` must be escaped FIRST or the escapes are escaped
+  # in turn.
+  run_secrets_step "$workflow" "$(printf 'PCT=pct-%%25-value\nCR=has\rcarriage\n')"
+
+  assert_true "$name: a '%' in a value is emitted escaped" \
+    "grep -qxF '::add-mask::pct-%2525-value' <<< \"\$MASK_OUT\""
+  assert_true "$name: the raw '%' form is NOT what is emitted" \
+    "! grep -qxF '::add-mask::pct-%25-value' <<< \"\$MASK_OUT\""
+  assert_true "$name: a carriage return in a value is emitted escaped" \
+    "grep -qxF '::add-mask::has%0Dcarriage' <<< \"\$MASK_OUT\""
+
+  # Nothing that is not an assignment, and nothing empty: `::add-mask::` on an
+  # empty string is a runner error, and masking a bare word would redact an
+  # ordinary English token everywhere it appeared in the log.
+  run_secrets_step "$workflow" "$(printf 'NOT_AN_ASSIGNMENT\nEMPTY=\n\nREAL=value-here\n')"
+
+  assert_true "$name: a line with no '=' registers no mask" \
+    "! grep -q 'NOT_AN_ASSIGNMENT' <<< \"\$MASK_OUT\""
+  assert_true "$name: an empty value registers no mask" \
+    "! grep -qE '::add-mask::\s*$' <<< \"\$MASK_OUT\""
+  assert_true "$name: the real value beside them is still masked" \
+    "grep -qxF '::add-mask::value-here' <<< \"\$MASK_OUT\""
 done
-
-# The real shape a caller sends, with the trap in it: the Sentry auth token is
-# base64 and carries its own `=`, so a split on the LAST one registers a mask for
-# a truncated string that never appears and leaves the secret printed in full.
-SENTRY_SHAPED='sntrys_eyJvcmciOiJtZWRodWItbGlmZSJ9=_/QwjaEI+c8QE6bPdwTIhD'
-run_secrets_step ".github/workflows/dart-cloudflare.yaml" \
-  "$(printf 'SENTRY_DSN=https://abc@o123.ingest.us.sentry.io/456\nSENTRY_AUTH_TOKEN=%s\n' "$SENTRY_SHAPED")"
-
-assert_true "build_env_secrets: the step succeeds on a two-line payload" \
-  "[[ $MASK_STATUS -eq 0 ]]"
-assert_true "build_env_secrets: the first value is masked" \
-  "grep -qF '::add-mask::https://abc@o123.ingest.us.sentry.io/456' <<< \"\$MASK_OUT\""
-assert_true "build_env_secrets: a base64 value is masked WHOLE, not truncated at its own '='" \
-  "grep -qF '::add-mask::$SENTRY_SHAPED' <<< \"\$MASK_OUT\""
-assert_true "build_env_secrets: no mask is registered for a truncated prefix of the token" \
-  "! grep -qE '::add-mask::sntrys_[A-Za-z0-9]+$' <<< \"\$MASK_OUT\""
-
-# The masking must not cost the step its original job.
-assert_true "build_env_secrets: the payload still reaches GITHUB_ENV" \
-  "grep -qF 'SENTRY_AUTH_TOKEN=$SENTRY_SHAPED' <<< \"\$MASK_ENV\""
-assert_true "build_env_secrets: every line reaches GITHUB_ENV" \
-  "grep -qF 'SENTRY_DSN=https://abc@o123.ingest.us.sentry.io/456' <<< \"\$MASK_ENV\""
-
-# Nothing that is not an assignment, and nothing empty: `::add-mask::` on an
-# empty string is a runner error, and masking a bare word would redact an
-# ordinary English token everywhere it appeared in the log.
-run_secrets_step ".github/workflows/dart-cloudflare.yaml" \
-  "$(printf 'NOT_AN_ASSIGNMENT\nEMPTY=\n\nREAL=value-here\n')"
-
-assert_true "build_env_secrets: a line with no '=' registers no mask" \
-  "! grep -q 'NOT_AN_ASSIGNMENT' <<< \"\$MASK_OUT\""
-assert_true "build_env_secrets: an empty value registers no mask" \
-  "! grep -qE '::add-mask::\s*$' <<< \"\$MASK_OUT\""
-assert_true "build_env_secrets: the real value beside them is still masked" \
-  "grep -qF '::add-mask::value-here' <<< \"\$MASK_OUT\""
 echo ""
 
 echo "================================"

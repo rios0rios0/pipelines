@@ -301,21 +301,31 @@ jobs:
       # `BUILD_ENV_SECRETS: ***` and, in the same step's env block, a full Sentry auth token and
       # DSN. The blob was masked; both values it expands to were not.
       #
-      # SPLIT ON THE FIRST `=` ONLY. Base64 and JWT-shaped credentials carry their own -- the token
-      # that exposed this ends in `...In0=_/QwjaEI+...` -- so splitting on the last, or on every
-      # one, registers a mask for a truncated string that never appears in any log. That fails in
-      # the worst available way: the step succeeds, `::add-mask::` is emitted, and the secret is
-      # still printed in full.
+      # SPLIT ON THE FIRST `=` ONLY. Base64 and JWT-shaped credentials carry their own `=`, so
+      # splitting on the last, or on every one, registers a mask for a truncated string that never
+      # appears in any log. That fails in the worst available way: the step succeeds,
+      # `::add-mask::` is emitted, and the secret is still printed in full.
       #
       # A line with no `=` and a `KEY=` with no value are both skipped rather than masked: the
       # first is not an assignment, and `::add-mask::` on an empty string is an error the runner
       # reports on a line whose content is, by construction, nothing worth hiding.
+      #
+      # THE DATA IS WORKFLOW-COMMAND ESCAPED, which is not decoration. The runner UNESCAPES `%25`,
+      # `%0D` and `%0A` in the data half of a `::` command, so a value containing the literal three
+      # characters `%25` -- a URL-encoded `%`, which credentials and connection strings really do
+      # carry -- registers a mask for `%` alone. That is a string which never appears, so the real
+      # value goes on printing while the step reports success: the same silent shape as the leak
+      # this whole change closes. `%` is escaped FIRST, or the escapes introduced by the other two
+      # would themselves be escaped.
       - if: "env.BUILD_ENV_SECRETS != ''"
         run: |
           while IFS= read -r line; do
             value="${line#*=}"
             if [ -n "$value" ] && [ "$value" != "$line" ]; then
-              echo "::add-mask::$value"
+              escaped="${value//%/%25}"
+              escaped="${escaped//$'\r'/%0D}"
+              escaped="${escaped//$'\n'/%0A}"
+              echo "::add-mask::$escaped"
             fi
           done <<< "$BUILD_ENV_SECRETS"
           printf '%s\n' "$BUILD_ENV_SECRETS" >> "$GITHUB_ENV"

@@ -339,7 +339,8 @@ jobs:
     name: 'tests > test:build'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     # LEAST PRIVILEGE, and this job is the one that most needs it: it resolves and runs the whole
-    # dependency tree (`dart_pub_get`, then a real compile, then whatever `build_command` names),
+    # dependency tree (`dart_pub_get`, then a real compile, then whatever `test_build_command`
+    # names -- NOT the deployment workflows' `build_command`, which is a different input),
     # which is the largest amount of third-party code any job in this file executes.
     #
     # Without this block it runs with the CALLING job's permissions, which is not a theoretical

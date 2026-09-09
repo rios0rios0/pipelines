@@ -1150,6 +1150,46 @@ print('yes' if ok else 'no')
 assert_true "GitHub: dart.yaml's permissions note names checks: write for the Test Results check" \
   "grep -q \"^#   checks: 'write' # tests-test_all\" '$SCRIPTS_DIR/.github/workflows/dart.yaml'"
 
+# THE ENFORCING HALF OF THE SAME CONTRACT. The two assertions above cover the
+# footer NOTE -- what a caller must grant -- and a note is documentation. This
+# covers the block that actually holds a token down.
+#
+# `tests-test_build` resolves and compiles the whole dependency tree, plus
+# whatever a consumer passes as `test_build_command`, so it runs more
+# third-party code than any other job here. Without a `permissions:` block of
+# its own it runs with the CALLING job's scopes: measured on a consumer whose
+# caller grants what `promote_release: true` requires, it held `Contents: write`
+# and `Actions: write` -- a token that can push to the default branch and
+# dispatch a workflow, on `pull_request` runs too.
+#
+# Asserted rather than reviewed because deleting those two lines has NO SYMPTOM:
+# not a syntax error, not a lint failure, no red job. The pipeline stays green
+# and the token silently widens back. That is the same reasoning
+# `test-runner-cache-gating.sh` exists for, and why the rule is a test rather
+# than a review habit. `test-workflow-composition.sh` cannot cover it: it emits
+# `job-has-permissions` but consumes only `needs`, `environment` and `if`.
+assert_equals "GitHub: tests-test_build is narrowed to contents: read" \
+  "{'contents': 'read'}" \
+  "$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
+print(d['jobs']['tests-test_build'].get('permissions'))
+")"
+
+# THE CONVERSE, and it is not symmetry for its own sake. `tests-test_all` needs
+# `checks: write` and `pull-requests: write`, and a called workflow's job may
+# never request MORE than its caller granted -- so hardcoding a block there
+# turns every consumer that grants only `contents: read` into a hard
+# permissions error instead of the degraded report that job is written for.
+# The "restore consistency" edit that adds one is exactly what this catches.
+assert_equals "GitHub: tests-test_all deliberately carries no permissions block" \
+  "None" \
+  "$(python3 -c "
+import yaml
+d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
+print(d['jobs']['tests-test_all'].get('permissions'))
+")"
+
 # The reporter follows the toolchain the suite RAN under -- `dorny/test-reporter`
 # reads a Flutter failure's real message and stack frame only under
 # `flutter-json` -- and `inputs.toolchain` cannot supply it: it is `auto` for

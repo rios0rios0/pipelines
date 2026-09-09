@@ -22,6 +22,21 @@ on:
         required: false
         default: '["ubuntu-latest"]'
         description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See dart.yaml.'
+      test_build_command:
+        required: false
+        type: 'string'
+        default: ''
+        description: |
+          Forwarded to `dart.yaml`: the command `tests > test:build` runs to compile the release
+          artifact, empty skipping the job. Forwarded rather than dropped for the reason the
+          composition standard gives about `runs_on` -- an input a composed workflow does not
+          declare is an input its consumers cannot reach at all, and the pipeline then looks
+          identical to the base one while silently offering less.
+      test_build_node_version:
+        required: false
+        type: 'string'
+        default: ''
+        description: 'Forwarded to `dart.yaml`: Node.js version for `test_build_command`, empty installing none.'
 
 jobs:
   dart:
@@ -31,6 +46,8 @@ jobs:
       dart_sdk_version: ${{ inputs.dart_sdk_version }}
       toolchain: ${{ inputs.toolchain }}
       runs_on: ${{ inputs.runs_on }}
+      test_build_command: ${{ inputs.test_build_command }}
+      test_build_node_version: ${{ inputs.test_build_node_version }}
 
   # fourth stage
   delivery-release:

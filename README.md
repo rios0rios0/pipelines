@@ -654,6 +654,21 @@ Flutter app and a pure Dart package. See
 [.docs/examples/github-flutter-artifacts](.docs/examples/github-flutter-artifacts)
 for a complete project.
 
+**Compiling the release artifact.** `tests > test:build` runs beside `test:all` -- same stage,
+same `needs:`, same tag exclusion -- and runs the command given as `test_build_command`, with the
+toolchain on `PATH` and dependencies already resolved. It covers what `test:all` structurally
+cannot: the suite runs on the Dart VM and never reaches dart2js, dart2wasm or the AOT compiler, so
+a `dart:io` import reachable from web code, an icon tree-shake or a plugin with no web
+implementation fails the first build after the merge rather than the pull request. Unlike the
+`npm.yaml` and `yarn.yaml` job of the same name it is OPT-IN, because Dart has no equivalent of
+the `build` script every `package.json` declares -- a Flutter app builds an APK, an app bundle, a
+web bundle or six desktop targets, a pure Dart package builds an executable, a library builds
+nothing -- so an empty command skips the job rather than adding minutes to every pipeline and
+building the wrong artifact for most of them. Set `test_build_node_version` when the command needs
+Node.js. For a project whose build is exactly `flutter build web --release`, prefer
+`flutter-artifacts.yaml` and its target-driven builder; this input is for a build that is a
+command rather than a target.
+
 **Coverage on a pull request.** `tests > test:all` posts one sticky comment per pull request --
 the totals table, the floor it was judged against and the coverage of every source file the change
 touches -- updated in place on every push, and writes the same table to the job summary of every

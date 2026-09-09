@@ -40,6 +40,21 @@ on:
         required: false
         default: '["ubuntu-latest"]'
         description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See dart.yaml.'
+      test_build_command:
+        required: false
+        type: 'string'
+        default: ''
+        description: |
+          Forwarded to `dart.yaml`: the command `tests > test:build` runs to compile the release
+          artifact, empty skipping the job. Forwarded rather than dropped for the reason the
+          composition standard gives about `runs_on` -- an input a composed workflow does not
+          declare is an input its consumers cannot reach at all, and the pipeline then looks
+          identical to the base one while silently offering less.
+      test_build_node_version:
+        required: false
+        type: 'string'
+        default: ''
+        description: 'Forwarded to `dart.yaml`: Node.js version for `test_build_command`, empty installing none.'
 
 # `ubuntu-latest` carries the tools the Dart scripts need (see the same note in dart.yaml) AND
 # the Android SDK and a JDK; a bare self-hosted runner selected through `runs_on` carries none of
@@ -47,6 +62,7 @@ on:
 # SDK is not something a shared template will install ad hoc, because an unattended `sdkmanager`
 # licence acceptance inside a CI job is a supply-chain decision belonging to the consuming
 # project. Point `runs_on` at a runner that already has it, or leave the default.
+
 jobs:
   dart:
     uses: 'rios0rios0/pipelines/.github/workflows/dart.yaml@main'
@@ -54,6 +70,8 @@ jobs:
       flutter_version: ${{ inputs.flutter_version }}
       toolchain: 'flutter'
       runs_on: ${{ inputs.runs_on }}
+      test_build_command: ${{ inputs.test_build_command }}
+      test_build_node_version: ${{ inputs.test_build_node_version }}
 
   # fourth stage
   delivery-release:

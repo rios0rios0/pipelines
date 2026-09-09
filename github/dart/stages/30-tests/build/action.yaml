@@ -1,0 +1,107 @@
+# Compiles the project's release artifact, as a CHECK rather than as a delivery.
+#
+# `30-tests/all` runs the suite on the Dart VM, so it never reaches dart2js, dart2wasm or the
+# AOT compiler: a `dart:io` import reachable from web code, an icon tree-shake, a const the
+# release compiler cannot evaluate and a plugin with no web implementation are all invisible to
+# it and all fail the first time somebody builds. This is the job that builds, so a pull request
+# carries that verdict before it merges rather than the deployment discovering it.
+#
+# It is the Dart twin of `tests > test:build` in `npm.yaml` and `yarn.yaml`, which have run
+# `npm run build` in the third stage since those pipelines existed. The difference is what
+# "build" means: every `package.json` declares a `build` script, and Dart has no such
+# convention -- a Flutter app builds an APK, an app bundle, a web bundle or six desktop targets,
+# a pure Dart package builds an executable, and a library builds nothing at all. So the command
+# is the CONSUMER's, and an empty one skips the job rather than guessing a target and adding
+# minutes to every pipeline that adopts this file.
+#
+# `40-delivery/build` is the target-driven builder for a project that only needs
+# `flutter build web --release`, and a consumer wanting exactly that should reach for
+# `flutter-artifacts.yaml` instead. This exists for the case that one cannot express: a build
+# that is a command rather than a target -- flags derived from an environment, a generated
+# `_headers` beside the bundle, an artifact assertion that runs against what was just built.
+inputs:
+  flutter_version:
+    required: false
+    default: ''
+    description: 'Pin an exact Flutter version (e.g. 3.47.0). Defaults to the current stable release.'
+  dart_sdk_version:
+    required: false
+    default: 'latest'
+    description: 'Pin an exact Dart SDK version. Only used for pure Dart projects.'
+  toolchain:
+    required: false
+    default: 'auto'
+    description: "Force the toolchain: 'dart', 'flutter', or 'auto' to detect it from pubspec.yaml."
+  build_command:
+    required: true
+    description: >-
+      The command that produces the release artifact. Runs with the toolchain on `PATH` and
+      dependencies already resolved, so it starts at the build itself.
+  node_version:
+    required: false
+    default: ''
+    description: >-
+      Install Node.js before the build when the command needs it -- a bundle assertion that
+      parses its own output, a JavaScript step in the build. Empty installs nothing rather than
+      relying on whatever the runner happens to ship, which on a self-hosted fleet is not
+      knowable from here.
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
+
+    - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    # Skipped on a self-hosted runner for the reason `30-tests/all` and `40-delivery/build`
+    # record at length: there every path below lives in `$HOME` and persists between jobs, the
+    # restore cannot write over an unpacked SDK, and the download it exists to avoid is faster
+    # than the restore itself.
+    - name: 'Cache the Dart/Flutter SDK and pub packages'
+      if: "runner.environment != 'self-hosted'"
+      uses: 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' # v6.1.0
+      with:
+        path: |
+          ~/.local/share/flutter
+          ~/.local/share/dart-sdk
+          ~/.pub-cache
+        key: "dart-${{ runner.os }}-${{ inputs.flutter_version }}-${{ inputs.dart_sdk_version }}-${{ hashFiles('**/pubspec.lock') }}"
+        restore-keys: "dart-${{ runner.os }}-${{ inputs.flutter_version }}-${{ inputs.dart_sdk_version }}-"
+
+    - name: 'Setup Node.js'
+      if: "inputs.node_version != ''"
+      uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # v7.0.0
+      with:
+        node-version: '${{ inputs.node_version }}'
+
+    # The SDK is installed HERE and exported through `$GITHUB_PATH`, not left for the build
+    # command to arrange. `dart_ensure_sdk` prepends to `PATH` in the shell it runs in, and a
+    # composite action's steps are separate shells -- so a consumer's command would find no
+    # `flutter` at all unless the two shared one. Exporting instead of merging the two steps is
+    # what keeps `build_command` a plain command rather than a fragment spliced into somebody
+    # else's script.
+    - name: 'Install the toolchain'
+      shell: 'bash'
+      run: |
+        . "$SCRIPTS_DIR/global/scripts/languages/dart/common.sh"
+        dart_ensure_sdk
+        dart_pub_get
+        # Each guarded with `if`, never `cmd && dir >> file`: this step runs under `set -e`, where
+        # a `&&` list whose left side is false exits 1 and fails the job -- precisely when a
+        # toolchain is legitimately absent, which is every pure Dart project for `flutter`.
+        if command -v flutter > /dev/null 2>&1; then
+          dirname "$(command -v flutter)" >> "$GITHUB_PATH"
+        fi
+        if command -v dart > /dev/null 2>&1; then
+          dirname "$(command -v dart)" >> "$GITHUB_PATH"
+        fi
+        printf '%s\n' "$HOME/.local/bin" "${PUB_CACHE:-$HOME/.pub-cache}/bin" >> "$GITHUB_PATH"
+      env:
+        FLUTTER_VERSION: '${{ inputs.flutter_version }}'
+        DART_SDK_VERSION: '${{ inputs.dart_sdk_version }}'
+        DART_TOOLCHAIN: '${{ inputs.toolchain }}'
+
+    - name: 'Build'
+      shell: 'bash'
+      run: '${{ inputs.build_command }}'

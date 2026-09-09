@@ -74,6 +74,31 @@ on:
           generator that emits one string literal per line moves the total by tens of points
           without saying anything about whether the project is tested -- a floor a code generator
           can move is not measuring what it was put there to protect.
+      test_build_command:
+        required: false
+        type: 'string'
+        default: ''
+        description: |
+          The command `tests > test:build` runs to compile the release artifact. Empty skips the
+          job entirely.
+
+          It is opt-in because Dart has no equivalent of the `build` script every `package.json`
+          declares, which is what lets `npm.yaml` and `yarn.yaml` run that job unconditionally.
+          A Flutter app builds an APK, an app bundle, a web bundle or six desktop targets; a pure
+          Dart package builds an executable; a library builds nothing. Defaulting to any of them
+          would add minutes to every pipeline already consuming this file and build the wrong
+          artifact for most of them.
+
+          Named `test_build_*` rather than `build_*` so it cannot be confused with the
+          `build_command` the deployment workflows take: that one runs at deploy time against the
+          real environment, and this one runs on every pull request against placeholders. The two
+          are deliberately different commands.
+      test_build_node_version:
+        required: false
+        type: 'string'
+        default: ''
+        description: |
+          Install Node.js before `test_build_command` when it needs one. Empty installs nothing.
 
 # `ubuntu-latest` carries `curl`, `unzip`, `xz-utils`, `git`, `python3` and `jq`; a bare
 # self-hosted runner selected through `runs_on` carries none of them and must be provisioned
@@ -268,6 +293,32 @@ jobs:
           path: 'build/reports/coverage.md'
     needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_osv_scanner' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
+
+  # A SIBLING of `test:all`, not a successor: identical `needs:` and identical `if:`, so the two
+  # run in parallel and a pull request gets both verdicts at once. That is the shape `npm.yaml`
+  # and `yarn.yaml` have carried since they existed, and this is the Dart twin of it.
+  #
+  # The two cover disjoint ground. `test:all` runs the suite on the Dart VM and never reaches
+  # dart2js, dart2wasm or the AOT compiler, so every release-only compile failure is invisible to
+  # it. This job compiles, and nothing else in the pipeline does.
+  #
+  # SKIPPED ON TAGS like every other job in this file: a tag points at a commit whose verdict
+  # already exists, and `require-checks` re-asserts it there. A consumer that declared this job
+  # locally instead -- which is what a Dart consumer had to do until now -- also had it running on
+  # tags, where it gated nothing and could only paint a shipped release red.
+  tests-test_build:
+    name: 'tests > test:build'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    steps:
+      - uses: 'rios0rios0/pipelines/github/dart/stages/30-tests/build@main'
+        with:
+          flutter_version: ${{ inputs.flutter_version }}
+          dart_sdk_version: ${{ inputs.dart_sdk_version }}
+          toolchain: ${{ inputs.toolchain }}
+          build_command: ${{ inputs.test_build_command }}
+          node_version: ${{ inputs.test_build_node_version }}
+    needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_osv_scanner' ]
+    if: "!startsWith(github.ref, 'refs/tags/') && inputs.test_build_command != ''"
 
 
   # NOTE: there is no `management > report:sbom` job. Dependency-Track ingests

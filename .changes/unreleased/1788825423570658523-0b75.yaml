@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'refreshed `.github/copilot-instructions.md` to document the `make test-terra-pipeline` target and list `terra-pipeline` and `containers-detect` in the `make test` summary'
-time: '2026-09-07T23:57:03.570591231Z'

@@ -364,7 +364,7 @@ Each platform follows a consistent **5-stage pipeline architecture**:
 2. **🔒 Security (SCA/SAST)** - Vulnerability scanning, secret detection
 3. **🧪 Tests** - Unit tests, integration tests, coverage reporting
 4. **📊 Management** - Dependency tracking, SBOM generation
-5. **🚀 Delivery** - Build artifacts, container images, deployments
+5. **🚀 Delivery** - Build artifacts, container images, deployments. On GitHub, `delivery > release` (`github/global/stages/40-delivery/release/action.yaml`) cuts the version tag from a bump merge on the commit the run verified — pushed from the job's own checkout at `github.sha`, never through the Releases API, which tags the branch's *current* head — then creates the GitHub Release on it and, with `promote_release`, dispatches the tag run. A tag that already exists on that commit is kept; one on another commit fails the job by name. See README "Release Promotion"
 6. **🌐 Deployment** - Optional per-provider hosting deploys (see below)
 
 ### MVP Hosting Deployment Providers

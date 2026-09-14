@@ -277,18 +277,20 @@ cat > "$WORK/gitstub/git" <<'STUB'
 printf '%s\n' "$*" >> "$GIT_STUB_LOG"
 case "$1" in
   push) exit "${GIT_STUB_PUSH_EXIT:-0}" ;;
-  ls-remote) [[ -n "${GIT_STUB_REMOTE_SHA:-}" ]] && printf '%s\trefs/tags/%s\n' "$GIT_STUB_REMOTE_SHA" "${@: -1}"; exit 0 ;;
+  # A lookup that fails AFTER emitting output is the case `pipefail` exists for: `cut` would
+  # otherwise turn the partial answer into a green "already exists".
+  ls-remote) [[ -n "${GIT_STUB_REMOTE_SHA:-}" ]] && printf '%s\trefs/tags/%s\n' "$GIT_STUB_REMOTE_SHA" "${@: -1}"; exit "${GIT_STUB_LSREMOTE_EXIT:-0}" ;;
   *) exit 0 ;;
 esac
 STUB
 chmod +x "$WORK/gitstub/git"
 
 run_create_tag() {
-  # run_create_tag <push-exit> <remote-sha> -- runs the step script against the stub; its
-  # output lands in $WORK/tag.out and its exit code in TAG_EXIT.
+  # run_create_tag <push-exit> <remote-sha> [ls-remote-exit] -- runs the step script against
+  # the stub; its output lands in $WORK/tag.out and its exit code in TAG_EXIT.
   : > "$WORK/git.log"
   set +e
-  PATH="$WORK/gitstub:$PATH" GIT_STUB_LOG="$WORK/git.log" GIT_STUB_PUSH_EXIT="$1" GIT_STUB_REMOTE_SHA="$2" \
+  PATH="$WORK/gitstub:$PATH" GIT_STUB_LOG="$WORK/git.log" GIT_STUB_PUSH_EXIT="$1" GIT_STUB_REMOTE_SHA="$2" GIT_STUB_LSREMOTE_EXIT="${3:-0}" \
     RELEASE_TAG='v1.2.3' GITHUB_SHA='deadbeefcafe' GITHUB_REPOSITORY='owner/repo' \
     bash "$WORK/create-tag.sh" > "$WORK/tag.out" 2>&1
   TAG_EXIT=$?
@@ -314,6 +316,10 @@ assert_true "...and how to resolve it" "grep -q 'delete the tag' '$WORK/tag.out'
 run_create_tag 1 ''
 assert_equals "any other refused push fails the step" '1' "$TAG_EXIT"
 assert_true "...naming the permission it needs" "grep -q \"::error::could not push tag 'v1.2.3'\" '$WORK/tag.out' && grep -q 'contents: write' '$WORK/tag.out'"
+
+run_create_tag 1 'deadbeefcafe' 128
+assert_equals "a lookup that fails after answering is a failed lookup, not an existing tag (pipefail)" '1' "$TAG_EXIT"
+assert_true "...and reaches the same error path" "grep -q \"::error::could not push tag 'v1.2.3'\" '$WORK/tag.out' && ! grep -q 'already exists' '$WORK/tag.out'"
 
 echo ""
 echo "=== Release promotion: the workflows expose and forward the input ==="

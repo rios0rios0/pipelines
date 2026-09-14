@@ -222,7 +222,7 @@ One set of scripts serves both toolchains: `dart_detect_toolchain` reads the pro
 **Three tools in the standard stack do not support Dart, and each gap is handled deliberately — do not "restore consistency" with the other languages:**
 
 - **CodeQL is omitted from every Dart template.** It ships no Dart extractor ([dart-lang/sdk#52953](https://github.com/dart-lang/sdk/issues/52953)); a `sast:codeql` job could only fail. `makefiles/dart.mk` leaves `CODEQL_LANGUAGE` unset and `common.mk` skips the target with an explanation.
-- **The Semgrep Registry publishes no Dart rules** (`p/dart` is HTTP 404, `r/dart` returns an empty `rules: []`). `semgrep/run.sh` probes the registry and skips a missing pack — passing one is fatal to the whole invocation — then loads this repository's own ruleset from `global/scripts/tools/semgrep/rules/dart.yaml`.
+- **The Semgrep Registry publishes no Dart rules** (`p/dart` is HTTP 404, `r/dart` returns an empty `rules: []`). `semgrep/run.sh` probes the registry (retrying an inconclusive answer) and skips a missing pack — passing one is fatal to the whole invocation — then loads this repository's own ruleset from `global/scripts/tools/semgrep/rules/dart.yaml`.
 - **OWASP Dependency-Check has no pub analyzer**, so OSV-Scanner is the only Dart SCA — it queries the Pub advisory database directly.
 - **pub has no native CycloneDX generator** (`package:sbom` emits SPDX; `cdxgen` needs a Node.js toolchain), so there is **no SBOM job for Dart**. The BOM used to come from Trivy, which has been removed from this repository.
 

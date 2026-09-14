@@ -872,6 +872,54 @@ assert_equals "the language pack is referenced exactly once, on the conditional 
   "1" \
   "$(grep -c 'set -- "\$@" --config "p/\$SEMGREP_LANGUAGE"' "$SCRIPTS_DIR/global/scripts/tools/semgrep/run.sh")"
 
+# The probe is lifted out of the runner and executed against a stub `curl` that answers a
+# scripted sequence of HTTP statuses, so what is asserted is the DECISION it reaches: 200 keeps
+# the pack, 404 drops it, and anything else is retried -- kept if it persists (a network blip
+# must never quietly downgrade a scan), dropped if a later attempt answers 404. One inconclusive
+# answer followed by semgrep's own 404 is exactly what took a bump merge down on 2026-09-14.
+PROBE_WORK="$(mktemp -d)" || exit 1
+sed -n '/^semgrep_registry_pack_exists() {/,/^}/p' "$SCRIPTS_DIR/global/scripts/tools/semgrep/run.sh" > "$PROBE_WORK/probe.sh"
+assert_true "the registry probe is a self-contained function" "[[ -s '$PROBE_WORK/probe.sh' ]]"
+mkdir -p "$PROBE_WORK/bin"
+cat > "$PROBE_WORK/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+# Answers the next status in CURL_STUB_STATUSES (comma-separated), the last one forever after.
+IFS=',' read -r -a statuses <<< "$CURL_STUB_STATUSES"
+n=$(wc -l < "$CURL_STUB_LOG" | tr -d ' ')
+echo "$*" >> "$CURL_STUB_LOG"
+idx=$(( n < ${#statuses[@]} ? n : ${#statuses[@]} - 1 ))
+printf '%s' "${statuses[$idx]}"
+STUB
+chmod +x "$PROBE_WORK/bin/curl"
+
+probe() {
+  # probe <statuses> -- runs the probe against the stub; PROBE_EXIT and PROBE_CALLS come back.
+  : > "$PROBE_WORK/curl.log"
+  set +e
+  PROBE_OUT="$(PATH="$PROBE_WORK/bin:$PATH" CURL_STUB_STATUSES="$1" CURL_STUB_LOG="$PROBE_WORK/curl.log" \
+    SEMGREP_PROBE_ATTEMPTS=3 SEMGREP_PROBE_RETRY_DELAY=0 \
+    sh -c '. "$1"; semgrep_registry_pack_exists "p/dart"' sh "$PROBE_WORK/probe.sh" 2>&1)"
+  PROBE_EXIT=$?
+  set -e
+  PROBE_CALLS="$(wc -l < "$PROBE_WORK/curl.log" | tr -d ' ')"
+}
+
+probe '200'
+assert_equals "a published pack (200) is kept" '0' "$PROBE_EXIT"
+assert_equals "...settled by a single request" '1' "$PROBE_CALLS"
+probe '404'
+assert_equals "an unpublished pack (404) is skipped" '1' "$PROBE_EXIT"
+assert_equals "...settled by a single request" '1' "$PROBE_CALLS"
+probe '503,404'
+assert_equals "an inconclusive answer is retried, and a 404 on retry skips the pack" '1' "$PROBE_EXIT"
+assert_equals "...after two requests" '2' "$PROBE_CALLS"
+probe '000,503,429'
+assert_equals "an answer that stays inconclusive keeps the pack (fail-safe)" '0' "$PROBE_EXIT"
+assert_equals "...after every attempt was used" '3' "$PROBE_CALLS"
+assert_true "...and says so with the status it saw" "grep -q 'WARNING: the Semgrep Registry answered HTTP 429' <<< \"\$PROBE_OUT\""
+assert_true "the probe reaches the registry over https only" "grep -q -- \"--proto '=https'\" '$PROBE_WORK/probe.sh'"
+rm -rf "$PROBE_WORK"
+
 if command -v semgrep > /dev/null 2>&1; then
   assert_true "the Dart ruleset passes 'semgrep --validate'" \
     "semgrep --metrics=off --disable-version-check --validate --config '$DART_RULES' 2>&1 | grep -q 'Configuration is valid'"

@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'retried the Semgrep Registry probe in the shared runner on an inconclusive answer (three attempts, five seconds apart) and logged every answer with its status. A single non-404 was enough to pass `p/dart` to semgrep, whose own fetch of the same URL answered 404 twenty seconds later (exit code 7): medhub-life/frontend-dart''s bump merge on 2026-09-14 went red on that and cut no release, while the next push saw the 404 and passed. The fail-safe direction is unchanged -- only an explicit 200 settles that a pack exists, only an explicit 404 drops it, and an answer that stays inconclusive keeps the pack so an unreachable registry fails the scan in semgrep''s own words instead of passing it with fewer rules'
+time: '2026-09-14T20:58:17.671931816Z'

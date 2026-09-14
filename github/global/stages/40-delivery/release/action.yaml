@@ -81,20 +81,31 @@ runs:
     # exactly the case this step exists for. A `git push` of the tag has no such rule, and the
     # checkout above already carries the token.
     #
-    # A tag that already exists is kept, wherever it points: that is the recovery path (a tag
-    # pushed by hand before the run, a re-run after the tag was cut), and `action-gh-release`
-    # attaches the release to it exactly as before. Any other refusal fails here, by name,
-    # rather than falling through to a tag on the wrong commit. Only from a branch ref: on a
-    # tag ref the tag is the trigger.
+    # A tag that already exists ON THIS COMMIT is kept: that is the recovery path (a tag pushed
+    # by hand before the run, a re-run after the tag was cut), and `action-gh-release` attaches
+    # the release to it exactly as before. One that exists on ANOTHER commit fails the job by
+    # name: that is the incident's own residue, and a re-run must not release it again while a
+    # green step explains nothing. Any other refusal fails here too, rather than falling through
+    # to a tag on the wrong commit. Only from a branch ref: on a tag ref the tag is the trigger.
+    #
+    # This brings GitHub level with the other two platforms rather than adding a third shape:
+    # the GitLab template already tags `$CI_COMMIT_SHA` and the Azure DevOps one
+    # `Build.SourceVersion`. `--refs` on the lookup drops the `^{}` peeled line an annotated
+    # tag would add, so the comparison is against exactly one commit.
     - name: 'Create Tag'
       shell: 'bash'
       run: |
-        set -eu
+        set -euo pipefail
         git tag --force "$RELEASE_TAG" "$GITHUB_SHA"
         if git push origin "refs/tags/$RELEASE_TAG"; then
           echo "Tag '$RELEASE_TAG' created on $GITHUB_SHA."
-        elif remote_sha="$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG" | cut -f1)" && [ -n "$remote_sha" ]; then
-          echo "Tag '$RELEASE_TAG' already exists on ${remote_sha}; the release attaches to it as it is."
+        elif remote_sha="$(git ls-remote --refs --tags origin "refs/tags/$RELEASE_TAG" | cut -f1)" && [ -n "$remote_sha" ]; then
+          if [ "$remote_sha" = "$GITHUB_SHA" ]; then
+            echo "Tag '$RELEASE_TAG' already exists on $remote_sha, the commit this run verified; the release attaches to it."
+          else
+            echo "::error::tag '$RELEASE_TAG' already exists on $remote_sha, not on $GITHUB_SHA -- the commit this run verified. It is left where it is: delete the tag (and its release, if one was cut) and re-run this job to cut it here, or dispatch the workflow on the tag if $remote_sha is what should ship." >&2
+            exit 1
+          fi
         else
           echo "::error::could not push tag '$RELEASE_TAG' to $GITHUB_REPOSITORY. The job needs 'contents: write', and no ruleset may reserve tag creation to other actors." >&2
           exit 1

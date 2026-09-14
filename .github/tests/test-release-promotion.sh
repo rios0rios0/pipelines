@@ -284,12 +284,13 @@ STUB
 chmod +x "$WORK/gitstub/git"
 
 run_create_tag() {
-  # run_create_tag <push-exit> <remote-sha> -- runs the step script against the stub.
+  # run_create_tag <push-exit> <remote-sha> -- runs the step script against the stub; its
+  # output lands in $WORK/tag.out and its exit code in TAG_EXIT.
   : > "$WORK/git.log"
   set +e
-  TAG_OUT="$(PATH="$WORK/gitstub:$PATH" GIT_STUB_LOG="$WORK/git.log" GIT_STUB_PUSH_EXIT="$1" GIT_STUB_REMOTE_SHA="$2" \
+  PATH="$WORK/gitstub:$PATH" GIT_STUB_LOG="$WORK/git.log" GIT_STUB_PUSH_EXIT="$1" GIT_STUB_REMOTE_SHA="$2" \
     RELEASE_TAG='v1.2.3' GITHUB_SHA='deadbeefcafe' GITHUB_REPOSITORY='owner/repo' \
-    bash "$WORK/create-tag.sh" 2>&1)"
+    bash "$WORK/create-tag.sh" > "$WORK/tag.out" 2>&1
   TAG_EXIT=$?
   set -e
 }
@@ -298,15 +299,21 @@ run_create_tag 0 ''
 assert_equals "a pushable tag succeeds" '0' "$TAG_EXIT"
 assert_true "...created locally on GITHUB_SHA, not on HEAD" "grep -qx 'tag --force v1.2.3 deadbeefcafe' '$WORK/git.log'"
 assert_true "...and pushed as a tag ref" "grep -qx 'push origin refs/tags/v1.2.3' '$WORK/git.log'"
-assert_true "...which is what the log says" "grep -q \"Tag 'v1.2.3' created on deadbeefcafe\" <<< \"\$TAG_OUT\""
+assert_true "...which is what the log says" "grep -q \"Tag 'v1.2.3' created on deadbeefcafe\" '$WORK/tag.out'"
+
+run_create_tag 1 'deadbeefcafe'
+assert_equals "a tag that already exists on the verified commit is kept" '0' "$TAG_EXIT"
+assert_true "...looked up without the peeled line an annotated tag adds" "grep -qx 'ls-remote --refs --tags origin refs/tags/v1.2.3' '$WORK/git.log'"
+assert_true "...and named as the recovery path" "grep -q 'already exists on deadbeefcafe, the commit this run verified' '$WORK/tag.out'"
 
 run_create_tag 1 '0123456789ab'
-assert_equals "a tag that already exists is kept" '0' "$TAG_EXIT"
-assert_true "...with the commit it already points at named" "grep -q 'already exists on 0123456789ab' <<< \"\$TAG_OUT\""
+assert_equals "a tag that already exists on ANOTHER commit fails the step" '1' "$TAG_EXIT"
+assert_true "...naming both commits" "grep -q \"::error::tag 'v1.2.3' already exists on 0123456789ab, not on deadbeefcafe\" '$WORK/tag.out'"
+assert_true "...and how to resolve it" "grep -q 'delete the tag' '$WORK/tag.out' && grep -q 'dispatch the workflow on the tag' '$WORK/tag.out'"
 
 run_create_tag 1 ''
 assert_equals "any other refused push fails the step" '1' "$TAG_EXIT"
-assert_true "...naming the permission it needs" "grep -q \"::error::could not push tag 'v1.2.3'\" <<< \"\$TAG_OUT\" && grep -q 'contents: write' <<< \"\$TAG_OUT\""
+assert_true "...naming the permission it needs" "grep -q \"::error::could not push tag 'v1.2.3'\" '$WORK/tag.out' && grep -q 'contents: write' '$WORK/tag.out'"
 
 echo ""
 echo "=== Release promotion: the workflows expose and forward the input ==="

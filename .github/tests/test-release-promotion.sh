@@ -254,6 +254,74 @@ assert_true "the promotion runs after the release exists" \
   "[[ \$(grep -n \"name: 'Create Release'\" '$ACTION' | cut -d: -f1) -lt \$(grep -n \"name: 'Promote Release'\" '$ACTION' | cut -d: -f1) ]]"
 
 echo ""
+echo "=== Release promotion: the tag is cut on the commit the run verified ==="
+
+# The step's script is lifted out of the action and executed against a stub `git` that records
+# its argv and answers a scripted push, so what is asserted is what git is TOLD: the tag is
+# created on GITHUB_SHA (never on whatever `main` has become), pushed as a tag ref, an existing
+# tag is kept wherever it points, and any other refusal fails the step by name.
+awk "/name: 'Create Tag'/,/^      if:/" "$ACTION" | sed -n '/run: |/,/env:/p' | sed '1d;$d' | sed 's/^        //' > "$WORK/create-tag.sh"
+assert_true "the action carries a 'Create Tag' step with a script" "[[ -s '$WORK/create-tag.sh' ]]"
+assert_true "the tag is created before the release" \
+  "[[ \$(grep -n \"name: 'Create Tag'\" '$ACTION' | cut -d: -f1) -lt \$(grep -n \"name: 'Create Release'\" '$ACTION' | cut -d: -f1) ]]"
+assert_true "the tag step is guarded on a release having been cut and on a branch ref" \
+  "grep -q \"if: \\\"steps.extract.outputs.skip_release != 'true' && startsWith(github.ref, 'refs/heads/')\\\"\" '$ACTION'"
+assert_true "the tag step receives the tag it must create, prefix included" \
+  "grep -q \"RELEASE_TAG: '\\\${{ inputs.tag_prefix }}\\\${{ steps.extract.outputs.tag_name }}'\" '$ACTION'"
+assert_true "the release is not pinned through target_commitish (403 with the job token, softprops/action-gh-release#411)" \
+  "! grep -q 'target_commitish:' '$ACTION'"
+
+mkdir -p "$WORK/gitstub"
+cat > "$WORK/gitstub/git" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$GIT_STUB_LOG"
+case "$1" in
+  push) exit "${GIT_STUB_PUSH_EXIT:-0}" ;;
+  # A lookup that fails AFTER emitting output is the case `pipefail` exists for: `cut` would
+  # otherwise turn the partial answer into a green "already exists".
+  ls-remote) [[ -n "${GIT_STUB_REMOTE_SHA:-}" ]] && printf '%s\trefs/tags/%s\n' "$GIT_STUB_REMOTE_SHA" "${@: -1}"; exit "${GIT_STUB_LSREMOTE_EXIT:-0}" ;;
+  *) exit 0 ;;
+esac
+STUB
+chmod +x "$WORK/gitstub/git"
+
+run_create_tag() {
+  # run_create_tag <push-exit> <remote-sha> [ls-remote-exit] -- runs the step script against
+  # the stub; its output lands in $WORK/tag.out and its exit code in TAG_EXIT.
+  : > "$WORK/git.log"
+  set +e
+  PATH="$WORK/gitstub:$PATH" GIT_STUB_LOG="$WORK/git.log" GIT_STUB_PUSH_EXIT="$1" GIT_STUB_REMOTE_SHA="$2" GIT_STUB_LSREMOTE_EXIT="${3:-0}" \
+    RELEASE_TAG='v1.2.3' GITHUB_SHA='deadbeefcafe' GITHUB_REPOSITORY='owner/repo' \
+    bash "$WORK/create-tag.sh" > "$WORK/tag.out" 2>&1
+  TAG_EXIT=$?
+  set -e
+}
+
+run_create_tag 0 ''
+assert_equals "a pushable tag succeeds" '0' "$TAG_EXIT"
+assert_true "...created locally on GITHUB_SHA, not on HEAD" "grep -qx 'tag --force v1.2.3 deadbeefcafe' '$WORK/git.log'"
+assert_true "...and pushed as a tag ref" "grep -qx 'push origin refs/tags/v1.2.3' '$WORK/git.log'"
+assert_true "...which is what the log says" "grep -q \"Tag 'v1.2.3' created on deadbeefcafe\" '$WORK/tag.out'"
+
+run_create_tag 1 'deadbeefcafe'
+assert_equals "a tag that already exists on the verified commit is kept" '0' "$TAG_EXIT"
+assert_true "...looked up without the peeled line an annotated tag adds" "grep -qx 'ls-remote --refs --tags origin refs/tags/v1.2.3' '$WORK/git.log'"
+assert_true "...and named as the recovery path" "grep -q 'already exists on deadbeefcafe, the commit this run verified' '$WORK/tag.out'"
+
+run_create_tag 1 '0123456789ab'
+assert_equals "a tag that already exists on ANOTHER commit fails the step" '1' "$TAG_EXIT"
+assert_true "...naming both commits" "grep -q \"::error::tag 'v1.2.3' already exists on 0123456789ab, not on deadbeefcafe\" '$WORK/tag.out'"
+assert_true "...and how to resolve it" "grep -q 'delete the tag' '$WORK/tag.out' && grep -q 'dispatch the workflow on the tag' '$WORK/tag.out'"
+
+run_create_tag 1 ''
+assert_equals "any other refused push fails the step" '1' "$TAG_EXIT"
+assert_true "...naming the permission it needs" "grep -q \"::error::could not push tag 'v1.2.3'\" '$WORK/tag.out' && grep -q 'contents: write' '$WORK/tag.out'"
+
+run_create_tag 1 'deadbeefcafe' 128
+assert_equals "a lookup that fails after answering is a failed lookup, not an existing tag (pipefail)" '1' "$TAG_EXIT"
+assert_true "...and reaches the same error path" "grep -q \"::error::could not push tag 'v1.2.3'\" '$WORK/tag.out' && ! grep -q 'already exists' '$WORK/tag.out'"
+
+echo ""
 echo "=== Release promotion: the workflows expose and forward the input ==="
 
 for workflow in yarn-cloudflare npm-cloudflare dart-cloudflare go-docker go-flyio go-render; do

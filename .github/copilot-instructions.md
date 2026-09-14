@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, gitignore, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, dependency-updates, azure-step-names, containers-detect)
+- `make test` - Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, fixture-isolation, gitignore, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, dependency-updates, azure-step-names, containers-detect)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-go-module-toolchain` - Test that every `go.mod` toolchain directive is readable by the images/analysers that consume it specifically
 - `make test-go-tool-staleness` - Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves specifically
@@ -25,12 +25,14 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-docker-multi-arch` - Test 40-delivery/docker multi-arch contract specifically
 - `make test-containers-detect` - Test the Container Images change detection (deleted/renamed folders, dispatch inputs) specifically
 - `make test-basic-checks` - Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) specifically
+- `make test-fixture-isolation` - Test that every suite builds its fixtures in mktemp space and guards every `cd` specifically
 - `make test-gitignore` - Test the shared `.gitignore` block generator specifically
 - `make test-dependency-check` - Test the OWASP Dependency-Check NVD cache / API-key contract specifically
 - `make test-dependency-track` - Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, cross-platform wiring) specifically
 - `make test-goreleaser-prepare` - Test the GoReleaser main package detection specifically
 - `make test-release-version-extraction` - Test release version extraction (tag ref + bump commit) specifically
 - `make test-release-reconcile` - Test release reconciliation gap detection specifically
+- `make test-release-promotion` - Test release promotion (the tag run a bump merge now starts) specifically
 - `make test-deploy-providers` - Test the MVP hosting deployment providers (Cloudflare, Vercel, Render, Netlify, Fly.io) specifically
 - `make test-memory-detection` - Test the cgroup-aware memory ceiling detection specifically
 - `make test-dart-pipeline` - Test the Dart/Flutter pipeline (scripts, Semgrep rules, cross-platform wiring) specifically
@@ -809,12 +811,14 @@ make test-terraform-provider-mirror
 make test-docker-multi-arch
 make test-containers-detect
 make test-basic-checks
+make test-fixture-isolation
 make test-gitignore
 make test-dependency-check
 make test-dependency-track
 make test-goreleaser-prepare
 make test-release-version-extraction
 make test-release-reconcile
+make test-release-promotion
 make test-deploy-providers
 make test-memory-detection
 make test-dart-pipeline

@@ -145,30 +145,56 @@ set --
 # seconds later -- exit code 7, a red bump merge on medhub-life/frontend-dart
 # and no tag cut from it. Twenty minutes on, the same probe saw the 404 and the
 # scan passed. Every answer is now logged with its status, so the next such run
-# can be read instead of guessed at. Both knobs exist for the test suite.
+# can be read instead of guessed at. Both knobs exist for the test suite; a
+# value that is not an integer falls back to the default with a warning.
 SEMGREP_PROBE_ATTEMPTS="${SEMGREP_PROBE_ATTEMPTS:-3}"
 SEMGREP_PROBE_RETRY_DELAY="${SEMGREP_PROBE_RETRY_DELAY:-5}"
 semgrep_registry_pack_exists() {
+  _sr_config="$1"
+
+  # A typo'd knob must not be able to hang the scan: a non-integer attempt
+  # count makes `-ge` fail on every pass and the loop never end, and a
+  # non-integer delay fails `sleep`. Coerce a bad value back to the default
+  # and warn instead of hard-failing, as `terraform-provider-mirror.sh` does
+  # for its retry knobs -- the loop's whole purpose is resilience.
+  _sr_attempts="$SEMGREP_PROBE_ATTEMPTS"
+  case "$_sr_attempts" in
+    '' | *[!0-9]* | 0)
+      echo "WARNING: SEMGREP_PROBE_ATTEMPTS='$_sr_attempts' is not an integer >= 1; using 3." >&2
+      _sr_attempts=3
+      ;;
+    *) ;;
+  esac
+  _sr_delay="$SEMGREP_PROBE_RETRY_DELAY"
+  case "$_sr_delay" in
+    '' | *[!0-9]*)
+      echo "WARNING: SEMGREP_PROBE_RETRY_DELAY='$_sr_delay' is not an integer >= 0; using 5." >&2
+      _sr_delay=5
+      ;;
+    *) ;;
+  esac
+
   _sr_attempt=1
   while :; do
-    _sr_code="$(curl -sSL --proto '=https' --proto-redir '=https' -o /dev/null -w '%{http_code}' --max-time 15 "https://semgrep.dev/c/$1" 2>/dev/null)" || _sr_code='000'
+    _sr_code="$(curl -sSL --proto '=https' --proto-redir '=https' -o /dev/null -w '%{http_code}' --max-time 15 "https://semgrep.dev/c/$_sr_config" 2>/dev/null)" || _sr_code='000'
     case "$_sr_code" in
       200)
-        echo "The Semgrep Registry answered HTTP 200 for '$1': using the pack."
+        echo "The Semgrep Registry answered HTTP 200 for '$_sr_config': using the pack."
         return 0
         ;;
       404)
-        echo "The Semgrep Registry answered HTTP 404 for '$1': no such pack."
+        echo "The Semgrep Registry answered HTTP 404 for '$_sr_config': no such pack."
         return 1
         ;;
+      *) ;;
     esac
-    if [ "$_sr_attempt" -ge "$SEMGREP_PROBE_ATTEMPTS" ]; then
-      echo "WARNING: the Semgrep Registry answered HTTP ${_sr_code:-000} for '$1' on all $SEMGREP_PROBE_ATTEMPTS attempts; keeping the pack, so an unreachable registry fails the scan in semgrep's own words rather than passing it with fewer rules." >&2
+    if [ "$_sr_attempt" -ge "$_sr_attempts" ]; then
+      echo "WARNING: the Semgrep Registry answered HTTP ${_sr_code:-000} for '$_sr_config' on all $_sr_attempts attempts; keeping the pack, so an unreachable registry fails the scan in semgrep's own words rather than passing it with fewer rules." >&2
       return 0
     fi
-    echo "The Semgrep Registry answered HTTP ${_sr_code:-000} for '$1' (attempt $_sr_attempt of $SEMGREP_PROBE_ATTEMPTS); retrying in ${SEMGREP_PROBE_RETRY_DELAY}s." >&2
+    echo "The Semgrep Registry answered HTTP ${_sr_code:-000} for '$_sr_config' (attempt $_sr_attempt of $_sr_attempts); retrying in ${_sr_delay}s." >&2
     _sr_attempt=$((_sr_attempt + 1))
-    sleep "$SEMGREP_PROBE_RETRY_DELAY"
+    sleep "$_sr_delay"
   done
 }
 

@@ -893,12 +893,13 @@ STUB
 chmod +x "$PROBE_WORK/bin/curl"
 
 probe() {
-  # probe <statuses> -- runs the probe against the stub; PROBE_EXIT and PROBE_CALLS come back.
+  # probe <statuses> [attempts] [delay] -- runs the probe against the stub; PROBE_EXIT and
+  # PROBE_CALLS come back, and its output lands in $PROBE_WORK/probe.out.
   : > "$PROBE_WORK/curl.log"
   set +e
-  PROBE_OUT="$(PATH="$PROBE_WORK/bin:$PATH" CURL_STUB_STATUSES="$1" CURL_STUB_LOG="$PROBE_WORK/curl.log" \
-    SEMGREP_PROBE_ATTEMPTS=3 SEMGREP_PROBE_RETRY_DELAY=0 \
-    sh -c '. "$1"; semgrep_registry_pack_exists "p/dart"' sh "$PROBE_WORK/probe.sh" 2>&1)"
+  PATH="$PROBE_WORK/bin:$PATH" CURL_STUB_STATUSES="$1" CURL_STUB_LOG="$PROBE_WORK/curl.log" \
+    SEMGREP_PROBE_ATTEMPTS="${2:-3}" SEMGREP_PROBE_RETRY_DELAY="${3:-0}" \
+    sh -c '. "$1"; semgrep_registry_pack_exists "p/dart"' sh "$PROBE_WORK/probe.sh" > "$PROBE_WORK/probe.out" 2>&1
   PROBE_EXIT=$?
   set -e
   PROBE_CALLS="$(wc -l < "$PROBE_WORK/curl.log" | tr -d ' ')"
@@ -916,7 +917,12 @@ assert_equals "...after two requests" '2' "$PROBE_CALLS"
 probe '000,503,429'
 assert_equals "an answer that stays inconclusive keeps the pack (fail-safe)" '0' "$PROBE_EXIT"
 assert_equals "...after every attempt was used" '3' "$PROBE_CALLS"
-assert_true "...and says so with the status it saw" "grep -q 'WARNING: the Semgrep Registry answered HTTP 429' <<< \"\$PROBE_OUT\""
+assert_true "...and says so with the status it saw" "grep -q 'WARNING: the Semgrep Registry answered HTTP 429' '$PROBE_WORK/probe.out'"
+probe '000,503,429' 'abc' 'x'
+assert_equals "a typo'd attempt count falls back to the default instead of looping forever" '3' "$PROBE_CALLS"
+assert_true "...and both knobs say so" "grep -q \"SEMGREP_PROBE_ATTEMPTS='abc' is not an integer\" '$PROBE_WORK/probe.out' && grep -q \"SEMGREP_PROBE_RETRY_DELAY='x' is not an integer\" '$PROBE_WORK/probe.out'"
+assert_true "the shipped defaults are three attempts, five seconds apart" \
+  "grep -q 'SEMGREP_PROBE_ATTEMPTS:-3' '$SCRIPTS_DIR/global/scripts/tools/semgrep/run.sh' && grep -q 'SEMGREP_PROBE_RETRY_DELAY:-5' '$SCRIPTS_DIR/global/scripts/tools/semgrep/run.sh'"
 assert_true "the probe reaches the registry over https only" "grep -q -- \"--proto '=https'\" '$PROBE_WORK/probe.sh'"
 rm -rf "$PROBE_WORK"
 

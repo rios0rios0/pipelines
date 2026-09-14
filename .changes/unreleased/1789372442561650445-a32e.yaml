@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'refreshed `.github/copilot-instructions.md` to document the `make test-fixture-isolation` and `make test-release-promotion` targets and list `fixture-isolation` and `release-promotion` in the `make test` summary'
+time: '2026-09-14T07:54:02.56156237Z'

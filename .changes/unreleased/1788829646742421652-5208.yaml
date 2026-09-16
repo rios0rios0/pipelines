@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the wording of the coverage comment''s file section when a pull request touches no instrumented source: a docs-only change read "0 changed file(s)" above "6 more changed file(s) are not in the tracefile", as if six were listed. The summary now counts the instrumented files against all the changed ones ("1 of 2 changed file(s)", "none of the 6 changed file(s) ... is instrumented", "no file changed"), and the explanation no longer says "more" over an empty table'
-time: '2026-09-08T01:07:26.742324881Z'

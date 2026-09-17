@@ -8,19 +8,17 @@ parameters:
     default: '.'
 
 steps:
-  - task: AzureCLI@2
+  # `HELM_REGISTRY_SERVICE_CONNECTION` is a Docker Registry service connection
+  # (registry type ACR, Workload Identity Federation), the same kind the Docker
+  # delivery template logs in with. `Docker@2 login` writes the credential to
+  # the `DOCKER_CONFIG` it exports for the rest of the job, and Helm's OCI
+  # client falls back to the Docker credential store, so `helm push` below
+  # authenticates without a `helm registry login`.
+  - task: 'Docker@2'
     displayName: 'Login to Azure Container Registry'
     inputs:
-      connectedServiceNameARM: '${{ parameters.HELM_REGISTRY_SERVICE_CONNECTION }}'
-      scriptType: 'bash'
-      scriptLocation: 'inlineScript'
-      inlineScript: |
-        az acr login --name "$HELM_REGISTRY_SERVER"
-    # Passed as data rather than interpolated into `inlineScript`. Azure
-    # substitutes `${{ }}` into the YAML before the task runs, so the registry
-    # name was script; through `env:` the shell expands it at run time.
-    env:
-      HELM_REGISTRY_SERVER: ${{ parameters.HELM_REGISTRY_SERVER }}
+      containerRegistry: '${{ parameters.HELM_REGISTRY_SERVICE_CONNECTION }}'
+      command: 'login'
 
   - task: HelmInstaller@1
     displayName: 'Install Helm'

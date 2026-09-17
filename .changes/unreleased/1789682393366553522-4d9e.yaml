@@ -1,0 +1,4 @@
+kind: 'Fixed'
+body: 'logged the Helm delivery into the OCI registry through a Docker Registry service connection (`Docker@2 login`) instead of an ARM one. **BREAKING CHANGE:** consumers of `azure-devops/helm/helm-chart.yaml` must repoint `HELM_REGISTRY_SERVICE_CONNECTION` at a Docker Registry service connection (registry type ACR, Workload Identity Federation); an ARM connection now fails the `delivery` login step'
+breaking: true
+time: '2026-09-17T21:59:53.366485057Z'

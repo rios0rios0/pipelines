@@ -1086,6 +1086,17 @@ Create these variable groups in Azure DevOps Library:
 | `SONAR_PROJECT_NAME` | SonarQube project display name |
 | `SONAR_PROJECT_KEY`  | SonarQube project unique key   |
 
+**Project-Specific Variables (Python Example):**
+
+| Variable         | Description                 |
+|------------------|-----------------------------|
+| `SAFETY_API_KEY` | Safety authentication token |
+
+Every credential above may be stored as a **secret** variable. Azure Pipelines
+withholds secret variables from a step's process environment, so each template
+that consumes one maps it explicitly through `env:` -- `make test-azure-secret-env`
+holds that contract across the repository.
+
 **AWS Lambda Deployment Variables (Optional):**
 
 | Variable                | Description                                      | Required For           |

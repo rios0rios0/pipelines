@@ -19,6 +19,26 @@ stages:
         displayName: 'sca:safety'
         steps:
           - template: '../../abstracts/pdm-python3.14.yaml'
-          - script: pdm run safety-scan
+          - script: |
+              # Azure DevOps substitutes nothing for an UNDEFINED variable, so the
+              # mapping below delivers the macro text itself rather than an empty
+              # string. Handed to safety that way it authenticates as a bogus
+              # credential -- worse than being absent, because the unauthenticated
+              # path never engages and the scan fails instead of degrading. The
+              # pattern is spelled out here rather than quoted in prose: this body
+              # is macro-expanded before it runs, so naming the variable in the
+              # `$(...)` form would substitute the real key into a comment.
+              case "${SAFETY_API_KEY:-}" in
+                '$('*) unset SAFETY_API_KEY ;;
+              esac
+
+              pdm run safety-scan
             displayName: 'Run Safety dependency check'
+            # Explicit mapping so the secret `$(SAFETY_API_KEY)` reaches the shell
+            # as `$SAFETY_API_KEY`. Azure Pipelines withholds secret variables from
+            # the process environment; without this block the key is only readable
+            # while it is a PLAINTEXT variable, so marking it secret -- which is
+            # what it is -- silently turns the scan unauthenticated.
+            env:
+              SAFETY_API_KEY: $(SAFETY_API_KEY)
         continueOnError: true

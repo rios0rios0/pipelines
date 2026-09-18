@@ -47,6 +47,7 @@ make test-runner-cache-gating  # Test that no GitHub Actions cache restores into
 make test-dependency-updates  # Test the dependency-update checker only
 make check-dependency-updates # Report which pinned dependencies have a newer release (network)
 make test-azure-step-names  # Test Azure DevOps step-name uniqueness across expanded templates only
+make test-azure-secret-env  # Test that every Azure step consuming a credential maps it through `env:` only
 make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
 make build NAME=<image> TAG=<tag>           # Build both architectures, publish nothing (verification)
 ```

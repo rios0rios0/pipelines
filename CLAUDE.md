@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, fixture-isolation, gitignore, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, azure-step-names, dependency-updates, containers-detect)
+make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, fixture-isolation, gitignore, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, azure-step-names, azure-secret-env, dependency-updates, containers-detect)
 make test-go-script    # Test Go validation script only
 make test-go-module-toolchain  # Test that every go.mod toolchain directive is readable by the images/analysers that consume it only
 make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves only
@@ -47,6 +47,7 @@ make test-runner-cache-gating  # Test that no GitHub Actions cache restores into
 make test-dependency-updates  # Test the dependency-update checker only
 make check-dependency-updates # Report which pinned dependencies have a newer release (network)
 make test-azure-step-names  # Test Azure DevOps step-name uniqueness across expanded templates only
+make test-azure-secret-env  # Test that every Azure step consuming a credential maps it through `env:` only
 make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
 make build NAME=<image> TAG=<tag>           # Build both architectures, publish nothing (verification)
 ```

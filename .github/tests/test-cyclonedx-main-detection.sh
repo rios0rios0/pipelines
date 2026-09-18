@@ -226,7 +226,7 @@ echo 'package main' > "$workdir/cmd/main.go"
   cd "$workdir" || exit 1
   git init -q .
   git add -A
-  git -c user.email=test@example.test -c user.name=test commit -qm init
+  git -c user.email=test@example.test -c user.name=test -c commit.gpgsign=false commit -qm init
   git sparse-checkout init --cone
   git sparse-checkout set cmd
 )

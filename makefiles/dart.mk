@@ -25,7 +25,7 @@ SEMGREP_LANGUAGE ?= dart
 export PREFIX ?= .
 export REPORT_PATH ?= ./reports
 
-.PHONY: setup-dart lint format analyze test unused sca build sast
+.PHONY: setup-dart lint format analyze test unused sca build
 
 setup-dart:
 	@$(SCRIPTS_DIR)/global/scripts/languages/dart/setup/run.sh
@@ -56,10 +56,19 @@ sca:
 build:
 	@$(SCRIPTS_DIR)/global/scripts/languages/dart/build/run.sh
 
-# ADDS the Dart-native SCA to `common.mk`'s `sast` rather than redefining it.
-# `sast` there is a prerequisite-only rule (it carries no recipe), so naming it
-# again here appends to its prerequisite list -- the documented Make behaviour --
-# instead of triggering the "overriding recipe for target" warning a redefinition
-# would produce. CodeQL drops out on its own: this file leaves CODEQL_LANGUAGE
-# unset, and `common.mk`'s `codeql` target skips with an explanation when it is.
-sast: sca
+# ADDS the Dart-native SCA to the suite `common.mk`'s `sast` runs, rather than
+# adding a prerequisite to `sast` itself.
+#
+# `sast` there used to be a prerequisite-only rule, so naming it again here
+# appended to its prerequisite list. It carries a RECIPE now -- it runs every
+# tool and fails once at the end -- and a prerequisite runs BEFORE that recipe.
+# `sast: sca` would therefore abort the entire scan the moment OSV-Scanner found
+# one vulnerable package, leaving Semgrep, Hadolint, ShellCheck and Gitleaks
+# unrun: exactly the stop-at-the-first-failure behaviour that recipe exists to
+# prevent. Appending to `SAST_TOOLS_EXTRA` puts `sca` in the same
+# run-everything-then-report loop as the rest, and is order-independent, so this
+# file no longer has to be included after `common.mk` for the suite to be whole.
+#
+# CodeQL drops out on its own: this file leaves CODEQL_LANGUAGE unset, and
+# `common.mk`'s `codeql` target skips with an explanation when it is.
+SAST_TOOLS_EXTRA += sca

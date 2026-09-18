@@ -9,3 +9,19 @@ build/reports/
 # (`global/scripts/tools/codeql/run.sh`) and removes it only on the happy path, so
 # an interrupted or failing run leaves it behind.
 .codeql-db/
+
+# `global/scripts/tools/semgrep/run.sh` copies its default `.semgrepignore` into the
+# project root when the project ships none, and removes it again on the way out -- but
+# only on the way out. Four `exit 1` paths between the copy and the removal (no Python 3,
+# the virtualenv cannot be created, `pip` cannot install the pinned Semgrep, the installed
+# version is not the pinned one) leave it behind with no signal at all, and so does any
+# interruption of the scan itself, which is the longest-running step in the suite. It then
+# sits in the working tree as an untracked file that `git add -A` will stage -- it has
+# already come close to being committed that way in a consumer.
+#
+# A project that wants its OWN `.semgrepignore` is unaffected: the runner copies the
+# default only when the file is absent, and once the project's copy is committed it is a
+# tracked file, which `.gitignore` does not apply to. To start tracking a new one, either
+# `git add -f .semgrepignore` -- which is what git's own error message tells you -- or add
+# `!.semgrepignore` below this block, where a later match wins.
+.semgrepignore

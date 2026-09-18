@@ -27,6 +27,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-basic-checks` - Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) specifically
 - `make test-fixture-isolation` - Test that every suite builds its fixtures in mktemp space and guards every `cd` specifically
 - `make test-gitignore` - Test the shared `.gitignore` block generator specifically
+- `make test-sast-gate` - Test that `make sast` and every individual SAST target propagate tool failures specifically
 - `make test-dependency-check` - Test the OWASP Dependency-Check NVD cache / API-key contract specifically
 - `make test-dependency-track` - Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, cross-platform wiring) specifically
 - `make test-goreleaser-prepare` - Test the GoReleaser main package detection specifically
@@ -344,7 +345,7 @@ pipelines/
 │   │   ├── mssql-tools18.latest/ # Microsoft SQL Server tools
 │   │   └── tor-proxy.latest/  # Network proxy tools
 ├── makefiles/                  # Includable Makefile fragments for local usage
-│   ├── common.mk              # Security tools (sast, secrets, hadolint, semgrep)
+│   ├── common.mk              # Security tools (sast, secrets, hadolint, semgrep) — every target FAILS on findings
 │   ├── golang.mk              # Go-specific targets (lint, test)
 │   ├── python.mk              # Python/PDM targets (lint, test)
 │   ├── java.mk                # Java/Gradle targets (lint, test)
@@ -814,6 +815,7 @@ make test-containers-detect
 make test-basic-checks
 make test-fixture-isolation
 make test-gitignore
+make test-sast-gate
 make test-dependency-check
 make test-dependency-track
 make test-goreleaser-prepare

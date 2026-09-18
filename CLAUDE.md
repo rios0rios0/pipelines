@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, fixture-isolation, gitignore, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, azure-step-names, azure-secret-env, dependency-updates, containers-detect)
+make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, fixture-isolation, gitignore, sast-gate, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, azure-step-names, azure-secret-env, dependency-updates, containers-detect)
 make test-go-script    # Test Go validation script only
 make test-go-module-toolchain  # Test that every go.mod toolchain directive is readable by the images/analysers that consume it only
 make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves only
@@ -29,6 +29,7 @@ make test-containers-detect  # Test the Container Images change detection (delet
 make test-basic-checks # Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) only
 make test-fixture-isolation  # Test that every suite builds its fixtures in mktemp space and guards every cd only
 make test-gitignore    # Test the shared .gitignore block generator only
+make test-sast-gate    # Test that the SAST targets propagate tool failures only
 make test-dependency-check  # Test the OWASP Dependency-Check NVD cache / API-key contract only
 make test-dependency-track  # Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, cross-platform wiring) only
 make test-goreleaser-prepare  # Test the GoReleaser main package detection only
@@ -725,11 +726,41 @@ SCRIPTS_DIR ?= $(HOME)/Development/github.com/rios0rios0/pipelines
 -include $(SCRIPTS_DIR)/makefiles/golang.mk     # lint, test
 ```
 
-Order matters for `dart.mk`: it APPENDS its `sca` target to `common.mk`'s `sast`
-(a prerequisite-only rule, so appending emits no "overriding recipe" warning),
-so `common.mk` must be included first.
+`dart.mk` adds its `sca` target to the suite `common.mk`'s `sast` runs by appending to
+`SAST_TOOLS_EXTRA`, not by declaring `sast: sca`. `sast` carries a recipe now, and a
+prerequisite runs *before* it — so `sast: sca` would abort the whole scan on the first
+vulnerable package. Because `SAST_TOOLS_EXTRA` is only ever appended to and only ever
+read, include order no longer changes which tools run.
 
 The `-include` prefix makes includes optional (no error if pipelines not cloned).
+
+### The SAST Gate Fails
+
+`make sast` runs the whole suite and then **exits non-zero if any tool reported findings**,
+printing a `SAST FAILED: <tools>` line naming which ones. Each individual target
+(`make semgrep`, `make gitleaks`, …) fails on its own tool too. This is what makes the
+documented pre-push step `make lint && make sast` a real gate.
+
+It was not always so. Every SAST recipe carried a `-` prefix and `codeql` a trailing
+`|| true`, which tell Make to ignore the recipe's exit status, so the targets returned 0
+on findings, on a crash and on termination alike — real runs printed `Error 123 (ignored)`
+from ShellCheck and `Terminated (ignored)` from an out-of-memory Semgrep and then reported
+success. That was introduced for a good reason (*"so the aggregate `sast` target runs all
+tools to completion"* — a prerequisite-only `sast` stops at the first failure, and a
+repository with a Semgrep finding never learns it has a Gitleaks one), and the fix keeps
+that reason: `sast` iterates `SAST_TOOLS` + `SAST_TOOLS_EXTRA`, dispatching one `$(MAKE)`
+per tool so the recipes stay the single definition, collects the failures, and fails once
+at the end.
+
+**Do not "make SAST advisory again" here.** Advisory-versus-blocking is already decided at
+the call site, differently per platform — Azure DevOps marks all five `continueOnError:
+true`, `.github/workflows/*.yaml` forgives only `hadolint`, GitLab blocks on all five — and
+a makefile that swallows the code silently overrides all three. Findings a team has triaged
+belong in that tool's own suppression file (`.codeql-false-positives`, `.semgrepignore`,
+`.semgrepexcluderules`, `.hadolint.yaml`, `.gitleaksignore`). A consumer that genuinely
+wants the old behaviour writes `make sast || true` at its own call site, where review can
+see it. `.github/tests/test-sast-gate.sh` fails if the suppression returns.
+
 
 ### Shared Ignore Rules
 

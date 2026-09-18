@@ -6,6 +6,10 @@
 # with two entry points used to hand it a newline-separated list and abort with
 # `invalid options: - main: "..." does not exist`, producing no BOM at all.
 #
+# The same script also normalises the repository state cyclonedx-gomod reads. Azure DevOps'
+# checkout leaves `extensions.worktreeConfig=true` with `core.repositoryformatversion=0`, a
+# pairing go-git rejects, so `app` produced no BOM and `mod` produced an unversioned one.
+#
 # `cyclonedx-gomod` itself is not invoked here: the decision, not the tool, is what regressed.
 # A stub on PATH records the command line the script would have run.
 
@@ -181,6 +185,71 @@ if grep -q "Could not find a directory containing Go files" "$workdir/stdout.log
   print_result 0 "the failure names the missing entry point"
 else
   print_result 1 "the failure message is missing: $(cat "$workdir/stdout.log")"
+fi
+
+# =============================================================================
+# Test 6: the Azure DevOps checkout leftover is cleared before the tool runs
+# =============================================================================
+echo "TEST 6: a non-sparse repo carrying extensions.worktreeConfig has it cleared"
+workdir="$(new_module)"
+mkdir -p "$workdir/cmd"
+echo 'package main' > "$workdir/cmd/main.go"
+(
+  cd "$workdir" || exit 1
+  git init -q .
+  # Exactly the state `git sparse-checkout disable` leaves on an Azure DevOps
+  # agent: the extension declared while core.repositoryformatversion stays 0.
+  git config extensions.worktreeConfig true
+)
+run_generator "$workdir"
+leftover="$(cd "$workdir" && git config --local --get extensions.worktreeConfig 2>/dev/null || true)"
+if [ -z "$leftover" ]; then
+  print_result 0 "extensions.worktreeConfig is cleared for a non-sparse worktree"
+else
+  print_result 1 "extensions.worktreeConfig survived as '$leftover'"
+fi
+
+if [ -f "$workdir/build/reports/bom.json" ]; then
+  print_result 0 "a BOM is still written once the config is normalised"
+else
+  print_result 1 "no bom.json was written: $(cat "$workdir/stdout.log")"
+fi
+
+# =============================================================================
+# Test 7: a genuinely sparse worktree keeps the extension it depends on
+# =============================================================================
+echo "TEST 7: a sparse worktree keeps extensions.worktreeConfig"
+workdir="$(new_module)"
+mkdir -p "$workdir/cmd"
+echo 'package main' > "$workdir/cmd/main.go"
+(
+  cd "$workdir" || exit 1
+  git init -q .
+  git add -A
+  git -c user.email=test@example.test -c user.name=test commit -qm init
+  git sparse-checkout init --cone
+  git sparse-checkout set cmd
+)
+run_generator "$workdir"
+kept="$(cd "$workdir" && git config --local --get extensions.worktreeConfig 2>/dev/null || true)"
+if [ "$kept" = "true" ]; then
+  print_result 0 "a sparse worktree keeps its load-bearing extension"
+else
+  print_result 1 "the extension the sparse worktree depends on was removed"
+fi
+
+# =============================================================================
+# Test 8: outside a git repository the generator still runs
+# =============================================================================
+echo "TEST 8: a non-git working directory still produces a BOM"
+workdir="$(new_module)"
+mkdir -p "$workdir/cmd"
+echo 'package main' > "$workdir/cmd/main.go"
+run_generator "$workdir"
+if [ -f "$workdir/build/reports/bom.json" ]; then
+  print_result 0 "the absence of a git repository is not an error"
+else
+  print_result 1 "no bom.json was written: $(cat "$workdir/stdout.log")"
 fi
 
 # =============================================================================

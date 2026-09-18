@@ -23,6 +23,37 @@ BOM_PATH="$PREFIX$REPORT_PATH" && mkdir -p "$BOM_PATH"
 echo "Installing CycloneDX Go Module $CYCLONEDX_GOMOD_VERSION..."
 go install "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@$CYCLONEDX_GOMOD_VERSION"
 
+# Azure DevOps' checkout task runs `git sparse-checkout disable` on every job it
+# checks out (agent knob `UseSparseCheckoutInCheckoutTask`). Disabling sparse
+# checkout leaves `extensions.worktreeConfig=true` behind in `.git/config` while
+# `core.repositoryformatversion` stays `0`. Git itself reads that pairing
+# happily, but go-git -- which cyclonedx-gomod uses to resolve the main module's
+# version -- refuses it outright:
+#
+#   failed to determine version of main module:
+#   git: core.repositoryformatversion does not support extension: worktreeconfig
+#
+# `app` treats that as fatal: it exits non-zero having written no BOM at all, so
+# the Dependency-Track upload that consumes the BOM had nothing to send and the
+# `report:dependency-track` job failed on every build of every single-entry-point
+# Go repository. `mod` only warns, which is quieter but worse -- it publishes the
+# module with an EMPTY version, so Dependency-Track silently tracks an
+# unversioned project and findings cannot be attributed to a release.
+#
+# The extension is vestigial once sparse checkout is off, so dropping it restores
+# go-git without changing a single path in the worktree. `git sparse-checkout
+# list` is what proves that: it exits non-zero ("this worktree is not sparse")
+# exactly when the extension has nothing left to describe, and zero when the
+# worktree really is sparse -- in which case the extension is load-bearing
+# (`.git/config.worktree` holds `core.sparseCheckout`) and is left alone.
+#
+# `|| true` is required rather than defensive: `--unset-all` exits 5 when the key
+# is absent, which is the normal case on GitLab CI and for a local run, and
+# `set -e` would then abort the SBOM on the very platforms that never had the bug.
+if git rev-parse --git-dir >/dev/null 2>&1 && ! git sparse-checkout list >/dev/null 2>&1; then
+  git config --unset-all extensions.worktreeConfig 2>/dev/null || true
+fi
+
 if [ -d "pkg" ]; then
   echo "Found 'pkg' directory, using 'cyclonedx-gomod mod' command..."
   "$(go env GOPATH)/bin/cyclonedx-gomod" mod -json -output "$BOM_PATH/bom.json" -licenses

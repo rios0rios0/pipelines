@@ -1808,7 +1808,7 @@ This gives you the following targets for free:
 | Target       | Source            | Description                              |
 |--------------|-------------------|------------------------------------------|
 | `make setup` | `common.mk`       | Clone or update the pipelines repository |
-| `make sast`  | `common.mk`       | Run all security SAST tools              |
+| `make sast`  | `common.mk`       | Run all security SAST tools — **fails** on findings |
 | `make lint`  | `<language>.mk`   | Run language-specific linter             |
 | `make test`  | `<language>.mk`   | Run language-specific tests              |
 
@@ -1825,11 +1825,42 @@ Available language files:
 | `terraform.mk`  | Terraform         | `terraform fmt` + `validate`          | `terraform plan`                |
 | `terra.mk`      | Terra CLI         | `terra format` + git diff check       | unified `test-all` runner (`terraform test` on all modules + Terratest suite when present) |
 
-`dart.mk` adds `make sca` (OSV-Scanner over `pubspec.lock`) to `make sast`, and leaves
-`CODEQL_LANGUAGE` unset so `make sast` skips CodeQL with an explanation rather than failing —
-CodeQL has no Dart extractor. Include `common.mk` **before** `dart.mk` so that append works.
+`dart.mk` adds `make sca` (OSV-Scanner over `pubspec.lock`) to the suite `make sast` runs, by
+appending to `SAST_TOOLS_EXTRA`, and leaves `CODEQL_LANGUAGE` unset so `make sast` skips CodeQL
+with an explanation rather than failing — CodeQL has no Dart extractor. Include order does not
+affect which tools run.
 
 The `-include` prefix means Make silently skips the includes if the repository is not cloned yet. Run `make setup` (or `curl ... | bash`) to bootstrap.
+
+#### `make sast` Is a Gate
+
+`make sast` runs **every** tool, then exits non-zero if any of them reported findings, ending with
+a line that names them:
+
+```console
+$ make sast
+...
+SAST FAILED: semgrep gitleaks
+Reports are under build/reports/. Fix the findings, or record the
+ones you have triaged in that tool's suppression file (.codeql-false-positives,
+.semgrepignore, .semgrepexcluderules, .hadolint.yaml, .gitleaksignore).
+$ echo $?
+2
+```
+
+Each individual target fails on its own tool too, so `make lint && make sast` short-circuits the
+way the standard assumes, and `make gitleaks` is safe to put in a hook.
+
+| Variable           | Default                                      | Purpose                                              |
+|--------------------|----------------------------------------------|------------------------------------------------------|
+| `SAST_TOOLS`       | `codeql semgrep hadolint shellcheck gitleaks` | The suite `sast` runs. Override to narrow it         |
+| `SAST_TOOLS_EXTRA` | *(empty)*                                    | Appended to by language fragments; never set by hand |
+
+Findings a team has accepted belong in the tool's own suppression file — that is what those files
+are for, and a reviewer can see them. If a pipeline genuinely wants SAST to be advisory, it says so
+at its own call site (`make sast || true`, or the platform's `continueOnError` / `continue-on-error`
+/ `allow_failure`), which is where this repository's published templates already make that choice
+and where it stays visible.
 
 See the [`.docs/examples/`](.docs/examples) directory for complete per-provider examples including Makefiles.
 

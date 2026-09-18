@@ -202,6 +202,14 @@ for dirpath, _, filenames in os.walk(os.path.join(ROOT, "global", "scripts")):
             script_reads[os.path.relpath(path, ROOT)] = names
 
 
+# Azure's four shell-step shortcuts are one class: each carries a script body that
+# the agent macro-expands identically. Matching only `script:` made the other three
+# invisible to assertions 2 and 4 -- and `bash:` is the idiomatic form in this
+# repository (25 steps today, including every `eval "$PIPELINES_HOOK"` deployment
+# hook), so those steps passed by never being looked at. Do not narrow this back.
+SHELL_KEYS = ("script", "bash", "pwsh", "powershell")
+
+
 def walk_steps(node, path, out):
     """Yield every step-shaped mapping in a template, wrappers included.
 
@@ -210,7 +218,11 @@ def walk_steps(node, path, out):
     every value instead means a step inside a conditional is still seen.
     """
     if isinstance(node, dict):
-        if "script" in node or ("task" in node and "inputs" in node):
+        shell_key = next((k for k in SHELL_KEYS if k in node), None)
+        if shell_key or ("task" in node and "inputs" in node):
+            if shell_key and shell_key != "script":
+                # Normalise onto `script` so every downstream assertion reads one key.
+                node = dict(node, script=node[shell_key])
             out.append((path, node))
             inputs = node.get("inputs")
             if isinstance(inputs, dict):

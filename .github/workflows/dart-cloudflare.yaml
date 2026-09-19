@@ -63,6 +63,20 @@ on:
         required: false
         default: ''
         description: 'fnmatch patterns excluded from coverage. See dart.yaml.'
+      node_version:
+        type: 'string'
+        required: false
+        default: '22'
+        description: |
+          Node version the DEPLOYMENT runs on -- `wrangler`, `build_command`, and the bundling of
+          any Cloudflare Pages Function the repository ships in `functions/`.
+
+          Distinct from `test_build_node_version`, which belongs to `tests > test:build` inside
+          `dart.yaml`. A Dart repository has no Node of its own, so before this input the deploy
+          took whatever the deploy action supplied and a consumer had no way to say otherwise --
+          `yarn-cloudflare.yaml` has exposed the same knob since its own deploy started needing
+          one. The default is what the action already supplied, so leaving it alone changes
+          nothing.
       target:
         type: 'string'
         required: false
@@ -461,6 +475,7 @@ jobs:
           branch: "${{ env.PAGES_BRANCH }}"
           production_branch: '${{ inputs.pages_production_branch }}'
           environment: "${{ env.DEPLOY_ENVIRONMENT }}"
+          node_version: '${{ inputs.node_version }}'
           # The SDK is installed IN-PROCESS rather than by a `setup-*` action in an earlier step,
           # for two reasons that both come from this action checking the repository out itself.
           # First, that checkout wipes the workspace, so anything an earlier step built is gone --

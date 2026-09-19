@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added a `node_version` input to `dart-cloudflare.yaml`, forwarded to the Cloudflare deploy action so a Dart repository can pin the Node that runs `wrangler`, its `build_command` and the bundling of any Pages Function it ships in `functions/` — `yarn-cloudflare.yaml` has exposed the same knob, and until now a Dart consumer had to take whatever the action supplied; the default is that same value, so leaving it alone changes nothing'
+time: '2026-09-19T17:24:23.197202513Z'

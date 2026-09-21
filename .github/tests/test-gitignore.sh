@@ -212,12 +212,24 @@ assert_true "--check reports malformed rather than merely stale" \
 
 echo ""
 echo "Real gitignore semantics"
-for artifact in build/reports/x.json reports/x.json .codeql-db/x coverage.out \
+# `.semgrepignore` is not a report: the Semgrep runner copies its default into the
+# project root when the project ships none, and four install-failure paths -- plus any
+# interruption of the scan -- return before the line that removes it again. It then sits
+# there untracked, waiting for a `git add -A`, which is how it came close to being
+# committed in a consumer.
+for artifact in build/reports/x.json reports/x.json .codeql-db/x .semgrepignore coverage.out \
                 coverage.txt coverage.xml cobertura.xml junit.xml junit-unit.xml \
                 junit-integration.xml unit_coverage.txt integration_coverage.txt; do
   assert_true "git ignores $artifact" \
     "git -C '$REPO' check-ignore -q --no-index '$artifact'"
 done
+
+# A project that wants to track its OWN `.semgrepignore` must still be able to, since the
+# runner copies its default only when the file is absent.
+printf '\n!.semgrepignore\n' >> "$REPO/.gitignore"
+assert_true "a project can still track its own .semgrepignore" \
+  "! git -C '$REPO' check-ignore -q --no-index .semgrepignore"
+sed -i '/^!\.semgrepignore$/d' "$REPO/.gitignore"
 
 printf '\n!coverage.xml\n' >> "$REPO/.gitignore"
 assert_true "a project can still re-include a shared entry below the block" \

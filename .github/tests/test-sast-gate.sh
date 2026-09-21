@@ -263,6 +263,45 @@ for order in common-first fragment-first; do
     "[ -f '$FX/pipelines/ran/extra' ]"
   assert_true "$order: the base suite ran too, rather than being replaced" \
     "[ -f '$FX/pipelines/ran/gitleaks' ] && [ -f '$FX/pipelines/ran/semgrep' ]"
+  assert_not_contains "$order: including a fragment emits no 'overriding recipe' warning" \
+    'verriding recipe' "$(mk_output "$FX/project" -n sast)"
+done
+
+echo ""
+echo "A fragment that REPLACES the suite is reported, in either order"
+# The positive control for the `overriding recipe` assertion above, without which
+# that assertion would pass against a fixture where the string is simply
+# unreachable -- the same unfalsifiable shape it exists to catch. Exactly one
+# fragment shape emits it, and it is NOT the one a reader expects:
+#
+#   sast: sca                prerequisite-only. NO warning, in either order --
+#                            `make` appends a prerequisite rather than overriding
+#                            a recipe, so the pre-fix `dart.mk` shape would
+#                            silently abort the loop at the first failing tool
+#                            and nothing would print. That regression is caught
+#                            by the run-all assertions above, not by this one.
+#   SAST_TOOLS_EXTRA += sca  the shape `dart.mk` uses now. NO warning.
+#   sast: <recipe>           a SECOND recipe. WARNS, and whichever file is read
+#                            last wins -- so a fragment can silently replace the
+#                            whole run-everything-then-report loop with its own.
+for order in common-first fragment-first; do
+  FX="$TEST_DIR/override-$order"
+  make_fixture "$FX" ""
+  {
+    echo 'sast:'
+    printf '\t@echo "the fragment replaced the suite"\n'
+  } > "$FX/pipelines/makefiles/override.mk"
+
+  if [ "$order" = 'common-first' ]; then
+    printf 'SCRIPTS_DIR ?= %s\n-include $(SCRIPTS_DIR)/makefiles/common.mk\n-include $(SCRIPTS_DIR)/makefiles/override.mk\nCODEQL_LANGUAGE ?= go\n' \
+      "$FX/pipelines" > "$FX/project/Makefile"
+  else
+    printf 'SCRIPTS_DIR ?= %s\n-include $(SCRIPTS_DIR)/makefiles/override.mk\n-include $(SCRIPTS_DIR)/makefiles/common.mk\nCODEQL_LANGUAGE ?= go\n' \
+      "$FX/pipelines" > "$FX/project/Makefile"
+  fi
+
+  assert_contains "$order: a fragment's competing 'sast' recipe DOES warn" \
+    'verriding recipe' "$(mk_output "$FX/project" -n sast)"
 done
 
 echo ""
@@ -281,7 +320,7 @@ assert_contains "make -n sast prints the gitleaks runner" \
   'gitleaks/run.sh' "$DRY_OUT"
 assert_true "make -n sast runs nothing" \
   "[ ! -f '$FX/pipelines/ran/semgrep' ]"
-assert_not_contains "including a fragment after common.mk emits no 'overriding recipe' warning" \
+assert_not_contains "make -n sast emits no 'overriding recipe' warning" \
   'verriding recipe' "$DRY_OUT"
 
 echo ""

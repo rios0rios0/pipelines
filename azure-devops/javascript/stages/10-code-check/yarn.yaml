@@ -48,7 +48,7 @@ stages:
       - job: 'style_format'
         displayName: 'style:format'
         steps:
-          - template: '../../abstracts/corepack-node20.18.3-no-cache.yaml'
+          - template: '../../abstracts/corepack-node-no-cache.yaml'
 
           - template: 'steps/format.yaml'
             parameters:
@@ -60,7 +60,7 @@ stages:
       - job: 'quality_knip'
         displayName: 'quality:knip'
         steps:
-          - template: '../../abstracts/corepack-node20.18.3-no-cache.yaml'
+          - template: '../../abstracts/corepack-node-no-cache.yaml'
 
           # The hook's VALUE is shell, supplied by the consumer's pipeline. Passing it
           # through `env:` and running it with `eval` keeps it DATA at template-expansion

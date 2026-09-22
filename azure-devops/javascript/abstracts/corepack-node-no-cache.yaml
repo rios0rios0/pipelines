@@ -1,0 +1,21 @@
+# The Node runtime of the Azure JavaScript stages. The version lives here and only
+# here -- not in the filename -- so a bump is a one-line edit with no new file and
+# no forwarding stub; `corepack-node20.18.3*.yaml` are the historical names kept
+# for consumers that include them by path.
+#
+# 20.20.2 is the newest Node 20 release, not an arbitrary patch: `quality:knip` runs the knip
+# pinned in global/scripts/shared/pinned-versions.sh on this runtime, and knip 6
+# requires `^20.19.0 || >=22.12.0`. On 20.18.3 npm only WARNED `EBADENGINE` and
+# then failed to load knip's native parser binding, so the job died on every run
+# with an error that pointed at npm's optional-dependency bug rather than at the
+# runtime. Moving this pin below 20.19 breaks that job again.
+steps:
+  - task: 'UseNode@1'
+    inputs:
+      version: '20.20.2'
+    displayName: 'Use Node.js 20.20.2'
+
+  - script: |
+      corepack enable
+      corepack prepare yarn@stable --activate
+    displayName: 'Enable Corepack and Install Yarn'

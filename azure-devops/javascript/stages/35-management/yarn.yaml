@@ -28,7 +28,7 @@ stages:
             fetchDepth: 0
             fetchTags: true
 
-          - template: '../../abstracts/corepack-node20.18.3.yaml'
+          - template: '../../abstracts/corepack-node.yaml'
 
           - template: 'steps/sonarqube.yaml'
             parameters:
@@ -55,7 +55,7 @@ stages:
         variables:
           REPORT_PATH: 'build/reports'
         steps:
-          - template: '../../abstracts/corepack-node20.18.3.yaml'
+          - template: '../../abstracts/corepack-node.yaml'
 
           - template: 'steps/dependency-track.yaml'
             parameters:

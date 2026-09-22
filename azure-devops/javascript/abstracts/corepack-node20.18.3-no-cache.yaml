@@ -1,10 +1,7 @@
+# Compatibility name. Consumers include these abstracts by PATH, so the file a
+# consumer's `.ci/` wrapper names has to keep existing when the runtime moves --
+# a rename alone broke every consumer at expansion time ("Could not find ... in
+# repository pipelines"). The runtime is whatever `corepack-node-no-cache.yaml`
+# pins; only this name is historical. New consumers should include that file.
 steps:
-  - task: 'UseNode@1'
-    inputs:
-      version: '20.18.3'
-    displayName: 'Use Node.js 20.18.3'
-
-  - script: |
-      corepack enable
-      corepack prepare yarn@stable --activate
-    displayName: 'Enable Corepack and Install Yarn'
+  - template: 'corepack-node-no-cache.yaml'

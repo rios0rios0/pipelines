@@ -56,3 +56,6 @@ runs:
         overwrite: 'true'
         retention-days: 10
       if: always()
+      # A refused upload (e.g. `Artifact storage quota has been hit`) must not fail the job:
+      # the report is evidence, and the step above already decided pass or fail.
+      continue-on-error: true

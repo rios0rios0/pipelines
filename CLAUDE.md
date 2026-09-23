@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, fixture-isolation, gitignore, sast-gate, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, azure-step-names, azure-secret-env, dependency-updates, containers-detect)
+make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, fixture-isolation, gitignore, sast-gate, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, azure-step-names, azure-secret-env, dependency-updates, containers-detect, report-uploads)
 make test-go-script    # Test Go validation script only
 make test-go-module-toolchain  # Test that every go.mod toolchain directive is readable by the images/analysers that consume it only
 make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves only
@@ -49,6 +49,7 @@ make test-dependency-updates  # Test the dependency-update checker only
 make check-dependency-updates # Report which pinned dependencies have a newer release (network)
 make test-azure-step-names  # Test Azure DevOps step-name uniqueness across expanded templates only
 make test-azure-secret-env  # Test that every Azure step consuming a credential maps it through `env:` only
+make test-report-uploads  # Test that no GitHub Actions report upload can fail its job, while mandatory reports stay enforced, only
 make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
 make build NAME=<image> TAG=<tag>           # Build both architectures, publish nothing (verification)
 ```
@@ -760,6 +761,29 @@ belong in that tool's own suppression file (`.codeql-false-positives`, `.semgrep
 `.semgrepexcluderules`, `.hadolint.yaml`, `.gitleaksignore`). A consumer that genuinely
 wants the old behaviour writes `make sast || true` at its own call site, where review can
 see it. `.github/tests/test-sast-gate.sh` fails if the suppression returns.
+
+### Report Uploads Never Gate a Job
+
+On GitHub Actions every `actions/upload-artifact` step that publishes a report is
+`continue-on-error: true`. The tool's own step decides pass or fail; the upload only publishes the
+evidence, and GitHub can refuse it for reasons unrelated to the code. The one that forced this:
+once an account has spent its monthly Actions storage allowance and its budget stops further
+usage, every upload answers `Failed to CreateArtifact: Artifact storage quota has been hit`. The
+allowance is storage-time accrued over the billing month, so deleting artifacts does not bring
+uploads back before the next month starts. While uploads could fail their jobs, that refusal
+turned clean scans red and SKIPPED every stage that `needs` them — tests, builds and deployments.
+
+This does not make any tool advisory — findings still fail the job, as the previous section
+requires — and two cases keep the upload from weakening a gate:
+
+- **A mandatory report** (the tool must leave one when it exits 0) gets a `Verify Report` step
+  right before the upload. Do not use `if-no-files-found: 'error'` for this: under
+  `continue-on-error` it fails nothing.
+- **A deliverable** (the upload IS the job's product, like `dart/stages/40-delivery/build`)
+  stays fatal, because a refused upload means nothing was delivered.
+
+`.github/tests/test-report-uploads.sh` holds all three rules; a new stage that is mandatory or a
+deliverable must be added to that test's `MANDATORY` or `DELIVERABLES` set.
 
 
 ### Shared Ignore Rules

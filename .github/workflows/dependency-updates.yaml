@@ -141,6 +141,9 @@ jobs:
           if-no-files-found: 'warn'
           overwrite: 'true'
           retention-days: 30
+        # A refused upload (e.g. `Artifact storage quota has been hit`) must not fail the job:
+        # the report is evidence, and the step above already decided pass or fail.
+        continue-on-error: true
 
       - name: 'Fail when an update is available'
         if: "steps.check.outputs.status != '0'"

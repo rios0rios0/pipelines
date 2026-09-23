@@ -238,6 +238,9 @@ jobs:
             cobertura.xml
           if-no-files-found: ignore
           retention-days: 30
+        # A refused upload (e.g. `Artifact storage quota has been hit`) must not fail the job:
+        # the report is evidence, and the step above already decided pass or fail.
+        continue-on-error: true
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_govulncheck' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 

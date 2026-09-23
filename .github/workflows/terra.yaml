@@ -200,6 +200,9 @@ jobs:
           name: 'order-check'
           path: "${{ env.REPORT_PATH }}/junit-order-check.xml"
           if-no-files-found: 'ignore'
+        # A refused upload (e.g. `Artifact storage quota has been hit`) must not fail the job:
+        # the report is evidence, and the step above already decided pass or fail.
+        continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 
@@ -384,6 +387,9 @@ jobs:
           name: 'terra-coverage'
           path: "${{ env.REPORT_PATH }}"
           if-no-files-found: 'warn'
+        # A refused upload (e.g. `Artifact storage quota has been hit`) must not fail the job:
+        # the report is evidence, and the step above already decided pass or fail.
+        continue-on-error: true
     needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -478,6 +484,9 @@ jobs:
           name: 'validate-results'
           path: "${{ env.REPORT_PATH }}/junit-validate.xml"
           if-no-files-found: 'ignore'
+        # A refused upload (e.g. `Artifact storage quota has been hit`) must not fail the job:
+        # the report is evidence, and the step above already decided pass or fail.
+        continue-on-error: true
     needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint' ]
     if: "inputs.enable_validate && !startsWith(github.ref, 'refs/tags/')"
 
@@ -541,6 +550,9 @@ jobs:
           name: 'structural-results'
           path: "${{ env.REPORT_PATH }}/junit-structural.xml"
           if-no-files-found: 'ignore'
+        # A refused upload (e.g. `Artifact storage quota has been hit`) must not fail the job:
+        # the report is evidence, and the step above already decided pass or fail.
+        continue-on-error: true
     needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 

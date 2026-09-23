@@ -119,12 +119,27 @@ runs:
       shell: 'bash'
       working-directory: '${{ inputs.working_directory }}'
 
+    # The upload below is `continue-on-error`, so it cannot be what fails a scan that exited 0
+    # without writing its report. This step keeps that failure.
+    - name: 'Verify Report'
+      shell: 'bash'
+      env:
+        REPORT_DIR: '${{ inputs.working_directory }}/build/reports/knip'
+      run: |
+        if [ -z "$(find "$REPORT_DIR" -type f -print -quit 2> /dev/null)" ]; then
+          echo "::error::The scan exited 0 without writing a report to $REPORT_DIR/"
+          exit 1
+        fi
+
     - name: 'Upload Report'
       uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # v7.0.1
       with:
         name: 'knip'
         path: '${{ inputs.working_directory }}/build/reports/knip/'
-        if-no-files-found: 'error'
+        if-no-files-found: 'warn'
         overwrite: 'true'
         retention-days: 10
       if: always()
+      # A refused upload (e.g. `Artifact storage quota has been hit`) must not fail the job:
+      # the report is evidence, and the step above already decided pass or fail.
+      continue-on-error: true

@@ -1,7 +1,14 @@
+parameters:
+  - name: 'DEPENDS_ON'
+    type: object
+    default: ''
+
 stages:
   - stage: 'code_check'
     displayName: 'code check (style/quality)'
     condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    ${{ if ne(parameters.DEPENDS_ON, '') }}:
+      dependsOn: ${{ parameters.DEPENDS_ON }}
     jobs:
       - template: '../../../global/stages/10-code-check/basic-checks.yaml'
 

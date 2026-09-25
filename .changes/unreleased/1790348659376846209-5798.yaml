@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added `DEPENDS_ON` parameter to Python Azure DevOps stage templates (`10-code-check`, `20-security`, `30-tests`, `35-management`), allowing consumers to override stage dependencies for parallel execution'
+time: '2026-09-25T15:04:19.376772192Z'

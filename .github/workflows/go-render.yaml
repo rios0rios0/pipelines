@@ -210,5 +210,8 @@ jobs:
           environment: ${{ inputs.deployment_environment != '' && inputs.deployment_environment || (github.ref_type == 'tag' && 'production' || 'staging') }}
     needs: [ 'go-docker' ]
     # `!failure()` rather than `success()` so a skipped upstream job does not take the deploy with
-    # it, matching how `delivery-docker` gates itself one level down. A pull request never deploys.
-    if: "!failure() && github.event_name != 'pull_request' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))"
+    # it, matching how `delivery-docker` gates itself one level down. `!cancelled()` beside it
+    # because a cancelled job is not a failed one: without it a run superseded by
+    # `cancel-in-progress` still deploys a commit whose checks never finished. A pull request
+    # never deploys.
+    if: "!cancelled() && !failure() && github.event_name != 'pull_request' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))"

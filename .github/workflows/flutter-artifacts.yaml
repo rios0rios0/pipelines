@@ -118,7 +118,7 @@ jobs:
           toolchain: 'flutter'
           targets: 'web'
     needs: [ 'dart' ]
-    if: "inputs.build_web && !failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))"
+    if: "inputs.build_web && !cancelled() && !failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))"
 
   delivery-android:
     name: 'delivery > delivery:android'
@@ -130,4 +130,4 @@ jobs:
           toolchain: 'flutter'
           targets: ${{ inputs.android_targets }}
     needs: [ 'dart' ]
-    if: "inputs.build_android && !failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))"
+    if: "inputs.build_android && !cancelled() && !failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))"

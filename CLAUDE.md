@@ -243,7 +243,7 @@ is a large part of why the rule is a test rather than a review habit.
 
 ### Workflow Composition Standard
 
-**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), fourteen
+**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), fifteen
 assertions, every one of them proven to fire against a deliberate violation.** Read this section
 before writing anything under `.github/workflows/`, and before writing a pipeline in a repository
 that consumes this one.
@@ -302,6 +302,18 @@ Every deployment job therefore declares, and the test asserts, all four of:
 - **`if:`** — without one, a pull request deploys.
 - a preceding **`# fifth stage`** comment, matching the `# fourth stage` comments the delivery jobs
   already carry.
+
+**A gate that calls a status function must also refuse a cancelled run.** Delivery and deployment
+jobs gate on `!failure()` instead of the implicit `success()` so that an upstream job skipped by
+design — `delivery-release` on a non-bump commit, every base job on a tag — does not skip them too.
+But a cancelled job is not a failed one, and an `if:` that calls any status function gets no
+implicit `success()`, so `!failure() && (…)` is still true when `cancel-in-progress` supersedes the
+run: the checks are cancelled and delivery starts anyway. medhub-life/backend run 36349435394
+published an image of a commit whose lint, tests and SAST had all been cancelled, keeping a runner
+slot busy for ~23 minutes. Write `!cancelled() && !failure() && (…)`, with any input guard such as
+`inputs.build_web &&` in front, and give every `||` clause a `!cancelled()` or `success()` of its
+own, as the release gates' `(!cancelled() && startsWith(github.ref, 'refs/tags/'))` does. The
+fifteenth assertion holds it clause by clause.
 
 **Job names are an API, not a label.** `delivery > <target>` and `deployment > <provider>` are the
 strings consumers pass to `require-checks`, because GitHub composes a check's name from the calling

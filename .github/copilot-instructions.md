@@ -428,6 +428,10 @@ most likely to break, in order of how expensive the mistake was:
    does not. Consumers must hold deploy credentials at REPOSITORY scope and pass them explicitly.
    Verified by probe matrix: same-repo callee sees them, cross-repo callee never does, regardless
    of whether `environment:` is a literal or an expression.
+10. **A gate that calls a status function also refuses a cancelled run.** Write
+    `!cancelled() && !failure() && (…)`, never `!failure()` alone: a cancelled job is not a failed
+    one, so a run superseded by `cancel-in-progress` still delivers and deploys a commit whose
+    checks never finished. Every `||` clause needs a `!cancelled()` or `success()` of its own.
 
 ### Platform and Language Support Matrix
 

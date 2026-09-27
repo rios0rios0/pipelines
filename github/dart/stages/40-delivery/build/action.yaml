@@ -106,4 +106,7 @@ runs:
         if-no-files-found: 'warn'
         overwrite: 'true'
         retention-days: 10
-      if: always()
+      # `!cancelled()`, not `always()`: this upload IS the delivery, so a run superseded by
+      # `cancel-in-progress` must not publish a half-built artifact or keep a runner slot busy
+      # uploading one. A FAILED build still uploads, so what it produced can be inspected.
+      if: "!cancelled()"

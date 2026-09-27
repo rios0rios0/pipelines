@@ -18,7 +18,7 @@ parameters:
 stages:
   - stage: 'delivery'
     displayName: 'delivery'
-    condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
+    condition: and(not(failed()), not(canceled()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
     jobs:
       - ${{ if eq(parameters.ENABLE_WEB_DELIVERY, true) }}:
           - job: 'delivery_web'

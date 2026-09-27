@@ -5,7 +5,7 @@ stages:
   - template: 'stages/35-management/go.yaml'
   - stage: 'delivery'
     displayName: 'delivery'
-    condition: and(not(failed()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
+    condition: and(not(failed()), not(canceled()), or(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), startsWith(variables['Build.SourceBranch'], 'refs/heads/main')))
     jobs:
       - template: '../global/stages/40-delivery/release.yaml'
         parameters:

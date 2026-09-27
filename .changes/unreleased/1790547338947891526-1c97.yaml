@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'gated the 17 Azure DevOps delivery and deployment stages on `not(canceled())` beside `not(failed())`: a custom `condition:` replaces the implicit `succeeded()`, and `not(failed())` is true on a cancelled run, so a cancelled run could still build, publish or deploy -- the same trap the GitHub Actions workflows had'
+time: '2026-09-27T22:15:38.94779749Z'

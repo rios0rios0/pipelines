@@ -72,7 +72,7 @@ All platforms follow consistent numbered stages:
 
 - `.github/workflows/` — GitHub Actions reusable workflows (e.g., `go-docker.yaml`, `pdm-docker.yaml`)
 - `gitlab/<language>/` — GitLab CI templates with `stages/`, `scripts/`, `abstracts/` subdirs
-- `azure-devops/<language>/` — Azure DevOps templates, same structure as GitLab
+- `azure-devops/<language>/` — Azure DevOps templates, same structure as GitLab. A delivery or deployment stage whose `condition:` replaces the implicit `succeeded()` carries `not(canceled())` beside `not(failed())`: a cancelled run is not a failed one, so `not(failed())` alone lets a cancelled run deliver
 - `global/scripts/tools/` — Platform-agnostic security tools (codeql, gitleaks, semgrep, hadolint, shellcheck, sonarqube, dependency-track)
 - `global/scripts/languages/` — Language-specific scripts (golang, java, javascript, php, python, ruby, dart, terraform). Most `run.sh` scripts follow shared conventions, but the Terraform helpers below are documented exceptions: they write reports directly under `build/reports/` and do not rely on the common `cleanup.sh` report-directory pattern.
   - `dart/` — Dart and Flutter runners: `setup`, `format`, `analyze`, `test`, `unused`, `sca`, `build`, `publish`, plus a sourced `common.sh` (not executable — it is sourced, never run). All honour `DART_DRY_RUN=true`, which resolves and records commands without installing or executing anything; that is what makes the whole family testable offline. See Dart & Flutter Support below

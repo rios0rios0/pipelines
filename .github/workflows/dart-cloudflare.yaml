@@ -492,6 +492,8 @@ jobs:
     needs: [ 'dart' ]
     # `!failure()` rather than `success()` so a skipped upstream job does not take the deploy with
     # it -- on a tag every job inside `dart.yaml` skips, and a bare `needs:` would stop production
-    # shipping altogether. A genuine CI failure on a branch still blocks. A pull request never
-    # deploys.
-    if: "!failure() && github.event_name != 'pull_request' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))"
+    # shipping altogether. A genuine CI failure on a branch still blocks. `!cancelled()` beside it
+    # because a cancelled job is not a failed one: without it a run superseded by
+    # `cancel-in-progress` still deploys a commit whose checks never finished. A pull request
+    # never deploys.
+    if: "!cancelled() && !failure() && github.event_name != 'pull_request' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))"

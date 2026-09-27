@@ -39,14 +39,16 @@ set -e
 # flow style would slip past them; none is, and one would fail review long
 # before this.
 #
-# Tests 10 to 14 are the exceptions and do need PyYAML. Test 10 asserts under a
+# Tests 10 to 15 are the exceptions and do need PyYAML. Test 10 asserts under a
 # key YAML 1.1 RESOLVES -- `on:` parses as the boolean `true`, so `runs_on` sits
 # under no key spelled `on` at all and no indentation rule can reach it -- and
 # Test 11 needs the `if:` as ONE expression, which a block scalar spreads over
 # ten physical lines, Test 12 walks the whole trigger block for evaluated
 # expressions, Test 13 compares a block-scalar prompt against the tool rules in
-# another block scalar beside it, and Test 14 evaluates a folded-scalar `if:`
-# against input defaults declared under that same resolved `on:` key. All five
+# another block scalar beside it, Test 14 evaluates a folded-scalar `if:`
+# against input defaults declared under that same resolved `on:` key, and
+# Test 15 splits every job's `if:` into clauses, which a block scalar may spread
+# over several lines just as Test 11's does. All six
 # are written so that a host without PyYAML sees the assertion FAIL BY NAME
 # rather than a traceback -- see the comments there. CI installs `python3-yaml`
 # (`.github/workflows/ci.yaml`), and `make test` already requires it for
@@ -1051,6 +1053,177 @@ except Exception as error:                          # noqa: BLE001 -- see Test 1
 PY
 )"
 assert_empty "the review runs on human pull requests and on no automated one" "$BAD_REVIEW_GUARD"
+echo ""
+
+echo "Test 15: a job gated on a status function does not start on a cancelled run"
+
+# A CANCELLED job is not a FAILED one, and an `if:` that calls any status-check function
+# loses the `success()` GitHub otherwise prepends. So `!failure() && (...)` -- the gate every
+# delivery and deployment job carried, because it lets delivery run past a `delivery-release`
+# skipped on a non-bump commit and past a base pipeline that skips every job on a tag -- is
+# still TRUE when `cancel-in-progress` supersedes the run. Its lint, tests and SAST are
+# cancelled and delivery starts anyway. medhub-life/backend run 36349435394 did exactly that:
+# every check was cancelled at 21:20:24Z, `delivery > docker` started seven seconds later,
+# and it published an image of a commit nothing had verified while keeping a runner slot
+# busy for ~23 minutes. Its `deployment > flyio` then started too.
+#
+# Asserted per CLAUSE and structurally, the way Test 11 is, because "the expression contains
+# `!cancelled()`" is defeatable: `!failure() && (!cancelled() || x)` contains it and still
+# starts on a cancelled push. The `if:` is split into top-level `||` clauses and each clause
+# into top-level `&&` conjuncts, outside parentheses and quoted strings; every clause must
+# carry `!cancelled()` or `success()` as a conjunct of its OWN -- both are false on a
+# cancelled run, which makes the whole clause false. The clause beside a status function
+# needs one even when it calls none itself: `(success() && a) || b` gets no implicit
+# `success()`, so `b` alone starts the job -- which is why the library release gates spell
+# their tag clause `(!cancelled() && startsWith(github.ref, 'refs/tags/'))`.
+#
+# Two things pass without a guard. An `if:` calling no status function is safe, because
+# GitHub prepends `success()` to it. And a clause that selects `failure()` or `cancelled()`
+# positively runs after one BY DESIGN (a notifier, a cleanup) rather than by accident.
+# `always()` is neither: on a delivery job it is the same defect as `!failure()`.
+#
+# The classifier is also run against the gate every delivery job carried, verbatim, and
+# the shapes a "tidy these conditions" pass produces, so a parser that stops matching
+# fails here instead of passing with nothing flagged.
+BAD_CANCEL_GATE="$(python3 - "$WORKFLOWS_DIR" <<'PY'
+import glob
+import os
+import re
+import sys
+
+try:
+    import yaml
+except ImportError:
+    print('PyYAML is required for this assertion '
+          '(CI installs python3-yaml; locally: pip install pyyaml)')
+    sys.exit(0)
+
+workflows_dir = sys.argv[1]
+
+STRING = re.compile(r"'(?:[^']|'')*'")
+# Function names are case-insensitive in GitHub expressions, so `!Cancelled()` counts.
+STATUS = re.compile(r'\b(?:success|failure|cancelled|always)\s*\(\s*\)', re.IGNORECASE)
+# False on a cancelled run, so either one as a conjunct makes its whole clause false.
+GUARDS = {'!cancelled()', 'success()'}
+# Selecting a non-success outcome on purpose: the clause runs after one by design.
+SELECTS = {'failure()', 'cancelled()'}
+
+# (expression, is it safe on a cancelled run?)
+CANARIES = [
+    ("!failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || "
+     "github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))", False),
+    ("inputs.build_web && !failure() && (github.event_name == 'push')", False),
+    ("always() && github.ref == 'refs/heads/main'", False),
+    ("!failure() && (!cancelled() || github.event_name == 'push')", False),
+    ("(success() && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/')", False),
+    ("!success() && github.ref == 'refs/heads/main'", False),
+    ("!failure() && contains(github.ref, '!cancelled() || x')", False),
+    ("!cancelled() && !failure() && ((github.event_name == 'push' && github.ref == "
+     "'refs/heads/main') || startsWith(github.ref, 'refs/tags/'))", True),
+    ("inputs.build_web && !cancelled() && !failure() && (github.event_name == 'push')", True),
+    ("(success() && github.ref == 'refs/heads/main') || "
+     "(!cancelled() && startsWith(github.ref, 'refs/tags/'))", True),
+    ("${{ ! Cancelled( ) && !failure() }}", True),
+    ("github.event_name == 'push'", True),
+    ("failure() && github.ref == 'refs/heads/main'", True),
+]
+
+
+def scan(expression):
+    """Yield (index, character, at depth 0 outside a string) for each character."""
+    depth, quoted = 0, False
+    for index, character in enumerate(expression):
+        if character == "'":
+            quoted = not quoted              # a doubled `''` toggles twice, which is right
+        elif not quoted and character == '(':
+            depth += 1
+        elif not quoted and character == ')':
+            depth -= 1
+        yield index, character, depth == 0 and not quoted
+
+
+def split_top(expression, operator):
+    parts, start, skip = [], 0, 0
+    for index, _, top in scan(expression):
+        if skip:
+            skip -= 1
+            continue
+        if top and expression.startswith(operator, index):
+            parts.append(expression[start:index])
+            start, skip = index + len(operator), len(operator) - 1
+    parts.append(expression[start:])
+    return [part.strip() for part in parts if part.strip()]
+
+
+def strip_parens(term):
+    """`(x)` -> `x`, only while the outer pair encloses the whole term."""
+    term = term.strip()
+    while term.startswith('(') and term.endswith(')'):
+        closes = [index for index, character, top in scan(term) if top and character == ')']
+        if closes != [len(term) - 1]:
+            break
+        term = term[1:-1].strip()
+    return term
+
+
+def canonical(term):
+    term = strip_parens(re.sub(r'\s+', '', term).lower())
+    return '!' + strip_parens(term[1:]) if term.startswith('!') else term
+
+
+def clauses(expression):
+    """Top-level `||` clauses, recursing through redundant outer parentheses."""
+    expression = strip_parens(expression)
+    parts = split_top(expression, '||')
+    if len(parts) == 1:
+        return parts
+    return [clause for part in parts for clause in clauses(part)]
+
+
+def unguarded(expression):
+    """The clauses of a job `if:` that can still be TRUE on a cancelled run."""
+    expression = ' '.join(str(expression).split())
+    wrapped = re.fullmatch(r'\$\{\{(.*)\}\}', expression)
+    if wrapped:
+        expression = wrapped.group(1).strip()
+    if not STATUS.search(STRING.sub("''", expression)):
+        return []                            # GitHub prepends `success()` itself
+    return [clause for clause in clauses(expression)
+            if not {canonical(term) for term in split_top(strip_parens(clause), '&&')}
+            & (GUARDS | SELECTS)]
+
+
+examined = 0
+for path in sorted(glob.glob(os.path.join(workflows_dir, '*.yaml'))):
+    name = os.path.basename(path)
+    try:
+        with open(path, encoding='utf-8') as handle:
+            document = yaml.safe_load(handle) or {}
+        for job, body in (document.get('jobs') or {}).items():
+            condition = (body or {}).get('if')
+            if condition is None:
+                continue
+            if STATUS.search(STRING.sub("''", str(condition))):
+                examined += 1
+            for clause in unguarded(condition):
+                print(f'{name}: job {job} still starts on a cancelled run -- `{clause}` has no '
+                      f'`!cancelled()` or `success()` of its own; write '
+                      f'`!cancelled() && !failure() && (...)`')
+    except (OSError, yaml.YAMLError) as error:
+        print(f'{name}: unreadable ({error})')
+    except Exception as error:                      # noqa: BLE001 -- see Test 10's note
+        print(f'{name}: {type(error).__name__}: {error}')
+
+if not examined:
+    print(f'no job under {workflows_dir} gates on a status function -- the scan read nothing')
+
+for expression, safe in CANARIES:
+    if (not unguarded(expression)) != safe:
+        print(f'the classifier calls `{expression}` {"unsafe" if safe else "safe"} on a '
+              f'cancelled run, but it is {"safe" if safe else "not"}')
+PY
+)"
+assert_empty "every status-gated job clause refuses a cancelled run" "$BAD_CANCEL_GATE"
 echo ""
 
 echo "================================"

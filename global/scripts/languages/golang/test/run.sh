@@ -222,11 +222,21 @@ else
   # at the call site would silently never arrive. The GitHub path therefore
   # threads an `integration_parallel` INPUT through `go.yaml` into the test
   # action, which maps it onto this variable.
+  #
+  # GO_TEST_INTEGRATION_TIMEOUT is `go test`'s `-timeout` for this phase: the
+  # limit on each test binary, not on the phase. Go's own default is 10m, and an
+  # integration package that drives a real database through hundreds of flows
+  # can need most of that on a quiet runner, then die as `panic: test timed out
+  # after 10m0s` as soon as the runner is busy -- with nothing actually hung.
+  # 30m still bounds a genuine hang. `0` disables the limit. It is read from the
+  # environment like the variable above; no GitHub input carries it yet, so
+  # GitHub consumers get the default.
   # shellcheck disable=SC2086
   "$GOBIN_DIR"/gotestsum \
     --format pkgname \
     --junitfile junit-integration.xml \
     -- -p "${GO_TEST_INTEGRATION_PARALLEL:-1}" -tags integration \
+    -timeout "${GO_TEST_INTEGRATION_TIMEOUT:-30m}" \
     -coverpkg="$(echo $directories | tr ' ' ',')" \
     -covermode=count \
     -coverprofile=integration_coverage.txt \

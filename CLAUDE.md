@@ -354,6 +354,19 @@ is deliberately not asked, since taking the default is what a caller is for. And
 accepts any declared input, a workflow declaring `runs_on` must have at least one job resolve from or
 forward *it* — otherwise a consumer sets an input that GitHub accepts and nobody reads.
 
+A job may also take a selector of its **own** that falls back to the pipeline's:
+`runs-on: ${{ fromJSON(inputs.codeql_runs_on || inputs.runs_on) }}` is how `go.yaml`, `npm.yaml` and
+`yarn.yaml` let a consumer send CodeQL alone to a dedicated runner. CodeQL sizes its RAM and threads
+from the whole machine, so two analyses on one shared self-hosted host exhaust its memory, and the
+kernel's OOM kill surfaces as "The runner has received a shutdown signal". The chain parses as a
+declared-input selector, but a fallback reads correctly and still fails silently three ways, and the
+check reports each: a link after `runs_on` is never read, because `runs_on` always has a value; a link
+that is required or has a non-empty default never lets the job fall through, so the consumer's
+`runs_on` is ignored for that job; and a composed workflow that does not declare and forward its base's
+`<purpose>_runs_on` strands its consumers on `runs_on` — a drop that looks exactly like the default.
+Every runner-selecting input follows the same name, `runs_on` or `<purpose>_runs_on`, which is what
+lets the forward be demanded without the test listing the purposes.
+
 The eleventh is the **mention responder's trigger guard**, which is an authorization boundary rather
 than a style rule — that job runs with `contents: write` and the repository's secrets. It shipped with
 a hole worth remembering: an `issue_comment` payload carries **both** `comment` and `issue`, so a

@@ -370,6 +370,16 @@ echo "Test 10: every workflow declaring runs_on declares and consumes it the sam
 # well. A glob matching nothing is itself reported, so a rename fails rather than
 # passing with nothing left to check.
 #
+# One job may take a selector of its OWN, `<purpose>_runs_on`, that falls back to
+# the pipeline's: `fromJSON(inputs.codeql_runs_on || inputs.runs_on)` sends CodeQL to
+# a runner of its own on a shared self-hosted host and leaves it with every other job
+# when empty. A fallback reads correctly and still fails silently in three ways, so
+# each is a finding: a link after `runs_on` (which always has a value) is never read;
+# a link that is required or has a non-empty default never lets the job fall through
+# to the rest; and a composed workflow that does not forward its base's
+# `<purpose>_runs_on` strands its consumers on `runs_on` for that job -- the drop looks
+# exactly like the default, so nothing else would ever notice it.
+#
 # Two more things about the shape below are deliberate:
 #
 #   - It reads the PARSED document, one of the two assertions here that does, and
@@ -419,7 +429,11 @@ def normalized(value):
 # `${{ … }}` and a reformat may equally produce `fromJSON( inputs.runs_on )`. Anchoring
 # on exact interior spacing would report that correct job as PINNING A RUNNER -- the
 # wrong-defect message the `with:` compare was already fixed for.
-RUNNER = re.compile(r'^\$\{\{\s*fromJSON\(\s*inputs\.(\w+)\s*\)\s*\}\}$')
+# The argument may be one input or a FALLBACK CHAIN of them (`inputs.a || inputs.b`);
+# `chain_problems` holds the ways a chain parses and is still partly dead.
+RUNNER = re.compile(
+    r'^\$\{\{\s*fromJSON\(\s*(inputs\.\w+(?:\s*\|\|\s*inputs\.\w+)*)\s*\)\s*\}\}$')
+CHAIN_LINK = re.compile(r'inputs\.(\w+)')
 
 
 def declared_inputs(document):
@@ -432,6 +446,26 @@ def runs_on_input(document):
     return declared_inputs(document).get('runs_on')
 
 
+def callee_document(workflows_dir, uses):
+    """The parsed sibling workflow a job CALLS, or None when it cannot be resolved."""
+    reference = str(uses).split('@')[0]
+    # By basename alone, `someorg/theirrepo/.github/workflows/go.yaml@v1` would resolve
+    # to THIS repository's `go.yaml` and the forward would be demanded of a callee that
+    # does not declare it -- the trap `takes_runs_on` exists to avoid, from the other
+    # side. Only a local path or this repository's own workflows are resolvable.
+    if not (reference.startswith('./')
+            or reference.startswith('rios0rios0/pipelines/.github/workflows/')):
+        return None
+    path = os.path.join(workflows_dir, os.path.basename(reference))
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding='utf-8') as handle:
+            return yaml.safe_load(handle) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+
+
 def takes_runs_on(workflows_dir, uses):
     """Does the workflow this job CALLS declare a `runs_on` input?
 
@@ -442,22 +476,42 @@ def takes_runs_on(workflows_dir, uses):
     this directory can be resolved; anything else is assumed to take it, which is
     the status quo rather than a new silence.
     """
-    reference = str(uses).split('@')[0]
-    # By basename alone, `someorg/theirrepo/.github/workflows/go.yaml@v1` would resolve
-    # to THIS repository's `go.yaml` and the forward would be demanded of a callee that
-    # does not declare it -- the same trap this function exists to avoid, from the other
-    # side. Only a local path or this repository's own workflows are resolvable.
-    if not (reference.startswith('./')
-            or reference.startswith('rios0rios0/pipelines/.github/workflows/')):
-        return True
-    path = os.path.join(workflows_dir, os.path.basename(reference))
-    if not os.path.isfile(path):
-        return True
-    try:
-        with open(path, encoding='utf-8') as handle:
-            return runs_on_input(yaml.safe_load(handle) or {}) is not None
-    except (OSError, yaml.YAMLError):
-        return True
+    document = callee_document(workflows_dir, uses)
+    return document is None or runs_on_input(document) is not None
+
+
+def runner_overrides(document):
+    """The `<purpose>_runs_on` inputs a workflow declares beside `runs_on`.
+
+    One naming rule for every runner-selecting input is what lets a composed workflow
+    be checked for dropping one without this file listing which purposes exist. An
+    unresolvable callee contributes none: the forwards it wants cannot be known.
+    """
+    return sorted(name for name in declared_inputs(document) if name.endswith('_runs_on'))
+
+
+def chain_problems(job, chain, inputs):
+    """How a fallback chain parses correctly and still never reaches part of itself.
+
+    Each link is read only when every link before it is EMPTY. `runs_on` always has a
+    value -- its default is the hosted runner -- so any link after it is dead; and a
+    link that is required, or defaults to anything but the empty string, is never empty
+    unless a consumer happens to blank it, so the links after it are dead by default.
+    """
+    problems = []
+    if 'runs_on' in chain[:-1]:
+        dead = ', '.join(chain[chain.index('runs_on') + 1:])
+        problems.append(f'job {job} falls back past runs_on, which always has a value, '
+                        f'so {dead} is never read')
+    for name in chain[:-1]:
+        if name == 'runs_on':
+            continue                                # reported above, and only once
+        spec = inputs.get(name)
+        if (not isinstance(spec, dict) or spec.get('required') is True
+                or spec.get('default') not in ('', None)):
+            problems.append(f'job {job} falls back from inputs.{name}, which is not optional '
+                            f'with an empty default, so the rest of its chain is never reached')
+    return problems
 
 
 # DECLARATION half: these must offer the input at all.
@@ -503,7 +557,9 @@ for path in sorted(glob.glob(os.path.join(workflows_dir, '*.yaml'))):
             if spec.get('default') != '["ubuntu-latest"]':
                 problems.append('runs_on does not default to ["ubuntu-latest"]')
 
+        inputs = declared_inputs(document)
         reaches_a_job = False
+        consumed = set()
         for job, body in (document.get('jobs') or {}).items():
             body = body or {}
             # A job that CALLS another workflow cannot declare `runs-on` -- GitHub
@@ -514,21 +570,49 @@ for path in sorted(glob.glob(os.path.join(workflows_dir, '*.yaml'))):
             if 'uses' in body:
                 if not takes_runs_on(workflows_dir, body['uses']):
                     continue
-                if normalized((body.get('with') or {}).get('runs_on')) != '${{ inputs.runs_on }}':
+                forwards = body.get('with') or {}
+                if normalized(forwards.get('runs_on')) != '${{ inputs.runs_on }}':
                     problems.append(f'job {job} calls a workflow without forwarding runs_on')
                 else:
                     reaches_a_job = True
+                # The same converse one purpose down: a `<purpose>_runs_on` the callee
+                # takes and this workflow does not forward leaves that job on `runs_on`
+                # for every consumer of this one, and the fallback makes that look like
+                # the default rather than like a drop.
+                for override in runner_overrides(
+                        callee_document(workflows_dir, body['uses']) or {}):
+                    if override not in inputs:
+                        problems.append(f'job {job} calls a workflow that takes {override}, '
+                                        f'which this workflow does not declare to forward')
+                    elif normalized(forwards.get(override)) != f'${{{{ inputs.{override} }}}}':
+                        problems.append(f'job {job} calls a workflow without forwarding '
+                                        f'{override}')
+                    else:
+                        consumed.add(override)
                 continue
             selected = normalized(body.get('runs-on'))
             selector = RUNNER.match(selected) if isinstance(selected, str) else None
             if not selector:
                 problems.append(f'job {job} pins a runner instead of resolving one from an '
                                 f'input ({body.get("runs-on")!r})')
-            elif selector.group(1) not in declared_inputs(document):
-                problems.append(f'job {job} resolves its runner from inputs.{selector.group(1)}, '
+                continue
+            chain = CHAIN_LINK.findall(selector.group(1))
+            undeclared = [link for link in chain if link not in inputs]
+            if undeclared:
+                problems.append(f'job {job} resolves its runner from inputs.{undeclared[0]}, '
                                 f'which the workflow does not declare')
-            elif selector.group(1) == 'runs_on':
+                continue
+            problems.extend(chain_problems(job, chain, inputs))
+            consumed.update(chain)
+            if 'runs_on' in chain:
                 reaches_a_job = True
+
+        # A `<purpose>_runs_on` nothing reads is the same silently ignored input the
+        # check below refuses for `runs_on`: the consumer sets it, GitHub accepts it,
+        # and the job it names never moves.
+        for override in runner_overrides(document):
+            if override not in consumed:
+                problems.append(f'declares {override} that no job resolves from or forwards')
 
         # The runner rule accepts ANY declared input, which is what lets a job with a hard
         # platform requirement take a second one. Without this, a workflow could declare
@@ -546,7 +630,7 @@ for path in sorted(glob.glob(os.path.join(workflows_dir, '*.yaml'))):
         print(f'{name}: ' + '; '.join(problems))
 PY
 )"
-assert_empty "every runs_on input is optional, defaults to hosted, and reaches every job" "$BAD_RUNS_ON"
+assert_empty "every runs_on input is optional, defaults to hosted, and reaches every job, directly or as a fallback" "$BAD_RUNS_ON"
 echo ""
 
 echo "Test 11: the mention responder's trigger guard reads the right author"

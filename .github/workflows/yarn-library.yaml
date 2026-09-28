@@ -8,6 +8,11 @@ on:
         required: false
         default: '["ubuntu-latest"]'
         description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See yarn.yaml.'
+      codeql_runs_on:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'Runner labels for the CodeQL job alone; empty runs it on `runs_on`. See yarn.yaml.'
       codeql_upload:
         description: |
           Whether sast:codeql uploads its SARIF results ('always', 'failure-only' or 'never').
@@ -51,6 +56,7 @@ jobs:
     with:
       working_directory: '${{ inputs.working_directory }}'
       runs_on: ${{ inputs.runs_on }}
+      codeql_runs_on: ${{ inputs.codeql_runs_on }}
       codeql_upload: '${{ inputs.codeql_upload }}'
       install_run_scripts: ${{ inputs.install_run_scripts }}
       sonar_host: '${{ inputs.sonar_host }}'

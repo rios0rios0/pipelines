@@ -6,7 +6,8 @@
 # phases were handed the same package list, any consumer whose unit tests carry
 # no build tag ran its whole unit suite twice -- serially, under `-p 1` -- and
 # saw every test counted twice in the merged junit.xml. Phase 2 now runs only
-# the packages whose test file list actually changes under the tag.
+# the packages whose test file list actually changes under the tag. The last
+# case pins the `-timeout` phase 2 hands to `go test` (GO_TEST_INTEGRATION_TIMEOUT).
 #
 # Every case below drives the real run.sh rather than a copy of its selection
 # logic, so the test cannot drift away from the script it is pinning. The
@@ -364,6 +365,71 @@ check "the narrowing still holds when a package cannot be loaded" \
     "$(selected_packages "$BROKEN_LOG")" \
     "example.com/scope/broken/internal/swap
 example.com/scope/broken/internal/tagged"
+
+# ── phase 2 runs under its own timeout, not Go's 10m default ──────────────────
+# An integration package near 10 minutes on a quiet runner died as `panic: test
+# timed out after 10m0s` whenever the runner was busy. The fixture's only test
+# records the deadline `go test` handed it (`t.Deadline()`), so each case pins
+# the `-timeout` that actually reached the test binary, not the script's text.
+echo "== phase 2 runs under GO_TEST_INTEGRATION_TIMEOUT ==" >&2
+
+DEADLINE="$SANDBOX/deadline"
+mkdir -p "$DEADLINE/internal/deadline"
+cat > "$DEADLINE/go.mod" << 'EOF'
+module example.com/scope/deadline
+
+go 1.25
+EOF
+cat > "$DEADLINE/internal/deadline/deadline.go" << 'EOF'
+package deadline
+
+func Deadline() int { return 7 }
+EOF
+cat > "$DEADLINE/internal/deadline/deadline_integration_test.go" << 'EOF'
+//go:build integration
+
+package deadline
+
+import (
+	"os"
+	"strconv"
+	"testing"
+	"time"
+)
+
+// Writes the minutes left before the test binary times out, or "none".
+func TestRecordsItsDeadline(t *testing.T) {
+	left := "none"
+	if deadline, ok := t.Deadline(); ok {
+		left = strconv.Itoa(int(time.Until(deadline).Round(time.Minute) / time.Minute))
+	}
+	if Deadline() != 7 {
+		t.Fatal("unexpected value")
+	}
+	if err := os.WriteFile(os.Getenv("DEADLINE_FILE"), []byte(left), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+EOF
+
+# Each case writes to its own file: the path is read with os.Getenv, so it also
+# keys `go test`'s result cache, and a cached pass would never write the file.
+deadline_minutes() { # deadline_minutes <case> [GO_TEST_INTEGRATION_TIMEOUT]
+    local out="$SANDBOX/deadline-$1.txt" log="$SANDBOX/deadline-$1.log"
+    if [ $# -ge 2 ]; then
+        (cd "$DEADLINE" && DEADLINE_FILE="$out" GO_TEST_INTEGRATION_TIMEOUT="$2" "$RUN_SH") > "$log" 2>&1
+    else
+        (cd "$DEADLINE" && env -u GO_TEST_INTEGRATION_TIMEOUT DEADLINE_FILE="$out" "$RUN_SH") > "$log" 2>&1
+    fi || { echo "    runner failed (rc=$?), tail of $log:" >&2; tail -20 "$log" >&2; }
+    cat "$out" 2>/dev/null || echo "not-run"
+}
+
+check "the integration phase allows 30 minutes by default" \
+    "$(deadline_minutes default)" "30"
+check "GO_TEST_INTEGRATION_TIMEOUT sets the integration phase's limit" \
+    "$(deadline_minutes override 45m)" "45"
+check "GO_TEST_INTEGRATION_TIMEOUT=0 removes the limit" \
+    "$(deadline_minutes disabled 0)" "none"
 
 echo "" >&2
 if [ "$EXIT_CODE" -eq 0 ]; then

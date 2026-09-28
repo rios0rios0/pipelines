@@ -24,6 +24,27 @@ on:
           runner here rather than in each caller's job list makes moving a whole pipeline one
           switch. A JSON array rather than a plain string because a reusable-workflow input
           cannot be typed as a list, and multi-label runners need more than one value.
+      codeql_runs_on:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          JSON array of runner labels for the CodeQL job alone (e.g. '["self-hosted","heavy"]').
+          Empty, the default, runs it wherever `runs_on` says -- exactly as before this input
+          existed.
+
+          CodeQL is the heaviest job here, and it sizes itself from the machine rather than from
+          what the job is allowed: a runner that is not in a container of its own shows the
+          action the host's whole memory and every CPU, and the analysis asks for nearly all of
+          both. On a host that several self-hosted runners share, two analyses landing together
+          exceed its memory and the kernel's OOM killer ends one of them. On a runner run as a
+          systemd service the job then fails with "The runner has received a shutdown signal",
+          which reads like someone stopped the runner rather than like the machine ran out.
+          Pointing this at a label only one runner per host carries caps CodeQL at one analysis
+          per machine, while every other job keeps the whole pool.
+
+          `runs-on` is a hard selector, like `runs_on`: set this only once a runner carrying
+          every one of these labels exists, or the job queues until GitHub times it out.
       go_version_file:
         type: 'string'
         required: false
@@ -161,7 +182,9 @@ jobs:
   # second stage
   security-sast_codeql:
     name: 'security > sast:codeql'
-    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    # Its own selector, falling back to the pipeline's: see `codeql_runs_on`. An empty string is
+    # falsy in an expression, so the default leaves this job wherever every other job runs.
+    runs-on: ${{ fromJSON(inputs.codeql_runs_on || inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
         with:

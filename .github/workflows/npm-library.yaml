@@ -23,6 +23,11 @@ on:
         required: false
         default: '["ubuntu-latest"]'
         description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See npm.yaml.'
+      codeql_runs_on:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'Runner labels for the CodeQL job alone; empty runs it on `runs_on`. See npm.yaml.'
       codeql_upload:
         type: 'string'
         required: false
@@ -50,6 +55,7 @@ jobs:
       install_run_scripts: ${{ inputs.install_run_scripts }}
       sonar_host: '${{ inputs.sonar_host }}'
       runs_on: ${{ inputs.runs_on }}
+      codeql_runs_on: ${{ inputs.codeql_runs_on }}
       codeql_upload: ${{ inputs.codeql_upload }}
     secrets:
       sonar_token: '${{ secrets.sonar_token }}'

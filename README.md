@@ -305,6 +305,42 @@ contract is changed on its own.
 
 `make test-working-directory` fails if any of the above regresses.
 
+#### CodeQL on Its Own Runners (`codeql_runs_on`)
+
+On self-hosted runners that share a host, CodeQL is the job that runs the host out of memory. It
+sizes itself from the machine rather than from what the job is allowed: a runner that is not in a
+container of its own shows the action the host's whole memory and every CPU, and the analysis asks
+for nearly all of both. Two analyses that land on the same host together exceed its memory, and the
+kernel's OOM killer ends one of them. On a runner run as a systemd service the job then fails with
+"The runner has received a shutdown signal", which reads like someone stopped the runner rather than
+like the machine ran out.
+
+`codeql_runs_on` sends the CodeQL job alone to its own runners, while every other job keeps `runs_on`.
+Pointed at a label that only one runner per host carries, it caps CodeQL at one analysis per
+machine:
+
+```yaml
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'
+    with:
+      runs_on: '["self-hosted"]'
+      codeql_runs_on: '["self-hosted","heavy"]'
+```
+
+Empty, the default, runs CodeQL wherever `runs_on` says, so a consumer that does not pass it sees no
+change. Like `runs_on`, it is a hard selector: set it only once a runner carrying every one of those
+labels exists, or the job queues until GitHub times it out.
+
+`go.yaml`, `npm.yaml` and `yarn.yaml` take it, and so does every workflow composed on them:
+`go-docker.yaml`, `go-flyio.yaml`, `go-render.yaml`, `go-binary.yaml`, `go-library.yaml`,
+`npm-docker.yaml`, `npm-library.yaml`, `npm-cloudflare.yaml`, `yarn-docker.yaml`,
+`yarn-library.yaml` and `yarn-cloudflare.yaml`.
+
+It is GitHub Actions only, as `runs_on` is: the GitLab CI and Azure DevOps CodeQL jobs take no
+runner selector of their own. `make test-workflow-composition` fails if a composed workflow stops
+forwarding it, or if the CodeQL job's fallback can no longer reach `runs_on`.
+
 #### Usage Example (Go with Docker)
 
 ```yaml

@@ -432,6 +432,11 @@ most likely to break, in order of how expensive the mistake was:
     `!cancelled() && !failure() && (…)`, never `!failure()` alone: a cancelled job is not a failed
     one, so a run superseded by `cancel-in-progress` still delivers and deploys a commit whose
     checks never finished. Every `||` clause needs a `!cancelled()` or `success()` of its own.
+11. **A composed workflow declares and forwards every runner input its base takes** — `runs_on`,
+    and any `<purpose>_runs_on` such as `codeql_runs_on`. A dropped override is invisible: the job
+    falls back to `runs_on`, which looks exactly like the default. A job with its own selector
+    writes `fromJSON(inputs.<purpose>_runs_on || inputs.runs_on)`, with `runs_on` last and the
+    override optional and empty by default, or the fallback never happens.
 
 ### Platform and Language Support Matrix
 

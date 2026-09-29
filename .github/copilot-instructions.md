@@ -28,6 +28,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-fixture-isolation` - Test that every suite builds its fixtures in mktemp space and guards every `cd` specifically
 - `make test-gitignore` - Test the shared `.gitignore` block generator specifically
 - `make test-sast-gate` - Test that `make sast` and every individual SAST target propagate tool failures specifically
+- `make test-codeql-scope` - Test that a local CodeQL scan builds from the files git would ship, on every core, while CI keeps the checkout and one thread, specifically
 - `make test-dependency-check` - Test the OWASP Dependency-Check NVD cache / API-key contract specifically
 - `make test-dependency-track` - Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, cross-platform wiring) specifically
 - `make test-goreleaser-prepare` - Test the GoReleaser main package detection specifically
@@ -826,6 +827,7 @@ make test-basic-checks
 make test-fixture-isolation
 make test-gitignore
 make test-sast-gate
+make test-codeql-scope
 make test-dependency-check
 make test-dependency-track
 make test-goreleaser-prepare

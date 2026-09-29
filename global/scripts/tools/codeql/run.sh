@@ -10,7 +10,55 @@ CODEQL_LANGUAGE="${1:?Usage: run.sh <language> (e.g., go, python, java, javascri
 fileName="$(pwd)/$REPORT_PATH/codeql.sarif"
 
 CODEQL_RAM="${CODEQL_RAM:-}"
-CODEQL_THREADS="${CODEQL_THREADS:-1}"
+
+# Whether this is a CI runner: GitHub Actions and GitLab CI export CI on every job, Azure DevOps
+# exports TF_BUILD. Anything else is a developer's machine running `make codeql`.
+codeql_on_ci() {
+  [ -n "${CI:-}" ] || [ -n "${TF_BUILD:-}" ]
+}
+
+# One thread on a CI runner, where CodeQL may share its host with other jobs -- see the RAM note
+# below and `codeql_runs_on`. Every core on a developer's machine, where the scan is the one thing
+# running: a single thread there turned a six-minute scan into hours. An explicit CODEQL_THREADS
+# always wins.
+if [ -z "${CODEQL_THREADS:-}" ]; then
+  if codeql_on_ci; then
+    CODEQL_THREADS=1
+  else
+    CODEQL_THREADS=0
+  fi
+fi
+
+# What the database is built from. On a CI runner it is the checkout itself: a fresh clone holds
+# nothing else. A developer's working tree also holds everything .gitignore keeps out of the
+# repository -- an agent's worktrees under .claude/worktrees, vendored builds, old databases --
+# and the extractor takes all of it: the Go autobuilder builds every go.mod under the source root,
+# so thirty stale worktrees turned one module into 31, a 93 GB database and a scan still importing
+# after 77 minutes. So a local scan copies the files git would ship -- the tracked ones still on
+# disk, plus untracked ones no ignore rule excludes -- into a scratch directory and builds from
+# there. Every path stays relative to the project root, so the report's locations and the
+# `.codeql-false-positives` fingerprints (hashes of source lines, not of where they sit) come out
+# as a CI run reports them. An untracked nested repository is left out, as `git add` would: git
+# lists it as `dir/`, and taking its contents is how the stale worktrees would come back.
+#
+# CODEQL_SOURCE_SCOPE overrides the choice: `git` for that copy, `tree` for the directory as it is
+# -- the way back for a build that needs a file .gitignore keeps out. Outside a git work tree the
+# directory is scanned as it is, as it always was.
+CODEQL_SOURCE_SCOPE="${CODEQL_SOURCE_SCOPE:-}"
+if [ -z "$CODEQL_SOURCE_SCOPE" ]; then
+  if codeql_on_ci; then
+    CODEQL_SOURCE_SCOPE=tree
+  else
+    CODEQL_SOURCE_SCOPE=git
+  fi
+fi
+case "$CODEQL_SOURCE_SCOPE" in
+  git | tree) ;;
+  *)
+    echo "ERROR: CODEQL_SOURCE_SCOPE must be 'git' or 'tree', not '$CODEQL_SOURCE_SCOPE'." >&2
+    exit 1
+    ;;
+esac
 
 # When `--ram` is not given, CodeQL sizes its own JVM heap -- and inside a
 # memory-limited container it gets that badly wrong, because the number it
@@ -130,15 +178,45 @@ if ! command -v codeql > /dev/null 2>&1; then
   rm /tmp/codeql-bundle.tar.gz
 fi
 
+SOURCE_ROOT="$(pwd)"
+SCAN_WORK=""
+if [ "$CODEQL_SOURCE_SCOPE" = "git" ] && git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+  SCAN_WORK="$(mktemp -d)" || exit 1
+  trap 'rm -rf "$SCAN_WORK"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  mkdir "$SCAN_WORK/source"
+  if ! git ls-files -z --cached --others --exclude-standard > "$SCAN_WORK/listed"; then
+    echo "ERROR: could not list the files git would ship; set CODEQL_SOURCE_SCOPE=tree to scan the directory as it is." >&2
+    exit 1
+  fi
+  # shellcheck disable=SC2016 # the script is for the inner sh, which expands "$@" itself
+  if ! xargs -0 sh -c 'for f do case $f in */) ;; *) if [ -e "$f" ] || [ -L "$f" ]; then printf "%s\0" "$f"; fi ;; esac; done' sh \
+    < "$SCAN_WORK/listed" > "$SCAN_WORK/shipped" \
+    || ! tar -c -f "$SCAN_WORK/source.tar" --null -T "$SCAN_WORK/shipped" \
+    || ! tar -x -f "$SCAN_WORK/source.tar" -C "$SCAN_WORK/source"; then
+    echo "ERROR: could not copy the files git would ship; set CODEQL_SOURCE_SCOPE=tree to scan the directory as it is." >&2
+    exit 1
+  fi
+  rm -f "$SCAN_WORK/source.tar"
+  SOURCE_ROOT="$SCAN_WORK/source"
+  echo "Scanning the $(tr -cd '\0' < "$SCAN_WORK/shipped" | wc -c | tr -d ' ') file(s) git would ship, copied to $SOURCE_ROOT (CODEQL_SOURCE_SCOPE=git)."
+else
+  echo "Scanning $SOURCE_ROOT as it is (CODEQL_SOURCE_SCOPE=$CODEQL_SOURCE_SCOPE)."
+fi
+
 echo "Creating CodeQL database for language: $CODEQL_LANGUAGE"
 # shellcheck disable=SC2086
 if ! codeql database create \
   --language="$CODEQL_LANGUAGE" \
-  --source-root="$(pwd)" \
+  --source-root="$SOURCE_ROOT" \
   $THREADS_FLAG \
   $CONFIG_FLAG \
   "$(pwd)/.codeql-db"; then
   echo "ERROR: 'codeql database create' failed for language '$CODEQL_LANGUAGE'." >&2
+  if [ -n "$SCAN_WORK" ]; then
+    echo "The build ran on the files git would ship; if it needs one .gitignore keeps out, set CODEQL_SOURCE_SCOPE=tree." >&2
+  fi
   rm -rf "$(pwd)/.codeql-db"
   exit 1
 fi

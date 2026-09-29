@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, fixture-isolation, gitignore, sast-gate, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, azure-step-names, azure-secret-env, dependency-updates, containers-detect, report-uploads)
+make test              # Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, fixture-isolation, gitignore, sast-gate, codeql-scope, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, azure-step-names, azure-secret-env, dependency-updates, containers-detect, report-uploads)
 make test-go-script    # Test Go validation script only
 make test-go-module-toolchain  # Test that every go.mod toolchain directive is readable by the images/analysers that consume it only
 make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves only
@@ -30,6 +30,7 @@ make test-basic-checks # Test basic-checks changelog validation (chlog fragments
 make test-fixture-isolation  # Test that every suite builds its fixtures in mktemp space and guards every cd only
 make test-gitignore    # Test the shared .gitignore block generator only
 make test-sast-gate    # Test that the SAST targets propagate tool failures only
+make test-codeql-scope  # Test that a local CodeQL scan builds from the files git would ship, on every core, only
 make test-dependency-check  # Test the OWASP Dependency-Check NVD cache / API-key contract only
 make test-dependency-track  # Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, cross-platform wiring) only
 make test-goreleaser-prepare  # Test the GoReleaser main package detection only
@@ -786,6 +787,31 @@ belong in that tool's own suppression file (`.codeql-false-positives`, `.semgrep
 `.semgrepexcluderules`, `.hadolint.yaml`, `.gitleaksignore`). A consumer that genuinely
 wants the old behaviour writes `make sast || true` at its own call site, where review can
 see it. `.github/tests/test-sast-gate.sh` fails if the suppression returns.
+
+### A Local CodeQL Scan Builds From What Git Would Ship
+
+`global/scripts/tools/codeql/run.sh` builds its database from the directory it is handed, and the
+extractors take everything under it -- the Go autobuilder builds every `go.mod` it finds. A CI
+checkout holds only the repository, but a developer's working tree also holds what `.gitignore`
+keeps out of it: on 2026-09-29 thirty stale agent worktrees under `.claude/worktrees` turned one
+module into 31, a 93 GB database and a `make codeql` still importing on one thread after 77
+minutes, where a clean checkout scanned in six.
+
+So the script decides two things by whether it runs on CI (`CI`, which GitHub Actions and GitLab CI
+set, or `TF_BUILD`, which Azure DevOps sets):
+
+| | CI runner | Developer's machine |
+|---|---|---|
+| Source root (`CODEQL_SOURCE_SCOPE`) | `tree`: the checkout as it is | `git`: a scratch copy of the tracked files still on disk plus untracked ones no ignore rule excludes |
+| `CODEQL_THREADS` | `1`: the host may be shared (see `codeql_runs_on`) | `0`: every core |
+
+Either variable overrides its default. The copy keeps every path relative to the project root, so
+SARIF locations and the `.codeql-false-positives` fingerprints (hashes of source lines, not of
+paths) come out as on CI. It leaves out an untracked nested repository, which `git ls-files
+--others` lists as `dir/`, as `git add` would. Outside a git work tree the directory is scanned as
+it is. A build that needs a file `.gitignore` keeps out runs with `CODEQL_SOURCE_SCOPE=tree`, and a
+failed `database create` on the copy says so. `.github/tests/test-codeql-scope.sh` asserts all of
+it against a stub `codeql`.
 
 ### Report Uploads Never Gate a Job
 

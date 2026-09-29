@@ -1898,6 +1898,24 @@ at its own call site (`make sast || true`, or the platform's `continueOnError` /
 / `allow_failure`), which is where this repository's published templates already make that choice
 and where it stays visible.
 
+#### `make codeql` on a Developer's Machine
+
+A working tree holds more than the repository ships -- an agent's worktrees under `.claude/worktrees`,
+vendored builds, old databases -- and CodeQL's extractors take everything under the directory they
+are given. So when it runs outside CI, `make codeql` builds its database from a scratch copy of the
+files git would ship: the tracked files still on disk plus untracked ones no `.gitignore` rule
+excludes. It also uses every core. Report locations and `.codeql-false-positives` fingerprints come
+out exactly as on CI.
+
+| Variable              | Default on CI | Default elsewhere | Purpose                                                                |
+|-----------------------|---------------|-------------------|------------------------------------------------------------------------|
+| `CODEQL_SOURCE_SCOPE` | `tree`        | `git`             | `git` scans the copy; `tree` scans the directory as it is              |
+| `CODEQL_THREADS`      | `1`           | `0` (every core)  | Threads for `database create` and `database analyze`                  |
+
+CI is recognised by `CI` (GitHub Actions, GitLab CI) or `TF_BUILD` (Azure DevOps). If a project's
+build needs a file `.gitignore` keeps out of the repository, scan it with
+`CODEQL_SOURCE_SCOPE=tree make codeql`.
+
 See the [`.docs/examples/`](.docs/examples) directory for complete per-provider examples including Makefiles.
 
 ### Direct Script Usage

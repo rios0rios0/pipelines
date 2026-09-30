@@ -1,3 +1,0 @@
-kind: 'Security'
-body: 'masked every value in `build_env_secrets` before writing it to the environment, so a credential no longer prints in cleartext in a later step''s env block'
-time: '2026-09-09T05:34:50.709840804Z'

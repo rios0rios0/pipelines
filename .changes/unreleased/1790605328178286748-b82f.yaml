@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed Go integration packages failing with `panic: test timed out after 10m0s` on a busy runner: the integration phase of `global/scripts/languages/golang/test/run.sh` passed no `-timeout`, so every test binary got Go''s 10-minute default. It now runs with `-timeout 30m`, which `GO_TEST_INTEGRATION_TIMEOUT` overrides (`0` removes the limit; no GitHub Actions input carries it yet, so GitHub consumers get the default)'
-time: '2026-09-28T14:22:08.178131874Z'

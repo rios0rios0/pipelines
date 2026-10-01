@@ -32,7 +32,8 @@ THE MEASUREMENT
                    `check` block under each module (test code excluded).
     Seeds S        the addresses that EXECUTED assertions name: assert
                    conditions and `expect_failures` entries in
-                   `tests/**/*.tftest.hcl`, the module's own `check` blocks,
+                   `tests/*.tftest.hcl` (the same non-recursive glob `run.sh`
+                   selects on), the module's own `check` blocks,
                    and `lifecycle { pre|postcondition }` guards.
     Graph R        `local.x`, `output.x` and `var.x` are indirections, not
                    destinations: each expands to the traversals of its value
@@ -67,18 +68,29 @@ import argparse
 import bisect
 import re
 import sys
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from xml.sax.saxutils import escape as xml_escape
 
 DEFAULT_OUTPUT = "build/reports/terra-coverage-generic.xml"
 
-# Vendored/derived trees. Pruned at ANY depth, because they are copies of
-# modules that already live in the source tree: counting them inflates the
-# denominator AND duplicates the successes, which once made one module appear
-# six times at 100%. Measured on the reference repos, `.terraform` copies were
-# 62 of 98 `.tf` files in one and 122 of 443 in the other.
-PRUNED_DIRS = {".terraform", ".terragrunt-cache", ".external_modules", ".git"}
+# Vendored/derived trees. Excluded EVERYWHERE -- the file walk and module
+# discovery alike -- and at ANY depth, because they are copies of modules that
+# already live in the source tree: counting them inflates the denominator AND
+# duplicates the successes, which once made one module appear six times at
+# 100%. Measured on the reference repos, `.terraform` copies were 62 of 98
+# `.tf` files in one and 122 of 443 in the other.
+VENDORED_DIRS = {".terraform", ".terragrunt-cache", ".external_modules", ".git"}
+
+# Pruned from the FILE WALK only. An `examples/` tree is example USAGE of a
+# module, not module code. In the root layout -- the common published module
+# layout, where the repository itself IS the module -- it would otherwise land
+# in the denominator and deflate every module that ships examples. It is
+# deliberately NOT excluded from module discovery: a module legitimately named
+# `modules/examples/` is a module, and silently skipping it would be the same
+# invisibility bug the root-layout case exists to fix.
+PRUNED_DIRS = VENDORED_DIRS | {"examples"}
 
 # Blocks that BEHAVE at apply time, so "was it exercised?" is a real question.
 DENOM_KINDS = {"resource", "data", "module", "output", "check"}
@@ -265,7 +277,7 @@ class Block:
     close_idx: int
 
 
-def iter_blocks(masked: str, original: str, lo: int, hi: int):
+def iter_blocks(masked: str, original: str, lo: int, hi: int) -> Iterator[Block]:
     """Yield the blocks declared DIRECTLY in `[lo, hi)`, skipping their bodies."""
     i = lo
     while i < hi:
@@ -292,7 +304,9 @@ def iter_blocks(masked: str, original: str, lo: int, hi: int):
         i += 1
 
 
-def iter_blocks_deep(masked: str, original: str, lo: int, hi: int):
+def iter_blocks_deep(
+    masked: str, original: str, lo: int, hi: int
+) -> Iterator[Block]:
     for blk in iter_blocks(masked, original, lo, hi):
         yield blk
         yield from iter_blocks_deep(masked, original, blk.open_idx + 1, blk.close_idx)
@@ -325,7 +339,9 @@ def _expr_end(masked: str, start: int, hi: int) -> int:
     return i
 
 
-def iter_attrs(masked: str, original: str, lo: int, hi: int):
+def iter_attrs(
+    masked: str, original: str, lo: int, hi: int
+) -> Iterator[tuple[str, int, int]]:
     """Yield `(name, expr_start, expr_end)` for attributes DIRECTLY in `[lo, hi)`."""
     i = lo
     while i < hi:
@@ -350,7 +366,9 @@ def iter_attrs(masked: str, original: str, lo: int, hi: int):
         i += 1
 
 
-def iter_attrs_deep(masked: str, original: str, lo: int, hi: int):
+def iter_attrs_deep(
+    masked: str, original: str, lo: int, hi: int
+) -> Iterator[tuple[str, int, int]]:
     yield from iter_attrs(masked, original, lo, hi)
     for blk in iter_blocks(masked, original, lo, hi):
         yield from iter_attrs_deep(masked, original, blk.open_idx + 1, blk.close_idx)
@@ -384,6 +402,31 @@ def traversals(expr: str | None) -> set[str]:
         elif m.group("rtype") and m.group("rtype") not in RESERVED_PREFIXES:
             found.add(f"{m.group('rtype')}.{m.group('rname')}")
     return found
+
+
+# The namespace of a file declared directly in the module root, and the one a
+# `tests/*.tftest.hcl` resolves against: `terraform test` evaluates a test
+# against the module root directory, not against the `tests/` directory itself.
+ROOT_NS = "."
+
+
+def qualify(address: str, namespace: str) -> str:
+    """Scope an address to the directory that declared it.
+
+    An HCL address is only unique within one directory: two nested submodules
+    may each declare `aws_s3_bucket.this`, and while addresses were global to
+    the whole module scan they shared one coverage entry, so an assertion on one
+    marked the other covered. `namespace` is the declaring directory relative to
+    the module root, so blocks in different directories can never collide, while
+    a single-directory module is unaffected (every address gets the same `@.`).
+    `@` cannot appear in an HCL identifier, and the address stays in FRONT so
+    `EXPANDING_PREFIXES` still matches a qualified node.
+    """
+    return f"{address}@{namespace}"
+
+
+def qualify_all(addresses: set[str], namespace: str) -> set[str]:
+    return {qualify(address, namespace) for address in addresses}
 
 
 def block_address(blk: Block) -> str | None:
@@ -426,7 +469,7 @@ def line_index(text: str) -> list[int]:
     return starts
 
 
-def walk_files(root: Path, pattern: str, skip_tests: bool):
+def walk_files(root: Path, pattern: str, skip_tests: bool) -> Iterator[Path]:
     """Yield files matching `pattern`, pruning vendored dirs (and `tests/`)."""
     stack = [root]
     while stack:
@@ -458,7 +501,16 @@ def scan_module(module_dir: Path, repo_dir: Path) -> ModuleScan:
 
     # A module with no test file has an empty seed set by definition: nothing
     # was executed, so nothing is covered. Its blocks still count in D.
-    test_files = sorted(walk_files(module_dir / "tests", ".tftest.hcl", skip_tests=False))
+    # Mirrors the runner's own selector, `ls "${mod}"/tests/*.tftest.hcl` in
+    # `terra-test/run.sh`, deliberately: NON-recursive, so a
+    # `tests/e2e/*.tftest.hcl` cannot credit coverage, because the terra-test
+    # tier never executes it. A `*.tftest.hcl` in the module root is likewise
+    # not counted, because `run.sh` does not select on it either. The report can
+    # then never claim coverage from a test the tier did not run.
+    test_files = sorted(
+        path for path in (module_dir / "tests").glob("*.tftest.hcl")
+        if path.is_file() and not path.is_symlink()
+    )
     has_tests = bool(test_files)
 
     for tf in sorted(walk_files(module_dir, ".tf", skip_tests=True)):
@@ -470,6 +522,7 @@ def scan_module(module_dir: Path, repo_dir: Path) -> ModuleScan:
         masked = mask(original)
         starts = line_index(original)
         rel = tf.relative_to(repo_dir).as_posix()
+        ns = tf.parent.relative_to(module_dir).as_posix()
 
         for blk in iter_blocks(masked, original, 0, len(masked)):
             address = block_address(blk)
@@ -477,7 +530,8 @@ def scan_module(module_dir: Path, repo_dir: Path) -> ModuleScan:
 
             if blk.kind == "locals":
                 for name, a, b in iter_attrs(masked, original, *body):
-                    add_edge(scan.graph, "local." + name, traversals(masked[a:b]))
+                    add_edge(scan.graph, qualify("local." + name, ns),
+                             qualify_all(traversals(masked[a:b]), ns))
                 continue
 
             if blk.kind == "variable" and blk.labels:
@@ -490,17 +544,19 @@ def scan_module(module_dir: Path, repo_dir: Path) -> ModuleScan:
                             attr_expr(masked, original, sub.open_idx + 1,
                                       sub.close_idx, "condition")
                         )
-                add_edge(scan.graph, "var." + blk.labels[0], refs)
+                add_edge(scan.graph, qualify("var." + blk.labels[0], ns),
+                         qualify_all(refs, ns))
                 continue
 
             if address is None or blk.kind not in DENOM_KINDS:
                 continue
 
-            scan.declared.append(Declared(rel, line_of(starts, blk.start), address))
+            qaddress = qualify(address, ns)
+            scan.declared.append(Declared(rel, line_of(starts, blk.start), qaddress))
 
             if blk.kind == "output":
-                add_edge(scan.graph, address,
-                         traversals(attr_expr(masked, original, *body, "value")))
+                add_edge(scan.graph, qaddress, qualify_all(
+                    traversals(attr_expr(masked, original, *body, "value")), ns))
 
             if not has_tests:
                 continue
@@ -509,23 +565,23 @@ def scan_module(module_dir: Path, repo_dir: Path) -> ModuleScan:
             # `terraform test` really evaluates. The check itself is exercised,
             # and so is everything its condition names.
             if blk.kind == "check":
-                scan.seeds.add(address)
+                scan.seeds.add(qaddress)
                 for sub in iter_blocks_deep(masked, original, *body):
                     if sub.kind == "assert":
-                        scan.seeds |= traversals(
+                        scan.seeds |= qualify_all(traversals(
                             attr_expr(masked, original, sub.open_idx + 1,
                                       sub.close_idx, "condition")
-                        )
+                        ), ns)
 
             # `lifecycle { pre|postcondition { condition } }` -- the guard runs
             # as part of the containing block, so the block is exercised.
             for sub in iter_blocks_deep(masked, original, *body):
                 if sub.kind in ("precondition", "postcondition"):
-                    scan.seeds.add(address)
-                    scan.seeds |= traversals(
+                    scan.seeds.add(qaddress)
+                    scan.seeds |= qualify_all(traversals(
                         attr_expr(masked, original, sub.open_idx + 1,
                                   sub.close_idx, "condition")
-                    )
+                    ), ns)
 
     for tft in test_files:
         try:
@@ -536,10 +592,10 @@ def scan_module(module_dir: Path, repo_dir: Path) -> ModuleScan:
         masked = mask(original)
         for blk in iter_blocks_deep(masked, original, 0, len(masked)):
             if blk.kind == "assert":
-                scan.seeds |= traversals(
+                scan.seeds |= qualify_all(traversals(
                     attr_expr(masked, original, blk.open_idx + 1,
                               blk.close_idx, "condition")
-                )
+                ), ROOT_NS)
         for name, a, b in iter_attrs_deep(masked, original, 0, len(masked)):
             if name != "expect_failures":
                 continue
@@ -549,7 +605,7 @@ def scan_module(module_dir: Path, repo_dir: Path) -> ModuleScan:
             for entry in re.split(r"[,\n]", masked[a:b].strip().strip("[]")):
                 entry = entry.strip().strip("[],")
                 if entry:
-                    scan.seeds.add(entry)
+                    scan.seeds.add(qualify(entry, ROOT_NS))
 
     return scan
 
@@ -591,7 +647,7 @@ def discover_modules(repo_dir: Path) -> list[Path]:
     if modules_root.is_dir():
         found = sorted(
             d for d in modules_root.iterdir()
-            if d.is_dir() and not d.is_symlink() and d.name not in PRUNED_DIRS
+            if d.is_dir() and not d.is_symlink() and d.name not in VENDORED_DIRS
         )
         if found:
             return found
@@ -607,7 +663,7 @@ XML_HEADER_COMMENT = """<!--
   One lineToCover per top level BLOCK (resource, data, module, output, check),
   placed on the block's declaration line. covered="true" means the block is
   reachable from an assertion `terraform test` actually executes: an assert
-  condition or an expect_failures entry in tests/**/*.tftest.hcl, the module's
+  condition or an expect_failures entry in tests/*.tftest.hcl, the module's
   own check blocks, or a lifecycle precondition/postcondition, followed through
   local, output and variable validation expressions.
 

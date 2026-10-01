@@ -636,7 +636,9 @@ make_coverage_fixtures() {
   mktemp -d "$TEST_DIR/coverage-XXXXXX"
 }
 
-# The eight properties the "no coverage" branch clears, as it writes them.
+# The seven properties the "no coverage" branch clears unconditionally, as it
+# writes them; `sonar.coverageReportPaths` is the eighth and is guarded, so
+# TEST 32 counts eight only because its fixture does not declare that key.
 CLEARED_COVERAGE_KEY='^sonar\.javascript\.lcov\.reportPaths=$'
 
 echo "TEST 29: Coverage detection — a project directory containing a space"
@@ -700,6 +702,36 @@ if grep -Eq "$CLEARED_COVERAGE_KEY" "$props" \
   print_result 0 "a tree with no coverage anywhere still clears the eight report-path properties"
 else
   print_result 1 "the no-coverage branch stopped clearing ($cleared_count of 8 empty entries)"
+fi
+
+echo "TEST 33: Coverage detection — a project-declared sonar.coverageReportPaths survives both branches"
+# `sonar.coverageReportPaths` is SonarQube's language-agnostic generic coverage
+# key, shared with every other language, and `coverage_present_in` does not glob
+# for whatever a project may have pointed it at. Blanking it in the no-coverage
+# branch, or appending the Terraform value over it in the found branch, silently
+# costs that project its coverage on a shared quality gate.
+printf 'sonar.coverageReportPaths=qa/generic-coverage.xml\n' \
+  > "$TEST_DIR/declared-generic-coverage.properties"
+
+# once against an empty tree (the clearing branch)...
+empty_fx=$(make_coverage_fixtures)
+declared_empty=$(run_with_fixtures "$empty_fx" "$TEST_DIR/declared-generic-coverage.properties" -- \
+  GITHUB_REPOSITORY=owner/repo)
+# ...and once against a tree that holds a Terraform generic report (the found branch)
+terra_fx=$(make_coverage_fixtures)
+mkdir -p "$terra_fx/build/reports"
+: > "$terra_fx/build/reports/terra-coverage-generic.xml"
+declared_found=$(run_with_fixtures "$terra_fx" "$TEST_DIR/declared-generic-coverage.properties" -- \
+  GITHUB_REPOSITORY=owner/repo)
+
+if grep -Fxq 'sonar.coverageReportPaths=qa/generic-coverage.xml' "$declared_empty" \
+  && [ "$(count_key sonar.coverageReportPaths "$declared_empty")" -eq 1 ] \
+  && grep -q 'No coverage files found' "$(run_log "$declared_empty")" \
+  && grep -Fxq 'sonar.coverageReportPaths=qa/generic-coverage.xml' "$declared_found" \
+  && [ "$(count_key sonar.coverageReportPaths "$declared_found")" -eq 1 ]; then
+  print_result 0 "a repository-declared sonar.coverageReportPaths is neither cleared nor overridden"
+else
+  print_result 1 "the repository lost its generic coverage path (no-coverage: $(grep -E '^sonar\.coverageReportPaths=' "$declared_empty" 2>/dev/null || echo 'missing'), found: $(grep -E '^sonar\.coverageReportPaths=' "$declared_found" 2>/dev/null || echo 'missing'))"
 fi
 
 # =============================================================================

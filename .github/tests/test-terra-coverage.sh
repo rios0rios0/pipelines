@@ -315,6 +315,237 @@ assert_true "empty run still states the granularity caveat" \
   "echo \"\$SUMMARY4\" | grep -q 'granularity is per BLOCK'"
 
 # =============================================================================
+# Test 5: An examples/ tree is usage of the module, not module code
+#   (regression guard: the walk pruned only vendored trees, so in the root
+#    layout -- the common published-module layout -- every block under
+#    `examples/` landed in the denominator and deflated the module that ships
+#    them.)
+# =============================================================================
+echo "TEST 5: examples/ is excluded from the denominator"
+# given -- a root-layout module that ships an examples/ tree
+REPO5="$TEST_DIR/repo5"
+mkdir -p "$REPO5/tests" "$REPO5/examples/complete"
+cat > "$REPO5/main.tf" << 'HCL'
+resource "aws_s3_bucket" "logs" {
+  bucket = "l"
+}
+
+output "bucket_id" {
+  value = aws_s3_bucket.logs.id
+}
+HCL
+cat > "$REPO5/examples/complete/main.tf" << 'HCL'
+module "example" {
+  source = "../.."
+}
+
+resource "aws_s3_bucket" "example_only" {
+  bucket = "e"
+}
+HCL
+cat > "$REPO5/tests/smoke.tftest.hcl" << 'HCL'
+run "r" {
+  command = plan
+  assert {
+    condition     = output.bucket_id != ""
+    error_message = "no id"
+  }
+}
+HCL
+
+# when
+OUT5="$TEST_DIR/out5.xml"
+# shellcheck disable=SC2034  # used inside assert_true's eval'd argument
+SUMMARY5="$(python3 "$COV" --repo-dir "$REPO5" --output "$OUT5")"
+
+# then
+assert_true "example usage is not module code (2/2, not 2/4)" \
+  "echo \"\$SUMMARY5\" | grep -q 'terra generic coverage: 2/2 blocks'"
+assert_true "no examples/ path is reported at all" \
+  "! grep -q 'examples' '$OUT5'"
+
+# =============================================================================
+# Test 6: An address is unique per directory, not per module scan
+#   (regression guard: addresses were global to the whole module scan, so two
+#    nested submodules each declaring `aws_s3_bucket.this` shared ONE coverage
+#    entry and the asserted one marked the unasserted one covered.)
+# =============================================================================
+echo "TEST 6: the same address in two nested directories does not collide"
+# given -- two nested submodules declaring the identical address, one asserted
+REPO6="$TEST_DIR/repo6"
+mkdir -p "$REPO6/tests" "$REPO6/internal/alpha" "$REPO6/internal/beta"
+cat > "$REPO6/main.tf" << 'HCL'
+module "alpha" {
+  source = "./internal/alpha"
+}
+HCL
+cat > "$REPO6/internal/alpha/main.tf" << 'HCL'
+resource "aws_s3_bucket" "this" {
+  bucket = "a"
+}
+
+check "alpha_named" {
+  assert {
+    condition     = aws_s3_bucket.this.arn != ""
+    error_message = "arn"
+  }
+}
+HCL
+cat > "$REPO6/internal/beta/main.tf" << 'HCL'
+resource "aws_s3_bucket" "this" {
+  bucket = "b"
+}
+HCL
+cat > "$REPO6/tests/smoke.tftest.hcl" << 'HCL'
+run "r" {
+  command = plan
+  assert {
+    condition     = module.alpha != null
+    error_message = "x"
+  }
+}
+HCL
+
+# when
+OUT6="$TEST_DIR/out6.xml"
+# shellcheck disable=SC2034  # used inside assert_true's eval'd argument
+SUMMARY6="$(python3 "$COV" --repo-dir "$REPO6" --output "$OUT6")"
+
+# then
+assert_true "only the asserted submodule is credited (3/4, not 4/4)" \
+  "echo \"\$SUMMARY6\" | grep -q 'terra generic coverage: 3/4 blocks'"
+assert_true "the submodule whose own check names the address is covered" \
+  "[ \"\$(grep -A2 'internal/alpha/main.tf' '$OUT6' | grep -c 'covered=\"true\"')\" -eq 2 ]"
+assert_true "the sibling declaring the same address is NOT covered by it" \
+  "grep -A1 'internal/beta/main.tf' '$OUT6' | grep -q '<lineToCover lineNumber=\"1\" covered=\"false\"/>'"
+
+# =============================================================================
+# Test 7: Only the test files `run.sh` selects may credit coverage
+#   (regression guard: discovery walked tests/ recursively, so a
+#    `tests/e2e/*.tftest.hcl` the terra-test tier never executes -- its selector
+#    is `ls "${mod}"/tests/*.tftest.hcl` -- credited coverage for a test that
+#    did not run.)
+# =============================================================================
+echo "TEST 7: only tests/*.tftest.hcl counts, matching run.sh's glob"
+# given -- one selected test file, one nested under tests/e2e, one in the root
+REPO7="$TEST_DIR/repo7"
+mkdir -p "$REPO7/tests/e2e"
+cat > "$REPO7/main.tf" << 'HCL'
+resource "aws_s3_bucket" "shallow" {
+  bucket = "s"
+}
+
+resource "aws_s3_bucket" "deep_only" {
+  bucket = "d"
+}
+
+resource "aws_s3_bucket" "root_test_only" {
+  bucket = "r"
+}
+HCL
+cat > "$REPO7/tests/smoke.tftest.hcl" << 'HCL'
+run "r" {
+  command = plan
+  assert {
+    condition     = aws_s3_bucket.shallow.id != ""
+    error_message = "shallow"
+  }
+}
+HCL
+cat > "$REPO7/tests/e2e/deep.tftest.hcl" << 'HCL'
+run "deep" {
+  command = plan
+  assert {
+    condition     = aws_s3_bucket.deep_only.id != ""
+    error_message = "deep"
+  }
+}
+HCL
+cat > "$REPO7/root.tftest.hcl" << 'HCL'
+run "root" {
+  command = plan
+  assert {
+    condition     = aws_s3_bucket.root_test_only.id != ""
+    error_message = "root"
+  }
+}
+HCL
+
+# when
+OUT7="$TEST_DIR/out7.xml"
+# shellcheck disable=SC2034  # used inside assert_true's eval'd argument
+SUMMARY7="$(python3 "$COV" --repo-dir "$REPO7" --output "$OUT7")"
+
+# then
+assert_true "only the executed test credits coverage (1/3, not 3/3)" \
+  "echo \"\$SUMMARY7\" | grep -q 'terra generic coverage: 1/3 blocks'"
+assert_true "the assertion run.sh selects covers its block" \
+  "grep -q '<lineToCover lineNumber=\"1\" covered=\"true\"/>' '$OUT7'"
+assert_true "a tests/e2e assertion the tier never runs covers nothing" \
+  "grep -q '<lineToCover lineNumber=\"5\" covered=\"false\"/>' '$OUT7'"
+assert_true "a *.tftest.hcl in the module root covers nothing either" \
+  "grep -q '<lineToCover lineNumber=\"9\" covered=\"false\"/>' '$OUT7'"
+
+# =============================================================================
+# Test 8: `examples` prunes the file walk, never module discovery
+#   (regression guard: both consumers shared one set, so a module legitimately
+#    named `modules/examples/` was silently skipped and scored nothing at all
+#    -- the same invisibility the root-layout case in Test 1 exists to fix.
+#    Pruning it from the walk INSIDE a module must keep working.)
+# =============================================================================
+echo "TEST 8: modules/examples/ is a module; a module's examples/ is not code"
+# given -- a module actually named examples, and a sibling shipping examples/
+REPO8="$TEST_DIR/repo8"
+mkdir -p "$REPO8/modules/examples/tests" "$REPO8/modules/alpha/tests" \
+  "$REPO8/modules/alpha/examples/complete"
+cat > "$REPO8/modules/examples/main.tf" << 'HCL'
+resource "aws_s3_bucket" "measured" {
+  bucket = "m"
+}
+HCL
+cat > "$REPO8/modules/examples/tests/smoke.tftest.hcl" << 'HCL'
+run "r" {
+  command = plan
+  assert {
+    condition     = aws_s3_bucket.measured.id != ""
+    error_message = "measured"
+  }
+}
+HCL
+cat > "$REPO8/modules/alpha/main.tf" << 'HCL'
+resource "aws_s3_bucket" "alpha" {
+  bucket = "a"
+}
+HCL
+cat > "$REPO8/modules/alpha/examples/complete/main.tf" << 'HCL'
+resource "aws_s3_bucket" "example_only" {
+  bucket = "e"
+}
+HCL
+cat > "$REPO8/modules/alpha/tests/smoke.tftest.hcl" << 'HCL'
+run "r" {
+  command = plan
+  assert {
+    condition     = aws_s3_bucket.alpha.id != ""
+    error_message = "alpha"
+  }
+}
+HCL
+
+# when
+OUT8="$TEST_DIR/out8.xml"
+# shellcheck disable=SC2034  # used inside assert_true's eval'd argument
+SUMMARY8="$(python3 "$COV" --repo-dir "$REPO8" --output "$OUT8")"
+
+# then
+assert_true "a module named examples is measured, not skipped (2/2, not 1/1)" \
+  "echo \"\$SUMMARY8\" | grep -q 'terra generic coverage: 2/2 blocks'"
+assert_true "modules/examples/ reports its own blocks" \
+  "grep -q 'path=\"modules/examples/main.tf\"' '$OUT8'"
+assert_true "examples/ inside a module stays out of its denominator" \
+  "! grep -q 'modules/alpha/examples' '$OUT8'"
+
+# =============================================================================
 # Summary
 # =============================================================================
 echo ""

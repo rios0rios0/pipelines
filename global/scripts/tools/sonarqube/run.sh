@@ -189,8 +189,19 @@ if [ "$COVERAGE_FOUND" = "false" ]; then
     echo "sonar.cs.opencover.reportsPaths="
     echo "sonar.cs.dotcover.reportsPaths="
     echo "sonar.cs.vscoveragexml.reportsPaths="
-    echo "sonar.coverageReportPaths="
   } >> sonar-project.properties
+  # `sonar.coverageReportPaths` is SonarQube's LANGUAGE-AGNOSTIC generic
+  # coverage key, so unlike `sonar.go.coverage.reportPaths` it is not ours to
+  # assume: a project may already point it at a report `coverage_present_in`
+  # does not glob for, and blanking it would silently cost that project its
+  # coverage. Declaring the key in sonar-project.properties is this script's
+  # established override channel -- the same "only if absent" contract as
+  # `set_default_sonar_property` -- so a declared value is left alone.
+  if has_sonar_property sonar.coverageReportPaths; then
+    echo "Keeping sonar.coverageReportPaths from sonar-project.properties"
+  else
+    echo "sonar.coverageReportPaths=" >> sonar-project.properties
+  fi
   echo "Cleared coverage report path properties in sonar-project.properties."
 else
   # Root first, then the project, matching the detection above. The `./` a root
@@ -219,11 +230,16 @@ else
   # channel Terraform coverage can arrive through: there is no
   # `sonar.terraform.coverage.reportPaths`, so without this key the report is
   # published as a build artifact and read by nothing.
+  # The key is shared with every other language, so a repository that declares
+  # it wins: appending the Terraform value would be the last definition in the
+  # file and would override whatever the project pointed the key at.
   TERRA_REPORT_PATH=$(find_terra_report .) || true
   if [ -z "$TERRA_REPORT_PATH" ] && [ "$SONAR_PROJECT_DIR_IS_SEPARATE" = "true" ]; then
     TERRA_REPORT_PATH=$(find_terra_report "$SONAR_PROJECT_DIR") || true
   fi
-  if [ -n "$TERRA_REPORT_PATH" ]; then
+  if has_sonar_property sonar.coverageReportPaths; then
+    echo "Keeping sonar.coverageReportPaths from sonar-project.properties"
+  elif [ -n "$TERRA_REPORT_PATH" ]; then
     echo "sonar.coverageReportPaths=$TERRA_REPORT_PATH" >> sonar-project.properties
   fi
 fi

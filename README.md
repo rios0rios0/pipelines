@@ -896,7 +896,7 @@ Every Terra pipeline (Azure DevOps, GitLab CI, GitHub Actions) exposes a single 
 
 | Tier         | Inputs                           | Tooling                             | Outputs (under `build/reports/`)                    |
 |--------------|----------------------------------|-------------------------------------|-----------------------------------------------------|
-| `terra-test` | `modules/*/tests/*.tftest.hcl`   | `terraform test -junit-xml`         | `terra-tests.xml`, `terra-coverage.{md,json,xml}`   |
+| `terra-test` | `modules/*/tests/*.tftest.hcl`   | `terraform test -junit-xml`         | `terra-tests.xml`, `terra-coverage.{md,json,xml}`, `terra-coverage-generic.xml` |
 | `terratest`  | `tests/terratest/*.go`           | `go test ./...` + `go-junit-report` | `junit-terratest.xml`                               |
 
 The runner auto-detects which tiers the consumer actually has, runs only those, merges both JUnit files into `junit-terra-all.xml` for the single-artifact upload contract used by GitLab CI and GitHub Actions, and propagates a non-zero exit from either tier so CI correctly fails. **When neither tier has tests** (e.g., a stack-only repo without `modules/` tests or `tests/terratest/`), the runner emits an empty-but-valid JUnit and exits `0` so the job passes without a bespoke opt-out.

@@ -32,9 +32,10 @@ lint:
 # `test` delegates to the unified runner, which orchestrates both tiers
 # (`terra-test` over modules + `terratest` over `tests/terratest/`) behind a
 # single entry point. Emits per-tier artifacts plus a merged JUnit at
-# $(REPORT_PATH)/junit-terra-all.xml and a Cobertura coverage summary at
-# $(REPORT_PATH)/terra-coverage.xml. Exits 0 cleanly when neither tier has
-# tests, so stack-only repos don't need a bespoke opt-out.
+# $(REPORT_PATH)/junit-terra-all.xml, a Cobertura breadth summary at
+# $(REPORT_PATH)/terra-coverage.xml and a SonarQube generic coverage report at
+# $(REPORT_PATH)/terra-coverage-generic.xml. Exits 0 cleanly when neither tier
+# has tests, so stack-only repos don't need a bespoke opt-out.
 test:
 	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/test-all/run.sh
 
@@ -70,7 +71,7 @@ test-validate:
 coverage:
 	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/test-all/run.sh || true
 	@artifacts=""; \
-	for report in "$(REPORT_PATH)/terra-coverage.md" "$(REPORT_PATH)/terra-coverage.xml" "$(REPORT_PATH)/terra-coverage.json" "$(REPORT_PATH)/junit-terra-all.xml"; do \
+	for report in "$(REPORT_PATH)/terra-coverage.md" "$(REPORT_PATH)/terra-coverage.xml" "$(REPORT_PATH)/terra-coverage-generic.xml" "$(REPORT_PATH)/terra-coverage.json" "$(REPORT_PATH)/junit-terra-all.xml"; do \
 		if [ -f "$$report" ]; then \
 			artifacts="$$artifacts $$report"; \
 		fi; \

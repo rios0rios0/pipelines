@@ -18,14 +18,21 @@ fi
 #   - terra-tests.xml            aggregated <testsuites> bundle (for PublishTestResults)
 #   - terra-coverage.md          human-readable coverage report
 #   - terra-coverage.json        machine-readable coverage summary
+#   - terra-coverage.xml         Cobertura breadth report (PublishCodeCoverageResults)
+#   - terra-coverage-generic.xml SonarQube generic coverage, real files and lines
 #
 # Exits non-zero when any module's `terraform test` exits non-zero.
 #
-# Why coverage ≠ line coverage:
-# Terraform has no line-coverage concept — a plan/apply exercises every
-# expression or none. This script measures *breadth* (share of modules that
-# run at least one `terraform test` case) plus *case counts* aggregated from
-# JUnit, which together answer "how much of the module tree is exercised?".
+# Why the two coverage reports measure different things:
+# `terra-coverage.xml` measures *breadth* — the share of modules that own a
+# `tests/` directory with at least one case — mapped onto the Cobertura schema
+# so the Azure DevOps Code Coverage tab has something to render, plus the
+# aggregate case counts from JUnit. `terra-coverage-generic.xml` measures which
+# `resource` / `data` / `module` / `output` / `check` blocks a test assertion
+# actually references, reported against the real `.tf` file and the real line
+# the block is declared on. Breadth answers "how much of the module tree is
+# exercised at all?"; the generic report answers "which declarations does a
+# test actually look at?" — at block granularity, not line granularity.
 
 REPORT_PATH="${REPORT_PATH:-build/reports}"
 TESTS_DIR="${REPORT_PATH}/terra-tests"
@@ -55,6 +62,7 @@ AGGREGATE_JUNIT="${REPORT_PATH}/terra-tests.xml"
 COVERAGE_MD="${REPORT_PATH}/terra-coverage.md"
 COVERAGE_JSON="${REPORT_PATH}/terra-coverage.json"
 COVERAGE_COBERTURA="${REPORT_PATH}/terra-coverage.xml"
+COVERAGE_GENERIC="${REPORT_PATH}/terra-coverage-generic.xml"
 
 mkdir -p "${TESTS_DIR}"
 
@@ -219,8 +227,10 @@ fi
   fi
 
   printf '## Notes\n\n'
-  printf -- '- Terraform has no native line-coverage metric. "Coverage" here is the share of modules exercised by at least one `terraform test` case, combined with the aggregate pass/fail counts from JUnit.\n'
+  printf -- '- This summary measures *breadth*: the share of modules exercised by at least one `terraform test` case, combined with the aggregate pass/fail counts from JUnit. Terraform ships no native line-coverage metric, so the finest signal available is a static resolution of which declarations an assertion references — which is what the sibling report below does.\n'
   printf -- '- JUnit bundle: `%s` (point `PublishTestResults@2` at it).\n' "${AGGREGATE_JUNIT#${REPORT_PATH}/}"
+  printf -- '- A finer report sits beside this one: `%s`, in the SonarQube generic coverage format, listing the real `.tf` file and line of every `resource`/`data`/`module`/`output`/`check` block and whether a test assertion references it.\n' "${COVERAGE_GENERIC#${REPORT_PATH}/}"
+  printf -- '- Its granularity is the block, not the line: a 220-line `resource` counts as covered the moment a single one of its attributes is asserted on. That is inherent to measuring HCL declarations rather than executed statements, and is stated here rather than hidden.\n'
 } > "${COVERAGE_MD}"
 
 # ---------- Cobertura XML ----------
@@ -276,6 +286,29 @@ timestamp=$(date +%s)
   printf '</coverage>\n'
 } > "${COVERAGE_COBERTURA}"
 
+# ---------- SonarQube generic coverage XML ----------
+# The Cobertura file above is a breadth signal dressed in a coverage schema.
+# This one is the real thing: a static pass over the module tree that resolves
+# which `resource`/`data`/`module`/`output`/`check` blocks a test assertion
+# references, reported against the actual file and line. It is pure parsing —
+# no terraform binary, no network, no credentials — so it runs even when the
+# loop above bailed out early.
+#
+# Deliberately SOFT: a coverage report is a report, not a gate. The only thing
+# allowed to fail this script is `exit_code` from `terraform test`. A host
+# without python3, a tool not yet shipped in this checkout, or a parser that
+# chokes on one exotic file must all degrade to a warning, never to a red
+# build that hides a green test suite.
+coverage_generic_py="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)/terra_coverage.py"
+if ! command -v python3 > /dev/null 2>&1; then
+  echo "WARNING: python3 not on PATH; skipping ${COVERAGE_GENERIC}" >&2
+elif [ ! -f "${coverage_generic_py}" ]; then
+  echo "WARNING: ${coverage_generic_py} not found; skipping ${COVERAGE_GENERIC}" >&2
+else
+  python3 "${coverage_generic_py}" --repo-dir . --output "${COVERAGE_GENERIC}" \
+    || echo "WARNING: terra_coverage.py failed; ${COVERAGE_GENERIC} may be missing or stale" >&2
+fi
+
 # ---------- JSON report ----------
 # Minimal JSON without jq — keeps this runnable on a cold CI agent.
 json_list() {
@@ -309,5 +342,10 @@ echo "  junit bundle     : ${AGGREGATE_JUNIT}"
 echo "  coverage md      : ${COVERAGE_MD}"
 echo "  coverage json    : ${COVERAGE_JSON}"
 echo "  coverage cobertura: ${COVERAGE_COBERTURA}"
+# Only announced when it exists: the generic report is a soft step, and naming
+# a path the soft step just warned about skipping would be the one misleading
+# line in this summary. `exit` follows, so the false branch cannot trip `set -e`.
+[ -f "${COVERAGE_GENERIC}" ] && \
+  echo "  coverage generic : ${COVERAGE_GENERIC}"
 
 exit "${exit_code}"

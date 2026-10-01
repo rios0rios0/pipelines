@@ -636,7 +636,7 @@ make_coverage_fixtures() {
   mktemp -d "$TEST_DIR/coverage-XXXXXX"
 }
 
-# The seven properties the "no coverage" branch clears, as it writes them.
+# The eight properties the "no coverage" branch clears, as it writes them.
 CLEARED_COVERAGE_KEY='^sonar\.javascript\.lcov\.reportPaths=$'
 
 echo "TEST 29: Coverage detection — a project directory containing a space"
@@ -694,11 +694,12 @@ props=$(run_with_fixtures "$fx" "$TEST_DIR/no-coverage.properties" -- \
   GITHUB_REPOSITORY=owner/repo SONAR_PROJECT_DIR=app)
 cleared_count=$(grep -cE '^sonar\.[A-Za-z.]+[Rr]eportsPaths=$|^sonar\.[A-Za-z.]+[Rr]eportPaths=$' "$props" || true)
 if grep -Eq "$CLEARED_COVERAGE_KEY" "$props" \
-  && [ "$cleared_count" -eq 7 ] \
+  && grep -Fxq 'sonar.coverageReportPaths=' "$props" \
+  && [ "$cleared_count" -eq 8 ] \
   && grep -q 'No coverage files found' "$(run_log "$props")"; then
-  print_result 0 "a tree with no coverage anywhere still clears the seven report-path properties"
+  print_result 0 "a tree with no coverage anywhere still clears the eight report-path properties"
 else
-  print_result 1 "the no-coverage branch stopped clearing ($cleared_count of 7 empty entries)"
+  print_result 1 "the no-coverage branch stopped clearing ($cleared_count of 8 empty entries)"
 fi
 
 # =============================================================================

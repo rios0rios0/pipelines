@@ -683,7 +683,7 @@ The Terra CLI pipeline test stage exposes three parallel jobs on every platform 
 
    | Tier          | Input                              | Tool                             | Output                          |
    |---------------|------------------------------------|----------------------------------|---------------------------------|
-   | `terra-test`  | `modules/*/tests/*.tftest.hcl`     | `terraform test -junit-xml`      | `terra-tests.xml`, `terra-coverage.{md,json,xml}` |
+   | `terra-test`  | `modules/*/tests/*.tftest.hcl`     | `terraform test -junit-xml`      | `terra-tests.xml`, `terra-coverage.{md,json,xml}`, `terra-coverage-generic.xml` |
    | `terratest`   | `tests/terratest/*.go`             | `go test ./...` + `go-junit-report` | `junit-terratest.xml`         |
 
 2. **`test:structural`** — third-tier shell runner, delegates to `global/scripts/languages/terraform/structural/run.sh`:

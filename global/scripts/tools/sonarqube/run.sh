@@ -112,6 +112,7 @@ coverage_present_in() {
     "build/reports/coverage*" \
     "build/reports/cobertura.xml" \
     "build/reports/jacoco/test/jacocoTestReport.xml" \
+    "build/reports/terra-coverage-generic.xml" \
     "target/site/jacoco/jacoco.xml" \
     "TestResults/*.xml" \
     "TestResults/Cobertura.xml"; do
@@ -152,6 +153,20 @@ find_jacoco_report() {
   return 1
 }
 
+# The same, for the SonarQube generic coverage report the Terraform `terra-test`
+# tier emits. Only the generic-format file is looked for: its sibling
+# `terra-coverage.xml` is a Cobertura breadth summary built for the Azure DevOps
+# Code Coverage tab, and feeding it to Sonar would report module counts as line
+# coverage.
+find_terra_report() {
+  _cov_file="$1"/build/reports/terra-coverage-generic.xml
+  if [ -f "$_cov_file" ]; then
+    printf '%s\n' "${_cov_file#./}"
+    return 0
+  fi
+  return 1
+}
+
 # Check if coverage files exist. If no coverage was produced by the test stage,
 # override coverage report paths to avoid sonar-scanner failures when the project's
 # sonar-project.properties references files that don't exist.
@@ -174,6 +189,7 @@ if [ "$COVERAGE_FOUND" = "false" ]; then
     echo "sonar.cs.opencover.reportsPaths="
     echo "sonar.cs.dotcover.reportsPaths="
     echo "sonar.cs.vscoveragexml.reportsPaths="
+    echo "sonar.coverageReportPaths="
   } >> sonar-project.properties
   echo "Cleared coverage report path properties in sonar-project.properties."
 else
@@ -196,6 +212,19 @@ else
   fi
   if [ -n "$JACOCO_REPORT_PATH" ]; then
     echo "sonar.coverage.jacoco.xmlReportPaths=$JACOCO_REPORT_PATH" >> sonar-project.properties
+  fi
+
+  # Auto-detect the Terraform generic coverage report. `sonar.coverageReportPaths`
+  # is SonarQube's LANGUAGE-AGNOSTIC generic coverage property, and it is the only
+  # channel Terraform coverage can arrive through: there is no
+  # `sonar.terraform.coverage.reportPaths`, so without this key the report is
+  # published as a build artifact and read by nothing.
+  TERRA_REPORT_PATH=$(find_terra_report .) || true
+  if [ -z "$TERRA_REPORT_PATH" ] && [ "$SONAR_PROJECT_DIR_IS_SEPARATE" = "true" ]; then
+    TERRA_REPORT_PATH=$(find_terra_report "$SONAR_PROJECT_DIR") || true
+  fi
+  if [ -n "$TERRA_REPORT_PATH" ]; then
+    echo "sonar.coverageReportPaths=$TERRA_REPORT_PATH" >> sonar-project.properties
   fi
 fi
 

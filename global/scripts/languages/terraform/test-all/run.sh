@@ -28,6 +28,8 @@ fi
 # Outputs (under $REPORT_PATH, default build/reports/):
 #   - terra-tests.xml          per-module `terraform test` aggregate (tier 1)
 #   - terra-coverage.{md,json,xml}  terra-test coverage (tier 1)
+#   - terra-coverage-generic.xml    terra-test block coverage, SonarQube
+#                                   generic format (tier 1)
 #   - junit-terratest.xml      terratest Go suite (tier 2)
 #   - junit-terra-all.xml      merged JUnit across both tiers (this runner)
 #
@@ -173,6 +175,8 @@ echo "  merged JUnit          : ${MERGED_JUNIT}"
   echo "  coverage (Cobertura)  : ${REPORT_PATH}/terra-coverage.xml"
 [ -f "${REPORT_PATH}/terra-coverage.md" ] && \
   echo "  coverage (Markdown)   : ${REPORT_PATH}/terra-coverage.md"
+[ -f "${REPORT_PATH}/terra-coverage-generic.xml" ] && \
+  echo "  coverage (Sonar)      : ${REPORT_PATH}/terra-coverage-generic.xml"
 echo "  tier 1 (terra-test)   : exit=${rc_terra_test} (ran=${has_terra_tests})"
 echo "  tier 2 (terratest)    : exit=${rc_terratest} (ran=${has_terratest})"
 

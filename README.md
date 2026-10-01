@@ -1424,6 +1424,13 @@ server.
 
 #### Dependency-Track configuration
 
+The Python CycloneDX generator keeps the static `[project].version` read from
+`pyproject.toml`, including for PDM applications with `distribution = false`.
+When CycloneDX has no root version, it resolves a dynamic version with
+`pdm show --version`. Failed or empty version resolution stops the report with
+an explicit error; PDM's original diagnostic remains visible. Validate this
+contract locally with `make test-python-cyclonedx`.
+
 The uploader is driven entirely by environment variables. Only the first two are required.
 
 | Variable | Default | Purpose |

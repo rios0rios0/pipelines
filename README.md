@@ -950,6 +950,29 @@ It is **opt-in** rather than on by default, because unlike its siblings it needs
 
 Locally: `make test-validate`. Vendored copies under `.terraform/` are excluded, and the runner no-ops with a valid empty report when the roots are absent.
 
+##### Coverage to SonarQube (`DOWNLOAD_COVERAGE_ARTIFACT`, opt-in, Azure DevOps only)
+
+Stages run as separate jobs with separate workspaces, so the `terra-coverage.{md,json,xml}` the `terra-test` tier writes under `build/reports/` never reaches the `35-management` (SonarQube) stage on its own — a pipeline artifact is the only channel into that job. The Azure DevOps terra pipeline exposes that channel as three parameters, forwarded from `azure-devops/terra/terra.yaml` through `stages/35-management/terra.yaml` into the shared Sonar job:
+
+| Parameter                       | Default                     | What it controls                                               |
+|---------------------------------|-----------------------------|----------------------------------------------------------------|
+| `DOWNLOAD_COVERAGE_ARTIFACT`    | `false`                     | Whether the artifact is downloaded before `sonar-scanner` runs |
+| `COVERAGE_ARTIFACT_NAME`        | `coverage`                  | Which pipeline artifact to download                            |
+| `COVERAGE_ARTIFACT_TARGET_PATH` | `$(Build.SourcesDirectory)` | Where it is unpacked, to match the report path Sonar is told   |
+
+The default is **off**, because a plain Terraform project publishes no coverage artifact and the download would emit `##[error]Artifact coverage was not found` and turn the job yellow. That is exactly what the stage did before these parameters existed, so **nothing changes for an existing consumer and none has to pass anything**. A repository that does produce coverage — published from an earlier stage, e.g. through `PRE_STEPS`, which is spliced into `30-tests` and therefore runs before `35-management` — opts in:
+
+```yaml
+extends:
+  template: 'azure-devops/terra/terra.yaml@pipelines'
+  parameters:
+    DOWNLOAD_COVERAGE_ARTIFACT: true
+    COVERAGE_ARTIFACT_NAME: 'terra-coverage'
+    COVERAGE_ARTIFACT_TARGET_PATH: "$(Build.SourcesDirectory)/build/reports"
+```
+
+This is an **Azure DevOps parameter set only**. The GitLab CI and GitHub Actions terra pipelines have no equivalent, and the sibling raw-Terraform pipeline (`azure-devops/terraform/`) still pins the download off.
+
 #### Required GitLab Variables
 
 Configure these in your GitLab project settings:

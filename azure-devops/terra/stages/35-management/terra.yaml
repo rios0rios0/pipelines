@@ -1,3 +1,14 @@
+parameters:
+  - name: 'DOWNLOAD_COVERAGE_ARTIFACT'
+    type: 'boolean'
+    default: false
+  - name: 'COVERAGE_ARTIFACT_NAME'
+    type: 'string'
+    default: 'coverage'
+  - name: 'COVERAGE_ARTIFACT_TARGET_PATH'
+    type: 'string'
+    default: "$(Build.SourcesDirectory)"
+
 stages:
   - stage: 'management'
     displayName: 'management'
@@ -5,10 +16,13 @@ stages:
     jobs:
       - template: '../../../global/stages/35-management/sonarqube.yaml'
         parameters:
-          # Terraform consumers don't produce a `coverage` artifact, so the
-          # default download step emits `##[error]Artifact coverage was not
-          # found` and turns the job yellow. Skip it.
-          DOWNLOAD_COVERAGE_ARTIFACT: false
+          # Forwarded from the pipeline parameters. The default is `false`:
+          # Terraform consumers usually produce no `coverage` artifact, so the
+          # download would emit `##[error]Artifact coverage was not found` and
+          # turn the job yellow. A consumer that does produce one opts in.
+          DOWNLOAD_COVERAGE_ARTIFACT: ${{ parameters.DOWNLOAD_COVERAGE_ARTIFACT }}
+          COVERAGE_ARTIFACT_NAME: ${{ parameters.COVERAGE_ARTIFACT_NAME }}
+          COVERAGE_ARTIFACT_TARGET_PATH: ${{ parameters.COVERAGE_ARTIFACT_TARGET_PATH }}
 
       # NOTE: there is no `report:dependency-track` job for Terraform.
       # Dependency-Track ingests CycloneDX, and the BOM here was produced by

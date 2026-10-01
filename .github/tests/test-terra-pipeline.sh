@@ -85,6 +85,56 @@ for mk in terra terraform; do
 done
 
 echo ""
+echo "--- 3. Terra forwards the coverage artifact parameters to the shared Sonar job ---"
+
+# The feature here IS the forwarding, and nothing about a template fails when it stops
+# happening. `35-management/terra.yaml` used to pin `DOWNLOAD_COVERAGE_ARTIFACT: false`
+# as a literal; stages are separate jobs with separate workspaces, so that artifact
+# download is the only channel into the Sonar job, and a Terraform consumer that did
+# produce a coverage report had no way to reach `sonar-scanner`. A later edit that
+# re-pins the literal, or that drops either hop of the two-hop chain, leaves a pipeline
+# that still parses and still runs -- it just silently stops carrying the value, which
+# shows up as 0% coverage rather than as a failure. Both hops, the absence of the pin
+# and the backward-compatible defaults are therefore asserted. The defaults matter on
+# their own: they reproduce the old pinned behaviour exactly, which is what lets this
+# land without touching a single existing consumer.
+#
+# Note `false` legitimately remains in both files as the parameter's `default:`, so the
+# pin assertion looks for the literal being PASSED (`NAME: false`), not for the word.
+
+TERRA_ROOT="$SCRIPTS_DIR/azure-devops/terra/terra.yaml"
+TERRA_MGMT="$SCRIPTS_DIR/azure-devops/terra/stages/35-management/terra.yaml"
+
+for hop in "$TERRA_ROOT|stages/35-management/terra.yaml" \
+           "$TERRA_MGMT|../../../global/stages/35-management/sonarqube.yaml"; do
+  hop_file="${hop%%|*}"
+  hop_target="${hop#*|}"
+  hop_label="$(echo "$hop_file" | sed "s|$SCRIPTS_DIR/||")"
+
+  assert_true "$hop_label: the template exists" "[ -f '$hop_file' ]"
+
+  for param in DOWNLOAD_COVERAGE_ARTIFACT COVERAGE_ARTIFACT_NAME COVERAGE_ARTIFACT_TARGET_PATH; do
+    assert_true "$hop_label: declares $param as a parameter" \
+      "grep -qE \"^ *- name: '$param'\" '$hop_file'"
+    assert_true "$hop_label: forwards $param on to $hop_target" \
+      "grep -A12 -F \"template: '$hop_target'\" '$hop_file' | grep -qF '$param: \${{ parameters.$param }}'"
+  done
+
+  # The defaults keep the pre-change behaviour: no download, named `coverage`, repo root.
+  for spec in 'DOWNLOAD_COVERAGE_ARTIFACT|default: false' \
+              "COVERAGE_ARTIFACT_NAME|default: 'coverage'" \
+              'COVERAGE_ARTIFACT_TARGET_PATH|default: "$(Build.SourcesDirectory)"'; do
+    spec_param="${spec%%|*}"
+    spec_default="${spec#*|}"
+    assert_true "$hop_label: $spec_param keeps the backward-compatible '$spec_default'" \
+      "grep -A2 -F -e \"- name: '\$spec_param'\" \"\$hop_file\" | grep -qF -e \"\$spec_default\""
+  done
+
+  assert_true "$hop_label: passes no literal DOWNLOAD_COVERAGE_ARTIFACT, so the opt-in is not re-pinned" \
+    "! grep -qE '^[^#]*DOWNLOAD_COVERAGE_ARTIFACT: *(true|false)' '$hop_file'"
+done
+
+echo ""
 echo "=========================================="
 echo -e "Passed:  ${GREEN}$TESTS_PASSED${NC}"
 echo -e "Failed:  ${RED}$TESTS_FAILED${NC}"

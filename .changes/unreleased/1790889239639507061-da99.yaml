@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed Python SBOM generation for non-distribution PDM projects by retaining the static PEP 621 version already read by CycloneDX, resolving only missing versions through PDM and reporting failed or empty version resolution'
+time: '2026-10-01T21:13:59.639431714Z'

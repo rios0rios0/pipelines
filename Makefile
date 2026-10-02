@@ -48,6 +48,13 @@ test-cyclonedx-main:
 	@echo "Running Go CycloneDX entry-point detection validation..."
 	@./.github/tests/test-cyclonedx-main-detection.sh
 
+.PHONY: test-python-cyclonedx
+test-python-cyclonedx:
+	@echo "Running Python CycloneDX version resolution validation..."
+	@./.github/tests/test-python-cyclonedx.sh
+
+test: test-python-cyclonedx
+
 test-go-cache-trim:
 	@echo "Running Go build-cache disk guard validation..."
 	@./.github/tests/test-go-cache-trim.sh

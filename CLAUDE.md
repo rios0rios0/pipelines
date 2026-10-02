@@ -34,6 +34,7 @@ make test-sast-gate    # Test that the SAST targets propagate tool failures only
 make test-codeql-scope  # Test that a local CodeQL scan builds from the files git would ship, on every core, only
 make test-dependency-check  # Test the OWASP Dependency-Check NVD cache / API-key contract only
 make test-dependency-track  # Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, cross-platform wiring) only
+make test-python-cyclonedx  # Test static/non-distribution and dynamic Python SBOM versions, including resolution failures
 make test-goreleaser-prepare  # Test the GoReleaser main package detection only
 make test-release-version-extraction  # Test release version extraction (tag ref + bump commit) only
 make test-release-reconcile  # Test release reconciliation gap detection only

@@ -30,9 +30,23 @@ fi
 pdm run cyclonedx-py environment "$(pdm info --python)" \
   --pyproject pyproject.toml --mc-type "$CYCLONEDX_MC_TYPE" \
   --of JSON -o "$BOM_PATH/bom.json"
-# `version` is the one field PEP 621 may leave dynamic (resolved by the build
-# backend, e.g. pdm-backend), so resolve it via pdm and inject only that.
-version=$(pdm show --version 2>/dev/null)
+# CycloneDX already reads a static PEP 621 version from pyproject.toml. Keep
+# that value: `pdm show` refuses non-distribution projects, even when they have
+# a version. Only a dynamic version needs PDM's build-backend resolution.
+version=$(jq -r '.metadata.component.version // empty' "$BOM_PATH/bom.json")
+if [ -z "$version" ]; then
+  if ! version=$(pdm show --version); then
+    echo "ERROR: could not resolve the SBOM project version; declare project.version or configure the PDM version backend." >&2
+    exit 1
+  fi
+fi
+case "$version" in
+  *[![:space:]]*) ;;
+  *)
+    echo "ERROR: the SBOM project version is empty; declare project.version or configure the PDM version backend." >&2
+    exit 1
+    ;;
+esac
 jq --arg version "$version" \
    '.metadata.component.version = $version' \
    "$BOM_PATH/bom.json" > "$BOM_PATH/temp.json"

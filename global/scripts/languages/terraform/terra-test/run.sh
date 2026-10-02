@@ -306,7 +306,7 @@ elif [ ! -f "${coverage_generic_py}" ]; then
   echo "WARNING: ${coverage_generic_py} not found; skipping ${COVERAGE_GENERIC}" >&2
 else
   python3 "${coverage_generic_py}" --repo-dir . --output "${COVERAGE_GENERIC}" \
-    || echo "WARNING: terra_coverage.py failed; ${COVERAGE_GENERIC} may be missing or stale" >&2
+    || echo "WARNING: terra_coverage.py failed; ${COVERAGE_GENERIC} may be missing or stale. If REPORT_PATH points outside the checkout, the generator refuses to write there by design -- use a path inside the repository." >&2
 fi
 
 # ---------- JSON report ----------

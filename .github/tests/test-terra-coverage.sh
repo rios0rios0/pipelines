@@ -77,7 +77,7 @@ run "smoke" {
 HCL
 
 # when
-OUT1="$TEST_DIR/out1.xml"
+OUT1="$REPO1/out1.xml"
 # shellcheck disable=SC2034  # used inside assert_true's eval'd argument
 SUMMARY1="$(python3 "$COV" --repo-dir "$REPO1" --output "$OUT1")"
 
@@ -207,7 +207,7 @@ resource "aws_sns_topic" "alerts" {
 HCL
 
 # when
-OUT2="$TEST_DIR/out2.xml"
+OUT2="$REPO2/out2.xml"
 # shellcheck disable=SC2034  # used inside assert_true's eval'd argument
 SUMMARY2="$(python3 "$COV" --repo-dir "$REPO2" --output "$OUT2")"
 
@@ -274,7 +274,7 @@ run "r" {
 HCL
 
 # when
-OUT3="$TEST_DIR/out3.xml"
+OUT3="$REPO3/out3.xml"
 python3 "$COV" --repo-dir "$REPO3" --output "$OUT3" --quiet
 
 # then
@@ -297,7 +297,7 @@ REPO4="$TEST_DIR/repo4"
 mkdir -p "$REPO4"
 
 # when
-OUT4="$TEST_DIR/nested/dir/out4.xml"
+OUT4="$REPO4/nested/dir/out4.xml"
 set +e
 # shellcheck disable=SC2034  # used inside assert_true's eval'd argument
 SUMMARY4="$(python3 "$COV" --repo-dir "$REPO4" --output "$OUT4")"
@@ -354,7 +354,7 @@ run "r" {
 HCL
 
 # when
-OUT5="$TEST_DIR/out5.xml"
+OUT5="$REPO5/out5.xml"
 # shellcheck disable=SC2034  # used inside assert_true's eval'd argument
 SUMMARY5="$(python3 "$COV" --repo-dir "$REPO5" --output "$OUT5")"
 
@@ -407,7 +407,7 @@ run "r" {
 HCL
 
 # when
-OUT6="$TEST_DIR/out6.xml"
+OUT6="$REPO6/out6.xml"
 # shellcheck disable=SC2034  # used inside assert_true's eval'd argument
 SUMMARY6="$(python3 "$COV" --repo-dir "$REPO6" --output "$OUT6")"
 
@@ -472,7 +472,7 @@ run "root" {
 HCL
 
 # when
-OUT7="$TEST_DIR/out7.xml"
+OUT7="$REPO7/out7.xml"
 # shellcheck disable=SC2034  # used inside assert_true's eval'd argument
 SUMMARY7="$(python3 "$COV" --repo-dir "$REPO7" --output "$OUT7")"
 
@@ -533,7 +533,7 @@ run "r" {
 HCL
 
 # when
-OUT8="$TEST_DIR/out8.xml"
+OUT8="$REPO8/out8.xml"
 # shellcheck disable=SC2034  # used inside assert_true's eval'd argument
 SUMMARY8="$(python3 "$COV" --repo-dir "$REPO8" --output "$OUT8")"
 
@@ -582,7 +582,7 @@ run "r" {
 HCL
 
 # when
-OUT9="$TEST_DIR/out9.xml"
+OUT9="$REPO9/out9.xml"
 # shellcheck disable=SC2034  # used inside assert_true's eval'd argument
 SUMMARY9="$(python3 "$COV" --repo-dir "$REPO9" --output "$OUT9")"
 
@@ -591,6 +591,49 @@ assert_true "every block is reached, including through the nested quotes (4/4)" 
   "echo \"\$SUMMARY9\" | grep -q 'terra generic coverage: 4/4 blocks'"
 assert_true "the block reached only through \${...} with nested quotes is covered" \
   "grep -q '<lineToCover lineNumber=\"5\" covered=\"true\"/>' '$OUT9'"
+
+# =============================================================================
+# Test 10: --output cannot escape the repository being measured
+# =============================================================================
+echo "TEST 10: A traversing --output is refused, not followed"
+# given
+# The report describes the repository it measured, so it belongs inside it.
+# Following a `..` would also create the directories on the way, which is a
+# path traversal for any caller that does not choose its own arguments.
+REPO10="$TEST_DIR/repo10"
+OUTSIDE10="$TEST_DIR/outside10"
+mkdir -p "$REPO10/modules/m/tests" "$OUTSIDE10"
+cat > "$REPO10/modules/m/main.tf" << 'HCL'
+resource "null_resource" "a" {
+  triggers = { x = "1" }
+}
+HCL
+cat > "$REPO10/modules/m/tests/smoke.tftest.hcl" << 'HCL'
+run "r" {
+  assert {
+    condition     = 1 == 1
+    error_message = "x"
+  }
+}
+HCL
+
+# when
+set +e
+TRAVERSE10="$(python3 "$COV" --repo-dir "$REPO10" --output "$REPO10/../outside10/escaped.xml" --quiet 2>&1)"
+TRAVERSE10_RC=$?
+set -e
+# shellcheck disable=SC2034  # used inside assert_true's eval'd argument
+TRAVERSE10_OUT="$TRAVERSE10"
+
+# then
+assert_true "a traversing --output exits non-zero" \
+  "[[ $TRAVERSE10_RC -ne 0 ]]"
+assert_true "it says why, naming the repository it is confined to" \
+  "echo \"\$TRAVERSE10_OUT\" | grep -q 'must stay inside'"
+assert_true "nothing is written outside the repository" \
+  "[[ ! -e '$OUTSIDE10/escaped.xml' ]]"
+assert_true "a relative --output still resolves inside the repository" \
+  "python3 '$COV' --repo-dir '$REPO10' --output build/reports/in.xml --quiet && [[ -s '$REPO10/build/reports/in.xml' ]]"
 
 # =============================================================================
 # Summary

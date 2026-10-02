@@ -952,7 +952,7 @@ Locally: `make test-validate`. Vendored copies under `.terraform/` are excluded,
 
 ##### Coverage to SonarQube (`DOWNLOAD_COVERAGE_ARTIFACT`, opt-in, Azure DevOps only)
 
-Stages run as separate jobs with separate workspaces, so the `terra-coverage.{md,json,xml}` the `terra-test` tier writes under `build/reports/` never reaches the `35-management` (SonarQube) stage on its own — a pipeline artifact is the only channel into that job. The Azure DevOps terra pipeline exposes that channel as three parameters, forwarded from `azure-devops/terra/terra.yaml` through `stages/35-management/terra.yaml` into the shared Sonar job:
+Stages run as separate jobs with separate workspaces, so what the `terra-test` tier writes under `build/reports/` never reaches the `35-management` (SonarQube) stage on its own — a pipeline artifact is the only channel into that job. The Azure DevOps terra pipeline exposes that channel as three parameters, forwarded from `azure-devops/terra/terra.yaml` through `stages/35-management/terra.yaml` into the shared Sonar job:
 
 | Parameter                       | Default                     | What it controls                                               |
 |---------------------------------|-----------------------------|----------------------------------------------------------------|
@@ -970,6 +970,8 @@ extends:
     COVERAGE_ARTIFACT_NAME: 'terra-coverage'
     COVERAGE_ARTIFACT_TARGET_PATH: "$(Build.SourcesDirectory)/build/reports"
 ```
+
+**The artifact must contain `build/reports/terra-coverage-generic.xml`.** That is the only file `tools/sonarqube/run.sh` detects; the Cobertura `terra-coverage.xml` beside it is deliberately ignored, because its "lines" are modules rather than lines and importing it would publish a false green. A consumer that opts in but publishes only the Cobertura file gets no Terraform coverage in Sonar and no error saying so.
 
 This is an **Azure DevOps parameter set only**. The GitLab CI and GitHub Actions terra pipelines have no equivalent, and the sibling raw-Terraform pipeline (`azure-devops/terraform/`) still pins the download off.
 

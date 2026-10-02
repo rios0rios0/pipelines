@@ -731,7 +731,26 @@ def main() -> int:
     args = parser.parse_args()
 
     repo_dir = Path(args.repo_dir).resolve()
-    output = Path(args.output)
+
+    # `--output` is confined to the repository being measured. The report
+    # describes that tree, every caller writes it under `build/reports/` there,
+    # and nothing has a use for writing it anywhere else -- so the safe
+    # contract and the real one are the same contract.
+    #
+    # Without this, `--output ../../x` both writes through the repository root
+    # and creates the directories on the way (`mkdir(parents=True)` below),
+    # which is a path traversal for any caller that does not choose its own
+    # arguments: a workflow interpolating a variable, or an agent driving this
+    # as a tool. SonarQube pythonsecurity:S8707.
+    requested = Path(args.output)
+    output = (requested if requested.is_absolute() else repo_dir / requested).resolve()
+    if not output.is_relative_to(repo_dir):
+        print(
+            f"terra generic coverage: --output must stay inside {repo_dir}, "
+            f"got {output}",
+            file=sys.stderr,
+        )
+        return 2
 
     # path -> line -> covered. Two blocks declared on one line (legal, rare)
     # collapse to one entry; covered wins, because the line IS exercised.

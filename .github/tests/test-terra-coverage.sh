@@ -546,6 +546,53 @@ assert_true "examples/ inside a module stays out of its denominator" \
   "! grep -q 'modules/alpha/examples' '$OUT8'"
 
 # =============================================================================
+# Test 9: A quote inside ${...} does not end the string literal
+# =============================================================================
+echo "TEST 9: Nested quotes inside an interpolation keep their references"
+# given
+# `"${join(",", [...])}"` is the common shape, and ending the literal at the
+# separator would blank the rest and lose the reference after it -- the block
+# would read as uncovered on the strength of its punctuation alone.
+REPO9="$TEST_DIR/repo9"
+mkdir -p "$REPO9/modules/m/tests"
+cat > "$REPO9/modules/m/main.tf" << 'HCL'
+resource "null_resource" "via_plain" {
+  triggers = { x = "1" }
+}
+
+resource "null_resource" "via_nested" {
+  triggers = { x = "2" }
+}
+
+output "plain_out" {
+  value = join("-", [null_resource.via_plain.id])
+}
+
+output "nested_out" {
+  value = "${join(",", [null_resource.via_nested.id])}"
+}
+HCL
+cat > "$REPO9/modules/m/tests/smoke.tftest.hcl" << 'HCL'
+run "r" {
+  assert {
+    condition     = output.plain_out != "" && output.nested_out != ""
+    error_message = "x"
+  }
+}
+HCL
+
+# when
+OUT9="$TEST_DIR/out9.xml"
+# shellcheck disable=SC2034  # used inside assert_true's eval'd argument
+SUMMARY9="$(python3 "$COV" --repo-dir "$REPO9" --output "$OUT9")"
+
+# then
+assert_true "every block is reached, including through the nested quotes (4/4)" \
+  "echo \"\$SUMMARY9\" | grep -q 'terra generic coverage: 4/4 blocks'"
+assert_true "the block reached only through \${...} with nested quotes is covered" \
+  "grep -q '<lineToCover lineNumber=\"5\" covered=\"true\"/>' '$OUT9'"
+
+# =============================================================================
 # Summary
 # =============================================================================
 echo ""

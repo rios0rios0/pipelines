@@ -235,12 +235,43 @@ def mask(text: str) -> str:
             i = term_end
             continue
         if ch == '"':
+            # A quote inside an open `${...}` does NOT end the literal: HCL
+            # interpolations routinely carry their own strings, and
+            # `"${join(",", [aws_s3_bucket.b.id])}"` is the common shape. Ending
+            # at the first `"` would close the literal on the separator, blank
+            # the rest as literal text, and lose every reference after it -- the
+            # block would read as uncovered on the strength of its punctuation.
+            # So track interpolation depth and only an unnested quote terminates.
+            #
+            # KNOWN LIMITS, both of which over-credit rather than under-credit,
+            # and both rare enough not to warrant a real HCL parser here: a
+            # string nested inside the interpolation is kept as code rather than
+            # re-masked, so `"${lookup(m, "aws_s3_bucket.foo")}"` yields a
+            # reference that is really a lookup key, and a `}` inside such a
+            # nested string unbalances the counter; and `$${`, the escape for a
+            # literal `${`, is read as opening an interpolation.
             j = i + 1
+            interpolation = 0
             while j < n:
                 if text[j] == "\\":
                     j += 2
                     continue
-                if text[j] == '"' or text[j] == "\n":
+                if text[j] == "\n":
+                    break
+                if text[j] in "$%" and j + 1 < n and text[j + 1] == "{":
+                    interpolation += 1
+                    j += 2
+                    continue
+                if interpolation > 0:
+                    # Braces of any kind nest, so an object literal inside the
+                    # interpolation cannot close it early.
+                    if text[j] == "{":
+                        interpolation += 1
+                    elif text[j] == "}":
+                        interpolation -= 1
+                    j += 1
+                    continue
+                if text[j] == '"':
                     break
                 j += 1
             _mask_literal(out, text, i + 1, min(j, n))

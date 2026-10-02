@@ -112,6 +112,7 @@ coverage_present_in() {
     "build/reports/coverage*" \
     "build/reports/cobertura.xml" \
     "build/reports/jacoco/test/jacocoTestReport.xml" \
+    "build/reports/terra-coverage-generic.xml" \
     "target/site/jacoco/jacoco.xml" \
     "TestResults/*.xml" \
     "TestResults/Cobertura.xml"; do
@@ -152,6 +153,20 @@ find_jacoco_report() {
   return 1
 }
 
+# The same, for the SonarQube generic coverage report the Terraform `terra-test`
+# tier emits. Only the generic-format file is looked for: its sibling
+# `terra-coverage.xml` is a Cobertura breadth summary built for the Azure DevOps
+# Code Coverage tab, and feeding it to Sonar would report module counts as line
+# coverage.
+find_terra_report() {
+  _cov_file="$1"/build/reports/terra-coverage-generic.xml
+  if [ -f "$_cov_file" ]; then
+    printf '%s\n' "${_cov_file#./}"
+    return 0
+  fi
+  return 1
+}
+
 # Check if coverage files exist. If no coverage was produced by the test stage,
 # override coverage report paths to avoid sonar-scanner failures when the project's
 # sonar-project.properties references files that don't exist.
@@ -175,6 +190,18 @@ if [ "$COVERAGE_FOUND" = "false" ]; then
     echo "sonar.cs.dotcover.reportsPaths="
     echo "sonar.cs.vscoveragexml.reportsPaths="
   } >> sonar-project.properties
+  # `sonar.coverageReportPaths` is SonarQube's LANGUAGE-AGNOSTIC generic
+  # coverage key, so unlike `sonar.go.coverage.reportPaths` it is not ours to
+  # assume: a project may already point it at a report `coverage_present_in`
+  # does not glob for, and blanking it would silently cost that project its
+  # coverage. Declaring the key in sonar-project.properties is this script's
+  # established override channel -- the same "only if absent" contract as
+  # `set_default_sonar_property` -- so a declared value is left alone.
+  if has_sonar_property sonar.coverageReportPaths; then
+    echo "Keeping sonar.coverageReportPaths from sonar-project.properties"
+  else
+    echo "sonar.coverageReportPaths=" >> sonar-project.properties
+  fi
   echo "Cleared coverage report path properties in sonar-project.properties."
 else
   # Root first, then the project, matching the detection above. The `./` a root
@@ -196,6 +223,24 @@ else
   fi
   if [ -n "$JACOCO_REPORT_PATH" ]; then
     echo "sonar.coverage.jacoco.xmlReportPaths=$JACOCO_REPORT_PATH" >> sonar-project.properties
+  fi
+
+  # Auto-detect the Terraform generic coverage report. `sonar.coverageReportPaths`
+  # is SonarQube's LANGUAGE-AGNOSTIC generic coverage property, and it is the only
+  # channel Terraform coverage can arrive through: there is no
+  # `sonar.terraform.coverage.reportPaths`, so without this key the report is
+  # published as a build artifact and read by nothing.
+  # The key is shared with every other language, so a repository that declares
+  # it wins: appending the Terraform value would be the last definition in the
+  # file and would override whatever the project pointed the key at.
+  TERRA_REPORT_PATH=$(find_terra_report .) || true
+  if [ -z "$TERRA_REPORT_PATH" ] && [ "$SONAR_PROJECT_DIR_IS_SEPARATE" = "true" ]; then
+    TERRA_REPORT_PATH=$(find_terra_report "$SONAR_PROJECT_DIR") || true
+  fi
+  if has_sonar_property sonar.coverageReportPaths; then
+    echo "Keeping sonar.coverageReportPaths from sonar-project.properties"
+  elif [ -n "$TERRA_REPORT_PATH" ]; then
+    echo "sonar.coverageReportPaths=$TERRA_REPORT_PATH" >> sonar-project.properties
   fi
 fi
 

@@ -16,6 +16,12 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
 
+# What a failure message prints where a `grep` found nothing. Named because the
+# word carries meaning in those messages -- it says the key is absent rather
+# than present and wrong, which is a different bug -- and it is repeated once
+# per assertion.
+MISSING='missing'
+
 TESTS_PASSED=0
 TESTS_FAILED=0
 
@@ -275,7 +281,7 @@ props=$(run_derivation -- GITHUB_REPOSITORY=myorg/my-repo)
 if grep -q 'sonar.projectKey=myorg_my-repo' "$props"; then
   print_result 0 "GitHub projectKey derived correctly"
 else
-  print_result 1 "GitHub projectKey derivation failed (contents: $(grep 'sonar.projectKey' "$props" 2>/dev/null || echo 'missing'))"
+  print_result 1 "GitHub projectKey derivation failed (contents: $(grep 'sonar.projectKey' "$props" 2>/dev/null || echo "$MISSING"))"
 fi
 
 # =============================================================================
@@ -286,7 +292,7 @@ props=$(run_derivation -- GITHUB_REPOSITORY=myorg/my-repo)
 if grep -q 'sonar.projectName=my-repo' "$props"; then
   print_result 0 "GitHub projectName derived correctly"
 else
-  print_result 1 "GitHub projectName derivation failed (contents: $(grep 'sonar.projectName' "$props" 2>/dev/null || echo 'missing'))"
+  print_result 1 "GitHub projectName derivation failed (contents: $(grep 'sonar.projectName' "$props" 2>/dev/null || echo "$MISSING"))"
 fi
 
 # =============================================================================
@@ -297,7 +303,7 @@ props=$(run_derivation -- SYSTEM_TEAMPROJECT=MyProject BUILD_REPOSITORY_NAME=my-
 if grep -q 'sonar.projectKey=MyProject_my-repo' "$props"; then
   print_result 0 "Azure DevOps projectKey derived correctly"
 else
-  print_result 1 "Azure DevOps projectKey derivation failed (contents: $(grep 'sonar.projectKey' "$props" 2>/dev/null || echo 'missing'))"
+  print_result 1 "Azure DevOps projectKey derivation failed (contents: $(grep 'sonar.projectKey' "$props" 2>/dev/null || echo "$MISSING"))"
 fi
 
 # =============================================================================
@@ -308,7 +314,7 @@ props=$(run_derivation -- SYSTEM_TEAMPROJECT=MyProject BUILD_REPOSITORY_NAME=my-
 if grep -q 'sonar.projectName=MyProject/my-repo' "$props"; then
   print_result 0 "Azure DevOps projectName derived correctly"
 else
-  print_result 1 "Azure DevOps projectName derivation failed (contents: $(grep 'sonar.projectName' "$props" 2>/dev/null || echo 'missing'))"
+  print_result 1 "Azure DevOps projectName derivation failed (contents: $(grep 'sonar.projectName' "$props" 2>/dev/null || echo "$MISSING"))"
 fi
 
 # =============================================================================
@@ -319,7 +325,7 @@ props=$(run_derivation -- CI_PROJECT_PATH=group/subgroup/my-repo CI_PROJECT_NAME
 if grep -q 'sonar.projectKey=group_subgroup_my-repo' "$props"; then
   print_result 0 "GitLab projectKey derived correctly"
 else
-  print_result 1 "GitLab projectKey derivation failed (contents: $(grep 'sonar.projectKey' "$props" 2>/dev/null || echo 'missing'))"
+  print_result 1 "GitLab projectKey derivation failed (contents: $(grep 'sonar.projectKey' "$props" 2>/dev/null || echo "$MISSING"))"
 fi
 
 # =============================================================================
@@ -330,7 +336,7 @@ props=$(run_derivation -- CI_PROJECT_PATH=group/subgroup/my-repo CI_PROJECT_NAME
 if grep -q 'sonar.projectName=my-repo' "$props"; then
   print_result 0 "GitLab projectName derived correctly"
 else
-  print_result 1 "GitLab projectName derivation failed (contents: $(grep 'sonar.projectName' "$props" 2>/dev/null || echo 'missing'))"
+  print_result 1 "GitLab projectName derivation failed (contents: $(grep 'sonar.projectName' "$props" 2>/dev/null || echo "$MISSING"))"
 fi
 
 # =============================================================================
@@ -356,7 +362,7 @@ if grep -Fxq 'sonar.sources=.' "$props" && \
    grep -Fxq 'sonar.test.exclusions=**/vendor/**,**/node_modules/**' "$props"; then
   print_result 0 "sources, tests, test.inclusions, exclusions and test.exclusions derived"
 else
-  print_result 1 "test classification defaults missing or wrong (contents: $(grep -E 'sonar\.(sources|tests|test\.inclusions|exclusions|test\.exclusions)=' "$props" 2>/dev/null || echo 'missing'))"
+  print_result 1 "test classification defaults missing or wrong (contents: $(grep -E 'sonar\.(sources|tests|test\.inclusions|exclusions|test\.exclusions)=' "$props" 2>/dev/null || echo "$MISSING"))"
 fi
 
 # =============================================================================
@@ -378,7 +384,7 @@ if grep -Fxq 'sonar.sources=src' "$props" && [ "$(count_key sonar.sources "$prop
    grep -Fxq 'sonar.test.exclusions=qa/fixtures/**' "$props" && [ "$(count_key sonar.test.exclusions "$props")" -eq 1 ]; then
   print_result 0 "repository-defined classification kept, nothing duplicated"
 else
-  print_result 1 "repository-defined classification overwritten or duplicated (contents: $(grep -E 'sonar\.(sources|tests|test\.inclusions|exclusions|test\.exclusions)=' "$props" 2>/dev/null || echo 'missing'))"
+  print_result 1 "repository-defined classification overwritten or duplicated (contents: $(grep -E 'sonar\.(sources|tests|test\.inclusions|exclusions|test\.exclusions)=' "$props" 2>/dev/null || echo "$MISSING"))"
 fi
 
 # =============================================================================
@@ -398,7 +404,7 @@ if grep -Fxq 'sonar.tests=qa' "$props" && [ "$(count_key sonar.tests "$props")" 
    [ "$(count_key sonar.exclusions "$props")" -eq 0 ]; then
   print_result 0 "nothing derived against a repository-defined sonar.tests, so the main and test sets cannot overlap"
 else
-  print_result 1 "classification keys derived against a repository-defined sonar.tests (contents: $(grep -E 'sonar\.(sources|tests|test\.inclusions|exclusions)=' "$props" 2>/dev/null || echo 'missing'))"
+  print_result 1 "classification keys derived against a repository-defined sonar.tests (contents: $(grep -E 'sonar\.(sources|tests|test\.inclusions|exclusions)=' "$props" 2>/dev/null || echo "$MISSING"))"
 fi
 
 # =============================================================================
@@ -414,7 +420,7 @@ if grep -Fxq 'sonar.issue.ignore.multicriteria.fp1.ruleKey=githubactions:S7637' 
    grep -q 'Accepting .github/workflows/default.yaml for githubactions:S7637: all 2 uses: references' "$(run_log "$props")"; then
   print_result 0 "fp1 ignore rule written for .github/workflows/default.yaml and logged with its reason"
 else
-  print_result 1 "first-party workflow not accepted (contents: $(grep 'multicriteria' "$props" 2>/dev/null || echo 'missing'); log: $(grep 'S7637' "$(run_log "$props")" 2>/dev/null || echo 'none'))"
+  print_result 1 "first-party workflow not accepted (contents: $(grep 'multicriteria' "$props" 2>/dev/null || echo "$MISSING"); log: $(grep 'S7637' "$(run_log "$props")" 2>/dev/null || echo 'none'))"
 fi
 
 # =============================================================================
@@ -585,7 +591,7 @@ if grep -Fxq 'sonar.exclusions=src/generated/**' "$props" && [ "$(count_key sona
    grep -q 'Keeping the test classification from sonar-project.properties' "$(run_log "$props")"; then
   print_result 0 "repository sonar.exclusions kept and no test set derived against it"
 else
-  print_result 1 "test set derived against a lone repository sonar.exclusions (contents: $(grep -E 'sonar\.(sources|tests|test\.inclusions|exclusions)=' "$props" 2>/dev/null || echo 'missing'))"
+  print_result 1 "test set derived against a lone repository sonar.exclusions (contents: $(grep -E 'sonar\.(sources|tests|test\.inclusions|exclusions)=' "$props" 2>/dev/null || echo "$MISSING"))"
 fi
 
 # =============================================================================
@@ -605,7 +611,7 @@ if grep -Fxq 'sonar.test.exclusions=qa/fixtures/**' "$props" && [ "$(count_key s
    grep -Fxq "sonar.exclusions=$TEST_PATTERNS,$GENERATED_PATTERNS" "$props"; then
   print_result 0 "the four classification keys derived; the repository's sonar.test.exclusions kept"
 else
-  print_result 1 "derivation skipped for a lone sonar.test.exclusions (contents: $(grep -E 'sonar\.(sources|tests|test\.inclusions|exclusions|test\.exclusions)=' "$props" 2>/dev/null || echo 'missing'))"
+  print_result 1 "derivation skipped for a lone sonar.test.exclusions (contents: $(grep -E 'sonar\.(sources|tests|test\.inclusions|exclusions|test\.exclusions)=' "$props" 2>/dev/null || echo "$MISSING"))"
 fi
 
 # =============================================================================
@@ -655,7 +661,7 @@ if ! grep -Eq "$CLEARED_COVERAGE_KEY" "$props" \
   && grep -Fxq 'sonar.go.coverage.reportPaths=my app/coverage.out' "$props"; then
   print_result 0 "a spaced SONAR_PROJECT_DIR keeps the repository's report path and derives the Go profile"
 else
-  print_result 1 "a spaced SONAR_PROJECT_DIR word-split back into the clearing branch (contents: $(grep -E 'sonar\.(javascript\.lcov|go\.coverage)' "$props" 2>/dev/null || echo 'missing'))"
+  print_result 1 "a spaced SONAR_PROJECT_DIR word-split back into the clearing branch (contents: $(grep -E 'sonar\.(javascript\.lcov|go\.coverage)' "$props" 2>/dev/null || echo "$MISSING"))"
 fi
 
 echo "TEST 30: Coverage detection — a project in a plain subfolder"
@@ -671,7 +677,7 @@ if ! grep -Eq "$CLEARED_COVERAGE_KEY" "$props" \
   && ! grep -q 'No coverage files found' "$(run_log "$props")"; then
   print_result 0 "a subfolder project keeps the report path it declared"
 else
-  print_result 1 "a subfolder project had its report path cleared (contents: $(grep -E 'sonar\.javascript\.lcov' "$props" 2>/dev/null || echo 'missing'))"
+  print_result 1 "a subfolder project had its report path cleared (contents: $(grep -E 'sonar\.javascript\.lcov' "$props" 2>/dev/null || echo "$MISSING"))"
 fi
 
 echo "TEST 31: Coverage detection — a root-only repository derives the same value three ways"
@@ -685,7 +691,7 @@ if grep -Fxq 'sonar.go.coverage.reportPaths=coverage.out' "$root_unset" \
   && grep -Fxq 'sonar.go.coverage.reportPaths=coverage.out' "$root_missing"; then
   print_result 0 "SONAR_PROJECT_DIR unset, '.' and a missing directory all derive the root value unchanged"
 else
-  print_result 1 "the root derivation moved (unset: $(grep -E 'sonar\.go\.coverage' "$root_unset" 2>/dev/null || echo 'missing'), '.': $(grep -E 'sonar\.go\.coverage' "$root_dot" 2>/dev/null || echo 'missing'), missing: $(grep -E 'sonar\.go\.coverage' "$root_missing" 2>/dev/null || echo 'missing'))"
+  print_result 1 "the root derivation moved (unset: $(grep -E 'sonar\.go\.coverage' "$root_unset" 2>/dev/null || echo "$MISSING"), '.': $(grep -E 'sonar\.go\.coverage' "$root_dot" 2>/dev/null || echo "$MISSING"), missing: $(grep -E 'sonar\.go\.coverage' "$root_missing" 2>/dev/null || echo "$MISSING"))"
 fi
 
 echo "TEST 32: Coverage detection — an empty tree still clears the report paths"
@@ -731,7 +737,7 @@ if grep -Fxq 'sonar.coverageReportPaths=qa/generic-coverage.xml' "$declared_empt
   && [[ "$(count_key sonar.coverageReportPaths "$declared_found")" -eq 1 ]]; then
   print_result 0 "a repository-declared sonar.coverageReportPaths is neither cleared nor overridden"
 else
-  print_result 1 "the repository lost its generic coverage path (no-coverage: $(grep -E '^sonar\.coverageReportPaths=' "$declared_empty" 2>/dev/null || echo 'missing'), found: $(grep -E '^sonar\.coverageReportPaths=' "$declared_found" 2>/dev/null || echo 'missing'))"
+  print_result 1 "the repository lost its generic coverage path (no-coverage: $(grep -E '^sonar\.coverageReportPaths=' "$declared_empty" 2>/dev/null || echo "$MISSING"), found: $(grep -E '^sonar\.coverageReportPaths=' "$declared_found" 2>/dev/null || echo "$MISSING"))"
 fi
 
 # =============================================================================

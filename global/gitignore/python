@@ -2,3 +2,17 @@
 # reports here rather than under `build/` -- `vulture/run.sh` writes `vulture.txt` and
 # `cyclonedx/run.sh` writes its BOM into it.
 /reports/
+
+# Bytecode, written beside any module the interpreter imports. That includes a helper
+# script a repository only ever runs locally, which is how it reaches a tree that ships
+# no Python package of its own -- `customer-clusters` carries `__pycache__/` by hand for
+# exactly that reason.
+__pycache__/
+*.pyc
+
+# `pytest-cov`'s intermediate SQLite database, written to the working directory on every
+# instrumented run. The Cobertura XML it is converted into lands under REPORT_PATH, which
+# the entry above covers; this is what is left behind on the way there. `.coverage.*` is
+# the per-process form written under `--cov-context` or `-n` (xdist) before combining.
+.coverage
+.coverage.*

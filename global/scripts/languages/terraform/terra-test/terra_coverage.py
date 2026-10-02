@@ -237,6 +237,17 @@ def _mask_heredoc(out: list[str], text: str, i: int, n: int, hd: re.Match[str]) 
     return term_end
 
 
+def _brace_delta(ch: str) -> int:
+    """How one character moves brace depth inside an open `${...}`.
+
+    Braces of any kind nest, so an object literal inside the interpolation
+    cannot close it early.
+    """
+    if ch == "{":
+        return 1
+    return -1 if ch == "}" else 0
+
+
 def _string_end(text: str, i: int, n: int) -> int:
     """Index of the quote closing the literal opened at `i`, or the line end.
 
@@ -269,12 +280,7 @@ def _string_end(text: str, i: int, n: int) -> int:
             j += 2
             continue
         if interpolation > 0:
-            # Braces of any kind nest, so an object literal inside the
-            # interpolation cannot close it early.
-            if text[j] == "{":
-                interpolation += 1
-            elif text[j] == "}":
-                interpolation -= 1
+            interpolation += _brace_delta(text[j])
             j += 1
             continue
         if text[j] == '"':
@@ -616,6 +622,45 @@ def _guard_seeds(
             scan.seeds |= _condition_refs(masked, original, sub, ns)
 
 
+def _locals_edges(
+    scan: ModuleScan, masked: str, original: str, body_span: tuple[int, int], ns: str,
+) -> None:
+    """An edge from each `local.<name>` to whatever its expression names."""
+    for name, a, b in iter_attrs(masked, original, *body_span):
+        add_edge(scan.graph, qualify(LOCAL_PREFIX + name, ns),
+                 qualify_all(traversals(masked[a:b]), ns))
+
+
+def _variable_edges(
+    scan: ModuleScan, masked: str, original: str, body_span: tuple[int, int],
+    ns: str, label: str,
+) -> None:
+    """An edge from `var.<name>` to whatever its `validation` conditions name."""
+    refs: set[str] = set()
+    for sub in iter_blocks_deep(masked, original, *body_span):
+        if sub.kind == "validation":
+            refs |= _condition_refs(masked, original, sub, ns)
+    add_edge(scan.graph, qualify("var." + label, ns), refs)
+
+
+def _seed_from_guards(
+    scan: ModuleScan, masked: str, original: str, body_span: tuple[int, int],
+    qaddress: str, ns: str, kind: str,
+) -> None:
+    """Seed a declared block from the guards `terraform test` really evaluates."""
+    # `check "X" { assert { condition } }` -- a behavioural guard the test run
+    # evaluates. The check itself is exercised, and so is everything its
+    # condition names.
+    if kind == "check":
+        scan.seeds.add(qaddress)
+        _guard_seeds(scan, masked, original, body_span, qaddress, ns, ("assert",))
+
+    # `lifecycle { pre|postcondition { condition } }` -- the guard runs as part
+    # of the containing block, so the block is exercised.
+    _guard_seeds(scan, masked, original, body_span, qaddress, ns,
+                 ("precondition", "postcondition"))
+
+
 def _scan_declarations(
     scan: ModuleScan, masked: str, original: str, starts: list[int],
     rel: str, ns: str, has_tests: bool,
@@ -626,17 +671,11 @@ def _scan_declarations(
         body_span = (blk.open_idx + 1, blk.close_idx)
 
         if blk.kind == "locals":
-            for name, a, b in iter_attrs(masked, original, *body_span):
-                add_edge(scan.graph, qualify(LOCAL_PREFIX + name, ns),
-                         qualify_all(traversals(masked[a:b]), ns))
+            _locals_edges(scan, masked, original, body_span, ns)
             continue
 
         if blk.kind == "variable" and blk.labels:
-            refs: set[str] = set()
-            for sub in iter_blocks_deep(masked, original, *body_span):
-                if sub.kind == "validation":
-                    refs |= _condition_refs(masked, original, sub, ns)
-            add_edge(scan.graph, qualify("var." + blk.labels[0], ns), refs)
+            _variable_edges(scan, masked, original, body_span, ns, blk.labels[0])
             continue
 
         if address is None or blk.kind not in DENOM_KINDS:
@@ -646,23 +685,14 @@ def _scan_declarations(
         scan.declared.append(Declared(rel, line_of(starts, blk.start), qaddress))
 
         if blk.kind == "output":
-            add_edge(scan.graph, qaddress, qualify_all(
-                traversals(attr_expr(masked, original, *body_span, "value")), ns))
+            # Spelled out rather than `*body_span`: a star-unpack followed by a
+            # positional argument defeats type inference (SonarQube S5655),
+            # and the two indices read perfectly well on their own.
+            value = attr_expr(masked, original, body_span[0], body_span[1], "value")
+            add_edge(scan.graph, qaddress, qualify_all(traversals(value), ns))
 
-        if not has_tests:
-            continue
-
-        # `check "X" { assert { condition } }` -- a behavioural guard that
-        # `terraform test` really evaluates. The check itself is exercised,
-        # and so is everything its condition names.
-        if blk.kind == "check":
-            scan.seeds.add(qaddress)
-            _guard_seeds(scan, masked, original, body_span, qaddress, ns, ("assert",))
-
-        # `lifecycle { pre|postcondition { condition } }` -- the guard runs
-        # as part of the containing block, so the block is exercised.
-        _guard_seeds(scan, masked, original, body_span, qaddress, ns,
-                     ("precondition", "postcondition"))
+        if has_tests:
+            _seed_from_guards(scan, masked, original, body_span, qaddress, ns, blk.kind)
 
 
 def _scan_test_file(scan: ModuleScan, masked: str, original: str) -> None:

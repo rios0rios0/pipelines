@@ -971,7 +971,9 @@ extends:
     COVERAGE_ARTIFACT_TARGET_PATH: "$(Build.SourcesDirectory)/build/reports"
 ```
 
-**The artifact must contain `build/reports/terra-coverage-generic.xml`.** That is the only file `tools/sonarqube/run.sh` detects; the Cobertura `terra-coverage.xml` beside it is deliberately ignored, because its "lines" are modules rather than lines and importing it would publish a false green. A consumer that opts in but publishes only the Cobertura file gets no Terraform coverage in Sonar and no error saying so.
+**The artifact carries `terra-coverage-generic.xml` at its root**, because the test stage publishes the *contents* of `build/reports/` (`targetPath: '$(REPORT_PATH)'`). Unpacking it into `$(Build.SourcesDirectory)/build/reports`, as the example does, therefore puts the file back at `build/reports/terra-coverage-generic.xml` -- which is where `find_terra_report` looks, and the only file it detects. The Cobertura `terra-coverage.xml` beside it is deliberately ignored, because its "lines" are modules rather than lines and importing it would publish a false green.
+
+Get the target path wrong and nothing says so: the download succeeds, the scan runs, and Terraform coverage is simply absent.
 
 This is an **Azure DevOps parameter set only**. The GitLab CI and GitHub Actions terra pipelines have no equivalent, and the sibling raw-Terraform pipeline (`azure-devops/terraform/`) still pins the download off.
 

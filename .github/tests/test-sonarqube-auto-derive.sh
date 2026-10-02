@@ -697,7 +697,7 @@ props=$(run_with_fixtures "$fx" "$TEST_DIR/no-coverage.properties" -- \
 cleared_count=$(grep -cE '^sonar\.[A-Za-z.]+[Rr]eportsPaths=$|^sonar\.[A-Za-z.]+[Rr]eportPaths=$' "$props" || true)
 if grep -Eq "$CLEARED_COVERAGE_KEY" "$props" \
   && grep -Fxq 'sonar.coverageReportPaths=' "$props" \
-  && [ "$cleared_count" -eq 8 ] \
+  && [[ "$cleared_count" -eq 8 ]] \
   && grep -q 'No coverage files found' "$(run_log "$props")"; then
   print_result 0 "a tree with no coverage anywhere still clears the eight report-path properties"
 else
@@ -725,10 +725,10 @@ declared_found=$(run_with_fixtures "$terra_fx" "$TEST_DIR/declared-generic-cover
   GITHUB_REPOSITORY=owner/repo)
 
 if grep -Fxq 'sonar.coverageReportPaths=qa/generic-coverage.xml' "$declared_empty" \
-  && [ "$(count_key sonar.coverageReportPaths "$declared_empty")" -eq 1 ] \
+  && [[ "$(count_key sonar.coverageReportPaths "$declared_empty")" -eq 1 ]] \
   && grep -q 'No coverage files found' "$(run_log "$declared_empty")" \
   && grep -Fxq 'sonar.coverageReportPaths=qa/generic-coverage.xml' "$declared_found" \
-  && [ "$(count_key sonar.coverageReportPaths "$declared_found")" -eq 1 ]; then
+  && [[ "$(count_key sonar.coverageReportPaths "$declared_found")" -eq 1 ]]; then
   print_result 0 "a repository-declared sonar.coverageReportPaths is neither cleared nor overridden"
 else
   print_result 1 "the repository lost its generic coverage path (no-coverage: $(grep -E '^sonar\.coverageReportPaths=' "$declared_empty" 2>/dev/null || echo 'missing'), found: $(grep -E '^sonar\.coverageReportPaths=' "$declared_found" 2>/dev/null || echo 'missing'))"

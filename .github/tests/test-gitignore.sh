@@ -263,6 +263,30 @@ assert_true "a terraform project does NOT ignore .terraform.lock.hcl" \
   "! git -C '$TFMOD' check-ignore -q --no-index .terraform.lock.hcl"
 
 echo ""
+echo "A python project ignores what an instrumented run leaves behind"
+# The three entries below were written by hand in a consumer before they lived here, which
+# is the signal that they belong to the language rather than to that repository. `.coverage`
+# is the one that bites: `pytest-cov` writes it to the working directory, not under
+# REPORT_PATH, so the `/reports/` entry above does not reach it and `git add -A` after a
+# test run stages a binary SQLite database.
+PYREPO="$TEST_DIR/python-artefacts"
+make_repo "$PYREPO" "python"
+gi "$PYREPO" > /dev/null 2>&1
+mkdir -p "$PYREPO/helper/__pycache__"
+: > "$PYREPO/helper/__pycache__/mod.cpython-312.pyc"
+: > "$PYREPO/.coverage"
+: > "$PYREPO/.coverage.host.1234.567"
+
+assert_true "bytecode under any __pycache__ is ignored" \
+  "git -C '$PYREPO' check-ignore -q helper/__pycache__/mod.cpython-312.pyc"
+assert_true "the pytest-cov database is ignored" \
+  "git -C '$PYREPO' check-ignore -q .coverage"
+assert_true "and so are the per-process files xdist writes beside it" \
+  "git -C '$PYREPO' check-ignore -q .coverage.host.1234.567"
+assert_true "nothing in the python block reaches a project that is not python" \
+  "! git -C '$REPO' check-ignore -q --no-index .coverage"
+
+echo ""
 echo "======================================"
 echo -e "Tests passed: ${GREEN}${TESTS_PASSED}${NC}"
 if [ "$TESTS_FAILED" -gt 0 ]; then

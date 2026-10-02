@@ -1362,6 +1362,28 @@ derived only as a set, as **Test classification** below explains.
 | `sonar.test.inclusions` | `**/*_test.go,**/test/**,**/tests/**,**/test_*.py,**/*_test.py,**/conftest.py,**/*.test.ts,**/*.test.tsx,**/*.spec.ts,**/*.spec.tsx,**/*.test.js,**/*.spec.js,**/__tests__/**,**/src/test/**,**/*Tests/**,**/*.Tests/**,**/spec/**` | the Go, Python, JavaScript/TypeScript, Java, .NET and Ruby test conventions |
 | `sonar.exclusions` | the test patterns above plus `**/vendor/**,**/node_modules/**,**/build/**,**/dist/**,**/coverage/**,**/.pipelines/**` | a file matched by the test inclusions must not be indexed as a source file as well |
 | `sonar.test.exclusions` | `**/vendor/**,**/node_modules/**` | vendored tests are not the repository's; an independent default, because it only ever shrinks the test set |
+| `sonar.coverage.exclusions` | the `.tf`/`.hcl` outside `modules/`, plus the non-`.tf` types inside it | only in a tree holding `modules/**/*.tf`; mirrors what the Terraform coverage generator measures, as **Terraform coverage scope** below explains |
+
+**Terraform coverage scope.** Only for a repository holding `modules/**/*.tf`. The Terraform coverage
+generator walks `modules/` and reports one kind of file, `.tf`, with one `lineToCover` per declared block.
+Everything else in such a tree is unmeasurable by construction -- not badly tested, never on the scale --
+and an unmeasurable file left coverable reads as **0%**, which fails `new_coverage` on the default, shared
+`Sonar way` gate for a repository that could never have satisfied it.
+
+Every entry names an extension and none excludes a directory wholesale, so the list covers exactly what
+SonarQube indexes as Terraform and the generator never measures: `.tf` and `.hcl` under `stacks/` and
+`environments/`, which it does not walk, and everything but `.tf` under `modules/`. A source in another
+language keeps its own analyser wherever it sits -- a Python Lambda under `stacks/`, a `.sh` at the
+repository root with a shell coverage tool wired to it. `modules/**/*.tf` stays coverable: it is the
+whole point.
+
+Declaring `sonar.coverage.exclusions` keeps your value and skips the derivation entirely, which is how a
+repository with a different layout -- a module tree somewhere other than `modules/`, or extra generated
+files to leave out -- states its own scope:
+
+```properties
+sonar.coverage.exclusions=stacks/**/*.tf,environments/**/*.tf,**/*.hcl
+```
 
 **Test classification.** Without `sonar.tests`, every `*_test.go`, `test_*.py` or `*.spec.ts` is analyzed
 as production code, and the scaffolding that table-driven tests legitimately repeat is what fails the

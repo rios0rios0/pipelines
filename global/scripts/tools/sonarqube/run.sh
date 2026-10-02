@@ -244,6 +244,36 @@ else
   fi
 fi
 
+# --- Terraform coverage scope -------------------------------------------------
+# What the Terraform coverage generator CANNOT measure, excluded so it does not
+# read as uncovered. Derived here rather than copied into every consumer,
+# because the list only means anything beside the generator it mirrors: that
+# tool (`terra-test/terra_coverage.py`) walks `modules/` and reports exactly one
+# kind of file, `.tf`, one `lineToCover` per declared block. Everything else in
+# the tree is unmeasurable by construction -- not badly tested, never on the
+# scale -- and an unmeasurable file left coverable reads as 0% and fails
+# `new_coverage` on the DEFAULT, SHARED `Sonar way` gate, for a repository that
+# could never have satisfied it.
+#
+# Every entry names an extension, and none excludes a directory wholesale. What
+# this list has authority over is exactly what SonarQube indexes as Terraform
+# and the generator never measures: `.tf` and `.hcl` outside `modules/`, which
+# the generator does not walk, and everything but `.tf` inside it. A source in
+# another language keeps its own analyser wherever it sits -- a Python Lambda
+# under `stacks/`, a `.sh` at the repository root with a shell coverage tool
+# wired to it -- because a directory glob would silence an analyser that was
+# measuring it properly, and this script has no business doing that.
+#
+# A repository that declares the key keeps it, the same override channel as
+# every other default here.
+# `head -n 1` rather than `find -quit`: this runs under POSIX sh, and busybox
+# find has no `-quit`. There it would error, stderr is discarded, and the
+# derivation would silently never run.
+if [ -d modules ] && [ -n "$(find modules -name '.terraform' -prune -o -name '*.tf' -print 2>/dev/null | head -n 1)" ]; then
+  set_default_sonar_property sonar.coverage.exclusions \
+    'stacks/**/*.tf,stacks/**/*.hcl,environments/**/*.tf,environments/**/*.hcl,modules/**/*.hcl,modules/**/*.json,modules/**/*.yaml,modules/**/*.yml,modules/**/*.tpl,modules/**/*.tftpl,modules/**/*.tmpl,modules/**/*.sh,modules/**/Dockerfile,modules/**/*.Dockerfile'
+fi
+
 # --- Test classification ------------------------------------------------------
 # Without `sonar.tests`, every `*_test.go`, `test_*.py`, `*.spec.ts`... is
 # analyzed as production code, so the table-driven scaffolding that tests

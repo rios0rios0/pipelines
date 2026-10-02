@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added derivation of `sonar.coverage.exclusions` for a Terraform module tree, so the list lives beside the coverage generator it mirrors instead of being copied into every consumer. A repository that declares the key keeps it'
+time: '2026-10-02T14:52:37.706197724Z'

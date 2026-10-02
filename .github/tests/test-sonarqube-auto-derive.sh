@@ -741,6 +741,61 @@ else
 fi
 
 # =============================================================================
+# Terraform coverage scope
+# =============================================================================
+echo "TEST 34: sonar.coverage.exclusions derived for a Terraform module tree"
+tf_fx=$(make_fixtures)
+mkdir -p "$tf_fx/modules/alpha" "$tf_fx/stacks/prod"
+: > "$tf_fx/modules/alpha/main.tf"
+: > "$tf_fx/stacks/prod/main.tf"
+tf_props=$(run_with_fixtures "$tf_fx" -- GITHUB_REPOSITORY=owner/repo)
+tf_line=$(grep -E '^sonar\.coverage\.exclusions=' "$tf_props" || true)
+# The invariant is the negative one: `modules/**/*.tf` must NOT be excluded,
+# compared as a whole list entry because it is a prefix of `modules/**/*.tftpl`
+# and a substring test matches that instead.
+if [[ -n "$tf_line" ]] \
+  && [[ "$tf_line" == *'stacks/**/*.tf'* ]] \
+  && [[ "$tf_line" == *'environments/**/*.hcl'* ]] \
+  && [[ ",${tf_line#*=}," != *',modules/**/*.tf,'* ]] \
+  && [[ "$tf_line" == *'modules/**/*.hcl'* ]] \
+  && [[ "$tf_line" == *'modules/**/*.tftpl'* ]] \
+  && [[ "$tf_line" != *',stacks/**,'* ]] \
+  && [[ "$tf_line" != *',**/*.sh'* ]] \
+  && [[ "$(count_key sonar.coverage.exclusions "$tf_props")" -eq 1 ]]; then
+  print_result 0 "a module tree excludes what the generator cannot measure, scoped to modules/, and keeps its .tf coverable"
+else
+  print_result 1 "the Terraform coverage scope was not derived (line: ${tf_line:-$MISSING})"
+fi
+
+echo "TEST 35: a repository-declared sonar.coverage.exclusions is kept"
+# The override channel matters for a tree holding another language inside
+# `modules/` -- a Python Lambda beside the Terraform that deploys it, which a
+# blanket directory exclusion written here would silence.
+own_fx=$(make_fixtures)
+mkdir -p "$own_fx/modules/alpha"
+: > "$own_fx/modules/alpha/main.tf"
+own_starter="$TEST_DIR/own-exclusions.properties"
+printf 'sonar.coverage.exclusions=stacks/**/*.tf\n' > "$own_starter"
+own_props=$(run_with_fixtures "$own_fx" "$own_starter" -- GITHUB_REPOSITORY=owner/repo)
+if grep -Fxq 'sonar.coverage.exclusions=stacks/**/*.tf' "$own_props" \
+  && [[ "$(count_key sonar.coverage.exclusions "$own_props")" -eq 1 ]]; then
+  print_result 0 "a repository-declared coverage scope is neither overridden nor duplicated"
+else
+  print_result 1 "the declared coverage scope was lost (contents: $(grep -E '^sonar\.coverage\.exclusions=' "$own_props" 2>/dev/null || echo "$MISSING"))"
+fi
+
+echo "TEST 36: a non-Terraform repository is left alone"
+go_fx=$(make_fixtures)
+mkdir -p "$go_fx/internal"
+: > "$go_fx/internal/app.go"
+go_props=$(run_with_fixtures "$go_fx" -- GITHUB_REPOSITORY=owner/repo)
+if ! grep -Eq '^sonar\.coverage\.exclusions=' "$go_props"; then
+  print_result 0 "no coverage scope is invented for a tree with no modules/*.tf"
+else
+  print_result 1 "a non-Terraform repository got Terraform exclusions (contents: $(grep -E '^sonar\.coverage\.exclusions=' "$go_props"))"
+fi
+
+# =============================================================================
 # Summary
 # =============================================================================
 echo ""

@@ -1667,6 +1667,12 @@ SCRIPTS_DIR=$HOME/Development/github.com/rios0rios0/pipelines
 ln -s $SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/.golangci.yml ~/.golangci.yml
 ```
 
+`make lint` runs with `--fix`, and nolintlint fixes an unused `//nolint` directive by deleting the
+whole comment it sits in. The shared config therefore leaves that finding alone on any line that also
+carries a scanner's allow marker (`//gitleaks:allow`, `// nosemgrep`, `ggignore`), so a fixture such
+as `"..." //nolint:gosec //gitleaks:allow` keeps its marker even though gosec never runs on tests.
+`.github/tests/test-golangci-scanner-markers.sh` holds that in place.
+
 ## MVP Hosting & Deployment
 
 The `50-deployment` stage ships ready-made jobs for the five platforms most worth using to host an

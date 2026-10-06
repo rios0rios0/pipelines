@@ -94,6 +94,7 @@ All platforms follow consistent numbered stages:
 - `makefiles/` — Includable `.mk` fragments for downstream projects (`common.mk`, `golang.mk`, `python.mk`, etc.)
 - `global/gitignore/` — Canonical ignore rules for the files the pipeline writes into a consumer's working tree, one fragment per language plus `common`. Git has no `include` for ignore files and refuses to follow a symlinked `.gitignore`, so these are GENERATED into a delimited block in the consumer's own `.gitignore` by `make gitignore`, and `make gitignore-check` fails when that block is stale. See Shared Ignore Rules below
 - `.docs/examples/` — Complete per-platform usage examples
+- `.docs/known-issues.md` — Defects consumers observed in the shared workflows and not fixed yet (never security defects: this repository is public); read it before diagnosing a workflow, and record a new one there
 
 ### Workflow Naming Convention
 

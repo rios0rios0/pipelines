@@ -91,17 +91,19 @@ quality:basic-checks:
             echo "Dependency-bot branch detected ('$SOURCE_BRANCH'); changelog fragment not required."
             ;;
           "$AUTOUPDATE_PREFIX"*)
-            # autoupdate writes NO entry when the target branch already records the
-            # statement it would have written. It runs unattended, on a schedule, against
-            # the same repositories, so without that check yesterday's bullet is restated
-            # verbatim on every run until a release moves it away. A correct run therefore
-            # legitimately carries no fragment, and demanding one fails a pull request
-            # that is right (rios0rios0/autoupdate, `newChangelogEntries`).
+            # autoupdate can legitimately add no fragment. It runs unattended, on a schedule,
+            # against the same repositories, and names every dependency it moves: one it
+            # already named is updated where it is -- the pending fragment is modified, not
+            # added -- and an entry it would restate verbatim is not written again. A run
+            # that moved only transitive dependencies writes nothing while something is
+            # pending, and a summary only when nothing is. Demanding an added fragment
+            # therefore fails a pull request that is right (rios0rios0/autoupdate,
+            # `mergeDependencyChanges` and `RecordObservedDependencyChanges`).
             #
             # The other half of that rule IS checkable, and is what is enforced here:
             # omitting the fragment is acceptable only BECAUSE one is already pending, so
             # something must be pending. Nothing added and nothing pending means the
-            # change is written down nowhere -- a real miss, or a dedupe that broke -- and
+            # change is written down nowhere -- a real miss, or a writer that broke -- and
             # still fails.
             echo "Automation branch detected ('$SOURCE_BRANCH')."
 
@@ -165,8 +167,8 @@ quality:basic-checks:
         CHANGED_FILES=$(git diff --name-only "origin/$TARGET_BRANCH"...HEAD -- 'CHANGELOG.md' 2>/dev/null || true)
         if [ -z "$CHANGED_FILES" ]; then
           # The same exemption the chlog path above makes, for a repository that keeps a
-          # hand-written CHANGELOG.md: autoupdate suppresses the entry when [Unreleased]
-          # on the target branch already states it.
+          # hand-written CHANGELOG.md: autoupdate leaves it untouched when [Unreleased] on
+          # the target branch already records everything the run would have written.
           PENDING_ENTRIES=''
           case "$SOURCE_BRANCH" in
             dependabot/*)

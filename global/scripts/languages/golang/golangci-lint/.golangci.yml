@@ -472,5 +472,16 @@ linters:
           - gosec
           - noctx
           - wrapcheck
+      # nolintlint fixes an unused directive by deleting the whole comment it sits in, so
+      # on `"fixture" //nolint:gosec //gitleaks:allow` it deletes the gitleaks marker too.
+      # The rule above stops gosec from ever running on `_test.go`, which makes every such
+      # directive in a test "unused": one `make lint` (which runs with `--fix`) strips the
+      # markers without reporting anything, and the next Gitleaks scan flags the fixtures
+      # as leaks. Leave the finding alone on any line that also carries a secret or SAST
+      # scanner's own allow marker -- an unused directive costs nothing, a lost marker
+      # fails the build or hides a real finding.
+      - text: 'is unused for linter'
+        source: '(gitleaks:allow|nosemgrep|ggignore)'
+        linters: [ nolintlint ]
       - path: '.*/docs'
         linters: [gochecknoglobals, gochecknoinits, godot]

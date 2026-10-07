@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added `DOWNLOAD_COVERAGE_ARTIFACT`, `COVERAGE_ARTIFACT_NAME` and `COVERAGE_ARTIFACT_TARGET_PATH` parameters to the Azure DevOps `terra` pipeline, so a Terraform consumer that produces a coverage report in an earlier stage can get it to the Sonar job, which until now had no way to see it; the defaults keep the previous behaviour, so an existing consumer changes nothing and one that does produce coverage opts in with `DOWNLOAD_COVERAGE_ARTIFACT: true`'
-time: '2026-10-01T13:06:44.941651188Z'

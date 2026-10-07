@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added `.docs/known-issues.md`, the defects consumers observed in the shared workflows and not fixed yet, starting with the Dart `tests > test:all` job running without a `timeout-minutes`, so a stuck Flutter suite holds its runner for hours'
-time: '2026-10-06T15:15:09.196080484Z'

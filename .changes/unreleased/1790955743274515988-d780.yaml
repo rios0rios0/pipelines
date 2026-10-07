@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added the Python bytecode and pytest-cov artefacts (`__pycache__/`, `*.pyc`, `.coverage`, `.coverage.*`) to the shared Python gitignore fragment, so a consumer stops writing them into its own `.gitignore` by hand'
-time: '2026-10-02T15:42:23.274434253Z'

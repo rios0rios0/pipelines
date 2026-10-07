@@ -16,7 +16,8 @@ fi
 #
 #   terra-test    runs `terraform test` over `modules/*/tests/*.tftest.hcl`.
 #                 Only covers reusable modules, and only those that have a test
-#                 file. A root module is never its subject.
+#                 file. A root module is its subject only when it sits under
+#                 the opt-in `TERRA_TEST_ROOTS`, and only if it has one.
 #   terratest     a Go suite that parses HCL offline. A parser answers "is this
 #                 syntactically valid HCL", not "does this identifier exist" --
 #                 it has no evaluation context, no module graph, no schema.

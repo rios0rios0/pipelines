@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, fixture-isolation, gitignore, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, dependency-updates, azure-step-names, azure-secret-env, containers-detect, report-uploads)
+- `make test` - Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, docker-multi-arch, basic-checks, fixture-isolation, gitignore, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, dependency-updates, azure-step-names, azure-secret-env, containers-detect, report-uploads)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-go-module-toolchain` - Test that every `go.mod` toolchain directive is readable by the images/analysers that consume it specifically
 - `make test-go-tool-staleness` - Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves specifically
@@ -23,6 +23,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-var-catalog` - Test the shared variable-declaration generator specifically
 - `make test-terraform-validate` - Test the root-module `terraform validate` tier specifically
 - `make test-terraform-provider-mirror` - Test the local Terraform provider mirror specifically
+- `make test-terra-test-roots` - Test the terra-test tier's opt-in root-module run (`TERRA_TEST_ROOTS`) specifically
 - `make test-docker-multi-arch` - Test 40-delivery/docker multi-arch contract specifically
 - `make test-containers-detect` - Test the Container Images change detection (deleted/renamed folders, dispatch inputs) specifically
 - `make test-basic-checks` - Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) specifically
@@ -240,7 +241,7 @@ The Terra CLI pipeline test stage exposes parallel jobs on every platform (Azure
 | Tool                     | Purpose                                            | Script Location                                         |
 |--------------------------|----------------------------------------------------|---------------------------------------------------------|
 | **Terra Test (unified)** | Orchestrates both heavier tiers behind one `test:all` job | `global/scripts/languages/terraform/test-all/run.sh`    |
-| **terra-test**           | `terraform test` over `modules/*/tests/*.tftest.hcl` | `global/scripts/languages/terraform/terra-test/run.sh`  |
+| **terra-test**           | `terraform test` over `modules/*/tests/*.tftest.hcl`, plus root modules under the opt-in `TERRA_TEST_ROOTS` (default empty, e.g. `stacks`) | `global/scripts/languages/terraform/terra-test/run.sh`  |
 | **Terratest**            | Go test suite under `tests/terratest/*.go`         | `global/scripts/languages/terraform/terratest/run.sh`   |
 | **Structural**           | Third-tier runner for `tests/structural.sh` (own `test:structural` job) | `global/scripts/languages/terraform/structural/run.sh`  |
 | **validate** (opt-in)    | Fourth-tier `terraform init -backend=false` + `terraform validate` over root modules under `VALIDATE_ROOTS` (own `test:validate` job) | `global/scripts/languages/terraform/validate/run.sh`    |
@@ -823,6 +824,7 @@ make test-order-check
 make test-var-catalog
 make test-terraform-validate
 make test-terraform-provider-mirror
+make test-terra-test-roots
 make test-docker-multi-arch
 make test-containers-detect
 make test-basic-checks

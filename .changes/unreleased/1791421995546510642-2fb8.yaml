@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed the comments, test notes and released changelog entries that named specific consumer repositories, their modules, CI builds or pull requests so that they describe them generically; every entry keeps its technical content, and no script, template or test behaves differently'
+time: '2026-10-08T01:13:15.548740524Z'

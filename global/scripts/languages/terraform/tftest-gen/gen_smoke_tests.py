@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Generate `tests/smoke.tftest.hcl` for a single terraform-module repo.
 
-Where `customer-clusters/tests/generators/gen_smoke_tests.py` treats
+Where a monorepo's own generator treats
 `modules/<name>/` as the module and iterates over all of them, this variant
 treats the CWD (or `--repo-dir`) as the single module and emits one file
-at `<repo-dir>/tests/smoke.tftest.hcl`. That matches the terraform-modules
-project layout where every module is its own Azure DevOps repository.
+at `<repo-dir>/tests/smoke.tftest.hcl`. That matches a module-per-repository
+layout, where every module is its own repository.
 
 Reads:
     <repo>/variables.tf
@@ -36,7 +36,7 @@ from pathlib import Path
 
 MARKER = "# smoke.tftest.hcl -- auto-generated minimal plan-time smoke test."
 
-# ---------- HCL tokenisation helpers (lifted from customer-clusters) ----------
+# ---------- HCL tokenisation helpers (lifted from a monorepo generator) ----------
 
 RE_VARIABLE_BLOCK = re.compile(r'(?ms)^\s*variable\s+"([^"]+)"\s*\{(.*?)^\}\s*$')
 RE_REQUIRED_PROVIDERS_HEAD = re.compile(r"required_providers\s*\{")

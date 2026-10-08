@@ -110,8 +110,8 @@ assert_true "granularity caveat is stated in the XML header" \
 #      discarding real behavioural tests -- one of them the guard protecting
 #      against an outage that took a fleet down;
 #    * a non-greedy assert-body regex truncated at the first nested `}`, so
-#      every reference after it vanished. The condition below is the real one
-#      from customer-clusters/modules/aws_aurora that it truncated;
+#      every reference after it vanished. The condition below is a real one,
+#      taken from a consumer repository's module, that it truncated;
 #    * .terraform / .terragrunt-cache copies and tests/ code inflated the
 #      denominator and duplicated the successes.)
 # =============================================================================

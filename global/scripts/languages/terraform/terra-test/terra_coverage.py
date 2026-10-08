@@ -772,8 +772,8 @@ def discover_modules(repo_dir: Path) -> list[Path]:
 
     `modules/<name>/` is the monorepo layout. When there is no such tree but
     the repo root itself holds `*.tf`, the repo IS the module -- that is the
-    `terraform-modules` layout where every module is its own Azure DevOps
-    repository (see `tftest-gen/gen_smoke_tests.py`). Missing that case scored
+    module-per-repository layout, where every module is its own repository
+    (see `tftest-gen/gen_smoke_tests.py`). Missing that case scored
     a whole published module `0/0` instead of measuring it.
     """
     modules_root = repo_dir / "modules"

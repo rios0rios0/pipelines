@@ -18,7 +18,7 @@ fi
 #   1. Detect which tiers the consumer actually has.
 #   2. If neither tier has tests, exit 0 with an empty JUnit so CI publishers
 #      don't fail with "no test results". Repos with no tests are a valid
-#      state — a shared-toolbox-style stack repo with no modules is common.
+#      state — a stack-only repo with no modules is common.
 #   3. Run each applicable tier in sequence (terra-test first, then
 #      terratest). Each tier's own runner still emits its own artifacts.
 #   4. Merge both JUnit files into `${REPORT_PATH}/junit-terra-all.xml` for

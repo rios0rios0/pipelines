@@ -5,7 +5,7 @@
 
 # Bytecode, written beside any module the interpreter imports. That includes a helper
 # script a repository only ever runs locally, which is how it reaches a tree that ships
-# no Python package of its own -- `customer-clusters` carries `__pycache__/` by hand for
+# no Python package of its own -- some repositories carried `__pycache__/` by hand for
 # exactly that reason.
 __pycache__/
 *.pyc

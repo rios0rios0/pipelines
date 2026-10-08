@@ -1,13 +1,13 @@
 parameters:
   # Steps injected before `terraform init` in both the smoke and e2e
   # jobs. Required for any module that references private-git submodules
-  # (e.g. `k8s-deployment` pulling `tf-container-image` via the
+  # (e.g. a module pulling another module via the
   # `git@dev.azure.com-northwind:` host alias) -- without the alias
   # configured on the agent, `terraform init` aborts with
   # `ssh: Could not resolve hostname dev.azure.com-northwind`.
   #
-  # Mirrors the `PRE_STEPS` hook already accepted by `terra/` for
-  # customer-clusters etc. Consumers pass a single list of steps that
+  # Mirrors the `PRE_STEPS` hook already accepted by `terra/`.
+  # Consumers pass a single list of steps that
   # covers both the SAST tier (`20-security`) and the test tier
   # (`30-test`).
   - name: 'PRE_STEPS'
@@ -178,7 +178,7 @@ stages:
           # The binary is verified against the upstream `.sha256sum` so a
           # tampered mirror or a corrupted download is caught before the
           # binary is executed -- this is a shared template that runs in
-          # every `terraform-modules` pipeline, so the supply-chain risk
+          # every module pipeline, so the supply-chain risk
           # is non-trivial. Architecture is detected at runtime so the
           # template works on `arm64` agents (Linux ARM agent pools are
           # already in rotation in some Azure DevOps subscriptions).

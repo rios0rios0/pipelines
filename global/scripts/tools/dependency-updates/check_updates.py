@@ -646,7 +646,8 @@ class ManifestParser:
     def annotation(self, stripped: str) -> bool:
         upstream = UPSTREAM.match(stripped)
         if upstream:
-            options = dict(pair.split("=", 1) for pair in upstream.group("opts").split() if "=" in pair)
+            options = {key: value for key, _, value in (word.partition("=") for word in upstream.group("opts").split())
+                       if value}
             self.upstream = {"kind": upstream.group("kind"), "coord": upstream.group("coord"),
                              "track_major": options.get("track")}
             return True

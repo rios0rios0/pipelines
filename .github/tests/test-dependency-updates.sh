@@ -388,7 +388,12 @@ echo ""
 # A repository with one pin of every shape `--apply` rewrites, and the fixture
 # that moves each of them.
 # --------------------------------------------------------------------------- #
-repeat() { printf "%0.s$1" $(seq 1 "$2"); }
+# `count` copies of one character: a digest-shaped value with no entropy, so no
+# secret scanner can mistake a fixture for a credential.
+repeat() {
+  local char="$1" count="$2"
+  printf '%*s' "$count" '' | tr ' ' "$char"
+}
 OLD_AMD64="$(repeat 1 64)"; OLD_ARM64="$(repeat 2 64)"; OLD_TG="$(repeat 3 64)"
 NEW_AMD64="$(repeat 4 64)"; NEW_ARM64="$(repeat 5 64)"; NEW_TG="$(repeat 6 64)"
 IMG_OLD="$(repeat a 64)"; IMG_STILL="$(repeat b 64)"; IMG_NEW="$(repeat c 64)"
@@ -494,6 +499,7 @@ json.dump(fixture, open(sys.argv[1], "w"), indent=1)
 EOS
 
 APPLY_REPO="$WORK/apply-repo"
+UNBUMPED_TOOL='TOOL_PINNED_VERSION="1.2.3"'
 run_apply() {
   local fixture="$1"; shift
   python3 "$CHECKER" --repo-dir "$APPLY_REPO" --report "apply-out" --fixture "$fixture" --apply \
@@ -597,8 +603,9 @@ echo "11. --apply refuses what it cannot do safely, and leaves it untouched"
 # broken pin must stay exactly as it was -- never half-updated -- while the
 # rest of the run still lands, and the exit code must say a person is needed.
 refusal_case() {
+  local fixture_edit="$1"
   build_apply_repo "$APPLY_REPO"
-  python3 - apply.json case.json "$1" <<'EOS'
+  python3 - apply.json case.json "$fixture_edit" <<'EOS'
 import json
 import os
 import sys
@@ -619,7 +626,7 @@ TOOL_RELEASE_NEW='f["GET https://api.github.com/repos/example/tool/releases/tags
 refusal_case "${TOOL_RELEASE_NOW}[\"assets\"][0][\"digest\"] = \"sha256:\" + \"9\" * 64"
 assert_eq "a template that no longer locates the committed file exits 1" "1" "$CASE_STATUS"
 assert_contains "and says the template cannot be trusted" "$CASE_OUT" "is not the committed one"
-assert_contains "and leaves the pin as it was" "$CASE_MANIFEST" 'TOOL_PINNED_VERSION="1.2.3"'
+assert_contains "and leaves the pin as it was" "$CASE_MANIFEST" "$UNBUMPED_TOOL"
 assert_contains "and its digests too" "$CASE_MANIFEST" "TOOL_SHA256_AMD64=\"$OLD_AMD64\""
 assert_contains "while every other update still lands" "$CASE_CI" "someorg/someaction@$COMMIT"
 
@@ -627,7 +634,7 @@ refusal_case "${TOOL_RELEASE_NEW}[\"assets\"][0][\"name\"] = \"tool-1.3.0-linux-
 assert_eq "a release that renamed its asset exits 1" "1" "$CASE_STATUS"
 assert_contains "and names the asset it could not find" "$CASE_OUT" "has no asset named tool_1.3.0_linux_amd64.tar.gz"
 assert_contains "and says the installer has to follow" "$CASE_OUT" "renamed its assets"
-assert_contains "and the pin is untouched" "$CASE_MANIFEST" 'TOOL_PINNED_VERSION="1.2.3"'
+assert_contains "and the pin is untouched" "$CASE_MANIFEST" "$UNBUMPED_TOOL"
 
 # The manifest lists BOTH assets, one of them wrongly, so the mismatch is the
 # only thing standing between this release and the pull request.
@@ -635,7 +642,7 @@ refusal_case 'f["GET https://github.com/example/tool/releases/download/v1.3.0/ch
 assert_eq "a release that disagrees with its own checksums exits 1" "1" "$CASE_STATUS"
 assert_contains "and reports the disagreement" "$CASE_OUT" "but the asset itself is"
 assert_contains "and writes neither digest" "$CASE_MANIFEST" "TOOL_SHA256_AMD64=\"$OLD_AMD64\""
-assert_contains "nor the version" "$CASE_MANIFEST" 'TOOL_PINNED_VERSION="1.2.3"'
+assert_contains "nor the version" "$CASE_MANIFEST" "$UNBUMPED_TOOL"
 
 refusal_case 'f["github-release:example/tool"] = "v1.3.0\";touch_pwned;\""'
 assert_eq "a version unsafe to write into a sourced shell file exits 1" "1" "$CASE_STATUS"
@@ -649,6 +656,17 @@ assert_eq "a tag unsafe to write into a workflow exits 1" "1" "$CASE_STATUS"
 assert_not_contains "and never reaches the workflow" "$CASE_CI" "injected"
 assert_contains "which keeps its old pin" "$CASE_CI" "someorg/someaction@$ACTION_OLD' # v3.1.0"
 
+# A refused name is still SHOWN -- in the pull request and the job summary, both
+# rendered as Markdown -- so it must arrive there inert: no code span it can
+# close, no table cell it can end, no link or HTML it can open.
+refusal_case 'f["github-release:example/tool"] = "v1.3.0`|[click](https://example.test)<b>x</b>"'
+CASE_BODY="$(cat apply-out/pull-request.md)"
+CASE_SUMMARY="$(cat apply-out/dependency-updates.md)"
+assert_contains "a refused name is still reported" "$CASE_BODY" "Not in this pull request"
+assert_not_contains "but opens no link in the pull request" "$CASE_BODY" "[click](https://example.test)"
+assert_not_contains "and no HTML" "$CASE_BODY" "<b>"
+assert_not_contains "nor in the job summary" "$CASE_SUMMARY" "[click](https://example.test)"
+
 refusal_case 'del f["GET https://api.github.com/repos/someorg/someaction/git/ref/tags/v4.0.0"]'
 assert_eq "a lookup that cannot be completed while applying exits 2" "2" "$CASE_STATUS"
 assert_contains "and that action keeps its old pin" "$CASE_CI" "someorg/someaction@$ACTION_OLD' # v3.1.0"
@@ -661,7 +679,7 @@ set -e
 assert_eq "a digest with no asset annotation exits 1" "1" "$CASE_STATUS"
 assert_contains "and is reported as untracked" "$CASE_OUT" "no '# asset:' annotation"
 assert_contains "and its pin is not bumped half-way" "$(cat "$APPLY_REPO/global/scripts/shared/pinned-versions.sh")" \
-  'TOOL_PINNED_VERSION="1.2.3"'
+  "$UNBUMPED_TOOL"
 echo ""
 
 # --------------------------------------------------------------------------- #
@@ -794,7 +812,8 @@ echo "14. The pull-request guard protects a decline and a hand-made commit"
 GUARD_FP="$(repeat d 64)"
 export GUARD_FP
 write_guard_fixture() {
-  python3 - "guard.json" "$1" <<'EOS'
+  local case_name="$1"
+  python3 - "guard.json" "$case_name" <<'EOS'
 import json
 import os
 import sys
@@ -816,8 +835,9 @@ json.dump(cases[sys.argv[2]], open(sys.argv[1], "w"))
 EOS
 }
 run_guard() {
+  local fingerprint="${1:-$GUARD_FP}"
   GITHUB_API_URL='https://api.github.com' python3 "$GUARD" --repository 'owner/repo' \
-    --branch 'chore/dependency-updates' --base 'main' --fingerprint "${1:-$GUARD_FP}" --fixture 'guard.json' 2>&1
+    --branch 'chore/dependency-updates' --base 'main' --fingerprint "$fingerprint" --fixture 'guard.json' 2>&1
 }
 
 write_guard_fixture declined

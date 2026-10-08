@@ -38,30 +38,40 @@ FINGERPRINT = re.compile(r"^[0-9a-f]{64}$")
 REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
 
+def declined_by(closed: list[dict], marker: str) -> dict | None:
+    """The pull request that declined this exact set: closed, never merged, and carrying its fingerprint."""
+    return next((pull for pull in closed
+                 if not pull.get("merged_at") and marker in (pull.get("body") or "")), None)
+
+
+def hand_made(commits: list[dict]) -> dict | None:
+    """The first commit on the branch this workflow did not write. Merge commits never count."""
+    for commit in commits:
+        if len(commit.get("parents") or []) > 1:
+            continue
+        if TRAILER not in ((commit.get("commit") or {}).get("message") or ""):
+            return commit
+    return None
+
+
 def decide(lookups: Lookups, api: str, repository: str, branch: str, base: str, fingerprint: str) -> tuple[bool, str]:
     owner = repository.split("/", 1)[0]
     closed = lookups.json("%s/repos/%s/pulls?state=closed&head=%s&per_page=100" % (
         api, repository, urllib.parse.quote("%s:%s" % (owner, branch), safe="")), github_headers()) or []
-    marker = "<!-- %s %s -->" % (MARKER, fingerprint)
-    for pull in closed:
-        if pull.get("merged_at"):
-            continue
-        if marker in (pull.get("body") or ""):
-            return False, ("these exact updates were declined in #%s, which was closed without merging; they are "
-                           "proposed again once upstream releases something newer" % pull.get("number"))
+    declined = declined_by(closed, "<!-- %s %s -->" % (MARKER, fingerprint))
+    if declined:
+        return False, ("these exact updates were declined in #%s, which was closed without merging; they are "
+                       "proposed again once upstream releases something newer" % declined.get("number"))
     try:
         compare = lookups.json("%s/repos/%s/compare/%s...%s" % (
             api, repository, urllib.parse.quote(base, safe="/"), urllib.parse.quote(branch, safe="/")),
             github_headers()) or {}
     except NotFound:
         return True, "the branch does not exist yet"
-    for commit in compare.get("commits") or []:
-        if len(commit.get("parents") or []) > 1:
-            continue
-        message = (commit.get("commit") or {}).get("message") or ""
-        if TRAILER not in message:
-            return False, ("%s carries %s, a commit this workflow did not write; the branch is left alone until its "
-                           "pull request is merged or closed" % (branch, (commit.get("sha") or "")[:12]))
+    commit = hand_made(compare.get("commits") or [])
+    if commit:
+        return False, ("%s carries %s, a commit this workflow did not write; the branch is left alone until its "
+                       "pull request is merged or closed" % (branch, (commit.get("sha") or "")[:12]))
     return True, "the branch holds only this workflow's own commits"
 
 

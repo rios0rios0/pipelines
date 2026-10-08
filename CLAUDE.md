@@ -205,15 +205,24 @@ is empty by default and is meant for genuinely ROLLING tags such as
 `alpine:edge`, which is rebuilt almost daily — a check that is always red stops
 being read — and for a dependency somebody has decided never to move.
 
-Two things a repository has to do once, and the first run fails with a message
-naming them if it has not: GitHub refuses pull requests from `GITHUB_TOKEN`
-unless Settings → Actions → General → "Allow GitHub Actions to create and approve
-pull requests" is on, and a pull request opened with `GITHUB_TOKEN` starts no
-workflows — so no checks run, and a ruleset requiring CodeQL results blocks the
-merge — until someone closes and reopens it. Passing a GitHub App token as the
-`dependency_updates_token` secret (repository secret `DEPENDENCY_UPDATES_TOKEN`
-here) fixes both and keeps the commits verified; a personal access token fixes
-the checks but its commits are unsigned.
+**The job needs a token, in practice.** `GITHUB_TOKEN` can never change a file
+under `.github/workflows/` — GitHub offers no `workflows` permission for it, by
+design — and almost every update set here bumps an action in one; it can also
+open a pull request only when Settings → Actions → General → "Allow GitHub
+Actions to create and approve pull requests" is on, and that pull request starts
+no workflows, so a ruleset requiring CodeQL results blocks it until someone
+closes and reopens it. So `dependency_updates_token` (repository secret
+`DEPENDENCY_UPDATES_TOKEN` here) is a **fine-grained personal access token** on
+the repository with Contents, Pull requests and Workflows read and write
+(classic: `repo` + `workflow`). Two costs come with it and neither is a bug:
+`sign-commits` signs only for a bot's token, so its commits are unsigned
+(`required_signatures` needs a bypass), and its owner cannot approve the pull
+request it opens. A GitHub App would avoid both, but an App token expires within
+the hour and would have to be minted on every run from the App's ID and private
+key (`actions/create-github-app-token`) — a step the workflow does not have, so
+an App token stored in that secret stops working an hour after it is created.
+The first run that hits either `GITHUB_TOKEN` limit fails with a message naming
+the fix.
 
 ### Caches on a Self-Hosted Runner
 

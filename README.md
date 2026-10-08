@@ -1250,14 +1250,28 @@ checksum that disagrees with the release, a version name it will not write into
 a shell file), a pin with no annotation to check it by, or an upstream it could
 not reach. Everything else is in the pull request and the run stays green.
 
-**Setting it up.** GitHub refuses to let the default `GITHUB_TOKEN` open pull
-requests until Settings → Actions → General → *Allow GitHub Actions to create and
-approve pull requests* is enabled -- the first run fails with that message
-otherwise. A pull request opened by `GITHUB_TOKEN` also starts no workflows, so
-its checks do not run (and a ruleset requiring CodeQL results blocks the merge)
-until you close and reopen it. Storing a GitHub App token as the
-`DEPENDENCY_UPDATES_TOKEN` secret avoids both and keeps the commits verified; a
-personal access token runs the checks but its commits are unsigned.
+**Setting it up: give it a token.** The default `GITHUB_TOKEN` can never change a
+file under `.github/workflows/` -- GitHub does not offer that permission to it, by
+design -- and nearly every update set bumps an action there. It also opens pull
+requests only once Settings → Actions → General → *Allow GitHub Actions to create
+and approve pull requests* is enabled, and those pull requests start no workflows,
+so their checks never run until you close and reopen them. So create a
+**fine-grained personal access token** (Settings → Developer settings → Personal
+access tokens → Fine-grained tokens) for this repository only, with these
+repository permissions set to *Read and write*: **Contents**, **Pull requests** and
+**Workflows**. Store it as the `DEPENDENCY_UPDATES_TOKEN` repository secret
+(Settings → Secrets and variables → Actions). A classic token works too, with the
+`repo` and `workflow` scopes.
+
+With it, the pull request is opened under your account and its checks run. Two
+things follow from that, and neither is a fault: its commits are not signed
+(GitHub signs these commits only for a bot's token), and you cannot approve a
+pull request your own token opened -- so a ruleset that requires signed commits or
+an approving review needs your bypass, or a second person, to merge it. A token
+from a separate machine account fixes the second. A GitHub App would fix both,
+but an App token expires within the hour, so it cannot simply be stored as the
+secret; the workflow would have to mint one on every run, which it does not do yet.
+Fine-grained tokens also expire (at most a year), so set a reminder to rotate it.
 
 **From another repository**, it pins and proposes that repository's actions and
 images. The caller has to grant both permissions -- GitHub checks a called
@@ -1277,7 +1291,8 @@ jobs:
       contents: 'write'
       pull-requests: 'write'
     secrets:
-      dependency_updates_token: '${{ secrets.DEPENDENCY_UPDATES_TOKEN }}'  # optional
+      # Required as soon as an update touches .github/workflows/ -- see above.
+      dependency_updates_token: '${{ secrets.DEPENDENCY_UPDATES_TOKEN }}'
 ```
 
 `report_only: true` reports without opening a pull request or failing, and a run

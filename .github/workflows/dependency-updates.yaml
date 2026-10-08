@@ -54,10 +54,13 @@ on:
       dependency_updates_token:
         required: false
         description: |
-          A token to open the pull request with instead of the job's own. Pull
-          requests opened by the default token start no workflows, so their
-          checks never run; one from a GitHub App starts them and keeps the
-          commits verified. It needs contents and pull-requests write access.
+          A personal access token to open the pull request with instead of the
+          job's own: fine-grained, on this repository, with Contents, Pull
+          requests and Workflows read and write (classic: repo and workflow).
+          The job's own token cannot change files under .github/workflows,
+          which most update sets do, and its pull requests start no checks.
+          This one's do; its commits are unsigned, and its owner cannot
+          approve the pull request it opens.
 
 jobs:
   check-dependency-updates:
@@ -281,10 +284,20 @@ jobs:
       # files does not push at all, which matters because the default branch's
       # rules dismiss approvals on every push.
       #
-      # `sign-commits` creates the commit through the API, so it is verified
-      # with the default token and with a GitHub App token; a personal access
-      # token can open the pull request but its commits stay unsigned. No
-      # labels: adding one GitHub has to create needs `issues: write`, which
+      # Which token decides what is possible, and GITHUB_TOKEN rarely suffices.
+      # It can never change a file under `.github/workflows/` -- GitHub offers
+      # no `workflows` permission for it, deliberately, so that a workflow
+      # cannot rewrite workflows -- and almost every update set here bumps an
+      # action in one. It can open a pull request only when the repository
+      # allows Actions to, and the pull request it opens starts no workflows.
+      # A personal access token (`dependency_updates_token`) has none of those
+      # limits, but `sign-commits` signs only for a bot's token, so its commits
+      # are unsigned, and its owner cannot approve the pull request it opens.
+      # A GitHub App token would avoid both, but it expires within the hour,
+      # so it would have to be minted on every run from the App's ID and
+      # private key -- a step this job does not have.
+      #
+      # No labels: adding one GitHub has to create needs `issues: write`, which
       # this job deliberately does not ask callers for.
       - name: 'Open or update the pull request'
         id: 'pull-request'
@@ -306,9 +319,10 @@ jobs:
         shell: 'bash'
         run: |
           {
-            echo "::error::The pull request could not be opened. If the log above says 'GitHub Actions is not permitted to create or approve pull requests',"
-            echo "::error::enable Settings > Actions > General > Workflow permissions > 'Allow GitHub Actions to create and approve pull requests',"
-            echo "::error::or pass a token with contents and pull-requests write access as 'dependency_updates_token'."
+            echo "::error::The pull request could not be opened. The two usual causes, by what the log above says:"
+            echo "::error::'refusing to allow a GitHub App to create or update workflow ... without workflows permission' -- the default token cannot change files under .github/workflows, ever; pass 'dependency_updates_token'."
+            echo "::error::'GitHub Actions is not permitted to create or approve pull requests' -- pass 'dependency_updates_token', or enable Settings > Actions > General > 'Allow GitHub Actions to create and approve pull requests'."
+            echo "::error::The token: a fine-grained personal access token on this repository with Contents, Pull requests and Workflows read and write (classic: repo and workflow scopes)."
           } >&2
           exit 1
 

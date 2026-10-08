@@ -27,6 +27,24 @@ parameters:
     type: 'string'
     default: 'stacks'
 
+  # Directories searched, at any depth, for ROOT modules whose own
+  # `tests/*.tftest.hcl` the `test:all` job runs besides `modules/*/tests/`,
+  # space-separated (e.g. `stacks`); read by `terra-test/run.sh` as
+  # `TERRA_TEST_ROOTS`. Empty by default, which runs the modules only.
+  #
+  # Mapped into the step ONLY when set. A consumer may already define
+  # `TERRA_TEST_ROOTS` as a pipeline variable, which Azure Pipelines exports to
+  # every step's environment on its own; an `env:` entry carrying an empty
+  # parameter would shadow that value and silently turn the root tests off.
+  #
+  # A root whose test would apply with its real providers -- a `run` block
+  # without `command = plan`, in a file with no `mock_provider` -- is refused
+  # and fails the job, because `PRE_STEPS` may have handed this job real
+  # credentials and a cancelled job would orphan whatever the run created.
+  - name: 'TERRA_TEST_ROOTS'
+    type: 'string'
+    default: ''
+
 stages:
   - stage: 'tests'
     displayName: 'tests'
@@ -36,7 +54,8 @@ stages:
     jobs:
       # Single unified job that orchestrates both tiers of Terraform testing
       # behind one `test:all` entry: native `terraform test` over
-      # `modules/*/tests/*.tftest.hcl` (tier 1) followed by the Go Terratest
+      # `modules/*/tests/*.tftest.hcl`, plus the root modules
+      # `TERRA_TEST_ROOTS` opts in (tier 1), followed by the Go Terratest
       # suite under `tests/terratest/` (tier 2). The runner auto-detects
       # which tiers the consumer has, runs only those, and exits 0 when
       # neither is present — so stack-only repos (no `modules/` tests, no
@@ -85,6 +104,8 @@ stages:
             displayName: 'Run Terraform tests (terra-test + terratest)'
             env:
               REPORT_PATH: $(REPORT_PATH)
+              ${{ if ne(parameters.TERRA_TEST_ROOTS, '') }}:
+                TERRA_TEST_ROOTS: ${{ parameters.TERRA_TEST_ROOTS }}
 
           # Publish the merged JUnit so the Tests tab surfaces every case
           # from both tiers in one place. `condition: always()` so a red

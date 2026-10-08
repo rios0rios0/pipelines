@@ -44,8 +44,11 @@ TESTS_DIR="${REPORT_PATH}/terra-tests"
 # `VALIDATE_ROOTS`. Without it a root module's `terraform test` suite is run by
 # no tier at all: this one covers `modules/*/` and `validate` never runs a test.
 # Empty by default, so a consumer that does not opt in runs exactly the module
-# loop it ran before. Read from the job environment -- for example a CI
-# variable -- so turning it on needs no template parameter.
+# loop it ran before. Read from the environment; each platform's template sets
+# it from its own option (GitHub Actions `terra_test_roots`, Azure DevOps
+# `TERRA_TEST_ROOTS`, GitLab CI a variable of that name), and `make test
+# TERRA_TEST_ROOTS=stacks` sets it locally. A root whose tests would APPLY with
+# real providers is refused rather than run -- see the per-root loop below.
 TERRA_TEST_ROOTS="${TERRA_TEST_ROOTS:-}"
 
 # Share one provider cache across every `terraform init` in the loop below.
@@ -206,6 +209,21 @@ done
 #   `-lockfile=readonly`, which Terraform refuses to combine with `-upgrade`.
 #   Without a lock file the flag makes no difference.
 #
+# A root is REFUSED, never run, when one of its test files would APPLY it with
+# its real providers. `terraform test` applies every `run` block that does not
+# set `command = plan`, and a root module carries its real provider
+# configuration, so such a block creates real infrastructure with whatever
+# credentials the job holds -- and under `-backend=false` the only record of it
+# is the test process's in-memory state, so a cancelled job, an evicted runner
+# or a failure before the implicit destroy orphans it. A root's tests must
+# therefore set `command = plan` on every run block, or declare a
+# `mock_provider` in that file; apply-time suites belong under `tests/e2e/`,
+# which this tier never runs. `terra_test_root_apply_runs` (`roots.sh`) checks
+# this before `init` and names each offending file and run block; the root then
+# counts as one failed case, written as a JUnit so every report agrees with the
+# exit code, and the next root still runs. The module loop above is
+# deliberately not checked, so its behaviour is unchanged.
+#
 # Roots stay out of the module breadth metric (`modules tested` and the
 # Cobertura and generic coverage reports), which keeps meaning "modules tested
 # / modules"; their cases still count in the JUnit and the totals, and a
@@ -214,15 +232,54 @@ done
 # of the same name -- do not overwrite each other. A leading `.` becomes `_`
 # because the aggregation below globs `*.xml`, which never matches a name
 # starting with one.
+
+# Writes a refused root's JUnit: one failed case carrying the findings, so the
+# test report, the merged JUnit and the summary below count the refusal rather
+# than a red job publishing only green results. It also replaces any stale JUnit
+# a previous, passing run left at that path.
+#   $1 JUnit file  $2 root  $3 the findings `terra_test_root_apply_runs` printed
+write_refusal_junit() {
+  refusal_name="$(printf '%s' "$2" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g')"
+  {
+    printf '<?xml version="1.0" encoding="UTF-8"?><testsuites>\n'
+    printf '  <testsuite name="%s" tests="1" skipped="0" failures="1" errors="0">\n' "${refusal_name}"
+    printf '    <testcase name="refused: terraform test would apply real providers" classname="%s" time="0">\n' "${refusal_name}"
+    printf '      <failure message="a run block would apply this root module with its real providers; set command = plan or declare a mock_provider"><![CDATA[\n'
+    printf '%s\n' "$3" | sed 's/]]>/]]]]><![CDATA[>/g'
+    printf ']]></failure>\n'
+    printf '    </testcase>\n'
+    printf '  </testsuite>\n'
+    printf '</testsuites>\n'
+  } > "$1"
+}
+
 roots_tested=0
+roots_refused=0
+tested_roots=''
+refused_roots=''
 for root in ${root_dirs}; do
-  roots_tested=$((roots_tested + 1))
   junit_name="$(printf '%s' "${root}" | tr '/' '_')"
   case "${junit_name}" in
     .*) junit_name="_${junit_name#.}" ;;
     *) ;;
   esac
   junit_file="${TESTS_DIR}/${junit_name}.xml"
+  apply_runs="$(terra_test_root_apply_runs "${root}")"
+  if [ -n "${apply_runs}" ]; then
+    roots_refused=$((roots_refused + 1))
+    refused_roots="${refused_roots} ${root}"
+    exit_code=1
+    {
+      echo "ERROR: refusing to test ${root}: terraform test would apply it with its real providers."
+      printf '%s\n' "${apply_runs}" | sed 's/^/  /'
+      printf '%s\n' '  A run block applies unless it sets `command = plan`. Add `command = plan` to each run block above,' \
+        '  or declare a `mock_provider` for the providers in that file; apply-time suites belong under tests/e2e/.'
+    } >&2
+    write_refusal_junit "${junit_file}" "${root}" "${apply_runs}"
+    continue
+  fi
+  roots_tested=$((roots_tested + 1))
+  tested_roots="${tested_roots} ${root}"
   junit_abs="$(cd "$(dirname "${junit_file}")" && pwd)/$(basename "${junit_file}")"
   echo "Testing ${root}..."
   if ! (cd "${root}" && terraform_init_cached . -backend=false -input=false > /dev/null && terraform test -junit-xml="${junit_abs}"); then
@@ -305,9 +362,17 @@ fi
     printf '## Root modules tested (`TERRA_TEST_ROOTS`)\n\n'
     if [ -z "${root_dirs}" ]; then
       printf '_None found under `%s`._\n\n' "${TERRA_TEST_ROOTS}"
+    elif [ -z "${tested_roots}" ]; then
+      printf '_None: every root found was refused (below)._\n\n'
     else
       printf '_Their cases count in the totals above; they are not part of the module figures._\n\n'
-      for n in ${root_dirs}; do printf -- '- `%s`\n' "${n}"; done
+      for n in ${tested_roots}; do printf -- '- `%s`\n' "${n}"; done
+      printf '\n'
+    fi
+    if [ -n "${refused_roots}" ]; then
+      printf '## Root modules refused (`TERRA_TEST_ROOTS`)\n\n'
+      printf '_A test file would apply them with their real providers: a `run` block without `command = plan`, in a file with no `mock_provider`. Each counts as one failed case above; the job log names the files and run blocks._\n\n'
+      for n in ${refused_roots}; do printf -- '- `%s`\n' "${n}"; done
       printf '\n'
     fi
   fi
@@ -425,6 +490,9 @@ echo "terra-test coverage:"
 echo "  modules tested   : ${tested}/${total} (${module_pct}%)"
 if [ -n "${TERRA_TEST_ROOTS}" ]; then
   echo "  roots tested     : ${roots_tested} (TERRA_TEST_ROOTS='${TERRA_TEST_ROOTS}')"
+  if [ "${roots_refused}" -gt 0 ]; then
+    echo "  roots refused    : ${roots_refused} (a test would apply real providers; see above)"
+  fi
 fi
 echo "  test cases       : ${tests_total} (passed=${passed_total} failed=${failures_total} errored=${errors_total})"
 echo "  junit bundle     : ${AGGREGATE_JUNIT}"

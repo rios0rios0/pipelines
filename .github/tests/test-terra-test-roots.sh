@@ -16,12 +16,19 @@ set -e
 #   * selection matches `terraform test`: `tests/e2e/` and vendored copies are not
 #     roots, `.`/`./stacks` spell a root the same way, and no module runs twice
 #   * a root's committed lock file is honoured, never upgraded or rewritten
+#   * a root whose tests would APPLY with real providers -- a run block without
+#     `command = plan` in a file with no `mock_provider` -- is refused, never run:
+#     the file and run block are named, the failure reaches the JUnit and the
+#     summary, the next root still runs, and how the file is written (comments,
+#     nesting, spacing, strings, heredocs, the file's location) cannot hide one;
+#     plan-only and mocked files still run, and module tests are not checked
 #
-# Every fixture is provider-less, so the cases run offline with no credentials;
-# only the lock-file case uses the `null` provider, and it skips when that cannot
-# be downloaded. Each run goes through `env -i` with HOME (and so the plugin
-# cache) under the scratch directory, so neither a developer's exported
-# TERRA_TEST_ROOTS nor their real provider cache can reach a case.
+# Every fixture is provider-less or uses only the builtin `terraform` provider,
+# so the cases run offline with no credentials; only the lock-file case uses the
+# `null` provider, and it skips when that cannot be downloaded. Each run goes
+# through `env -i` with HOME (and so the plugin cache) under the scratch
+# directory, so neither a developer's exported TERRA_TEST_ROOTS nor their real
+# provider cache can reach a case.
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RUN_SH="$SCRIPTS_DIR/global/scripts/languages/terraform/terra-test/run.sh"
@@ -116,6 +123,39 @@ run "stray" {
 EOF
 }
 
+# A root module that leaves a mark wherever it is APPLIED: `terraform_data`
+# belongs to the builtin `terraform` provider, so nothing is downloaded, and
+# with `marker` its `local-exec` provisioner writes `applied.marker` into the
+# root -- the stand-in for the real infrastructure an apply would create. A
+# plan never runs a provisioner. `plain` omits it, for a case that applies on
+# purpose (a provisioner runs even against a mocked provider).
+#   $1 directory  $2 `marker` or `plain`
+make_builtin_root() {
+  local dir="$1" kind="$2"
+  mkdir -p "$dir/tests"
+  {
+    cat << 'EOF'
+variable "name" {
+  type    = string
+  default = "world"
+}
+
+resource "terraform_data" "sentinel" {
+  input = "hello ${var.name}"
+EOF
+    if [ "$kind" = 'marker' ]; then
+      printf '\n  provisioner "local-exec" {\n    command = "touch applied.marker"\n  }\n'
+    fi
+    cat << 'EOF'
+}
+
+output "greeting" {
+  value = terraform_data.sentinel.input
+}
+EOF
+  } > "$dir/main.tf"
+}
+
 # Runs a tier script from a fixture repository, isolated from the caller's
 # environment. Extra `NAME=value` assignments follow the two positional ones.
 #   $1 repository  $2 script
@@ -124,6 +164,14 @@ run_tier() {
   shift 2
   (cd "$repo" && env -i PATH="$PATH" HOME="$TEST_HOME" ${TMPDIR:+"TMPDIR=$TMPDIR"} \
     SCRIPTS_DIR="$SCRIPTS_DIR" CHECKPOINT_DISABLE=1 REPORT_PATH=build/reports "$@" "$script")
+}
+
+# Runs `terraform init` + `terraform test` straight in a directory, as nothing
+# in this tier would, to prove what a fixture does when the guard is not there.
+#   $1 directory
+run_unguarded() {
+  (cd "$1" && env -i PATH="$PATH" HOME="$TEST_HOME" ${TMPDIR:+"TMPDIR=$TMPDIR"} CHECKPOINT_DISABLE=1 \
+    sh -c 'terraform init -backend=false -input=false -no-color && terraform test -no-color' > /dev/null 2>&1) || true
 }
 
 echo "== unset: a root module's test is not run, modules behave as before =="
@@ -351,6 +399,260 @@ else
   assert_true "installs the version the lock file pins" \
     "[ \"\$(ls \"$LOCK_ROOT\"/.terraform/providers/registry.terraform.io/*/null)\" = '3.1.1' ]"
 fi
+
+echo "== a root whose tests would apply real providers is refused, never run =="
+# given -- every root but the last would APPLY with its real providers: a run
+# block with no `command`, or `command = apply`, in a file with no
+# `mock_provider`. Each `command = plan`, and the one `mock_provider`, written
+# below sits where it does not count: in a comment, or in a nested block.
+REFUSE_REPO="$TEST_DIR/refuse"
+make_builtin_root "$REFUSE_REPO/stacks/apply_default" marker
+cat > "$REFUSE_REPO/stacks/apply_default/tests/default.tftest.hcl" << 'EOF'
+run "default_apply" {
+  assert {
+    condition     = output.greeting == "hello world"
+    error_message = "unexpected greeting"
+  }
+}
+EOF
+make_builtin_root "$REFUSE_REPO/stacks/apply_explicit" marker
+cat > "$REFUSE_REPO/stacks/apply_explicit/tests/explicit.tftest.hcl" << 'EOF'
+run "explicit_apply" {
+  command = apply
+}
+EOF
+make_builtin_root "$REFUSE_REPO/stacks/commented" marker
+# Each comment style also holds an unmatched `{`: read as code, it would open a
+# block that hides every run block after it from the check.
+cat > "$REFUSE_REPO/stacks/commented/tests/commented.tftest.hcl" << 'EOF'
+# mock_provider "terraform" {}
+# an unmatched { in a comment opens nothing
+
+run "hash_comment" {
+  # command = plan
+}
+
+// nor does one here {
+run "slash_comment" {
+  // command = plan
+}
+
+/* nor here {
+*/
+run "block_comment" {
+  /*
+  command = plan
+  */
+}
+EOF
+make_builtin_root "$REFUSE_REPO/stacks/nested" marker
+# Only a top-level `mock_provider` BLOCK mocks the file; this one is a value.
+cat > "$REFUSE_REPO/stacks/nested/tests/nested.tftest.hcl" << 'EOF'
+run "nested_command" {
+  variables {
+    command       = plan
+    mock_provider = "not a block"
+  }
+}
+EOF
+make_builtin_root "$REFUSE_REPO/stacks/one_of_three" marker
+cat > "$REFUSE_REPO/stacks/one_of_three/tests/mixed.tftest.hcl" << 'EOF'
+run "first_plans" {
+  command = plan
+}
+
+run "second_applies" {
+}
+
+run "third_plans" {
+  command = plan
+}
+EOF
+# Sorted after every refused root, so it runs only if refusing them let the loop go on.
+make_config "$REFUSE_REPO/stacks/zz_good" refuse_good_root pass
+# The guard is only proven if `terraform test` really would apply the fixture.
+REFUSE_PROBE="$TEST_DIR/refuse-probe"
+cp -R "$REFUSE_REPO/stacks/apply_default" "$REFUSE_PROBE"
+run_unguarded "$REFUSE_PROBE"
+assert_true "precondition: unguarded, terraform test applies the fixture" "[ -f '$REFUSE_PROBE/applied.marker' ]"
+
+# when
+REFUSE_RC=0
+REFUSE_OUT="$(run_tier "$REFUSE_REPO" "$RUN_SH" TERRA_TEST_ROOTS=stacks 2>&1)" || REFUSE_RC=$?
+REFUSE_LOG="$TEST_DIR/refuse.log"
+printf '%s\n' "$REFUSE_OUT" > "$REFUSE_LOG"
+REFUSE_REPORTS="$REFUSE_REPO/build/reports"
+
+# then
+assert_true "exits non-zero" "[ $REFUSE_RC -ne 0 ]"
+assert_true "applies nothing" "[ -z \"\$(find '$REFUSE_REPO/stacks' -name applied.marker)\" ]"
+assert_true "hands no refused root to terraform" \
+  "! grep -qE 'Testing stacks/(apply_|commented|nested|one_of_three)' '$REFUSE_LOG'"
+assert_true "names the root it refuses" "grep -qF 'refusing to test stacks/apply_default:' '$REFUSE_LOG'"
+assert_true "names the file and the run block that sets no command" \
+  "grep -qF 'stacks/apply_default/tests/default.tftest.hcl:1: run \"default_apply\" sets no command, so it applies' '$REFUSE_LOG'"
+assert_true "says to set command = plan or declare a mock_provider" \
+  "grep -qF 'Add \`command = plan\` to each run block above' '$REFUSE_LOG' && grep -qF 'declare a \`mock_provider\`' '$REFUSE_LOG'"
+assert_true "refuses an explicit command = apply" \
+  "grep -qF 'stacks/apply_explicit/tests/explicit.tftest.hcl:1: run \"explicit_apply\" sets command = apply' '$REFUSE_LOG'"
+assert_true "a command = plan in a # comment does not count, nor a commented-out mock_provider" \
+  "grep -qF 'run \"hash_comment\" sets no command' '$REFUSE_LOG'"
+assert_true "a command = plan in a // comment does not count" "grep -qF 'run \"slash_comment\" sets no command' '$REFUSE_LOG'"
+assert_true "a command = plan in a /* */ comment does not count" "grep -qF 'run \"block_comment\" sets no command' '$REFUSE_LOG'"
+assert_true "a command = plan, or a mock_provider, in a nested block does not count" \
+  "grep -qF 'run \"nested_command\" sets no command' '$REFUSE_LOG'"
+assert_true "one applying block among planning ones refuses the root" \
+  "grep -qF 'stacks/one_of_three/tests/mixed.tftest.hcl:5: run \"second_applies\" sets no command' '$REFUSE_LOG'"
+assert_true "and names only that block" "! grep -qE 'run \"(first|third)_plans\"' '$REFUSE_LOG'"
+assert_true "keeps going: the next root still runs" \
+  "grep -qF 'Testing stacks/zz_good...' '$REFUSE_LOG' && grep -q 'name=\"refuse_good_root\"' '$REFUSE_REPORTS/terra-tests/stacks_zz_good.xml'"
+assert_true "a refused root's JUnit records the failure and the run block" \
+  "grep -q '<failure' '$REFUSE_REPORTS/terra-tests/stacks_apply_default.xml' && grep -qF 'run \"default_apply\"' '$REFUSE_REPORTS/terra-tests/stacks_apply_default.xml'"
+assert_true "the aggregate is well-formed XML" \
+  "python3 -c \"import xml.etree.ElementTree as E; E.parse('$REFUSE_REPORTS/terra-tests.xml')\""
+assert_true "the summary counts one failed case per refused root" \
+  '[[ "$REFUSE_OUT" == *"test cases       : 6 (passed=1 failed=5 errored=0)"* ]]'
+assert_true "the summary separates the refused roots from the tested one" \
+  '[[ "$REFUSE_OUT" == *"roots tested     : 1 "* && "$REFUSE_OUT" == *"roots refused    : 5 "* ]]'
+assert_true "the Markdown report lists the refused roots apart" \
+  "grep -q '^## Root modules refused' '$REFUSE_REPORTS/terra-coverage.md' && grep -q '^- \`stacks/apply_default\`' '$REFUSE_REPORTS/terra-coverage.md'"
+
+echo "== a plan-only file runs, and a mocked one runs even when it applies =="
+# given -- one root plans (its provisioner would mark an apply), written to
+# trip a naive scan: `command=plan` with no spaces, a string holding `//`, `{`
+# and `#`, and a heredoc holding `}` and `command = apply`. The other applies
+# against a `mock_provider` declared after its run block.
+ACCEPT_REPO="$TEST_DIR/accept"
+make_builtin_root "$ACCEPT_REPO/stacks/plans" marker
+cat > "$ACCEPT_REPO/stacks/plans/tests/plans.tftest.hcl" << 'EOF'
+run "plans_without_spaces" {
+  command=plan
+
+  variables {
+    name = "a // b { c # d"
+  }
+
+  assert {
+    condition     = output.greeting == "hello a // b { c # d"
+    error_message = <<-EOT
+      unexpected greeting }
+      command = apply
+    EOT
+  }
+}
+EOF
+make_builtin_root "$ACCEPT_REPO/stacks/mocked" plain
+cat > "$ACCEPT_REPO/stacks/mocked/tests/mocked.tftest.hcl" << 'EOF'
+run "applies_against_a_mock" {
+  assert {
+    condition     = output.greeting == "hello world"
+    error_message = "unexpected greeting"
+  }
+}
+
+mock_provider "terraform" {}
+EOF
+
+# when
+ACCEPT_RC=0
+ACCEPT_OUT="$(run_tier "$ACCEPT_REPO" "$RUN_SH" TERRA_TEST_ROOTS=stacks 2>&1)" || ACCEPT_RC=$?
+ACCEPT_TESTS="$ACCEPT_REPO/build/reports/terra-tests"
+
+# then
+assert_true "exits 0" "[ $ACCEPT_RC -eq 0 ]"
+assert_true "refuses neither" '[[ "$ACCEPT_OUT" != *"refusing"* && "$ACCEPT_OUT" != *"roots refused"* ]]'
+assert_true "runs the plan-only root" '[[ "$ACCEPT_OUT" == *"Testing stacks/plans..."* ]]'
+assert_true "its case passes" \
+  "grep -q 'name=\"plans_without_spaces\"' '$ACCEPT_TESTS/stacks_plans.xml' && ! grep -q '<failure' '$ACCEPT_TESTS/stacks_plans.xml'"
+assert_true "and applies nothing" "[ ! -f '$ACCEPT_REPO/stacks/plans/applied.marker' ]"
+assert_true "runs the mocked root" '[[ "$ACCEPT_OUT" == *"Testing stacks/mocked..."* ]]'
+assert_true "its applying case passes against the mock" \
+  "grep -q 'name=\"applies_against_a_mock\"' '$ACCEPT_TESTS/stacks_mocked.xml' && ! grep -q '<failure' '$ACCEPT_TESTS/stacks_mocked.xml'"
+
+echo "== a test file beside the .tf files, or in JSON, is checked too =="
+# given -- both roots plan in tests/, but `terraform test` also reads the
+# `*.tftest.hcl` sitting beside the root's `.tf` files, and `*.tftest.json`.
+LOCATE_REPO="$TEST_DIR/locate"
+make_builtin_root "$LOCATE_REPO/stacks/beside" marker
+cat > "$LOCATE_REPO/stacks/beside/tests/plans.tftest.hcl" << 'EOF'
+run "beside_plans" {
+  command = plan
+}
+EOF
+cat > "$LOCATE_REPO/stacks/beside/beside.tftest.hcl" << 'EOF'
+run "beside_the_tf_files" {
+}
+EOF
+make_config "$LOCATE_REPO/stacks/json" json_plans pass
+printf '{ "run": { "json_applies": {} } }\n' > "$LOCATE_REPO/stacks/json/tests/extra.tftest.json"
+LOCATE_PROBE="$TEST_DIR/locate-probe"
+cp -R "$LOCATE_REPO/stacks/beside" "$LOCATE_PROBE"
+run_unguarded "$LOCATE_PROBE"
+assert_true "precondition: terraform test runs, and applies, the file beside the .tf files" \
+  "[ -f '$LOCATE_PROBE/applied.marker' ]"
+
+# when
+LOCATE_RC=0
+LOCATE_OUT="$(run_tier "$LOCATE_REPO" "$RUN_SH" TERRA_TEST_ROOTS=stacks 2>&1)" || LOCATE_RC=$?
+LOCATE_LOG="$TEST_DIR/locate.log"
+printf '%s\n' "$LOCATE_OUT" > "$LOCATE_LOG"
+
+# then
+assert_true "exits non-zero" "[ $LOCATE_RC -ne 0 ]"
+assert_true "refuses the root over the file beside its .tf files" \
+  "grep -qF 'stacks/beside/beside.tftest.hcl:1: run \"beside_the_tf_files\" sets no command, so it applies' '$LOCATE_LOG'"
+assert_true "and applies nothing" "[ ! -f '$LOCATE_REPO/stacks/beside/applied.marker' ]"
+assert_true "refuses a JSON test file it cannot read" \
+  "grep -qF 'stacks/json/tests/extra.tftest.json: a JSON test file, which this check cannot read' '$LOCATE_LOG'"
+
+echo "== module tests are not checked: an unmocked module test still applies =="
+# given -- a module whose test applies with no mock_provider, which the guard
+# would refuse in a root, and the broadest root setting there is.
+MODULE_REPO="$TEST_DIR/module-unchecked"
+make_builtin_root "$MODULE_REPO/modules/applies" marker
+cat > "$MODULE_REPO/modules/applies/tests/applies.tftest.hcl" << 'EOF'
+run "module_applies" {
+  assert {
+    condition     = output.greeting == "hello world"
+    error_message = "unexpected greeting"
+  }
+}
+EOF
+make_config "$MODULE_REPO/stacks/app" module_unchecked_root pass
+
+# when
+MODULE_RC=0
+MODULE_OUT="$(run_tier "$MODULE_REPO" "$RUN_SH" TERRA_TEST_ROOTS=. 2>&1)" || MODULE_RC=$?
+MODULE_TESTS="$MODULE_REPO/build/reports/terra-tests"
+
+# then
+assert_true "exits 0" "[ $MODULE_RC -eq 0 ]"
+assert_true "refuses nothing" '[[ "$MODULE_OUT" != *"refusing"* ]]'
+assert_true "runs the module as before" \
+  "grep -q 'name=\"module_applies\"' '$MODULE_TESTS/applies.xml' && ! grep -q '<failure' '$MODULE_TESTS/applies.xml'"
+assert_true "which still applies, exactly as it did" "[ -f '$MODULE_REPO/modules/applies/applied.marker' ]"
+assert_true "and still runs the root" "grep -q 'name=\"module_unchecked_root\"' '$MODULE_TESTS/stacks_app.xml'"
+
+echo "== test-all fails on a refused root and publishes the failure =="
+# given
+ALL_REFUSE_REPO="$TEST_DIR/all-refuse"
+make_builtin_root "$ALL_REFUSE_REPO/stacks/app" marker
+cat > "$ALL_REFUSE_REPO/stacks/app/tests/app.tftest.hcl" << 'EOF'
+run "all_refused" {}
+EOF
+
+# when
+ALL_REFUSE_RC=0
+ALL_REFUSE_OUT="$(run_tier "$ALL_REFUSE_REPO" "$TEST_ALL_SH" TERRA_TEST_ROOTS=stacks 2>&1)" || ALL_REFUSE_RC=$?
+ALL_REFUSE_MERGED="$ALL_REFUSE_REPO/build/reports/junit-terra-all.xml"
+
+# then
+assert_true "exits non-zero" "[ $ALL_REFUSE_RC -ne 0 ]"
+assert_true "and blames tier 1" '[[ "$ALL_REFUSE_OUT" == *"tier 1 (terra-test)   : exit=1 (ran=1)"* ]]'
+assert_true "the merged JUnit carries the refusal" "grep -q '<failure' '$ALL_REFUSE_MERGED'"
+assert_true "the merged JUnit is well-formed XML" \
+  "python3 -c \"import xml.etree.ElementTree as E; E.parse('$ALL_REFUSE_MERGED')\""
+assert_true "and nothing was applied" "[ ! -f '$ALL_REFUSE_REPO/stacks/app/applied.marker' ]"
 
 echo ""
 echo "Passed: $TESTS_PASSED, Failed: $TESTS_FAILED"

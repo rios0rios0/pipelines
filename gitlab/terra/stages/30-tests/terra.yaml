@@ -9,6 +9,16 @@ include:
 # tiers the consumer has, runs only those, and exits 0 when neither is
 # present — so stack-only repos (no `modules/` tests, no `tests/terratest/`)
 # pass the stage without a bespoke opt-out.
+#
+# Root modules' own tests (e.g. `stacks/<x>/tests/*.tftest.hcl`) join tier 1
+# when `TERRA_TEST_ROOTS` names the directories to search, space-separated
+# (e.g. `"stacks"`), in the consumer's `.gitlab-ci.yml` or project CI/CD
+# variables; both reach this job's environment. Deliberately NOT declared under
+# `variables:` below: a job-level variable outranks one the consumer sets at the
+# top level of `.gitlab-ci.yml`, so even an empty default here would silently
+# switch theirs off. A root whose test would apply with its real providers -- a
+# `run` block without `command = plan`, in a file with no `mock_provider` -- is
+# refused and fails the job.
 test:all:
   extends: '.terra'
   stage: 'tests'

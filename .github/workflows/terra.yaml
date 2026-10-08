@@ -28,6 +28,11 @@ on:
         type: 'string'
         default: 'stacks'
         description: 'Space-separated directories searched for root modules. Only read when `enable_validate` is true.'
+      terra_test_roots:
+        required: false
+        type: 'string'
+        default: ''
+        description: 'Space-separated directories searched, at any depth, for root modules whose own `tests/*.tftest.hcl` the `tests > test:all` job runs besides `modules/*/tests/` (e.g. `stacks`). Empty by default, which runs the modules only. A root whose test would apply with its real providers (a `run` block without `command = plan`, in a file with no `mock_provider`) is refused and fails the job.'
 
 jobs:
   # first stage
@@ -252,11 +257,17 @@ jobs:
   # tiers the consumer has, runs only those, and exits 0 when neither is
   # present — so stack-only repos (no `modules/` tests, no `tests/terratest/`)
   # pass the stage without a bespoke opt-out.
+  #
+  # `terra_test_roots` reaches tier 1 as `TERRA_TEST_ROOTS`, which adds the
+  # root modules' own tests (e.g. `stacks/<x>/tests/`). It has to be an input:
+  # a called workflow's jobs never see the caller's environment, so a variable
+  # the caller sets could not reach this job any other way. Empty by default.
   tests-test_all:
     name: 'tests > test:all'
     runs-on: 'ubuntu-latest'
     env:
       REPORT_PATH: 'build/reports'
+      TERRA_TEST_ROOTS: ${{ inputs.terra_test_roots }}
     steps:
       - name: 'Checkout code'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1

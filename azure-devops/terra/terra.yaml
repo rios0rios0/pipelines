@@ -41,6 +41,15 @@ parameters:
     type: 'string'
     default: 'stacks'
 
+  # Forwarded to the tests stage. Space-separated directories searched, at any
+  # depth, for root modules whose own `tests/*.tftest.hcl` the `test:all` job
+  # runs besides `modules/*/tests/` (e.g. `stacks`). Empty by default, which
+  # leaves a `TERRA_TEST_ROOTS` pipeline variable, if the consumer defines one,
+  # in charge; see the tests stage for why.
+  - name: 'TERRA_TEST_ROOTS'
+    type: 'string'
+    default: ''
+
   # Forwarded to the management (Sonar) stage. Stages run as separate jobs with
   # separate workspaces, so this artifact download is the only way a coverage
   # report reaches the Sonar job. A consumer that produces one in an earlier
@@ -67,6 +76,7 @@ stages:
       PRE_STEPS: ${{ parameters.PRE_STEPS }}
       ENABLE_VALIDATE: ${{ parameters.ENABLE_VALIDATE }}
       VALIDATE_ROOTS: ${{ parameters.VALIDATE_ROOTS }}
+      TERRA_TEST_ROOTS: ${{ parameters.TERRA_TEST_ROOTS }}
   - template: 'stages/35-management/terra.yaml'
     parameters:
       DOWNLOAD_COVERAGE_ARTIFACT: ${{ parameters.DOWNLOAD_COVERAGE_ARTIFACT }}

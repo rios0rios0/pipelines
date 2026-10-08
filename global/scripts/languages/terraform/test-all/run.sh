@@ -9,9 +9,10 @@ if [ -z "${SCRIPTS_DIR:-}" ]; then
 fi
 
 # Unified Terraform/Terra test runner. Orchestrates the two existing tiers
-# (`terra-test` over `modules/*/tests/*.tftest.hcl` and `terratest` over
-# `tests/terratest/*.go`) behind a single entry point so every platform can
-# publish one JUnit and one coverage artifact per build.
+# (`terra-test` over `modules/*/tests/*.tftest.hcl`, plus the root modules
+# `TERRA_TEST_ROOTS` opts in, and `terratest` over `tests/terratest/*.go`)
+# behind a single entry point so every platform can publish one JUnit and one
+# coverage artifact per build.
 #
 # Behavior:
 #   1. Detect which tiers the consumer actually has.
@@ -115,6 +116,18 @@ if [ -d modules ]; then
   done
 fi
 
+# Root modules that `TERRA_TEST_ROOTS` opts into tier 1, so a repository whose
+# only `terraform test` files sit in root modules still runs the tier. Asked
+# through `terra-test/roots.sh`, the same definition the tier runner executes,
+# and only when the variable is set and the modules above found nothing.
+if [ "${has_terra_tests}" -eq 0 ] && [ -n "${TERRA_TEST_ROOTS:-}" ]; then
+  # shellcheck source=/dev/null
+  . "${SCRIPTS_DIR}/global/scripts/languages/terraform/terra-test/roots.sh"
+  if [ -n "$(terra_test_root_dirs)" ]; then
+    has_terra_tests=1
+  fi
+fi
+
 if [ -d "${TESTS_DIR}" ] && ls "${TESTS_DIR}"/*.go > /dev/null 2>&1; then
   has_terratest=1
 fi
@@ -124,6 +137,9 @@ mkdir -p "${REPORT_PATH}"
 if [ "${has_terra_tests}" -eq 0 ] && [ "${has_terratest}" -eq 0 ]; then
   echo "No Terraform tests detected:"
   echo "  - no modules/*/tests/*.tftest.hcl files"
+  if [ -n "${TERRA_TEST_ROOTS:-}" ]; then
+    echo "  - no root module tests/*.tftest.hcl under TERRA_TEST_ROOTS ('${TERRA_TEST_ROOTS}')"
+  fi
   echo "  - no ${TESTS_DIR}/*.go files"
   echo "Emitting an empty JUnit so the CI publisher doesn't fail and skipping."
   # Valid empty JUnit keeps `PublishTestResults@2` / GitLab / GitHub happy.
@@ -136,6 +152,8 @@ rc_terra_test=0
 if [ "${has_terra_tests}" -eq 1 ]; then
   echo "=== Tier 1: terraform test (terra-test) ==="
   REPORT_PATH="${REPORT_PATH}" sh "${TERRA_TEST_RUNNER}" || rc_terra_test=$?
+elif [ -n "${TERRA_TEST_ROOTS:-}" ]; then
+  echo "Tier 1 skipped: no modules/*/tests/*.tftest.hcl and no root module tests under TERRA_TEST_ROOTS detected."
 else
   echo "Tier 1 skipped: no modules/*/tests/*.tftest.hcl detected."
 fi

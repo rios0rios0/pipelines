@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, docker-multi-arch, basic-checks, fixture-isolation, gitignore, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, dependency-updates, azure-step-names, azure-secret-env, containers-detect, report-uploads)
+- `make test` - Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, docker-multi-arch, basic-checks, fixture-isolation, gitignore, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, dependency-updates, azure-step-names, azure-secret-env, containers-detect, report-uploads)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-go-module-toolchain` - Test that every `go.mod` toolchain directive is readable by the images/analysers that consume it specifically
 - `make test-go-tool-staleness` - Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves specifically
@@ -23,6 +23,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-var-catalog` - Test the shared variable-declaration generator specifically
 - `make test-terraform-validate` - Test the root-module `terraform validate` tier specifically
 - `make test-terraform-provider-mirror` - Test the local Terraform provider mirror specifically
+- `make test-terra-test-roots` - Test the terra-test tier's opt-in root-module run (`TERRA_TEST_ROOTS`) specifically
 - `make test-docker-multi-arch` - Test 40-delivery/docker multi-arch contract specifically
 - `make test-containers-detect` - Test the Container Images change detection (deleted/renamed folders, dispatch inputs) specifically
 - `make test-basic-checks` - Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) specifically
@@ -235,12 +236,12 @@ One set of scripts serves both toolchains: `dart_detect_toolchain` reads the pro
 
 #### Terraform / Terra Tools
 
-The Terra CLI pipeline test stage exposes parallel jobs on every platform (Azure DevOps, GitLab CI, GitHub Actions) — two always on, one opt-in. `test:all` delegates to `test-all/run.sh`, which auto-detects which of the two heavier tiers the consumer has, runs only those, merges the JUnit outputs into `build/reports/junit-terra-all.xml`, and exits `0` when neither has tests so stack-only repos pass without a bespoke opt-out. `test:structural` and the opt-in `test:validate` each run on their own parallel job with their own JUnit. Only `validate` **resolves** references (`terraform validate`) — the other three tiers parse, so a root module referencing an undeclared module/variable/resource/output stays green everywhere else while failing every plan. `test:validate` is off by default (`ENABLE_VALIDATE` / `enable_validate`) because it needs the network for provider downloads and, for private module sources, credentials; each platform reuses its existing pre-script hook (`PRE_STEPS` / `VALIDATE_PRE_SCRIPT` / `pre_script`) and `VALIDATE_ROOTS` (default `stacks`) overrides the search.
+The Terra CLI pipeline test stage exposes parallel jobs on every platform (Azure DevOps, GitLab CI, GitHub Actions) — two always on, one opt-in. `test:all` delegates to `test-all/run.sh`, which auto-detects which of the two heavier tiers the consumer has, runs only those, merges the JUnit outputs into `build/reports/junit-terra-all.xml`, and exits `0` when neither has tests so stack-only repos pass without a bespoke opt-out. `test:structural` and the opt-in `test:validate` each run on their own parallel job with their own JUnit. Only `validate` **resolves** references (`terraform validate`) — the other three tiers parse, so a root module referencing an undeclared module/variable/resource/output stays green everywhere else while failing every plan. `test:validate` is off by default (`ENABLE_VALIDATE` / `enable_validate`) because it needs the network for provider downloads and, for private module sources, credentials; each platform reuses its existing pre-script hook (`PRE_STEPS` / `VALIDATE_PRE_SCRIPT` / `pre_script`) and `VALIDATE_ROOTS` (default `stacks`) overrides the search. Root modules' own `tests/*.tftest.hcl` join `terra-test` only through `TERRA_TEST_ROOTS` (empty by default; Azure DevOps parameter or pipeline variable, GitLab CI variable, GitHub Actions `terra_test_roots` input), and a root whose test would apply with its real providers — a `run` block without `command = plan`, in a file with no `mock_provider` — is refused and fails the job rather than run, because under `-backend=false` a cancelled job would orphan what it created; module tests are not checked.
 
 | Tool                     | Purpose                                            | Script Location                                         |
 |--------------------------|----------------------------------------------------|---------------------------------------------------------|
 | **Terra Test (unified)** | Orchestrates both heavier tiers behind one `test:all` job | `global/scripts/languages/terraform/test-all/run.sh`    |
-| **terra-test**           | `terraform test` over `modules/*/tests/*.tftest.hcl` | `global/scripts/languages/terraform/terra-test/run.sh`  |
+| **terra-test**           | `terraform test` over `modules/*/tests/*.tftest.hcl`, plus root modules under the opt-in `TERRA_TEST_ROOTS` (default empty, e.g. `stacks`), refusing a root whose test would apply with real providers | `global/scripts/languages/terraform/terra-test/run.sh`  |
 | **Terratest**            | Go test suite under `tests/terratest/*.go`         | `global/scripts/languages/terraform/terratest/run.sh`   |
 | **Structural**           | Third-tier runner for `tests/structural.sh` (own `test:structural` job) | `global/scripts/languages/terraform/structural/run.sh`  |
 | **validate** (opt-in)    | Fourth-tier `terraform init -backend=false` + `terraform validate` over root modules under `VALIDATE_ROOTS` (own `test:validate` job) | `global/scripts/languages/terraform/validate/run.sh`    |
@@ -823,6 +824,7 @@ make test-order-check
 make test-var-catalog
 make test-terraform-validate
 make test-terraform-provider-mirror
+make test-terra-test-roots
 make test-docker-multi-arch
 make test-containers-detect
 make test-basic-checks

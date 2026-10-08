@@ -36,6 +36,13 @@ lint:
 # $(REPORT_PATH)/terra-coverage.xml and a SonarQube generic coverage report at
 # $(REPORT_PATH)/terra-coverage-generic.xml. Exits 0 cleanly when neither tier
 # has tests, so stack-only repos don't need a bespoke opt-out.
+#
+# Set `TERRA_TEST_ROOTS` (space-separated, empty by default, e.g. `stacks`) to
+# also run the root modules' own `tests/*.tftest.hcl`: `make test
+# TERRA_TEST_ROOTS=stacks`. A root's run blocks must set `command = plan`, or
+# the file declare a `mock_provider`, since a run block otherwise APPLIES with
+# the root's real providers; a root whose tests would apply is refused and
+# fails the target. Applies to `test-terra-test` too.
 test:
 	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/test-all/run.sh
 

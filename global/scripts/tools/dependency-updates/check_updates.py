@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report every pinned third-party dependency that has a newer version upstream.
+"""Report every pinned third-party dependency that has a newer version upstream, and with `--apply` rewrite it.
 
 WHY THIS EXISTS
 
@@ -11,16 +11,16 @@ whole point of pinning is that nothing moves without a human deciding it should,
 so the missing half is something that tells the human when to decide.
 
 This is that half. It reads the pins out of the repository, asks each upstream
-what the current version is, and exits non-zero when any of them differ, so a
-scheduled pipeline turns "somebody should check" into a red build with a diff-
-ready list.
+what the current version is, and reports every one that differs. With `--apply`
+it also does the work the decision used to cost, so what reaches a person is a
+pull request to review rather than a list to work through by hand.
 
 WHAT IT CHECKS
 
   actions   `uses: owner/repo@<sha> # vX.Y.Z` -> newer release for owner/repo
   images    `name:tag@sha256:...`             -> the tag now resolves elsewhere
   manifest  `*_PINNED_VERSION` / `*_SPEC`     -> newer version upstream
-  inline    the same version written twice    -> the two copies disagree
+  inline    the same value written twice      -> the two copies disagree
 
 Images are checked by DIGEST rather than by tag, because that is the question
 worth asking of a container: `python:3.13-slim` is rebuilt with patched system
@@ -28,6 +28,27 @@ packages under the same tag, so "is there a newer tag" would miss every security
 rebuild, while "does this tag still resolve to the bytes we pinned" catches them
 all. The tag is deliberately not resolved to a "latest" -- choosing to move from
 `python:3.13` to `3.14` is a decision, not an update.
+
+WHAT `--apply` WRITES
+
+  actions   the commit SHA the new release tag points at, and its `# vX.Y.Z`
+  images    the digest the pinned tag resolves to now
+  manifest  the new version, and every `*_SHA256_*` that belongs to it
+  inline    every copy of a manifest value, so a template with no SCRIPTS_DIR
+            cannot be left behind on the version the manifest just left
+
+plus the pull request's title, body and commit message under the report
+directory, and a changelog entry in the repository. It never commits, pushes or
+merges anything: the workflow opens the pull request, and a person decides.
+
+A new digest is never guessed and an old one is never carried forward. It is the
+SHA-256 GitHub recorded for the release asset -- or the SHA-256 of the
+downloaded bytes, for a release published before GitHub recorded any -- it must
+match the publisher's checksum manifest when the pin names one, and the
+`# asset:` template that located it must first reproduce the committed digest
+for the CURRENT version. That last check is what proves the template names the
+file the installer really verifies. A pin that fails any of them is left exactly
+as it is and listed as needing a person; nothing is ever written half-updated.
 
 FAIL-SAFE DIRECTION
 
@@ -41,16 +62,28 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import datetime
+import fnmatch
+import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
 USER_AGENT = "rios0rios0-pipelines-dependency-check"
 TIMEOUT = 30
+# A checksum manifest is a few kilobytes; anything near this is not one.
+MAX_DOCUMENT_BYTES = 8 * 1024 * 1024
+# Only an asset GitHub recorded no digest for is downloaded -- a release
+# published before GitHub started recording them -- and those are small. The cap
+# is what makes a template pointed at the wrong file fail here, loudly, instead
+# of filling the runner's disk.
+MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024
 
 # --------------------------------------------------------------------------- #
 # Version handling
@@ -103,6 +136,52 @@ def is_newer(pinned: str, latest: str) -> bool:
     return latest_parts[:width] > pinned_parts[:width]
 
 
+FAMILY = re.compile(r"^(?P<family>[^0-9]*?)v?[0-9]")
+
+
+def tag_family(tag: str) -> str | None:
+    """The release line a tag belongs to: `codeql-bundle` for `codeql-bundle-v2.27.2`, empty for `v4.38.3`.
+
+    One repository can publish two unrelated release lines. `github/codeql-action`
+    tags the action `v4.x` and the CodeQL bundle `codeql-bundle-v2.x`, and marks
+    whichever shipped last as its latest release -- so asking for "the latest
+    release" answered the action pin with a bundle version, which compares as
+    OLDER, and the action read as current at v4.37.7 while v4.38.3 was out. The
+    bundle pin is exposed the same way the next time an action release ships
+    last. Comparing only within one family is what keeps the two lines apart.
+
+    `v4.38.3` and `4.38.3` are the same family: a leading `v` is spelling, not a
+    release line, and the manifest drops it from versions whose tags carry it.
+    """
+    match = FAMILY.match(tag or "")
+    if not match:
+        return None
+    return match.group("family").rstrip("-_.")
+
+
+def restyle(current: str, latest: str) -> str:
+    """Write `latest` the way the pin already writes `current`.
+
+    Upstream tags carry prefixes the pins do not (`v8.31.0` for a pin written
+    `8.30.1`) and the reverse (`codeql-bundle-v2.27.2` IS the pin), and a
+    major-only pin (`wrangler@4`) is a deliberate range rather than an exact
+    build. Each pin keeps its own shape: the prefix it already has, and its
+    width when it names a major alone.
+    """
+    prefix = current[: len(current) - len(normalise(current))]
+    value = normalise(latest)
+    if re.fullmatch(r"[0-9]+", normalise(current)):
+        latest_parts = parts(latest)
+        if latest_parts:
+            value = str(latest_parts[0])
+    return prefix + value
+
+
+def is_major(current: str, new: str) -> bool:
+    current_parts, new_parts = parts(current), parts(new)
+    return bool(current_parts and new_parts and current_parts[0] != new_parts[0])
+
+
 # --------------------------------------------------------------------------- #
 # HTTP
 # --------------------------------------------------------------------------- #
@@ -110,26 +189,107 @@ class LookupError_(Exception):
     """An upstream could not be consulted. Never treated as 'up to date'."""
 
 
+class NotFound(LookupError_):
+    """The upstream answered, and what was asked for does not exist.
+
+    Kept apart from a failed lookup because the two call for different things.
+    A release asset that answers 404 is a definite answer -- usually an upstream
+    renaming its assets, which the installer has to follow by hand -- while a
+    timeout says nothing at all and must never be read as "absent".
+    """
+
+
+class HttpsOnlyRedirects(urllib.request.HTTPRedirectHandler):
+    """Follow a redirect only to another https URL, and never carry a token to a new host.
+
+    Release downloads redirect to a CDN. urllib follows a redirect into plain
+    HTTP by default, which would let whoever answers it choose the bytes being
+    hashed -- the downgrade `verify-download.sh` closes with
+    `--proto-redir '=https'`. And urllib copies every header onto the
+    redirected request, `Authorization` included, so a token meant for
+    api.github.com would follow a redirect to whichever host it named.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D102 - urllib's contract
+        if urllib.parse.urlsplit(newurl).scheme != "https":
+            raise urllib.error.HTTPError(newurl, code, "refused a redirect away from https", headers, fp)
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is not None and (
+                urllib.parse.urlsplit(newurl).hostname != urllib.parse.urlsplit(req.full_url).hostname):
+            redirected.remove_header("Authorization")
+        return redirected
+
+
+OPENER = urllib.request.build_opener(HttpsOnlyRedirects)
+
+
 def _request(url: str, headers: dict | None = None, method: str = "GET"):
+    if urllib.parse.urlsplit(url).scheme != "https":
+        raise LookupError_("%s -> refusing a URL that is not https" % url)
     request = urllib.request.Request(url, method=method)
     request.add_header("User-Agent", USER_AGENT)
     for key, value in (headers or {}).items():
         request.add_header(key, value)
-    return urllib.request.urlopen(request, timeout=TIMEOUT)  # noqa: S310 - fixed https hosts
+    return OPENER.open(request, timeout=TIMEOUT)  # noqa: S310 - https enforced above
+
+
+def _http_error(url: str, error: urllib.error.HTTPError) -> LookupError_:
+    if error.code == 404:
+        return NotFound("%s -> HTTP 404" % url)
+    if error.code in (403, 429):
+        return LookupError_("%s -> HTTP %s (rate limited; set GITHUB_TOKEN)" % (url, error.code))
+    return LookupError_("%s -> HTTP %s" % (url, error.code))
+
+
+def _read(url: str, headers: dict | None, limit: int) -> bytes:
+    try:
+        with _request(url, headers) as response:
+            data = response.read(limit + 1)
+    except urllib.error.HTTPError as error:
+        raise _http_error(url, error) from error
+    except LookupError_:
+        raise
+    except Exception as error:  # noqa: BLE001 - any transport failure is a lookup failure
+        raise LookupError_("%s -> %s" % (url, error)) from error
+    if len(data) > limit:
+        raise LookupError_("%s -> larger than %d bytes" % (url, limit))
+    return data
 
 
 def get_json(url: str, headers: dict | None = None):
+    data = _read(url, headers, MAX_DOCUMENT_BYTES)
     try:
-        with _request(url, headers) as response:
-            return json.loads(response.read().decode("utf-8"))
+        return json.loads(data.decode("utf-8"))
+    except ValueError as error:
+        raise LookupError_("%s -> not JSON: %s" % (url, error)) from error
+
+
+def get_text(url: str, headers: dict | None = None) -> str:
+    return _read(url, headers, MAX_DOCUMENT_BYTES).decode("utf-8", errors="replace")
+
+
+def download_sha256(url: str) -> str:
+    """The SHA-256 of what `url` serves, hashed while it streams and never written to disk."""
+    digest = hashlib.sha256()
+    total = 0
+    try:
+        with _request(url) as response:
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MAX_DOWNLOAD_BYTES:
+                    raise LookupError_("%s -> larger than %d bytes; is the template pointing at the right file?"
+                                       % (url, MAX_DOWNLOAD_BYTES))
+                digest.update(chunk)
     except urllib.error.HTTPError as error:
-        if error.code in (403, 429):
-            raise LookupError_(
-                "%s -> HTTP %s (rate limited; set GITHUB_TOKEN)" % (url, error.code)
-            ) from error
-        raise LookupError_("%s -> HTTP %s" % (url, error.code)) from error
+        raise _http_error(url, error) from error
+    except LookupError_:
+        raise
     except Exception as error:  # noqa: BLE001 - any transport failure is a lookup failure
         raise LookupError_("%s -> %s" % (url, error)) from error
+    return digest.hexdigest()
 
 
 def github_headers() -> dict:
@@ -143,99 +303,93 @@ def github_headers() -> dict:
 # --------------------------------------------------------------------------- #
 # Resolvers -- one per `# upstream:` kind
 # --------------------------------------------------------------------------- #
-def latest_github_release(repo: str, track_major: str | None = None) -> str:
+def newest(tags, track_major: str | None = None, family: str | None = None) -> str:
+    """The highest semver-shaped tag, optionally inside one major and one release line."""
+    best = ""
+    for tag in tags:
+        tag_parts = parts(tag)
+        if not tag_parts:
+            continue
+        if family is not None and tag_family(tag) != family:
+            continue
+        if track_major is not None and str(tag_parts[0]) != str(track_major):
+            continue
+        if not best or tag_parts > parts(best):
+            best = tag
+    return best
+
+
+def qualifiers(track_major: str | None, family: str | None) -> str:
+    words = []
+    if track_major is not None:
+        words.append("within major %s" % track_major)
+    if family:
+        words.append("in the `%s` release line" % family)
+    return (" " + " ".join(words)) if words else ""
+
+
+def latest_github_release(repo: str, track_major: str | None = None, family: str | None = None) -> str:
     if track_major is None:
         data = get_json("https://api.github.com/repos/%s/releases/latest" % repo, github_headers())
-        return data.get("tag_name") or ""
+        tag = data.get("tag_name") or ""
+        # The fast path answers almost every pin. It is wrong only for a
+        # repository that publishes two release lines -- see `tag_family`.
+        if family is None or tag_family(tag) == family:
+            return tag
     # A pin deliberately held inside a major (GoReleaser 1.x, whose 2.x is a
     # breaking configuration change) needs the newest release WITHIN it, not the
     # newest overall -- otherwise this reports an "update" that is really a
     # migration, every run, forever.
     data = get_json("https://api.github.com/repos/%s/releases?per_page=100" % repo, github_headers())
-    best = ""
-    for release in data:
-        if release.get("draft") or release.get("prerelease"):
-            continue
-        tag = release.get("tag_name") or ""
-        tag_parts = parts(tag)
-        if not tag_parts or str(tag_parts[0]) != str(track_major):
-            continue
-        if not best or parts(tag) > parts(best):
-            best = tag
+    best = newest(
+        (release.get("tag_name") or "" for release in data
+         if not release.get("draft") and not release.get("prerelease")),
+        track_major, family)
     if not best:
-        raise LookupError_("no release found for %s within major %s" % (repo, track_major))
+        raise LookupError_("no release found for %s%s" % (repo, qualifiers(track_major, family)))
     return best
 
 
-def latest_github_tag(repo: str, track_major: str | None = None) -> str:
+def latest_github_tag(repo: str, track_major: str | None = None, family: str | None = None) -> str:
     data = get_json("https://api.github.com/repos/%s/tags?per_page=100" % repo, github_headers())
-    best = ""
-    for tag in data:
-        name = tag.get("name") or ""
-        if not parts(name):
-            continue
-        if track_major is not None and str(parts(name)[0]) != str(track_major):
-            continue
-        if not best or parts(name) > parts(best):
-            best = name
+    best = newest((tag.get("name") or "" for tag in data), track_major, family)
     if not best:
-        raise LookupError_("no semver-shaped tag found for %s" % repo)
+        raise LookupError_("no semver-shaped tag found for %s%s" % (repo, qualifiers(track_major, family)))
     return best
 
 
-def latest_gitlab_tag(project: str, track_major: str | None = None) -> str:
-    encoded = urllib.request.quote(project, safe="")
+def latest_gitlab_tag(project: str, track_major: str | None = None, family: str | None = None) -> str:
+    encoded = urllib.parse.quote(project, safe="")
     data = get_json("https://gitlab.com/api/v4/projects/%s/repository/tags?per_page=100" % encoded)
-    best = ""
-    for tag in data:
-        name = tag.get("name") or ""
-        if not parts(name):
-            continue
-        if track_major is not None and str(parts(name)[0]) != str(track_major):
-            continue
-        if not best or parts(name) > parts(best):
-            best = name
+    best = newest((tag.get("name") or "" for tag in data), track_major, family)
     if not best:
-        raise LookupError_("no semver-shaped tag found for %s" % project)
+        raise LookupError_("no semver-shaped tag found for %s%s" % (project, qualifiers(track_major, family)))
     return best
 
 
-def latest_pypi(package: str, track_major: str | None = None) -> str:
+def latest_pypi(package: str, track_major: str | None = None, family: str | None = None) -> str:
     data = get_json("https://pypi.org/pypi/%s/json" % package)
     if track_major is None:
         return data["info"]["version"]
-    best = ""
-    for version in data.get("releases", {}):
-        version_parts = parts(version)
-        if not version_parts or str(version_parts[0]) != str(track_major):
-            continue
-        if not best or parts(version) > parts(best):
-            best = version
+    best = newest(data.get("releases", {}), track_major)
     if not best:
         raise LookupError_("no %s release within major %s" % (package, track_major))
     return best
 
 
-def latest_npm(package: str, track_major: str | None = None) -> str:
+def latest_npm(package: str, track_major: str | None = None, family: str | None = None) -> str:
     if track_major is None:
         return get_json("https://registry.npmjs.org/%s/latest" % package)["version"]
     data = get_json("https://registry.npmjs.org/%s" % package)
     tag = data.get("dist-tags", {}).get("latest", "")
-    best = ""
-    for version in data.get("versions", {}):
-        version_parts = parts(version)
-        if not version_parts or str(version_parts[0]) != str(track_major):
-            continue
-        if not best or parts(version) > parts(best):
-            best = version
-    return best or tag
+    return newest(data.get("versions", {}), track_major) or tag
 
 
-def latest_rubygems(gem: str, track_major: str | None = None) -> str:
+def latest_rubygems(gem: str, track_major: str | None = None, family: str | None = None) -> str:
     return get_json("https://rubygems.org/api/v1/gems/%s.json" % gem)["version"]
 
 
-def latest_goproxy(module: str, track_major: str | None = None) -> str:
+def latest_goproxy(module: str, track_major: str | None = None, family: str | None = None) -> str:
     # The proxy lower-cases module paths by escaping capitals as `!x`, so
     # `github.com/CycloneDX/...` must be requested as `github.com/!cyclone!d!x/...`.
     escaped = re.sub(r"([A-Z])", lambda m: "!" + m.group(1).lower(), module)
@@ -251,6 +405,9 @@ RESOLVERS = {
     "rubygems": latest_rubygems,
     "goproxy": latest_goproxy,
 }
+
+# Kinds whose versions are git tags, and so can belong to more than one release line.
+TAGGED_KINDS = {"github-release", "github-tag", "gitlab-tag"}
 
 
 # --------------------------------------------------------------------------- #
@@ -313,15 +470,20 @@ def image_digest(reference: str) -> str:
 # --------------------------------------------------------------------------- #
 # Discovery
 # --------------------------------------------------------------------------- #
-# `.pipelines` is where the workflow checks THIS repository out when scanning
-# somebody else's. Without it, a consumer's report would list this library's
-# pins as if they were the consumer's own -- and on this repository's own
-# scheduled run the same pin would be counted twice.
+# `.pipelines` is where the workflow used to check THIS repository out inside
+# the one being scanned, and where a consumer running it by hand may still put
+# it. Without the skip, a consumer's report would list this library's pins as if
+# they were the consumer's own -- and this repository's own run would count every
+# pin twice.
 SKIP_DIRS = {".git", "node_modules", "build", ".terraform", ".pipelines"}
+MANIFEST = Path("global") / "scripts" / "shared" / "pinned-versions.sh"
 
 UPSTREAM = re.compile(r"^#\s*upstream:\s*(?P<kind>[a-z-]+)\s+(?P<coord>\S+)(?P<opts>.*)$")
+CHECKSUMS = re.compile(r"^#\s*checksums:\s*(?P<url>\S+)\s*$")
+ASSET = re.compile(r"^#\s*asset:\s*(?P<url>\S+)\s*$")
 PIN = re.compile(r'^(?P<name>[A-Z0-9_]+)_PINNED_VERSION="(?P<value>[^"]*)"')
 SPEC = re.compile(r'^(?P<name>[A-Z0-9_]+)_SPEC="\$\{[A-Z0-9_]+:-(?P<value>[^}"]*)\}"')
+DIGEST = re.compile(r'^(?P<var>[A-Z0-9_]+_SHA256(?:_[A-Z0-9_]+)?)="(?P<value>[0-9a-f]{64})"\s*$')
 USES = re.compile(
     r"^\s*(?:-\s*)?uses:\s*'(?P<repo>[^'@]+)@(?P<sha>[0-9a-f]{40})'\s*#\s*(?P<version>\S+)")
 IMAGE = re.compile(r"^\s*(?:-\s*)?image:\s*'(?P<ref>[^']+@sha256:[0-9a-f]+)'")
@@ -329,15 +491,82 @@ FROM = re.compile(r"^FROM\s+(?P<ref>\S+@sha256:[0-9a-f]+)")
 
 
 def walk(root: Path, suffixes=None, names=None):
-    for path in sorted(root.rglob("*")):
-        if not path.is_file():
-            continue
-        if any(part in SKIP_DIRS for part in path.parts):
-            continue
-        if suffixes and path.suffix in suffixes:
-            yield path
-        elif names and path.name.startswith(tuple(names)):
-            yield path
+    # Pruned while walking rather than filtered afterwards: `.git` and
+    # `node_modules` hold more files than everything else put together, and
+    # nothing in them is a pin.
+    for directory, subdirectories, files in os.walk(root):
+        subdirectories[:] = sorted(name for name in subdirectories if name not in SKIP_DIRS)
+        for name in sorted(files):
+            path = Path(directory) / name
+            if suffixes and path.suffix in suffixes:
+                yield path
+            elif names and name.startswith(tuple(names)):
+                yield path
+
+
+class Workspace:
+    """The scanned repository's pinned files, read once and edited in memory.
+
+    Discovery and `--apply` read the same files, so they share one cache: a pin
+    is rewritten in exactly the text it was discovered in, every file is written
+    back at most once, and only after every edit to it has succeeded.
+
+    Files are read and written with `newline=""`, so a CRLF file stays CRLF and
+    the only bytes that change are the ones an edit names. Two kinds of file are
+    scanned but never written. One that is not valid UTF-8, because rewriting it
+    through a replacement character would corrupt the parts nobody asked to
+    touch. And a symlink, because writing through one edits whatever it points
+    at -- possibly outside the repository; the file it names inside the tree is
+    reached under its own path anyway.
+    """
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.yaml = list(walk(root, suffixes={".yaml", ".yml"}))
+        self.dockerfiles = list(walk(root, names={"Dockerfile"}))
+        self._original: dict[Path, str | None] = {}
+        self._current: dict[Path, str] = {}
+        self._unwritable: set[Path] = set()
+
+    def text(self, path: Path) -> str:
+        if path not in self._current:
+            if path.is_symlink():
+                self._unwritable.add(path)
+            try:
+                with open(path, encoding="utf-8", newline="") as handle:
+                    original = handle.read()
+            except FileNotFoundError:
+                original = None
+            except UnicodeDecodeError:
+                with open(path, encoding="utf-8", errors="replace", newline="") as handle:
+                    original = handle.read()
+                self._unwritable.add(path)
+            self._original[path] = original
+            self._current[path] = original or ""
+        return self._current[path]
+
+    def set(self, path: Path, text: str) -> bool:
+        self.text(path)
+        if path in self._unwritable:
+            return False
+        self._current[path] = text
+        return True
+
+    def changed(self) -> list[Path]:
+        def differs(path: Path) -> bool:
+            original = self._original.get(path)
+            return self._current[path] != original if original is not None else self._current[path] != ""
+
+        return sorted(path for path in self._current if differs(path))
+
+    def write(self) -> list[str]:
+        written = []
+        for path in self.changed():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "w", encoding="utf-8", newline="") as handle:
+                handle.write(self._current[path])
+            written.append(str(path.relative_to(self.root)))
+        return written
 
 
 def spec_version(value: str) -> str:
@@ -349,7 +578,20 @@ def spec_version(value: str) -> str:
 
 
 def discover_manifest(root: Path) -> list[dict]:
-    manifest = root / "global" / "scripts" / "shared" / "pinned-versions.sh"
+    """Every pin in `pinned-versions.sh`, with the annotations that say how to check and rewrite it.
+
+    Three annotations are read, each a comment directly above what it describes:
+
+      # upstream:  <kind> <coordinate> [track=<major>]   above a pin -- where releases come from
+      # checksums: <url with {version}>                  above a pin -- the publisher's manifest
+      # asset:     <url with {version}>                  above a digest -- the file it is of
+
+    A digest belongs to the pin whose name it extends (`GITLEAKS_SHA256_X64` to
+    `GITLEAKS`), so its place in the file does not have to be guessed from. The
+    two pin annotations may come in either order: a `# checksums:` line silently
+    dropped for sitting above `# upstream:` would take its cross-check with it.
+    """
+    manifest = root / MANIFEST
     entries: list[dict] = []
     # Absent in a CONSUMER's repository, which has no pinned-versions.sh of its
     # own. The action and image scans below are generic, so the check still does
@@ -358,8 +600,11 @@ def discover_manifest(root: Path) -> list[dict]:
     if not manifest.is_file():
         return entries
     pending = None
+    pending_checksums = None
+    pending_asset = None
     for raw in manifest.read_text(encoding="utf-8").splitlines():
-        annotation = UPSTREAM.match(raw.strip())
+        stripped = raw.strip()
+        annotation = UPSTREAM.match(stripped)
         if annotation:
             options = dict(
                 pair.split("=", 1)
@@ -372,33 +617,75 @@ def discover_manifest(root: Path) -> list[dict]:
                 "track_major": options.get("track"),
             }
             continue
+        checksums = CHECKSUMS.match(stripped)
+        if checksums:
+            pending_checksums = checksums.group("url")
+            continue
+        asset = ASSET.match(stripped)
+        if asset:
+            pending_asset = asset.group("url")
+            continue
+        digest = DIGEST.match(raw)
+        if digest:
+            owners = [entry for entry in entries
+                      if digest.group("var").startswith(entry["name"] + "_SHA256")]
+            if owners:
+                owner = max(owners, key=lambda entry: len(entry["name"]))
+                owner["digests"].append({
+                    "var": digest.group("var"),
+                    "value": digest.group("value"),
+                    "asset": pending_asset,
+                })
+            pending_asset = None
+            continue
         match = PIN.match(raw) or SPEC.match(raw)
         if not match:
-            if raw.strip() and not raw.lstrip().startswith("#"):
+            if stripped and not stripped.startswith("#"):
                 pending = None
+                pending_checksums = None
+                pending_asset = None
             continue
         value = match.group("value")
         name = match.group("name")
-        current = spec_version(value) if SPEC.match(raw) else value
-        if pending is None:
-            entries.append({"kind": "unannotated", "name": name, "current": current})
-        else:
-            entry = dict(pending)
-            entry.update({"name": name, "current": current})
-            entries.append(entry)
+        is_spec = SPEC.match(raw) is not None
+        entry = {
+            "kind": "unannotated",
+            "name": name,
+            "var": "%s_%s" % (name, "SPEC" if is_spec else "PINNED_VERSION"),
+            "style": "spec" if is_spec else "pin",
+            "spec_value": value if is_spec else None,
+            "current": spec_version(value) if is_spec else value,
+            "checksums": None,
+            "digests": [],
+        }
+        if pending is not None:
+            entry.update(pending)
+            entry["checksums"] = pending_checksums
+        entries.append(entry)
         pending = None
+        pending_checksums = None
     return entries
 
 
-def discover_actions(root: Path) -> dict[str, str]:
+def manifest_values(manifest: list[dict]) -> dict[str, str]:
+    """Every manifest variable an inline copy can mirror -> its value."""
+    values: dict[str, str] = {}
+    for entry in manifest:
+        values[entry["var"]] = entry["current"]
+        for digest in entry["digests"]:
+            values[digest["var"]] = digest["value"]
+    return values
+
+
+def discover_actions(ws: Workspace) -> dict[str, str]:
     """Distinct third-party action repositories -> the version comment recorded.
 
     Sub-path actions (`github/codeql-action/init`) collapse onto their owning
     repository, which is what carries the release.
     """
     found: dict[str, str] = {}
-    for path in walk(root, suffixes={".yaml", ".yml"}):
-        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+    for path in ws.yaml:
+        for line in ws.text(path).splitlines():
             match = USES.match(line)
             if not match:
                 continue
@@ -412,16 +699,16 @@ def discover_actions(root: Path) -> dict[str, str]:
     return found
 
 
-def discover_images(root: Path) -> dict[str, str]:
+def discover_images(ws: Workspace) -> dict[str, str]:
     found: dict[str, str] = {}
-    for path in walk(root, suffixes={".yaml", ".yml"}, names=None):
-        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+    for path in ws.yaml:
+        for line in ws.text(path).splitlines():
             match = IMAGE.match(line)
             if match:
                 reference = match.group("ref")
                 found[reference] = reference.split("@", 1)[1]
-    for path in walk(root, names={"Dockerfile"}):
-        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+    for path in ws.dockerfiles:
+        for line in ws.text(path).splitlines():
             match = FROM.match(line)
             if match:
                 reference = match.group("ref")
@@ -429,34 +716,60 @@ def discover_images(root: Path) -> dict[str, str]:
     return found
 
 
-# Versions written a second time in a template, because that template has no
+# Values written a second time in a template, because that template has no
 # `SCRIPTS_DIR` to source the manifest from. A copy is not a problem; a copy
-# that has drifted is, and it drifts silently.
+# that has drifted is, and it drifts silently -- two of them already had: the
+# Azure DevOps ProGuard job was still on 7.6.1 and the Azure Terragrunt abstract
+# on 1.1.3, a bump after the manifest had moved on, and nothing reported it.
+#
+# Each row is a manifest VARIABLE and a pattern whose one group is a copy of its
+# value. The same table drives drift detection and `--apply`, so a copy the
+# check knows about is a copy the bump rewrites, and the two cannot disagree.
 INLINE_COPIES = [
     ("PDM_SPEC", r'pip install[^"\n]*"pdm==([0-9][^"]*)"'),
     ("VULTURE_SPEC", r'pip install[^"\n]*"vulture==([0-9][^"]*)"'),
     ("KNIP_SPEC", r"npx --yes[^\n]*knip@([0-9][^\s'\"]*)"),
-    ("GOVULNCHECK", r"go install golang\.org/x/vuln/cmd/govulncheck@v?([0-9][^\s'\"]*)"),
+    ("GOVULNCHECK_PINNED_VERSION", r"go install golang\.org/x/vuln/cmd/govulncheck@v?([0-9][^\s'\"]*)"),
     ("BUNDLER_AUDIT_SPEC", r"gem install bundler-audit -v ([0-9][^\s'\"]*)"),
+    ("GORELEASER_PINNED_VERSION", r'GORELEASER_VERSION:\s*"([0-9][^"]*)"'),
+    ("PROGUARD_PINNED_VERSION", r"Guardsquare/proguard/releases/download/v([0-9][^/\"'\s]*)/"),
+    ("PROGUARD_PINNED_VERSION", r"proguard-([0-9][0-9.]*[0-9])(?=\.tar\.gz|/lib/)"),
+    ("PROGUARD_SHA256", r'"([0-9a-f]{64})  /tmp/proguard\.tar\.gz"'),
+    ("TERRAGRUNT_PINNED_VERSION", r'TERRAGRUNT_VERSION="([0-9][^"]*)"'),
+    ("TERRAGRUNT_SHA256_AMD64", r'TERRAGRUNT_SHA256="([0-9a-f]{64})"'),
+    ("STOML_PINNED_VERSION", r'STOML_VERSION="([0-9][^"]*)"'),
+    ("STOML_SHA256_AMD64", r'STOML_SHA256="([0-9a-f]{64})"'),
 ]
 
 
-def discover_inline(root: Path, manifest: list[dict]) -> list[dict]:
-    expected = {entry["name"]: entry["current"] for entry in manifest}
+def is_digest_var(var: str) -> bool:
+    return "_SHA256" in var
+
+
+def inline_files(ws: Workspace) -> list[Path]:
+    return ws.yaml + ws.dockerfiles
+
+
+def same_value(var: str, found: str, want: str) -> bool:
+    if is_digest_var(var):
+        return found.lower() == want.lower()
+    return normalise(found) == normalise(want)
+
+
+def discover_inline(ws: Workspace, manifest: list[dict]) -> list[dict]:
+    expected = manifest_values(manifest)
     findings = []
-    for name, pattern in INLINE_COPIES:
-        want = expected.get(name) or expected.get(name + "_SPEC") or expected.get(
-            name.replace("_SPEC", ""))
+    for var, pattern in INLINE_COPIES:
+        want = expected.get(var)
         if want is None:
             continue
         compiled = re.compile(pattern)
-        for path in walk(root, suffixes={".yaml", ".yml"}):
-            text = path.read_text(encoding="utf-8", errors="replace")
-            for found in compiled.findall(text):
-                if normalise(found) != normalise(want):
+        for path in inline_files(ws):
+            for found in compiled.findall(ws.text(path)):
+                if not same_value(var, found, want):
                     findings.append({
-                        "name": name,
-                        "file": str(path.relative_to(root)),
+                        "name": var,
+                        "file": str(path.relative_to(ws.root)),
                         "inline": found,
                         "manifest": want,
                     })
@@ -479,7 +792,7 @@ def resolve(task: dict, fixture: dict | None) -> dict:
             resolver = RESOLVERS.get(task["kind"])
             if resolver is None:
                 raise LookupError_("unknown upstream kind '%s'" % task["kind"])
-            latest = resolver(task["coord"], task.get("track_major"))
+            latest = resolver(task["coord"], task.get("track_major"), task.get("family"))
         # A pin deliberately held inside a major reports nothing when upstream's
         # newest release is OUTSIDE that major -- moving from GoReleaser 1.x to
         # 2.x is a migration, not an update, and reporting it every run is how a
@@ -491,6 +804,14 @@ def resolve(task: dict, fixture: dict | None) -> dict:
             latest_parts = parts(latest)
             if not latest_parts or str(latest_parts[0]) != str(track):
                 latest = task["current"]
+        # Likewise a release from ANOTHER line of the same repository is never
+        # an update -- see `tag_family`. The live resolvers never return one;
+        # this keeps an answer that did (a fixture, a future resolver) from
+        # being compared across lines, where `codeql-bundle-v2.26.4` would read
+        # as older than the action's `v4.37.7`.
+        family = task.get("family")
+        if family is not None and task["kind"] in TAGGED_KINDS and tag_family(latest) != family:
+            latest = task["current"]
 
         task["latest"] = latest
         task["outdated"] = (
@@ -507,9 +828,10 @@ def load_ignores(root: Path) -> list[str]:
 
     Deliberately empty by default. It exists for genuinely ROLLING references --
     `alpine:edge` is rebuilt almost daily, so it would report an update on nearly
-    every run, and a check that is always red is a check people stop reading.
-    Silencing one of those is a decision worth writing down in a file; silencing
-    them by default would hide the ordinary stale pins this tool exists to find.
+    every run, and a check that is always red is a check people stop reading --
+    and for a dependency somebody has decided to stay on for good. Silencing one
+    of those is a decision worth writing down in a file; silencing them by
+    default would hide the ordinary stale pins this tool exists to find.
     """
     config = root / ".dependency-updates.json"
     if not config.is_file():
@@ -521,14 +843,23 @@ def load_ignores(root: Path) -> list[str]:
         return []
 
 
-def build_tasks(root: Path) -> tuple[list[dict], list[dict], list[dict]]:
+def build_tasks(ws: Workspace) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
+    root = ws.root
     manifest = discover_manifest(root)
     tasks: list[dict] = []
     unannotated: list[dict] = []
 
     for entry in manifest:
+        # A digest nothing can re-derive is a pin `--apply` can never bump, and
+        # it would go on reading as covered: the same slow loss of coverage an
+        # unannotated pin is, so it is reported the same way.
+        for digest in entry["digests"]:
+            if not digest["asset"]:
+                unannotated.append({"kind": "unannotated", "missing": "asset",
+                                    "name": digest["var"], "current": digest["value"][:12]})
         if entry["kind"] == "unannotated":
-            unannotated.append(entry)
+            unannotated.append({"kind": "unannotated", "missing": "upstream",
+                                "name": entry["name"], "current": entry["current"]})
             continue
         if entry["kind"] == "none":
             continue
@@ -538,20 +869,23 @@ def build_tasks(root: Path) -> tuple[list[dict], list[dict], list[dict]]:
             "kind": entry["kind"],
             "coord": entry["coord"],
             "track_major": entry.get("track_major"),
+            "family": tag_family(entry["current"]) if entry["kind"] in TAGGED_KINDS else None,
             "current": entry["current"],
+            "entry": entry,
         })
 
-    for repo, version in sorted(discover_actions(root).items()):
+    for repo, version in sorted(discover_actions(ws).items()):
         tasks.append({
             "group": "action",
             "label": repo,
             "kind": "github-release",
             "coord": repo,
             "track_major": None,
+            "family": tag_family(version),
             "current": version,
         })
 
-    for reference, digest in sorted(discover_images(root).items()):
+    for reference, digest in sorted(discover_images(ws).items()):
         tasks.append({
             "group": "image",
             "label": reference.split("@", 1)[0],
@@ -563,17 +897,730 @@ def build_tasks(root: Path) -> tuple[list[dict], list[dict], list[dict]]:
 
     ignores = load_ignores(root)
     if ignores:
-        import fnmatch
-        kept = []
-        for task in tasks:
-            if any(fnmatch.fnmatch(task["label"], pattern) for pattern in ignores):
-                continue
-            kept.append(task)
-        tasks = kept
+        tasks = [task for task in tasks
+                 if not any(fnmatch.fnmatch(task["label"], pattern) for pattern in ignores)]
 
-    return tasks, unannotated, discover_inline(root, manifest)
+    return tasks, unannotated, discover_inline(ws, manifest), manifest
 
 
+# --------------------------------------------------------------------------- #
+# Upstream lookups for `--apply`
+# --------------------------------------------------------------------------- #
+SHA1 = re.compile(r"^[0-9a-f]{40}$")
+SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+IMAGE_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+# What an upstream may call a release before it is written into a SOURCED shell
+# file, a YAML comment and a Markdown table. Deliberately narrow: no quote, `$`,
+# backtick, space, `|`, `<` or newline can reach any of the three, so a hostile
+# or merely odd tag name is refused instead of executed or rendered.
+SAFE_VERSION = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._+-]{0,127}$")
+SAFE_TAG = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._+/-]{0,127}$")
+RELEASE_ASSET = re.compile(
+    r"^https://github\.com/(?P<repo>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)"
+    r"/releases/download/(?P<tag>[^/]+)/(?P<asset>[^/?#]+)$")
+TRAILER = "Dependency-Updates-Fingerprint:"
+MARKER = "dependency-updates-fingerprint:"
+
+
+class Lookups:
+    """The questions `--apply` asks upstream, answered live or from the offline fixture.
+
+    The fixture answers the same three transport questions the live path asks --
+    a JSON document, a text document, the SHA-256 of a download -- keyed by the
+    URL that would have been fetched (`GET <url>`, `SHA256 <url>`; `null` is a
+    404). Everything above the transport therefore runs the same code offline as
+    it does against GitHub: the URL construction, dereferencing an annotated
+    tag, falling back to a download when GitHub recorded no digest, and parsing
+    a checksum manifest.
+    """
+
+    def __init__(self, fixture: dict | None) -> None:
+        self.fixture = fixture
+        self._cache: dict[str, object] = {}
+
+    def _answer(self, verb: str, url: str):
+        key = "%s %s" % (verb, url)
+        if key not in self.fixture:
+            raise LookupError_("no fixture entry for %s" % key)
+        if self.fixture[key] is None:
+            raise NotFound("%s -> HTTP 404" % url)
+        return self.fixture[key]
+
+    def json(self, url: str, headers: dict | None = None):
+        if self.fixture is not None:
+            return self._answer("GET", url)
+        if url not in self._cache:
+            self._cache[url] = get_json(url, headers)
+        return self._cache[url]
+
+    def text(self, url: str) -> str:
+        if self.fixture is not None:
+            return str(self._answer("GET", url))
+        return get_text(url)
+
+    def sha256(self, url: str) -> str:
+        if self.fixture is not None:
+            return str(self._answer("SHA256", url))
+        return download_sha256(url)
+
+
+def tag_commit(lookups: Lookups, repo: str, tag: str) -> str:
+    """The commit a release tag points at, dereferencing an annotated tag.
+
+    An annotated tag's ref names a TAG OBJECT, not a commit, and pinning that
+    object's SHA would read correctly and resolve to nothing a runner can check
+    out. The chain is followed to the commit.
+    """
+    target = (lookups.json("https://api.github.com/repos/%s/git/ref/tags/%s"
+                           % (repo, urllib.parse.quote(tag, safe="/")), github_headers()) or {}).get("object") or {}
+    for _ in range(5):
+        kind, sha = target.get("type"), target.get("sha") or ""
+        if kind == "commit":
+            if not SHA1.match(sha):
+                raise LookupError_("%s@%s -> %r is not a commit SHA" % (repo, tag, sha))
+            return sha
+        if kind != "tag" or not SHA1.match(sha):
+            raise LookupError_("%s@%s points at %s, not a commit" % (repo, tag, kind or "nothing"))
+        target = (lookups.json("https://api.github.com/repos/%s/git/tags/%s" % (repo, sha),
+                               github_headers()) or {}).get("object") or {}
+    raise LookupError_("%s@%s -> tag chain too deep to dereference" % (repo, tag))
+
+
+def asset_digest(lookups: Lookups, url: str) -> tuple[str, str]:
+    """The SHA-256 of the file at `url`, and where that answer came from.
+
+    For a GitHub release asset this is the digest GitHub recorded when the asset
+    was uploaded, which needs no download -- the CodeQL bundle alone is a
+    gigabyte. A release published before GitHub recorded digests has none, and
+    then, like any other URL, the file is downloaded and hashed.
+    """
+    release = RELEASE_ASSET.match(url)
+    if release:
+        repo = release.group("repo")
+        tag = urllib.parse.unquote(release.group("tag"))
+        name = urllib.parse.unquote(release.group("asset"))
+        data = lookups.json("https://api.github.com/repos/%s/releases/tags/%s"
+                            % (repo, urllib.parse.quote(tag, safe="")), github_headers()) or {}
+        assets = {asset.get("name"): asset for asset in data.get("assets") or []}
+        if name not in assets:
+            raise NotFound("release %s of %s has no asset named %s" % (tag, repo, name))
+        recorded = assets[name].get("digest") or ""
+        if recorded.startswith("sha256:") and SHA256_HEX.match(recorded[len("sha256:"):]):
+            return recorded[len("sha256:"):], "GitHub's recorded digest of the release asset"
+    computed = lookups.sha256(url).lower()
+    if not SHA256_HEX.match(computed):
+        raise LookupError_("%s -> %r is not a SHA-256" % (url, computed))
+    return computed, "SHA-256 of the downloaded asset"
+
+
+GNU_SUM = re.compile(r"^(?P<hex>[0-9a-fA-F]{64})\s+\*?(?P<name>\S.*?)\s*$")
+BSD_SUM = re.compile(r"^SHA-?256\s*\((?P<name>[^)]+)\)\s*=\s*(?P<hex>[0-9a-fA-F]{64})\s*$")
+
+
+def published_checksum(text: str, asset: str) -> str | None:
+    """The SHA-256 a checksum manifest publishes for `asset`, from either common format.
+
+    GNU (`<hex>  <name>` or `<hex> *<name>`) is what nearly every publisher here
+    ships. BSD (`SHA256 (<name>) = <hex>`) is yq's `checksums-bsd`, whose other
+    lines carry thirty unrelated algorithms -- which is why the algorithm is
+    matched whole, so a `SHA3-256` line can never be read as SHA-256. A file
+    holding one bare digest is a per-asset checksum and answers for that asset.
+    """
+    for line in text.splitlines():
+        for pattern in (GNU_SUM, BSD_SUM):
+            match = pattern.match(line.strip())
+            if match and match.group("name").rsplit("/", 1)[-1] == asset:
+                return match.group("hex").lower()
+    bare = text.strip().lower()
+    if SHA256_HEX.match(bare):
+        return bare
+    return None
+
+
+def render(template: str, version: str) -> str:
+    return template.replace("{version}", version)
+
+
+class Refused(Exception):
+    """An update that is real but cannot be applied safely; it needs a person."""
+
+
+def prepare_manifest(task: dict, lookups: Lookups) -> dict:
+    """Resolve the new version's digests, or refuse to touch the pin at all."""
+    entry = task["entry"]
+    new = restyle(task["current"], task["latest"])
+    if not SAFE_VERSION.match(new):
+        raise Refused("upstream named the release %r, which is not safe to write into a sourced shell file"
+                      % task["latest"])
+    missing = [digest["var"] for digest in entry["digests"] if not digest["asset"]]
+    if missing:
+        raise Refused("%s %s no `# asset:` annotation, so %s cannot be re-derived for %s"
+                      % (", ".join(missing), "has" if len(missing) == 1 else "have",
+                         "its digest" if len(missing) == 1 else "their digests", new))
+    digests = []
+    for digest in entry["digests"]:
+        today = render(digest["asset"], task["current"])
+        proposed = render(digest["asset"], new)
+        if today == proposed:
+            raise Refused("the `# asset:` template for %s has no `{version}`, so it cannot locate %s"
+                          % (digest["var"], new))
+        # The template is proven against the digest the installer verifies
+        # TODAY before it is trusted to locate the file it will verify next.
+        try:
+            reproduced, _ = asset_digest(lookups, today)
+        except NotFound as error:
+            raise Refused("the `# asset:` template for %s does not locate the pinned %s (%s); fix the template"
+                          % (digest["var"], task["current"], error)) from error
+        if reproduced != digest["value"]:
+            raise Refused("the `# asset:` template for %s locates a file whose SHA-256 is not the committed one "
+                          "for %s, so it is not the asset the installer verifies and cannot be trusted for %s"
+                          % (digest["var"], task["current"], new))
+        try:
+            value, source = asset_digest(lookups, proposed)
+        except NotFound as error:
+            raise Refused("%s; if the release renamed its assets, the installer and the `# asset:` template "
+                          "both have to follow" % error) from error
+        digests.append({"var": digest["var"], "old": digest["value"], "new": value,
+                        "source": source, "url": proposed})
+    if entry.get("checksums") and digests:
+        manifest_url = render(entry["checksums"], new)
+        try:
+            text = lookups.text(manifest_url)
+        except NotFound as error:
+            raise Refused("the checksum manifest %s does not exist for %s" % (manifest_url, new)) from error
+        for digest in digests:
+            asset = digest["url"].rsplit("/", 1)[-1]
+            published = published_checksum(text, asset)
+            if published is None:
+                raise Refused("%s publishes no SHA-256 for %s" % (manifest_url, asset))
+            if published != digest["new"]:
+                raise Refused("%s publishes %s for %s, but the asset itself is %s. A release that disagrees "
+                              "with its own checksums is what verification exists to catch; look before "
+                              "trusting either" % (manifest_url, published, asset, digest["new"]))
+            digest["source"] += ", matching `%s`" % manifest_url.rsplit("/", 1)[-1]
+    return {"new": new, "digests": digests}
+
+
+def prepare_action(task: dict, lookups: Lookups) -> dict:
+    tag = task["latest"]
+    if not SAFE_TAG.match(tag):
+        raise Refused("upstream named the release %r, which is not safe to write into a workflow" % tag)
+    return {"new": tag, "sha": tag_commit(lookups, task["coord"], tag)}
+
+
+def prepare_image(task: dict) -> dict:
+    if not IMAGE_DIGEST.match(task["latest"]):
+        raise Refused("the registry answered %r, which is not an image digest" % task["latest"])
+    return {"new": task["latest"]}
+
+
+def prepare(task: dict, lookups: Lookups) -> dict:
+    """Everything `--apply` needs from upstream for one outdated pin, before any file is touched."""
+    try:
+        if task["group"] == "manifest":
+            task["apply"] = prepare_manifest(task, lookups)
+        elif task["group"] == "action":
+            task["apply"] = prepare_action(task, lookups)
+        else:
+            task["apply"] = prepare_image(task)
+    except Refused as reason:
+        task["refused"] = str(reason)
+    except NotFound as error:
+        task["refused"] = str(error)
+    except LookupError_ as error:
+        task["error"] = str(error)
+    return task
+
+
+# --------------------------------------------------------------------------- #
+# Applying
+# --------------------------------------------------------------------------- #
+def write_action(ws: Workspace, task: dict) -> int:
+    """Re-pin every `uses:` of the action, sub-path actions included, to the new commit."""
+    plan = task["apply"]
+    pattern = re.compile(
+        r"(?P<head>^[ \t]*(?:-[ \t]*)?uses:[ \t]*'%s(?:/[^'@\s]*)?@)(?P<sha>[0-9a-f]{40})"
+        r"(?P<mid>'[ \t]*#[ \t]*)(?P<version>\S+)" % re.escape(task["coord"]), re.MULTILINE)
+    rewritten = 0
+    for path in ws.yaml:
+        changes = 0
+
+        def replace(match: re.Match) -> str:
+            nonlocal changes
+            if match.group("sha") == plan["sha"] and match.group("version") == plan["new"]:
+                return match.group(0)
+            changes += 1
+            return match.group("head") + plan["sha"] + match.group("mid") + plan["new"]
+
+        text = pattern.sub(replace, ws.text(path))
+        if changes and ws.set(path, text):
+            rewritten += changes
+    return rewritten
+
+
+def write_image(ws: Workspace, task: dict) -> int:
+    old = task["coord"]
+    new = old.split("@", 1)[0] + "@" + task["apply"]["new"]
+    # Bounded on both sides, so `python:3.13-slim@sha256:...` is never rewritten
+    # inside a longer reference to a different repository that happens to end
+    # the same way -- a mirror of the same image, say.
+    pattern = re.compile(r"(?<![A-Za-z0-9._/:-])%s(?![0-9a-f])" % re.escape(old))
+    rewritten = 0
+    for path in inline_files(ws):
+        text, count = pattern.subn(lambda match: new, ws.text(path))
+        if count and ws.set(path, text):
+            rewritten += count
+    return rewritten
+
+
+def write_manifest(ws: Workspace, task: dict) -> int:
+    """Rewrite the pin and every digest of it in one edit, or nothing at all."""
+    entry, plan = task["entry"], task["apply"]
+    path = ws.root / MANIFEST
+    text = ws.text(path)
+    if entry["style"] == "pin":
+        line = r'^(%s=")%s(")(?=\r?$)' % (re.escape(entry["var"]), re.escape(task["current"]))
+        value = plan["new"]
+    else:
+        spec = entry["spec_value"]
+        line = r'^(%s="\$\{[A-Z0-9_]+:-)%s(\}")(?=\r?$)' % (re.escape(entry["var"]), re.escape(spec))
+        value = spec[: len(spec) - len(task["current"])] + plan["new"]
+    edits = [(entry["var"], line, value)]
+    for digest in plan["digests"]:
+        edits.append((digest["var"], r'^(%s=")%s(")(?=\r?$)' % (re.escape(digest["var"]), re.escape(digest["old"])),
+                      digest["new"]))
+    for var, pattern, replacement in edits:
+        text, count = re.subn(pattern, lambda match, r=replacement: match.group(1) + r + match.group(2), text,
+                              flags=re.MULTILINE)
+        if count != 1:
+            raise Refused("%s: expected exactly one `%s` line to rewrite, found %d" % (MANIFEST, var, count))
+    if not ws.set(path, text):
+        raise Refused("%s cannot be rewritten safely (a symlink, or not valid UTF-8)" % MANIFEST)
+    return len(edits)
+
+
+def write_inline(ws: Workspace, targets: dict[str, str], before: dict[str, str]) -> list[dict]:
+    """Bring every inline copy to the value its manifest variable now holds.
+
+    `targets` holds the value after this run's bumps, `before` the value the
+    manifest had when the run started -- so a copy that disagreed with `before`
+    was already out of step, and is reported as such rather than as part of a
+    bump it had nothing to do with.
+    """
+    fixes = []
+    for var, pattern in INLINE_COPIES:
+        want = targets.get(var)
+        if want is None:
+            continue
+        compiled = re.compile(pattern)
+        for path in inline_files(ws):
+            found_here = []
+
+            def replace(match: re.Match) -> str:
+                found = match.group(1)
+                value = want if is_digest_var(var) else restyle(found, want)
+                if same_value(var, found, want):
+                    return match.group(0)
+                found_here.append({
+                    "var": var,
+                    "file": str(path.relative_to(ws.root)),
+                    "from": found,
+                    "to": value,
+                    "drifted": not same_value(var, found, before.get(var, want)),
+                })
+                start, end = match.start(1) - match.start(0), match.end(1) - match.start(0)
+                return match.group(0)[:start] + value + match.group(0)[end:]
+
+            text = compiled.sub(replace, ws.text(path))
+            if found_here and ws.set(path, text):
+                fixes.extend(found_here)
+    return fixes
+
+
+def apply_updates(ws: Workspace, results: list[dict], manifest: list[dict], lookups: Lookups,
+                  jobs: int) -> tuple[list[dict], list[dict]]:
+    outdated = [task for task in results if task.get("outdated")]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
+        prepared = list(pool.map(lambda task: prepare(task, lookups), outdated))
+
+    before = manifest_values(manifest)
+    targets = dict(before)
+    for task in prepared:
+        if "apply" not in task or task.get("refused") or task.get("error"):
+            continue
+        try:
+            if task["group"] == "manifest":
+                write_manifest(ws, task)
+                targets[task["entry"]["var"]] = task["apply"]["new"]
+                for digest in task["apply"]["digests"]:
+                    targets[digest["var"]] = digest["new"]
+                task["rewritten"] = 1
+            elif task["group"] == "action":
+                task["rewritten"] = write_action(ws, task)
+            else:
+                task["rewritten"] = write_image(ws, task)
+        except Refused as reason:
+            task["refused"] = str(reason)
+            continue
+        if not task["rewritten"]:
+            task["refused"] = "no line in the repository matched it, so there was nothing to rewrite"
+            continue
+        task["applied"] = True
+    return prepared, write_inline(ws, targets, before)
+
+
+# --------------------------------------------------------------------------- #
+# The pull request
+# --------------------------------------------------------------------------- #
+GROUPS = (("action", "GitHub Actions"), ("image", "Container images"), ("manifest", "Tools and packages"))
+
+
+def fingerprint(applied: list[dict], fixes: list[dict]) -> str:
+    """One hash for one SET of proposed changes.
+
+    It is what lets a closed pull request mean "not this": the workflow does not
+    propose a set it finds in a declined pull request, and any newer release
+    changes the set -- and with it the hash. The proposed commit SHA and every
+    new digest are part of it, so a re-pointed tag or re-uploaded asset is
+    proposed again rather than hidden behind an earlier "no".
+    """
+    lines = []
+    for task in applied:
+        plan = task["apply"]
+        lines.append("|".join([task["group"], task["label"], plan["new"], plan.get("sha", "")]
+                              + [digest["new"] for digest in plan.get("digests", [])]))
+    for fix in fixes:
+        lines.append("|".join(["inline", fix["file"], fix["var"], fix["to"]]))
+    return hashlib.sha256("\n".join(sorted(lines)).encode("utf-8")).hexdigest()
+
+
+def release_link(task: dict) -> str | None:
+    kind, coord, latest = task["kind"], task["coord"], task.get("latest", "")
+    if task["group"] == "image":
+        return None
+    if kind in ("github-release", "github-tag"):
+        return "https://github.com/%s/releases/tag/%s" % (coord, latest)
+    if kind == "gitlab-tag":
+        return "https://gitlab.com/%s/-/tags/%s" % (coord, latest)
+    if kind == "pypi":
+        return "https://pypi.org/project/%s/%s/" % (coord, latest)
+    if kind == "npm":
+        return "https://www.npmjs.com/package/%s/v/%s" % (coord, latest)
+    if kind == "rubygems":
+        return "https://rubygems.org/gems/%s/versions/%s" % (coord, latest)
+    if kind == "goproxy":
+        return "https://pkg.go.dev/%s@%s" % (coord, latest)
+    return None
+
+
+def md_safe(value: str, limit: int = 300) -> str:
+    """An UPSTREAM-supplied string, made inert for a Markdown page.
+
+    Release names reach the job summary and the pull request body, and both are
+    rendered as Markdown -- so a tag or a refusal message quoting one could
+    otherwise carry a link, an image or a broken table into a page a person is
+    reading in order to decide what to trust. Values that were validated before
+    being applied never need this; anything shown BECAUSE it was refused does.
+
+    Only what can leave a code span or a table cell, open a link, or start HTML
+    is replaced. Asset names are full of underscores, and mangling those would
+    make a refusal unreadable without making it any safer.
+    """
+    cleaned = re.sub(r"[`|<>\[\]\r\n]", "?", str(value))
+    return cleaned if len(cleaned) <= limit else cleaned[:limit] + "..."
+
+
+def short_digest(digest: str) -> str:
+    return digest.replace("sha256:", "")[:12]
+
+
+def shown(task: dict, value: str) -> str:
+    """A pinned value as a person reads it: digests shortened, versions whole."""
+    return short_digest(value) if task["group"] == "image" else value
+
+
+def plural(count: int, singular: str, many: str | None = None) -> str:
+    return "%d %s" % (count, singular if count == 1 else (many or singular + "s"))
+
+
+def summary_phrase(applied: list[dict], fixes: list[dict]) -> str:
+    """`8 GitHub Actions, 17 container image digests and 11 tool pins`, for titles and changelogs."""
+    counts = {group: sum(1 for task in applied if task["group"] == group) for group, _ in GROUPS}
+    words = []
+    if counts["action"]:
+        words.append(plural(counts["action"], "GitHub Action"))
+    if counts["image"]:
+        words.append(plural(counts["image"], "container image digest"))
+    if counts["manifest"]:
+        words.append(plural(counts["manifest"], "tool pin"))
+    if fixes:
+        words.append(plural(len(fixes), "inline copy", "inline copies"))
+    if len(words) > 1:
+        return ", ".join(words[:-1]) + " and " + words[-1]
+    return words[0] if words else "nothing"
+
+
+def title_for(applied: list[dict], fixes: list[dict]) -> str:
+    if len(applied) == 1 and not fixes:
+        task = applied[0]
+        if task["group"] == "image":
+            return "chore(deps): re-pinned `%s` to the digest its tag resolves to now" % task["label"]
+        return "chore(deps): bumped `%s` to `%s`" % (task["label"], task["apply"]["new"])
+    if applied:
+        return "chore(deps): bumped %s to their latest upstream releases" % plural(
+            len(applied), "pinned dependency", "pinned dependencies")
+    if fixes:
+        return "chore(deps): realigned %s with `pinned-versions.sh`" % plural(
+            len(fixes), "inline copy", "inline copies")
+    return "chore(deps): every pinned dependency is current"
+
+
+def change_list(applied: list[dict], group: str, moves: bool = False) -> str:
+    """`label` `new` pairs for one group; with `moves`, `label` `old` -> `new`, as a hand-written bump reads."""
+    rows = sorted((task for task in applied if task["group"] == group), key=lambda task: task["label"])
+    if group == "image":
+        return ", ".join("`%s`" % task["label"] for task in rows)
+    if moves:
+        return ", ".join("`%s` `%s` -> `%s`" % (task["label"], task["current"], task["apply"]["new"])
+                         for task in rows)
+    return ", ".join("`%s` `%s`" % (task["label"], task["apply"]["new"]) for task in rows)
+
+
+def copies_clause(fixes: list[dict]) -> str:
+    clause = "kept %s in step with `pinned-versions.sh`" % plural(len(fixes), "inline copy", "inline copies")
+    drifted = sum(1 for fix in fixes if fix["drifted"])
+    if drifted:
+        clause += " (%d of them already out of step before this change)" % drifted
+    return clause
+
+
+def changelog_body(applied: list[dict], fixes: list[dict]) -> str:
+    clauses = []
+    counts = {group: sum(1 for task in applied if task["group"] == group) for group, _ in GROUPS}
+    if counts["action"]:
+        clauses.append("%s (%s)" % (plural(counts["action"], "GitHub Action"), change_list(applied, "action")))
+    if counts["image"]:
+        clauses.append("%s (%s)" % (plural(counts["image"], "container image digest"),
+                                    change_list(applied, "image")))
+    if counts["manifest"]:
+        clause = "%s (%s)" % (plural(counts["manifest"], "tool pin"), change_list(applied, "manifest"))
+        if any(task["apply"]["digests"] for task in applied if task["group"] == "manifest"):
+            clause += ", each binary's new SHA-256 taken from its release asset"
+        clauses.append(clause)
+    body = ""
+    if clauses:
+        joined = clauses[0] if len(clauses) == 1 else ", ".join(clauses[:-1]) + " and " + clauses[-1]
+        body = "bumped the pinned dependencies the scheduled `Dependency Updates` workflow found outdated: " + joined
+    if fixes:
+        body = (body + "; " + copies_clause(fixes)) if body else copies_clause(fixes)
+    return body
+
+
+def commit_message(applied: list[dict], fixes: list[dict], digest: str) -> str:
+    lines = [title_for(applied, fixes), ""]
+    if any(task["group"] == "action" for task in applied):
+        lines.append("- bumped GitHub Actions: %s" % change_list(applied, "action", moves=True))
+    if any(task["group"] == "image" for task in applied):
+        lines.append("- re-resolved %s: %s" % (
+            plural(sum(1 for task in applied if task["group"] == "image"), "image digest"),
+            change_list(applied, "image")))
+    if any(task["group"] == "manifest" for task in applied):
+        lines.append("- bumped tool pins with their checksums: %s" % change_list(applied, "manifest", moves=True))
+    if fixes:
+        lines.append("- " + copies_clause(fixes))
+    lines += ["", "%s %s" % (TRAILER, digest)]
+    return "\n".join(lines) + "\n"
+
+
+ACTIONS_NOTE = ("Every `uses:` of each action, sub-path actions included, is re-pinned to the commit its "
+                "release tag points at, with the comment moved to the new version.")
+IMAGES_NOTE = ("Same tag, new digest: the image was rebuilt upstream under the tag this repository already "
+               "uses, which is almost always a base-image security refresh. Moving to a different tag stays a "
+               "decision this workflow never makes.")
+TOOLS_NOTE = ("Each digest describes the asset of the NEW version: the `# asset:` template that located it "
+              "first reproduced the committed digest of the current one, which is what proves it names the file "
+              "the installer verifies.")
+ERRORS_NOTE = ("These could not be checked at all on this run, so they are neither proposed nor known to be "
+               "current:")
+
+
+def render_pull_request(applied: list[dict], refused: list[dict], errors: list[dict], unannotated: list[dict],
+                        fixes: list[dict], digest: str, changelog: str | None) -> str:
+    lines = ["<!-- %s %s -->" % (MARKER, digest), ""]
+    lines.append("Every pin below has a newer release upstream than the one this repository runs. "
+                 "The scheduled `Dependency Updates` workflow resolved each new value from the release itself "
+                 "and opened this pull request; nothing here is merged until a person decides to.")
+    lines.append("")
+    lines.append("**Proposed: %s.**" % summary_phrase(applied, fixes))
+    lines.append("")
+
+    actions = sorted((task for task in applied if task["group"] == "action"), key=lambda task: task["label"])
+    if actions:
+        lines += ["## GitHub Actions (%d)" % len(actions), "",
+                  "| action | pinned | proposed | |", "|---|---|---|---|"]
+        for task in actions:
+            plan = task["apply"]
+            lines.append("| [`%s`](%s) | `%s` | `%s` (`%s`) | %s |" % (
+                task["label"], release_link(task), task["current"], plan["new"], plan["sha"][:12],
+                "**major**" if is_major(task["current"], plan["new"]) else ""))
+        lines += ["", ACTIONS_NOTE, ""]
+
+    images = sorted((task for task in applied if task["group"] == "image"), key=lambda task: task["label"])
+    if images:
+        lines += ["## Container images (%d)" % len(images), "",
+                  "| image | pinned digest | proposed digest |", "|---|---|---|"]
+        for task in images:
+            lines.append("| `%s` | `%s` | `%s` |" % (
+                task["label"], short_digest(task["current"]), short_digest(task["apply"]["new"])))
+        lines += ["", IMAGES_NOTE, ""]
+
+    tools = sorted((task for task in applied if task["group"] == "manifest"), key=lambda task: task["label"])
+    if tools:
+        lines += ["## Tools and packages (%d)" % len(tools), "",
+                  "| pin | pinned | proposed | checksums |", "|---|---|---|---|"]
+        for task in tools:
+            plan = task["apply"]
+            link = release_link(task)
+            label = "[`%s`](%s)" % (task["label"], link) if link else "`%s`" % task["label"]
+            if plan["digests"]:
+                sources = sorted({digest["source"] for digest in plan["digests"]})
+                checks = "%s: %s" % (plural(len(plan["digests"]), "digest"), "; ".join(sources))
+            elif re.fullmatch(r"[0-9]+", normalise(plan["new"])):
+                checks = "a major-only range: the newest `%s.x` is installed from its registry" % plan["new"]
+            else:
+                checks = "installed by exact version from its registry"
+            lines.append("| %s%s | `%s` | `%s` | %s |" % (
+                label, " **major**" if is_major(task["current"], plan["new"]) else "",
+                task["current"], plan["new"], checks))
+        lines += ["", TOOLS_NOTE, ""]
+
+    if fixes:
+        lines += ["## Inline copies kept in step (%d)" % len(fixes), "",
+                  "| file | mirrors | from | to |", "|---|---|---|---|"]
+        for fix in sorted(fixes, key=lambda fix: (fix["file"], fix["var"])):
+            lines.append("| `%s` | `%s` | `%s`%s | `%s` |" % (
+                fix["file"], fix["var"], short_digest(fix["from"]) if is_digest_var(fix["var"]) else fix["from"],
+                " (was already out of step)" if fix["drifted"] else "",
+                short_digest(fix["to"]) if is_digest_var(fix["var"]) else fix["to"]))
+        lines.append("")
+
+    if refused or unannotated:
+        lines += ["## Not in this pull request: needs a person (%d)" % (len(refused) + len(unannotated)), ""]
+        for task in sorted(refused, key=lambda task: (task["group"], task["label"])):
+            lines.append("- `%s` `%s` -> `%s`: %s" % (task["label"], shown(task, task["current"]),
+                                                     md_safe(shown(task, task.get("latest", ""))),
+                                                     md_safe(task["refused"])))
+        for row in unannotated:
+            lines.append("- `%s`: no `# %s:` annotation, so it is not being checked" % (row["name"], row["missing"]))
+        lines.append("")
+
+    if errors:
+        lines += ["## Lookup errors (%d)" % len(errors), "", ERRORS_NOTE, ""]
+        for task in errors:
+            lines.append("- `%s`: %s" % (task["label"], md_safe(task["error"])))
+        lines.append("")
+
+    lines += ["## Deciding", ""]
+    lines.append("- **Merge** to take every update above.")
+    lines.append("- **Close** to decline this set: the workflow does not propose it again, and opens a new "
+                 "pull request only once upstream releases something newer.")
+    lines.append("- **Stop tracking** one dependency for good by adding its name to `.dependency-updates.json` "
+                 "(`{\"ignore\": [\"actions/checkout\"]}`).")
+    lines.append("- **Edit** freely: a commit pushed to this branch by hand is never overwritten. The workflow "
+                 "stops updating the branch until the pull request is merged or closed.")
+    lines.append("")
+    if changelog:
+        lines.append("The change is recorded in `%s`." % changelog)
+        lines.append("")
+    lines.append("No checks on this pull request? It was opened with the default `GITHUB_TOKEN`, and GitHub "
+                 "does not let that token start workflows. Close and reopen the pull request to run them, or give "
+                 "the workflow a `dependency_updates_token`: one from a GitHub App starts them and keeps these "
+                 "commits verified.")
+    body = "\n".join(lines) + "\n"
+    # GitHub refuses a body over 65536 characters. Far beyond any real run, but
+    # a truncated body beats a pull request that cannot be opened at all.
+    if len(body) > 60000:
+        body = body[:60000] + "\n\n*Truncated: see the workflow run's job summary for the full report.*\n"
+    return body
+
+
+def changelog_time(root: Path, explicit: str | None) -> datetime.datetime:
+    """When the changelog entry says it was written: deterministic, so a rerun changes nothing.
+
+    The time of the commit the branch is built on, rather than the time of the
+    run. A rerun against an unchanged default branch then writes byte-identical
+    files, so the pull request is not force-pushed -- and its approvals are not
+    dismissed -- twice a week for no change at all.
+    """
+    if explicit:
+        value = datetime.datetime.fromisoformat(explicit.replace("Z", "+00:00"))
+    else:
+        try:
+            head = subprocess.run(["git", "-C", str(root), "log", "-1", "--format=%cI", "HEAD"],
+                                  capture_output=True, text=True, timeout=30, check=True).stdout.strip()
+            value = datetime.datetime.fromisoformat(head)
+        except (OSError, subprocess.SubprocessError, ValueError):
+            value = datetime.datetime.now(datetime.timezone.utc)
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=datetime.timezone.utc)
+    return value.astimezone(datetime.timezone.utc).replace(microsecond=0)
+
+
+UNRELEASED = re.compile(r"^##\s*\[Unreleased\]", re.IGNORECASE)
+
+
+def insert_unreleased_entry(text: str, body: str) -> str | None:
+    """Add `- body` under `## [Unreleased]` > `### Changed` of a Keep a Changelog file, or None."""
+    lines = text.splitlines(keepends=True)
+    newline = "\r\n" if text.count("\r\n") > text.count("\n") // 2 else "\n"
+    bullet = "- " + body + newline
+    start = next((index for index, line in enumerate(lines) if UNRELEASED.match(line)), None)
+    if start is None:
+        return None
+    end = next((index for index in range(start + 1, len(lines)) if lines[index].startswith("## ")), len(lines))
+    changed = next((index for index in range(start + 1, end)
+                    if lines[index].strip().lower() == "### changed"), None)
+    if changed is None:
+        insert = start + 1
+        while insert < end and not lines[insert].strip():
+            insert += 1
+        block = [newline, "### Changed" + newline, newline, bullet]
+        # A blank line before whatever follows -- the next subsection, or the
+        # next release's heading -- whichever it turns out to be.
+        if insert < len(lines):
+            block.append(newline)
+        return "".join(lines[:start + 1] + block + lines[insert:])
+    insert = changed + 1
+    while insert < end and not lines[insert].strip():
+        insert += 1
+    if insert < end and lines[insert].lstrip().startswith(("-", "*")):
+        return "".join(lines[:insert] + [bullet] + lines[insert:])
+    return "".join(lines[:changed + 1] + [newline, bullet] + ([newline] if insert < len(lines) else [])
+                   + lines[insert:])
+
+
+def write_changelog(ws: Workspace, body: str, when: datetime.datetime, digest: str) -> str | None:
+    """Record the change the way the repository records changes; the path written, or None."""
+    root = ws.root
+    if (root / ".chlog.yaml").is_file() or (root / ".chlog.yml").is_file() or \
+            (root / ".changes" / "unreleased").is_dir():
+        # Named the way `chlog new` names fragments -- nanoseconds and four hex
+        # characters -- from the deterministic time above and the fingerprint.
+        name = ".changes/unreleased/%d-%s.yaml" % (int(when.timestamp()) * 10 ** 9, digest[:4])
+        ws.set(root / name, "kind: 'Changed'\nbody: '%s'\ntime: '%s'\n" % (
+            body.replace("'", "''"), when.strftime("%Y-%m-%dT%H:%M:%S.000000000Z")))
+        return name
+    changelog = root / "CHANGELOG.md"
+    if changelog.is_file():
+        updated = insert_unreleased_entry(ws.text(changelog), body)
+        if updated is not None and ws.set(changelog, updated):
+            return "CHANGELOG.md"
+    return None
+
+
+# --------------------------------------------------------------------------- #
+# Reports
+# --------------------------------------------------------------------------- #
 HOW_TO_FIX = {
     "manifest": ("bump the *_PINNED_VERSION (or *_SPEC) in "
                  "global/scripts/shared/pinned-versions.sh AND replace every *_SHA256_* "
@@ -583,7 +1630,8 @@ HOW_TO_FIX = {
 }
 
 
-def render_markdown(results: list[dict], unannotated: list[dict], inline: list[dict]) -> str:
+def render_markdown(results: list[dict], unannotated: list[dict], inline: list[dict],
+                    applied: list[dict] | None = None, refused: list[dict] | None = None) -> str:
     outdated = [r for r in results if r.get("outdated")]
     errors = [r for r in results if r.get("error")]
     lines = ["# Dependency update report", ""]
@@ -612,10 +1660,11 @@ def render_markdown(results: list[dict], unannotated: list[dict], inline: list[d
             lines.append("|---|---|---|")
             for row in sorted(rows, key=lambda r: r["label"]):
                 lines.append("| `%s` | `%s` | `%s` |" % (
-                    row["label"], row["current"], row["latest"]))
+                    row["label"], row["current"], md_safe(row["latest"])))
         lines.append("")
-        lines.append("To apply: %s." % HOW_TO_FIX[group])
-        lines.append("")
+        if applied is None:
+            lines.append("To apply: %s." % HOW_TO_FIX[group])
+            lines.append("")
 
     if inline:
         lines.append("## Copies that have drifted from the manifest (%d)" % len(inline))
@@ -628,20 +1677,32 @@ def render_markdown(results: list[dict], unannotated: list[dict], inline: list[d
         lines.append("")
 
     if unannotated:
-        lines.append("## Pins with no `# upstream:` annotation (%d)" % len(unannotated))
+        lines.append("## Pins with no annotation to check them by (%d)" % len(unannotated))
         lines.append("")
-        lines.append("These are not being checked at all. Add an annotation above each.")
+        lines.append("These are not being checked at all. Add the annotation named above each.")
         lines.append("")
         for row in unannotated:
-            lines.append("- `%s` (pinned `%s`)" % (row["name"], row["current"]))
+            lines.append("- `%s` (pinned `%s`): no `# %s:` annotation" % (
+                row["name"], row["current"], row.get("missing", "upstream")))
         lines.append("")
 
     if errors:
         lines.append("## Lookup errors (%d)" % len(errors))
         lines.append("")
         for row in errors:
-            lines.append("- `%s`: %s" % (row["label"], row["error"]))
+            lines.append("- `%s`: %s" % (row["label"], md_safe(row["error"])))
         lines.append("")
+
+    if applied is not None:
+        lines.append("## Prepared for the pull request")
+        lines.append("")
+        lines.append("%s applied, %s left for a person." % (
+            plural(len(applied), "update"), plural(len(refused or []), "update")))
+        lines.append("")
+        for row in sorted(refused or [], key=lambda r: (r["group"], r["label"])):
+            lines.append("- `%s`: %s" % (row["label"], md_safe(row["refused"])))
+        if refused:
+            lines.append("")
 
     if not outdated and not errors and not inline and not unannotated:
         lines.append("Every pinned dependency is current.")
@@ -701,22 +1762,98 @@ def read_fixture(raw: str) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def verify_assets(manifest: list[dict], lookups: Lookups) -> int:
+    """Check every `# asset:` template against the digest committed beside it.
+
+    For editing the annotations rather than for CI: it asks upstream about every
+    pin, bumped or not, and downloads the few assets GitHub recorded no digest
+    for. `--apply` runs the same check for each pin it bumps, so a template that
+    stops matching is caught there too -- this is how to catch it before then.
+    """
+    problems = errors = 0
+    for entry in manifest:
+        if not entry["digests"]:
+            continue
+        manifest_text = None
+        if entry.get("checksums"):
+            try:
+                manifest_text = lookups.text(render(entry["checksums"], entry["current"]))
+            except LookupError_ as error:
+                print("  ERROR     %-36s checksums: %s" % (entry["name"], error))
+                errors += 1
+        for digest in entry["digests"]:
+            if not digest["asset"]:
+                print("  MISSING   %-36s no `# asset:` annotation" % digest["var"])
+                problems += 1
+                continue
+            url = render(digest["asset"], entry["current"])
+            try:
+                value, source = asset_digest(lookups, url)
+            except NotFound as error:
+                print("  MISSING   %-36s %s" % (digest["var"], error))
+                problems += 1
+                continue
+            except LookupError_ as error:
+                print("  ERROR     %-36s %s" % (digest["var"], error))
+                errors += 1
+                continue
+            if value != digest["value"]:
+                print("  MISMATCH  %-36s %s is %s, committed %s" % (digest["var"], url, value, digest["value"]))
+                problems += 1
+                continue
+            if manifest_text is not None:
+                published = published_checksum(manifest_text, url.rsplit("/", 1)[-1])
+                if published != value:
+                    print("  MISMATCH  %-36s the checksum manifest says %s" % (digest["var"], published))
+                    problems += 1
+                    continue
+                source += ", matching the checksum manifest"
+            print("  OK        %-36s %s" % (digest["var"], source))
+    if errors:
+        return 2
+    return 1 if problems else 0
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo-dir", default=".", help="repository root to scan")
     parser.add_argument("--report", default=os.environ.get("REPORT_PATH", "build/reports"),
                         help="directory for the JSON and Markdown reports")
     parser.add_argument("--fixture", default=os.environ.get("DEPENDENCY_UPDATES_FIXTURE"),
-                        help="JSON of {'kind:coord': 'version'}; makes the run offline")
-    parser.add_argument("--report-only", action="store_true",
-                        help="always exit 0; report without failing the build")
+                        help="JSON of upstream answers; makes the run offline")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--report-only", action="store_true",
+                      help="always exit 0; report without failing the build")
+    mode.add_argument("--apply", action="store_true",
+                      help="rewrite every outdated pin in --repo-dir and write the pull request into --report")
+    mode.add_argument("--verify-assets", action="store_true",
+                      help="check every `# asset:` template against its committed digest (network)")
+    parser.add_argument("--timestamp",
+                        help="RFC 3339 time for the changelog entry --apply writes "
+                             "(default: the time of the repository's HEAD commit)")
+    parser.add_argument("--changelog", choices=("auto", "none"), default="auto",
+                        help="whether --apply records the change in the repository's changelog")
     parser.add_argument("--jobs", type=int, default=8, help="parallel upstream lookups")
     args = parser.parse_args(argv)
 
     root = Path(args.repo_dir).resolve()
     fixture = read_fixture(args.fixture) if args.fixture else None
+    ws = Workspace(root)
 
-    tasks, unannotated, inline = build_tasks(root)
+    if args.verify_assets:
+        return verify_assets(discover_manifest(root), Lookups(fixture))
+
+    # Resolved against the WORKING DIRECTORY, not `--repo-dir`. `cleanup.sh`
+    # hands this script a path relative to wherever the job runs, and the
+    # directory being scanned is a separate question from where the report
+    # belongs -- resolving it against the scan root wrote reports into the
+    # inspected repository whenever the two differed. The directory itself may
+    # be absolute and is deliberately not confined; the file names appended to
+    # it are. Checked before anything is looked up or rewritten, so a bad path
+    # fails without having touched the repository.
+    report_dir = within_workdir(args.report, "the report directory")
+
+    tasks, unannotated, inline, manifest = build_tasks(ws)
     if not tasks:
         print("ERROR: no pinned dependencies discovered -- is --repo-dir correct?", file=sys.stderr)
         return 2
@@ -727,7 +1864,6 @@ def main(argv: list[str]) -> int:
         results = list(pool.map(lambda task: resolve(task, fixture), tasks))
 
     outdated = [r for r in results if r.get("outdated")]
-    errors = [r for r in results if r.get("error")]
 
     for row in sorted(outdated, key=lambda r: (r["group"], r["label"])):
         if row["group"] == "image":
@@ -738,32 +1874,69 @@ def main(argv: list[str]) -> int:
         print("  DRIFT   %-52s %s has %s, manifest says %s" % (
             row["name"], row["file"], row["inline"], row["manifest"]))
     for row in unannotated:
-        print("  UNTRACKED %-50s no '# upstream:' annotation" % row["name"])
+        print("  UNTRACKED %-50s no '# %s:' annotation" % (row["name"], row.get("missing", "upstream")))
+
+    applied: list[dict] | None = None
+    refused: list[dict] = []
+    fixes: list[dict] = []
+    if args.apply:
+        prepared, fixes = apply_updates(ws, results, manifest, Lookups(fixture), args.jobs)
+        applied = [task for task in prepared if task.get("applied")]
+        refused = [task for task in prepared if task.get("refused")]
+        for row in sorted(applied, key=lambda r: (r["group"], r["label"])):
+            print("  APPLIED %-52s %s" % (row["label"], short_digest(row["apply"]["new"])
+                                          if row["group"] == "image" else row["apply"]["new"]))
+        for row in fixes:
+            print("  ALIGNED %-52s %s: %s -> %s" % (row["var"], row["file"], row["from"], row["to"]))
+        for row in refused:
+            print("  REFUSED %-52s %s" % (row["label"], row["refused"]), file=sys.stderr)
+
+    errors = [r for r in results if r.get("error")]
     for row in errors:
         print("  ERROR   %-52s %s" % (row["label"], row["error"]), file=sys.stderr)
 
-    # Resolved against the WORKING DIRECTORY, not `--repo-dir`. `cleanup.sh`
-    # hands this script a path relative to wherever the job runs, and the
-    # directory being scanned is a separate question from where the report
-    # belongs -- resolving it against the scan root wrote reports into the
-    # inspected repository whenever the two differed. The directory itself may
-    # be absolute and is deliberately not confined; the file names appended to
-    # it are.
-    report_dir = within_workdir(args.report, "the report directory")
     report_dir.mkdir(parents=True, exist_ok=True)
+
     payload = {
         "checked": len(results),
         "outdated": [
-            {k: v for k, v in row.items() if k != "track_major"} for row in outdated
+            {k: v for k, v in row.items() if k not in ("track_major", "entry", "family")} for row in outdated
         ],
         "errors": [{"label": r["label"], "error": r["error"]} for r in errors],
         "drifted_copies": inline,
         "unannotated_pins": unannotated,
     }
+
+    if applied is not None:
+        digest = fingerprint(applied, fixes)
+        changelog = None
+        if ws.changed() and args.changelog == "auto":
+            changelog = write_changelog(ws, changelog_body(applied, fixes),
+                                        changelog_time(root, args.timestamp), digest)
+        written = ws.write()
+        payload["pull_request"] = {
+            "title": title_for(applied, fixes),
+            "fingerprint": digest,
+            "changelog": changelog,
+            "changed_files": written,
+            "applied": [{"group": r["group"], "label": r["label"], "from": r["current"], "to": r["apply"]["new"]}
+                        for r in applied],
+            "refused": [{"group": r["group"], "label": r["label"], "reason": r["refused"]} for r in refused],
+            "inline_copies": fixes,
+        }
+        report_path(report_dir, "pull-request-title.txt").write_text(
+            title_for(applied, fixes) + "\n", encoding="utf-8")
+        report_path(report_dir, "pull-request.md").write_text(
+            render_pull_request(applied, refused, errors, unannotated, fixes, digest, changelog), encoding="utf-8")
+        report_path(report_dir, "commit-message.txt").write_text(
+            commit_message(applied, fixes, digest), encoding="utf-8")
+        report_path(report_dir, "fingerprint.txt").write_text(digest + "\n", encoding="utf-8")
+        print("\n%s rewritten in %s." % (plural(len(written), "file"), root))
+
     report_path(report_dir, "dependency-updates.json").write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     report_path(report_dir, "dependency-updates.md").write_text(
-        render_markdown(results, unannotated, inline), encoding="utf-8")
+        render_markdown(results, unannotated, inline, applied, refused), encoding="utf-8")
     print("\nReports written to %s" % report_dir)
 
     if args.report_only:
@@ -775,6 +1948,18 @@ def main(argv: list[str]) -> int:
         print("\n%d upstream lookup(s) failed; refusing to report a clean result."
               % len(errors), file=sys.stderr)
         return 2
+    if args.apply:
+        # Applied updates and realigned copies are the pull request's job now;
+        # what is left is what a pull request cannot carry.
+        if refused or unannotated:
+            print("\n%s could not be applied, %s untracked."
+                  % (plural(len(refused), "update"), plural(len(unannotated), "pin")))
+            return 1
+        if applied or fixes:
+            print("\n%s applied." % plural(len(applied or []) + len(fixes), "change"))
+        else:
+            print("\nEvery pinned dependency is current.")
+        return 0
     if outdated or inline or unannotated:
         print("\n%d update(s), %d drifted copy/copies, %d untracked pin(s)."
               % (len(outdated), len(inline), len(unannotated)))

@@ -33,13 +33,13 @@ stages:
              # `--proto-redir '=https'` rather than a bare follow: the GitHub release URL
              # redirects to its asset host, and this pins every hop of that chain to HTTPS
              # so the archive ProGuard is run from cannot arrive over plain HTTP.
-             curl -fsSL --proto '=https' --proto-redir '=https' "https://github.com/Guardsquare/proguard/releases/download/v7.6.1/proguard-7.6.1.tar.gz" -o /tmp/proguard.tar.gz
-             echo "672ef62a3154474a6172cbfde9a2f09da1642a17a80e1c7b79a6cc58953fbe06  /tmp/proguard.tar.gz" | sha256sum -c - || { rm -f /tmp/proguard.tar.gz; echo "ERROR - ProGuard checksum mismatch" >&2; exit 1; }
+             curl -fsSL --proto '=https' --proto-redir '=https' "https://github.com/Guardsquare/proguard/releases/download/v7.10.0/proguard-7.10.0.tar.gz" -o /tmp/proguard.tar.gz
+             echo "fbff4dfe037d0724ff767ad555c06ebd14063ccf99a657cf05a69e6f2610da21  /tmp/proguard.tar.gz" | sha256sum -c - || { rm -f /tmp/proguard.tar.gz; echo "ERROR - ProGuard checksum mismatch" >&2; exit 1; }
              tar xzf /tmp/proguard.tar.gz -C /tmp
              INPUT_JAR=$(find . -path "*/build/libs/*.jar" -not -name "*-sources.jar" -not -name "*-javadoc.jar" | head -1)
              if [ -z "$INPUT_JAR" ]; then INPUT_JAR=$(find . -path "*/build/classes/java/main" -type d | head -1); fi
              if [ -z "$INPUT_JAR" ]; then echo "No compiled classes found"; exit 0; fi
-             java -jar /tmp/proguard-7.6.1/lib/proguard.jar \
+             java -jar /tmp/proguard-7.10.0/lib/proguard.jar \
                -injars "$INPUT_JAR" -outjars /dev/null \
                -libraryjars "$JAVA_HOME/jmods/java.base.jmod(!**.jar;!module-info.class)" \
                -dontoptimize -dontobfuscate -dontwarn ** \

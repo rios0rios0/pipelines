@@ -1,18 +1,27 @@
 name: 'Dependency Updates'
 
-# Runs TWICE A WEEK and fails when any pinned dependency has moved upstream.
+# Runs TWICE A WEEK and opens a pull request that moves every pinned dependency
+# which has a newer release upstream.
 #
 # Everything this library executes is pinned -- actions to a commit SHA, images
 # to a digest, binaries to a version plus a committed SHA-256. That is what makes
 # a consumer's pipeline reproducible, and it is also what makes it go stale
 # quietly: a pin never announces that it is three CVEs behind. This is the other
-# half of pinning -- the thing that tells a human when to decide.
+# half of pinning -- the thing that tells a person when to decide.
 #
-# It is deliberately a RED BUILD rather than an issue or a pull request. An
-# automated bump PR would have to re-resolve a commit SHA, re-fetch a checksum
-# from an upstream manifest and re-resolve an image digest before it could even
-# be correct, and a wrong one of those is a supply-chain change nobody reviewed.
-# A failing job with a diff-ready list keeps the decision with a person.
+# It used to tell them with a RED BUILD and a list, on the reasoning that an
+# automated bump would have to re-resolve a commit SHA, re-fetch a checksum and
+# re-resolve an image digest before it could even be correct, and that a wrong
+# one is a supply-chain change nobody reviewed. Both halves still hold, and the
+# pull request answers them: every value in it is resolved from the release
+# itself (`check_updates.py`, "WHAT `--apply` WRITES"), and nothing in it reaches
+# the default branch until a person merges it. What changed is only who does the
+# typing. The red list sat on every run for weeks at a time, and a check that is
+# always red is a check nobody reads.
+#
+# The job is still RED when it cannot do its job: an update it could not apply
+# safely, a pin with no annotation to check it by, or an upstream it could not
+# reach. Each of those needs a person in a way a pull request cannot carry.
 on:
   schedule:
     # Monday and Thursday at 06:00 UTC. Twice a week is the useful cadence: a
@@ -30,26 +39,111 @@ on:
         required: false
         default: false
         description: |
-          Report without failing the job. The default is to FAIL, which is the
-          point of the schedule; this exists for a consumer that wants the
-          report on every pipeline without gating on it.
+          Report without opening a pull request and without failing the job.
+          For a consumer that wants the report on every pipeline without
+          gating on it.
+      branch:
+        type: 'string'
+        required: false
+        default: 'chore/dependency-updates'
+        description: |
+          The branch the pull request is opened from. It is regenerated from
+          the default branch on every run, so there is only ever one pull
+          request to review.
+    secrets:
+      dependency_updates_token:
+        required: false
+        description: |
+          A token to open the pull request with instead of the job's own. Pull
+          requests opened by the default token start no workflows, so their
+          checks never run; one from a GitHub App starts them and keeps the
+          commits verified. It needs contents and pull-requests write access.
 
 jobs:
   check-dependency-updates:
     name: 'security > check:dependency-updates'
     runs-on: 'ubuntu-latest'
-    # Read-only. This job resolves versions and digests and writes a report; it
-    # has no reason to touch the repository, and declaring it per job rather
-    # than workflow-wide keeps a future job from inheriting more.
+    # A stuck upstream must not hold a runner for the six-hour default.
+    timeout-minutes: 30
+    # `contents: write` pushes the update branch; `pull-requests: write` opens,
+    # updates or closes the pull request. On the job rather than the workflow,
+    # so nothing added later inherits them.
+    #
+    # GitHub checks a reusable workflow's job permissions against what its
+    # CALLER grants before any job starts -- regardless of `if:`, and without a
+    # log -- so a caller must grant both, even with `report_only`, which uses
+    # neither. A caller granting `contents: read` alone fails at startup.
     permissions:
-      contents: 'read'
+      contents: 'write'
+      pull-requests: 'write'
+    # Two runs regenerating the same branch at once would race each other's
+    # force-push. The second waits rather than cancelling the first.
+    concurrency:
+      group: 'dependency-updates-${{ github.repository }}'
+      cancel-in-progress: false
+    env:
+      BRANCH: "${{ inputs.branch || 'chore/dependency-updates' }}"
+      # The checker's two scripts import each other; nothing should leave
+      # bytecode in the checkout they were imported from.
+      PYTHONDONTWRITEBYTECODE: '1'
     steps:
+      # Three modes, decided once so every step below reads the same answer:
+      #
+      #   pull-request  apply the updates and open, update or close the pull
+      #                 request -- every run that is not one of the two below
+      #   report-only   report and never fail (`report_only`)
+      #   gate          fail on anything stale, as this job used to. For a
+      #                 caller running it on a pull request, where a second pull
+      #                 request is the wrong answer and a fork's token could not
+      #                 open one anyway.
+      - name: 'Resolve the run mode'
+        id: 'mode'
+        shell: 'bash'
+        env:
+          REPORT_ONLY: '${{ inputs.report_only }}'
+          EVENT_NAME: '${{ github.event_name }}'
+        run: |
+          mode='pull-request'
+          if [ "${REPORT_ONLY:-false}" = 'true' ]; then
+            mode='report-only'
+          elif [ "$EVENT_NAME" = 'pull_request' ] || [ "$EVENT_NAME" = 'pull_request_target' ]; then
+            mode='gate'
+          fi
+          echo "mode=${mode}" >> "$GITHUB_OUTPUT"
+          echo "Mode: ${mode}"
+
+      # The pull request targets the default branch whatever ref started the
+      # run: a manual dispatch from a feature branch still proposes updates to
+      # the branch they have to land on. Asked of the API because the event
+      # payload does not carry it on a scheduled run.
+      - name: 'Resolve the default branch'
+        id: 'base'
+        if: "steps.mode.outputs.mode == 'pull-request'"
+        shell: 'bash'
+        env:
+          GH_TOKEN: '${{ github.token }}'
+        run: |
+          set -euo pipefail
+          base="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.default_branch')"
+          echo "branch=${base}" >> "$GITHUB_OUTPUT"
+          echo "Default branch: ${base}"
+
+      # Checked out into its OWN directory, beside this library rather than
+      # around it, so the working tree the pull request is built from holds the
+      # updates and nothing else: no `.pipelines` checkout and no report files
+      # for the pull request step to find and commit. Without credentials,
+      # because the updater has no reason to hold any; the pull request step
+      # brings its own token.
       - name: 'Checkout code'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
+        with:
+          ref: "${{ steps.mode.outputs.mode == 'pull-request' && steps.base.outputs.branch || '' }}"
+          path: 'repository'
+          persist-credentials: false
 
       # The checker itself lives in THIS repository, and under `workflow_call`
       # the checkout above is the CONSUMER's repository -- so running
-      # `./global/scripts/...` from the workspace would look for the script in a
+      # `./global/scripts/...` from it would look for the script in a
       # repository that has no reason to contain it.
       #
       # Fetched with `actions/checkout` against an explicit `repository:` rather
@@ -65,7 +159,7 @@ jobs:
       #      (`githubactions:S7637`) and simultaneously REQUIRED to be `@main`
       #      by test-workflow-composition.sh Test 7. Those two rules contradict
       #      each other, and this shape has neither problem: there is no
-      #      internal `uses:` here at all, only a SHA-pinned third-party action.
+      #      internal `uses:` here at all, only SHA-pinned third-party actions.
       - name: 'Resolve pipelines ref'
         id: 'pipelines-ref'
         shell: 'bash'
@@ -88,6 +182,7 @@ jobs:
           repository: 'rios0rios0/pipelines'
           ref: '${{ steps.pipelines-ref.outputs.ref }}'
           path: '.pipelines'
+          persist-credentials: false
 
       - name: 'Check for dependency updates'
         id: 'check'
@@ -98,28 +193,43 @@ jobs:
           # returning 403 part-way through and fail as "lookup error" rather
           # than reporting anything useful.
           GITHUB_TOKEN: '${{ github.token }}'
-          REPORT_ONLY: '${{ inputs.report_only }}'
+          MODE: '${{ steps.mode.outputs.mode }}'
         run: |
           set -uo pipefail
-          args=''
-          if [ "${REPORT_ONLY:-false}" = 'true' ]; then
-            args='--report-only'
-          fi
+          case "$MODE" in
+            pull-request) args='--apply' ;;
+            report-only)  args='--report-only' ;;
+            *)            args='' ;;
+          esac
 
-          # `--repo-dir "$GITHUB_WORKSPACE"` is what separates the two
-          # repositories: the SCRIPT comes from `$SCRIPTS_DIR` (this library),
-          # the pins being inspected come from the checked-out workspace. For a
-          # consumer that is their repository, whose actions and images are
-          # scanned generically; `pinned-versions.sh` is simply absent there and
-          # the manifest scan tolerates that.
+          # `--repo-dir` is what separates the two repositories: the SCRIPT
+          # comes from `.pipelines` (this library), the pins being inspected --
+          # and, with `--apply`, rewritten -- are the checked-out repository's.
+          # For a consumer that is their repository, whose actions and images
+          # are scanned generically; `pinned-versions.sh` is simply absent there
+          # and the manifest scan tolerates that. The reports land under
+          # `build/reports` in the workspace, outside the repository.
           #
           # `|| status=$?` rather than letting it abort: the report has to be
-          # published and summarised even when -- especially when -- the check
-          # fails, which is the whole reason this job exists.
+          # published, and the pull request opened for whatever WAS applied,
+          # even when -- especially when -- something was not.
           status=0
           "$GITHUB_WORKSPACE/.pipelines/global/scripts/tools/dependency-updates/run.sh" \
-            --repo-dir "$GITHUB_WORKSPACE" $args || status=$?
+            --repo-dir "$GITHUB_WORKSPACE/repository" $args || status=$?
           echo "status=${status}" >> "$GITHUB_OUTPUT"
+
+          report='build/reports/dependency-updates'
+          if [ "$MODE" = 'pull-request' ] && [ -f "$report/fingerprint.txt" ]; then
+            # A random delimiter, so no line of the message can end the value.
+            delimiter="DEPENDENCY_UPDATES_$(openssl rand -hex 16)"
+            {
+              printf 'fingerprint=%s\n' "$(cat "$report/fingerprint.txt")"
+              printf 'title=%s\n' "$(cat "$report/pull-request-title.txt")"
+              printf 'commit-message<<%s\n' "$delimiter"
+              cat "$report/commit-message.txt"
+              printf '%s\n' "$delimiter"
+            } >> "$GITHUB_OUTPUT"
+          fi
 
       - name: 'Publish the report to the job summary'
         if: 'always()'
@@ -145,9 +255,97 @@ jobs:
         # the report is evidence, and the step above already decided pass or fail.
         continue-on-error: true
 
-      - name: 'Fail when an update is available'
-        if: "steps.check.outputs.status != '0'"
+      # The branch is regenerated from the default branch on every run, which
+      # is a force-push. This is what keeps that from overwriting a decision: a
+      # pull request somebody declined, or a commit somebody pushed to the
+      # branch. Skipped after a failed lookup, which proves nothing about what
+      # is current -- the pull request is then left exactly as it was.
+      - name: 'Check the pull request may be updated'
+        id: 'guard'
+        if: "steps.mode.outputs.mode == 'pull-request' && steps.check.outputs.fingerprint != '' && steps.check.outputs.status != '2'"
+        shell: 'bash'
+        env:
+          GITHUB_TOKEN: '${{ github.token }}'
+          BASE: '${{ steps.base.outputs.branch }}'
+          FINGERPRINT: '${{ steps.check.outputs.fingerprint }}'
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/.pipelines/global/scripts/tools/dependency-updates/pull_request_guard.py" \
+            --repository "$GITHUB_REPOSITORY" --branch "$BRANCH" --base "$BASE" \
+            --fingerprint "$FINGERPRINT" | tee -a "$GITHUB_OUTPUT"
+
+      # Creates the pull request when the run produced a diff, updates it when
+      # the diff changed, and CLOSES it -- deleting the branch -- once nothing
+      # differs from the default branch any more, so a pull request somebody
+      # already took by hand does not linger. A rerun that produces the same
+      # files does not push at all, which matters because the default branch's
+      # rules dismiss approvals on every push.
+      #
+      # `sign-commits` creates the commit through the API, so it is verified
+      # with the default token and with a GitHub App token; a personal access
+      # token can open the pull request but its commits stay unsigned. No
+      # labels: adding one GitHub has to create needs `issues: write`, which
+      # this job deliberately does not ask callers for.
+      - name: 'Open or update the pull request'
+        id: 'pull-request'
+        if: "steps.mode.outputs.mode == 'pull-request' && steps.check.outputs.status != '2' && steps.guard.outputs.proceed == 'true'"
+        uses: 'peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1' # v8.1.1
+        with:
+          token: '${{ secrets.dependency_updates_token || github.token }}'
+          path: 'repository'
+          base: '${{ steps.base.outputs.branch }}'
+          branch: '${{ env.BRANCH }}'
+          title: '${{ steps.check.outputs.title }}'
+          body-path: 'build/reports/dependency-updates/pull-request.md'
+          commit-message: '${{ steps.check.outputs.commit-message }}'
+          sign-commits: true
+          delete-branch: true
+
+      - name: 'Explain a refused pull request'
+        if: "failure() && steps.pull-request.outcome == 'failure'"
         shell: 'bash'
         run: |
-          echo "::error::Pinned dependencies are out of date -- see the job summary for the list."
+          {
+            echo "::error::The pull request could not be opened. If the log above says 'GitHub Actions is not permitted to create or approve pull requests',"
+            echo "::error::enable Settings > Actions > General > Workflow permissions > 'Allow GitHub Actions to create and approve pull requests',"
+            echo "::error::or pass a token with contents and pull-requests write access as 'dependency_updates_token'."
+          } >&2
+          exit 1
+
+      - name: 'Summarise the pull request'
+        if: "steps.pull-request.outcome == 'success' || steps.guard.outputs.proceed == 'false'"
+        shell: 'bash'
+        env:
+          OPERATION: '${{ steps.pull-request.outputs.pull-request-operation }}'
+          URL: '${{ steps.pull-request.outputs.pull-request-url }}'
+          REASON: '${{ steps.guard.outputs.reason }}'
+          PROCEED: '${{ steps.guard.outputs.proceed }}'
+        run: |
+          {
+            echo ''
+            echo '## Pull request'
+            echo ''
+            if [ "$PROCEED" = 'false' ]; then
+              echo "Not updated: ${REASON}."
+            elif [ -n "$URL" ]; then
+              echo "${OPERATION:-unchanged}: ${URL}"
+            else
+              echo 'None needed: nothing differs from the default branch.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 'Fail when a person is needed'
+        if: "!cancelled() && steps.check.outcome == 'success' && steps.check.outputs.status != '0'"
+        shell: 'bash'
+        env:
+          MODE: '${{ steps.mode.outputs.mode }}'
+          STATUS: '${{ steps.check.outputs.status }}'
+        run: |
+          if [ "$STATUS" = '2' ]; then
+            echo "::error::An upstream could not be reached, so this run cannot say what is current. The pull request was left as it was -- see the job summary."
+          elif [ "$MODE" = 'pull-request' ]; then
+            echo "::error::Some updates need a person: see the job summary. Everything that could be applied is in the pull request."
+          else
+            echo "::error::Pinned dependencies are out of date -- see the job summary for the list."
+          fi
           exit 1

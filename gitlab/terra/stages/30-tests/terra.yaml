@@ -95,7 +95,7 @@ test:validate:
 test:structural:
   extends: '.scripts-repo'
   stage: 'tests'
-  image: 'alpine/git:2.54.0@sha256:4f9488b7295baec153a9953479690f835ad4699b1d9f11e3897a4485c224fc3e'
+  image: 'alpine/git:2.54.0@sha256:a4bb51f1a3553df194ce679fc1db721d8bfba2046fa1a88fe9d4ac551ffbce25'
   variables:
     REPORT_PATH: 'build/reports'
   script:

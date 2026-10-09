@@ -97,7 +97,7 @@ jobs:
       # action resolves `.ruby-version` from, which is why the version expression and this input
       # always move together.
       - name: 'Setup Ruby'
-        uses: 'ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b' # v1.321.0
+        uses: 'ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8' # v1.327.0
         with:
           ruby-version: "${{ inputs.ruby_version != '' && inputs.ruby_version || (hashFiles(env.RUBY_VERSION_FILE) != '' && 'default' || '3.3') }}"
           working-directory: '${{ inputs.working_directory }}'
@@ -118,7 +118,7 @@ jobs:
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
       - name: 'Setup Ruby'
-        uses: 'ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b' # v1.321.0
+        uses: 'ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8' # v1.327.0
         with:
           ruby-version: "${{ inputs.ruby_version != '' && inputs.ruby_version || (hashFiles(env.RUBY_VERSION_FILE) != '' && 'default' || '3.3') }}"
           working-directory: '${{ inputs.working_directory }}'
@@ -188,7 +188,7 @@ jobs:
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
       - name: 'Setup Ruby'
-        uses: 'ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b' # v1.321.0
+        uses: 'ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8' # v1.327.0
         with:
           ruby-version: "${{ inputs.ruby_version != '' && inputs.ruby_version || (hashFiles(env.RUBY_VERSION_FILE) != '' && 'default' || '3.3') }}"
           working-directory: '${{ inputs.working_directory }}'
@@ -216,7 +216,7 @@ jobs:
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
       - name: 'Setup Ruby'
-        uses: 'ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b' # v1.321.0
+        uses: 'ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8' # v1.327.0
         with:
           ruby-version: "${{ inputs.ruby_version != '' && inputs.ruby_version || (hashFiles(env.RUBY_VERSION_FILE) != '' && 'default' || '3.3') }}"
           working-directory: '${{ inputs.working_directory }}'

@@ -22,7 +22,7 @@
 # it: `python:3.10-pdm-bullseye` -> `python:3.10-pdm-bookworm`. The old tag is left
 # published and simply stops being rebuilt, so anything still pinning it keeps
 # working while nothing new is minted on an unsupported base.
-FROM python:3.10-slim-bookworm@sha256:68d914ec641a0b69267ce65184d000a2bc3a9ee2590ab702b82250ab2385735a
+FROM python:3.10-slim-bookworm@sha256:5be5aaecb962a41567bc8041f1e9e3432cb085b037fe057f9a562630b2e4b370
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   gcc \
@@ -41,6 +41,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Pinned and binary-only, matching global/scripts/shared/pinned-versions.sh.
 # An unversioned install bakes whatever PyPI served on build day into the
 # image, and an sdist runs its `setup.py` during the build.
-RUN pip install --only-binary :all: "pdm==2.29.0"
+RUN pip install --only-binary :all: "pdm==2.29.2"
 RUN groupadd --system -g 1001 themaker \
   && useradd --system --create-home -g 1001 --no-user-group -u 1001 themaker

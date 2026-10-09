@@ -8,7 +8,7 @@ include:
 # `sast:semgrep` job — the static binary runs there without issue.
 sast:gitleaks:
   extends: '.scripts-repo'
-  image: 'python:3.13-slim@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285'
+  image: 'python:3.13-slim@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c'
   stage: 'security (sca/sast)'
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends git jq curl

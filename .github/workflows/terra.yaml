@@ -200,7 +200,7 @@ jobs:
 
       - name: 'Publish order-check results'
         if: 'always()'
-        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # v7.0.1
+        uses: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9' # v7.0.2
         with:
           name: 'order-check'
           path: "${{ env.REPORT_PATH }}/junit-order-check.xml"
@@ -393,7 +393,7 @@ jobs:
 
       - name: 'Publish test results'
         if: 'always()'
-        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # v7.0.1
+        uses: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9' # v7.0.2
         with:
           name: 'terra-coverage'
           path: "${{ env.REPORT_PATH }}"
@@ -490,7 +490,7 @@ jobs:
 
       - name: 'Publish validate JUnit'
         if: 'always()'
-        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # v7.0.1
+        uses: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9' # v7.0.2
         with:
           name: 'validate-results'
           path: "${{ env.REPORT_PATH }}/junit-validate.xml"
@@ -556,7 +556,7 @@ jobs:
 
       - name: 'Publish structural JUnit'
         if: 'always()'
-        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # v7.0.1
+        uses: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9' # v7.0.2
         with:
           name: 'structural-results'
           path: "${{ env.REPORT_PATH }}/junit-structural.xml"

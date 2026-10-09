@@ -8,7 +8,7 @@
 # it, never the other way round. Lowering the directive to suit an old builder would quietly
 # give up whatever the module is entitled to use. `.github/tests/test-go-module-toolchain.sh`
 # holds the two together from now on, and fails the build if this image ever falls behind again.
-FROM golang:1.27.1-alpine3.24@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS health_builder
+FROM golang:1.27.1-alpine3.24@sha256:8a5910f31396cd4d89662f56c68b3ae31d374308270a1c3bd96672ee5ed43414 AS health_builder
 
 COPY health src/health
 RUN cd src/health && go build -o /go/health -ldflags="-w -s"
@@ -42,7 +42,7 @@ RUN cd src/health && go build -o /go/health -ldflags="-w -s"
 # is still `layer4`, and `layer4.matchers.socks5`, `layer4.matchers.http` and
 # `layer4.handlers.proxy` (with `upstreams[].dial`) all keep their module IDs and
 # JSON shapes, so the config needed no change.
-FROM caddy:2.11.4-builder-alpine@sha256:1a1689db91cfb390b2d856a1b3774e796852822cd723fa54c475b272f82bb4b7 AS caddy_builder
+FROM caddy:2.11.4-builder-alpine@sha256:0aa610043dab5da82ad0a0268e46bb852785e6f5160f12f1c6fe3f42903d7e1b AS caddy_builder
 
 RUN xcaddy build \
 	--with github.com/mholt/caddy-l4@v0.1.2

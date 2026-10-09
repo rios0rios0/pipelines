@@ -1,4 +1,4 @@
-FROM amazon/aws-cli:latest@sha256:b6aeb95d19d7f5a8cae4eb814cb16739b6b2a4f2f46f427ada6a8c9a20d9881d
+FROM amazon/aws-cli:latest@sha256:d55d5b391f1cc0d428a05eb07408bb1a730d7df9f656008f1117ed5e13b0c083
 
 RUN yum install -y unzip; yum clean all
 

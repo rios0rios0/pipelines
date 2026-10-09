@@ -10,8 +10,8 @@ steps:
       # Kept in step with global/scripts/shared/pinned-versions.sh. Declared
       # inline because this abstract runs before any scripts-repo checkout, so
       # there is no $(Scripts.Directory) to source the manifest from yet.
-      TERRAGRUNT_VERSION="1.1.4"
-      TERRAGRUNT_SHA256="a2640da8455fa5f3671167e6373832b0907b9dc972dd01c2093cc7808934e158"
+      TERRAGRUNT_VERSION="1.1.6"
+      TERRAGRUNT_SHA256="d75a80bb264758ba00dabcb17f4b507fcdab4ca90d9e41f96750df036bf69b04"
 
       # Retried because the asset download can still drop mid-transfer from a
       # shared CI egress IP. The release LOOKUP that used to be retried

@@ -51,6 +51,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-azure-secret-env` - Test that every Azure DevOps step consuming a credential maps it through `env:` specifically
 - `make test-report-uploads` - Test that no GitHub Actions report upload can fail its job, while mandatory reports stay enforced, specifically
 - `make check-dependency-updates` - Report which pinned dependencies have a newer release (hits the network)
+- `make apply-dependency-updates` - Rewrite every stale pin in the working tree, digests and inline copies included -- what the scheduled pull request carries (hits the network; commits nothing)
 - `bash global/scripts/shared/cleanup.sh` - Clean up build reports
 - `docker --version && make --version && go version` - Check dependencies
 
@@ -80,12 +81,19 @@ Everything the pipelines execute is pinned, and `make test-supply-chain` fails t
   `npx --yes pkg@<version>`. Never `@latest` and never a bare package name.
 
 To bump a tool: change its `*_PINNED_VERSION`, replace every `*_SHA256_*` from the upstream checksum
-manifest (never carry an old digest forward), and run `make test-supply-chain`.
+manifest (never carry an old digest forward), and run `make test-supply-chain`. The scheduled
+`dependency-updates.yaml` workflow does exactly this twice a week and opens a pull request with the
+result; it merges nothing.
 
-Every pin carries a `# upstream: <kind> <coordinate>` annotation naming where its releases come from.
-Adding a pin without one FAILS `make test-dependency-updates` — that is deliberate, because coverage
-otherwise shrinks one forgotten annotation at a time while the job stays green. The scheduled
-`dependency-updates.yaml` workflow runs the check twice a week and fails when anything is stale.
+Every pin carries a `# upstream: <kind> <coordinate>` annotation naming where its releases come from,
+and every `*_SHA256*` an `# asset: <url with {version}>` annotation naming the file it is of (plus a
+`# checksums:` manifest where the publisher ships one). Adding a pin or digest without its annotation
+FAILS `make test-dependency-updates` — that is deliberate, because coverage otherwise shrinks one
+forgotten annotation at a time while the job stays green, and a digest with no `# asset:` could never
+be bumped. Write the `# asset:` URL exactly as the installer composes its download, then run
+`./global/scripts/tools/dependency-updates/run.sh --verify-assets`: the automated bump refuses a pin
+whose template does not reproduce the committed digest. A value written a second time in a template
+with no `SCRIPTS_DIR` needs a row in `INLINE_COPIES` (`check_updates.py`), or the bump leaves it behind.
 
 ## Working Effectively
 

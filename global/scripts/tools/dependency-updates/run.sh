@@ -1,16 +1,24 @@
 #!/usr/bin/env sh
-# Report every pinned third-party dependency that has a newer version upstream.
+# Report every pinned third-party dependency that has a newer version upstream,
+# and with --apply rewrite each one to it.
 #
 # Usage:
 #   run.sh                    # check this repo; exit 1 when anything is stale
-#   run.sh --report-only      # report without failing (exit 0 unless a lookup broke)
+#   run.sh --report-only      # report without failing (exit 0 always)
+#   run.sh --apply            # rewrite every outdated pin and write the pull request
+#   run.sh --verify-assets    # check every `# asset:` template against its digest
 #   run.sh --repo-dir /path   # target a different repository root
 #
 # Exit codes:
-#   0  every pin is current
-#   1  at least one update, drifted copy, or unannotated pin
+#   0  every pin is current -- or, with --apply, every update was applied
+#   1  at least one update, drifted copy, or unannotated pin -- or, with
+#      --apply, an update that could not be applied safely or a pin with no
+#      annotation to check it by: what a pull request cannot carry
 #   2  an upstream could not be consulted -- deliberately NOT reported as clean,
 #      because a rate-limited API must never look like a green light
+#
+# --apply never commits: the scheduled workflow opens the pull request, and
+# `make apply-dependency-updates` leaves the change for `git diff`.
 #
 # Set GITHUB_TOKEN (or GH_TOKEN) before running: roughly forty of the lookups hit
 # api.github.com, which allows 60 requests/hour unauthenticated and will

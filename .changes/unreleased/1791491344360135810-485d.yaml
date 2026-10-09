@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the dependency-update checker reading `github/codeql-action` as current at `v4.37.7` while `v4.38.3` was out: the repository releases the action (`v4.x`) and the CodeQL bundle (`codeql-bundle-v2.x`) and marks whichever shipped last as its latest release, so the action was compared with a bundle version that sorts as older. Releases are now compared only within the pin''s own release line, which also keeps the `CODEQL_BUNDLE` pin from ever being offered an action release'
+time: '2026-10-08T20:29:04.36008747Z'

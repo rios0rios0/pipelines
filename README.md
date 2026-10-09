@@ -216,7 +216,7 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 | `checks.yaml`                | Rebase and changelog gate for a repository with no build | any |
 | `release.yaml`               | Tag and GitHub Release from a bump commit  | any           |
 | `update-major-version-tag.yaml` | Moving `vN` tag for action consumers    | any           |
-| `dependency-updates.yaml`    | Twice-weekly check for stale pinned dependencies | all           |
+| `dependency-updates.yaml`    | Twice-weekly pull request bumping stale pinned dependencies | all |
 | `reusable-claude-review.yaml`  | `Claude Review` — automated review on pull requests (not drafts, forks or automation branches) | any |
 | `reusable-claude-mention.yaml` | `Claude Mention` — responds to `@claude` mentions | any  |
 
@@ -1216,33 +1216,105 @@ guarantee is part of a consumer's threat model.
 Pinning stops a dependency moving without a decision. It does not tell you when
 to make one -- a pin never announces that it is three CVEs behind. That is what
 `dependency-updates.yaml` is for: it runs **twice a week** (Monday and Thursday,
-06:00 UTC) and **fails** when any pinned dependency has moved upstream.
+06:00 UTC) and **opens a pull request** that moves every pinned dependency with a
+newer release upstream, from the `chore/dependency-updates` branch. Nothing is
+merged for you: the pull request is how you see the updates and decide.
 
-```bash
-make check-dependency-updates    # run the same check by hand (needs the network)
-```
-
-It reports four things, and exits non-zero on any of them:
-
-| Surface | Question |
-|---------|----------|
-| GitHub Actions | is there a newer release for that action? |
-| Container images | does the pinned tag still resolve to the digest we pinned? |
-| Binaries and packages | is there a newer version upstream? |
-| Inline copies | do the two copies of a version still agree? |
+| Surface | Question | What the pull request changes |
+|---------|----------|-------------------------------|
+| GitHub Actions | is there a newer release for that action? | the commit SHA the new release tag points at, and the `# vX.Y.Z` comment |
+| Container images | does the pinned tag still resolve to the digest we pinned? | the digest the same tag resolves to now |
+| Binaries and packages | is there a newer version upstream? | the version, and every SHA-256 of the new release's assets |
+| Inline copies | do the two copies of a value still agree? | every copy, so a template that cannot read the manifest is not left behind |
 
 Images are checked by **digest, not tag**, because that is the question worth
 asking of a container: `python:3.13-slim` is rebuilt with patched system packages
 under the same tag, so "is there a newer tag" would miss every security rebuild.
+Moving to a different tag stays your decision; the workflow never makes it.
 
-Set `GITHUB_TOKEN` before running it -- around forty of the lookups hit
+Each pull request lists every update with a link to its release, flags major
+bumps, and says where every new digest came from -- the digest GitHub recorded
+for the release asset, checked against the publisher's own checksum manifest
+where there is one. To decide:
+
+| You want to | Do this |
+|-------------|---------|
+| take every update | merge the pull request |
+| decline this set for now | close it -- the same set is not proposed again, and a new pull request opens only once upstream releases something newer |
+| never move one dependency | add its name to `.dependency-updates.json` (below) |
+| take some and not others | push your own commits to the branch -- they are never overwritten; the workflow stops updating the branch until it is merged or closed |
+
+The run goes **red** only when it needs you for something a pull request cannot
+carry: an update it could not apply safely (an asset the new release renamed, a
+checksum that disagrees with the release, a version name it will not write into
+a shell file), a pin with no annotation to check it by, or an upstream it could
+not reach. Everything else is in the pull request and the run stays green.
+
+**Setting it up: give it a token.** The default `GITHUB_TOKEN` can never change a
+file under `.github/workflows/` -- GitHub does not offer that permission to it, by
+design -- and nearly every update set bumps an action there. It also opens pull
+requests only once Settings → Actions → General → *Allow GitHub Actions to create
+and approve pull requests* is enabled, and those pull requests start no workflows,
+so their checks never run until you close and reopen them. So create a
+**fine-grained personal access token** (Settings → Developer settings → Personal
+access tokens → Fine-grained tokens) for this repository only, with these
+repository permissions set to *Read and write*: **Contents**, **Pull requests** and
+**Workflows**. Store it as the `DEPENDENCY_UPDATES_TOKEN` repository secret
+(Settings → Secrets and variables → Actions). A classic token works too, with the
+`repo` and `workflow` scopes.
+
+With it, the pull request is opened under your account and its checks run. Two
+things follow from that, and neither is a fault: its commits are not signed
+(GitHub signs these commits only for a bot's token), and you cannot approve a
+pull request your own token opened -- so a ruleset that requires signed commits or
+an approving review needs your bypass, or a second person, to merge it. A token
+from a separate machine account fixes the second. A GitHub App would fix both,
+but an App token expires within the hour, so it cannot simply be stored as the
+secret; the workflow would have to mint one on every run, which it does not do yet.
+Fine-grained tokens also expire (at most a year), so set a reminder to rotate it.
+
+**From another repository**, it pins and proposes that repository's actions and
+images. The caller has to grant both permissions -- GitHub checks a called
+workflow's permissions before it starts, so granting less fails at startup even
+with `report_only`:
+
+```yaml
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  dependency-updates:
+    uses: 'rios0rios0/pipelines/.github/workflows/dependency-updates.yaml@main'
+    permissions:
+      contents: 'write'
+      pull-requests: 'write'
+    secrets:
+      # Required as soon as an update touches .github/workflows/ -- see above.
+      dependency_updates_token: '${{ secrets.DEPENDENCY_UPDATES_TOKEN }}'
+```
+
+`report_only: true` reports without opening a pull request or failing, and a run
+started by a pull request event checks without opening one -- it fails on stale
+pins instead, as a gate.
+
+```bash
+make check-dependency-updates    # report what is stale (needs the network)
+make apply-dependency-updates    # rewrite it in this working tree, as the pull request would
+```
+
+Set `GITHUB_TOKEN` before running either -- around forty of the lookups hit
 `api.github.com`, which allows 60 requests/hour unauthenticated. A lookup that
 cannot be completed exits `2` and is deliberately never reported as "up to date".
 
 Each pin in `pinned-versions.sh` carries a `# upstream:` annotation naming where
-its releases come from; a pin without one is reported as untracked and fails,
-rather than being skipped quietly. To silence a genuinely rolling reference such
-as `alpine:edge`, add it to `.dependency-updates.json`:
+its releases come from, and each digest an `# asset:` annotation naming the file
+it is of (plus, where the publisher ships one, a `# checksums:` manifest). A pin
+or digest without its annotation is reported as untracked and fails, rather than
+being skipped quietly. To silence a genuinely rolling reference such as
+`alpine:edge`, or a dependency you have decided to stay on, add it to
+`.dependency-updates.json`:
 
 ```json
 { "ignore": ["alpine:edge"] }
@@ -1250,10 +1322,15 @@ as `alpine:edge`, add it to `.dependency-updates.json`:
 
 ### Bumping a pinned tool
 
+The scheduled pull request does this for you. By hand -- or to bump a tool to a
+version the workflow would not choose, such as a new major you are moving to
+deliberately:
+
 1. Change the `*_PINNED_VERSION` value in `global/scripts/shared/pinned-versions.sh`.
 2. Replace every `*_SHA256_*` for that tool, taken from the upstream checksum
    manifest. Never carry an old digest forward.
-3. Run `make test-supply-chain`.
+3. Run `make test-supply-chain`, and `./global/scripts/tools/dependency-updates/run.sh --verify-assets`
+   if you touched an `# asset:` or `# checksums:` annotation.
 
 Every version is also overridable from the environment, so an operator can
 respond to an upstream CVE without waiting for a release here:

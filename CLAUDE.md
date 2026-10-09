@@ -51,6 +51,7 @@ make test-supply-chain # Test the supply-chain pinning contract (actions, images
 make test-runner-cache-gating  # Test that no GitHub Actions cache restores into $HOME on a self-hosted runner only
 make test-dependency-updates  # Test the dependency-update checker only
 make check-dependency-updates # Report which pinned dependencies have a newer release (network)
+make apply-dependency-updates # Rewrite every stale pin in the working tree, digests included -- what the scheduled pull request carries (network)
 make test-azure-step-names  # Test Azure DevOps step-name uniqueness across expanded templates only
 make test-azure-secret-env  # Test that every Azure step consuming a credential maps it through `env:` only
 make test-report-uploads  # Test that no GitHub Actions report upload can fail its job, while mandatory reports stay enforced, only
@@ -172,29 +173,56 @@ Pinning is only half a policy. A pin stops a dependency moving without a
 decision; it does not tell anyone when to make one, and a pin never announces
 that it is three CVEs behind. `global/scripts/tools/dependency-updates/` is the
 other half, and `.github/workflows/dependency-updates.yaml` runs it **twice a
-week** (Mon/Thu 06:00 UTC) and **fails the build** when anything is stale.
+week** (Mon/Thu 06:00 UTC) and **opens a pull request** that moves every stale
+pin — one branch, `chore/dependency-updates`, regenerated from the default branch
+on every run. It merges nothing; a person reads the diff and decides.
 
-| Surface | Question asked | Discovered from |
-|---------|----------------|-----------------|
-| Actions | is there a newer release for `owner/repo`? | `uses: '…@<sha>' # vX.Y.Z` in every YAML |
-| Images | does the pinned tag still resolve to this digest? | `image:` and Dockerfile `FROM` |
-| Binaries / packages | is there a newer version upstream? | `# upstream:` annotations in `pinned-versions.sh` |
-| Inline copies | do the two copies of a version still agree? | a fixed list of templates with no `SCRIPTS_DIR` |
+| Surface | Question asked | Discovered from | `--apply` writes |
+|---------|----------------|-----------------|------------------|
+| Actions | is there a newer release for `owner/repo`? | `uses: '…@<sha>' # vX.Y.Z` in every YAML | the commit the new tag points at (annotated tags dereferenced) and its comment |
+| Images | does the pinned tag still resolve to this digest? | `image:` and Dockerfile `FROM` | the digest the tag resolves to now |
+| Binaries / packages | is there a newer version upstream? | `# upstream:` annotations in `pinned-versions.sh` | the version, and every `*_SHA256*` from the new release's assets |
+| Inline copies | do the two copies of a value still agree? | `INLINE_COPIES` in `check_updates.py` (versions AND digests, YAML and Dockerfiles) | the value its manifest variable now holds |
 
-Five decisions shape it; do not "simplify" any of them away:
+Eleven decisions shape it; do not "simplify" any of them away:
 
 | Decision | Why |
 |----------|-----|
 | **Images are checked by DIGEST, not by tag** | `python:3.13-slim` is rebuilt with patched system packages under the SAME tag, so "is there a newer tag" misses every security rebuild. "Does this tag still resolve to the bytes we pinned" catches all of them. Moving `3.13` → `3.14` is a decision, not an update, so no newest-tag search is attempted |
-| **A failed lookup exits 2 and is never "up to date"** | ~40 of the lookups hit `api.github.com`, which allows 60 requests/hour unauthenticated. Treating a 403 as "current" would turn the whole check into a green light that inspected nothing — worse than not running it |
-| **A pin with no `# upstream:` annotation FAILS** | Otherwise coverage shrinks one forgotten annotation at a time while the job stays green. The annotation lives next to the pin so adding one without the other is visible in review |
+| **A failed lookup exits 2 and is never "up to date"** | ~40 of the lookups hit `api.github.com`, which allows 60 requests/hour unauthenticated. Treating a 403 as "current" would turn the whole check into a green light that inspected nothing — worse than not running it. After one, the pull request is left exactly as it was: a partial result is not a smaller set of updates |
+| **A pin with no `# upstream:` annotation FAILS** | Otherwise coverage shrinks one forgotten annotation at a time while the job stays green. The annotation lives next to the pin so adding one without the other is visible in review. A `*_SHA256*` with no `# asset:` fails the same way, because nothing could ever bump its pin |
 | **`track=<major>` exists for deliberately-held pins** | GoReleaser is on 1.x because 2.x is a breaking config change. Without it the check would report that migration as an update on every run, forever, until somebody muted the job |
-| **It fails the build; it does not open a PR** | An automated bump would have to re-resolve a commit SHA, re-fetch a checksum from an upstream manifest and re-resolve an image digest before it could even be correct, and a wrong one of those is a supply-chain change nobody reviewed. A red build with a diff-ready list keeps the decision with a person |
+| **It opens a pull request; it never merges one** | It used to fail the build instead, because an automated bump has to re-resolve a SHA, a checksum and a digest before it is even correct. The pull request is the answer to that, not a way round it: every value is resolved from the release, and nothing reaches the default branch unread. The red list sat on every run for weeks, which is how a gate stops being read |
+| **A digest comes from the asset, never from the old one** | Each `*_SHA256*` carries an `# asset:` URL template (`{version}` = the pin), and a pin may name its publisher's `# checksums:` manifest. The new digest is GitHub's recorded SHA-256 of the release asset (or the downloaded bytes, for releases older than GitHub's digests), and must match the manifest. BEFORE that, the template must reproduce the committed digest of the CURRENT version — the only proof it names the file the installer verifies. `run.sh --verify-assets` checks every template after an edit |
+| **Anything unsafe is refused, never half-applied** | A missing annotation, a template that fails that proof, an asset the new release renamed, a checksum disagreement, or an upstream name with a quote or `$` in it (it would be written into a file every installer SOURCES): the pin stays exactly as it was, the rest of the run still lands, the pull request lists it under "needs a person", and the job goes red. Upstream values shown because they were refused are made inert before reaching Markdown |
+| **Releases compare within one release line** | `github/codeql-action` tags the action `v4.x` and the CodeQL bundle `codeql-bundle-v2.x`, and marks whichever shipped last as latest — so the action read as current at v4.37.7 while v4.38.3 was out. `tag_family` keeps the two lines apart, in the resolvers and again in `resolve()` |
+| **A rerun is byte-identical** | The changelog fragment is named and dated from the base commit, not the clock. The default branch's rules dismiss approvals on every push, so a rerun that differed would cost the reviewer their approval twice a week for nothing |
+| **A decline and a hand-made commit are respected** | `pull_request_guard.py` refuses to regenerate the branch when a pull request with the same fingerprint (an HTML comment in the body, a trailer in the commit) was closed unmerged, or when the branch holds a non-merge commit without that trailer. Closing the pull request therefore means "not this set"; `.dependency-updates.json` means "never" |
+| **Callers must grant `contents: write` + `pull-requests: write`** | GitHub checks a called workflow's job permissions against the caller's grant before any job starts, regardless of `if:` — so a caller granting `contents: read` alone gets a log-less startup failure, `report_only` or not. A run on a pull request event falls back to the old gate (fail on stale) rather than opening a second pull request |
 
 `.dependency-updates.json` (`{"ignore": ["glob", …]}`) silences a reference. It
 is empty by default and is meant for genuinely ROLLING tags such as
 `alpine:edge`, which is rebuilt almost daily — a check that is always red stops
-being read.
+being read — and for a dependency somebody has decided never to move.
+
+**The job needs a token, in practice.** `GITHUB_TOKEN` can never change a file
+under `.github/workflows/` — GitHub offers no `workflows` permission for it, by
+design — and almost every update set here bumps an action in one; it can also
+open a pull request only when Settings → Actions → General → "Allow GitHub
+Actions to create and approve pull requests" is on, and that pull request starts
+no workflows, so a ruleset requiring CodeQL results blocks it until someone
+closes and reopens it. So `dependency_updates_token` (repository secret
+`DEPENDENCY_UPDATES_TOKEN` here) is a **fine-grained personal access token** on
+the repository with Contents, Pull requests and Workflows read and write
+(classic: `repo` + `workflow`). Two costs come with it and neither is a bug:
+`sign-commits` signs only for a bot's token, so its commits are unsigned
+(`required_signatures` needs a bypass), and its owner cannot approve the pull
+request it opens. A GitHub App would avoid both, but an App token expires within
+the hour and would have to be minted on every run from the App's ID and private
+key (`actions/create-github-app-token`) — a step the workflow does not have, so
+an App token stored in that secret stops working an hour after it is created.
+The first run that hits either `GITHUB_TOKEN` limit fails with a message naming
+the fix.
 
 ### Caches on a Self-Hosted Runner
 

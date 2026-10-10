@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, docker-multi-arch, basic-checks, fixture-isolation, gitignore, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, dependency-updates, azure-step-names, azure-secret-env, containers-detect, report-uploads)
+- `make test` - Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, docker-multi-arch, basic-checks, fixture-isolation, gitignore, hadolint-discovery, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, dependency-updates, azure-step-names, azure-secret-env, containers-detect, report-uploads)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-go-module-toolchain` - Test that every `go.mod` toolchain directive is readable by the images/analysers that consume it specifically
 - `make test-go-tool-staleness` - Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves specifically
@@ -30,6 +30,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-fixture-isolation` - Test that every suite builds its fixtures in mktemp space and guards every `cd` specifically
 - `make test-gitignore` - Test the shared `.gitignore` block generator specifically
 - `make test-sast-gate` - Test that `make sast` and every individual SAST target propagate tool failures specifically
+- `make test-hadolint-discovery` - Test which files the Hadolint runner lints as Dockerfiles (every name the delivery templates build) specifically
 - `make test-codeql-scope` - Test that a local CodeQL scan builds from the files git would ship, on every core, while CI keeps the checkout and one thread, specifically
 - `make test-dependency-check` - Test the OWASP Dependency-Check NVD cache / API-key contract specifically
 - `make test-dependency-track` - Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, cross-platform wiring) specifically
@@ -161,7 +162,7 @@ with no `SCRIPTS_DIR` needs a row in `INLINE_COPIES` (`check_updates.py`), or th
 
 ### Scripts That Require Environment Variables
 - **codeql/run.sh** - Requires language argument (e.g., go, python, java, javascript, csharp)
-- **hadolint/run.sh** - Auto-discovers Dockerfiles, skips gracefully if none found
+- **hadolint/run.sh** - Auto-discovers Dockerfiles (`Dockerfile`, `Dockerfile.*`, `*.Dockerfile`, `*.dockerfile`), skips gracefully if none found
 - **dependency-track/run.sh** - Requires `DEPENDENCY_TRACK_TOKEN` and `DEPENDENCY_TRACK_HOST_URL`
 - **sonarqube/run.sh** - Requires `sonar-scanner` installed and SonarQube environment; derives project key/name and the `githubactions:S7637` ignore rules for first-party workflow references (owners from `SONAR_FIRST_PARTY_OWNERS`, else the owner of `GITHUB_REPOSITORY`) for every key absent from `sonar-project.properties`, plus the test classification (`sonar.sources`, `sonar.tests`, `sonar.test.inclusions`, `sonar.exclusions`) as one unit, only when the file declares none of the four -- they are a partition, and an overlap aborts the scanner with "can't be indexed twice"
 - **semgrep/run.sh** - May run for 10+ minutes, installs Semgrep from PyPI into a virtualenv
@@ -839,6 +840,7 @@ make test-basic-checks
 make test-fixture-isolation
 make test-gitignore
 make test-sast-gate
+make test-hadolint-discovery
 make test-codeql-scope
 make test-dependency-check
 make test-dependency-track

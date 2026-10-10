@@ -2219,8 +2219,11 @@ Two mechanisms guard against this:
 
 **Issue: Hadolint skips analysis**
 
-- **Cause:** No Dockerfiles found in the project
-- **Solution:** This is expected for projects without Dockerfiles; Hadolint auto-skips gracefully
+- **Cause:** No Dockerfiles found in the project. Discovery lints regular files named `Dockerfile`, `Dockerfile.*`,
+  `*.Dockerfile` or `*.dockerfile` (so `.ci/stages/40-delivery/app.Dockerfile` is included), skipping `*.dockerignore`
+  and anything under `.git/`, `node_modules/`, `vendor/` or `.codeql-db/`
+- **Solution:** This is expected for projects without Dockerfiles; Hadolint auto-skips gracefully. A Dockerfile under
+  any other name is not linted: rename it to one of the forms above
 
 #### Platform-Specific Issues
 

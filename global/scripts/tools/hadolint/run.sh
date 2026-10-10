@@ -8,8 +8,25 @@ TOOL_NAME="hadolint" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
 
 fileName="$(pwd)/$REPORT_PATH/hadolint.sarif"
 
-# Find all Dockerfiles in the project
-DOCKERFILES=$(find "$(pwd)" -name "Dockerfile*" \
+# Find all Dockerfiles in the project, under every name they go by:
+#
+#   Dockerfile, Dockerfile.<variant>   the default name and its variants
+#   <name>.Dockerfile                  the name every delivery template here
+#                                      builds: `.ci/stages/40-delivery/app.Dockerfile`
+#   <name>.dockerfile                  the same, in lower case
+#
+# Matching `Dockerfile*` alone missed the second form, so the one Dockerfile a
+# project ships through these templates was never linted. Where it was the only
+# Dockerfile, the job said "No Dockerfiles found" -- also the honest answer for
+# a project without one -- so nothing in its output gave the miss away.
+#
+# `-type f` keeps a directory such as `Dockerfiles/` out of the list; hadolint
+# fails on a directory. `*.dockerignore` excludes BuildKit's per-Dockerfile
+# ignore file, which `Dockerfile*` would otherwise match as
+# `Dockerfile.dockerignore` and hand to hadolint as a Dockerfile.
+DOCKERFILES=$(find "$(pwd)" -type f \
+  \( -name "Dockerfile*" -o -name "*.Dockerfile" -o -name "*.dockerfile" \) \
+  -not -name "*.dockerignore" \
   -not -path "*/.git/*" \
   -not -path "*/node_modules/*" \
   -not -path "*/vendor/*" \

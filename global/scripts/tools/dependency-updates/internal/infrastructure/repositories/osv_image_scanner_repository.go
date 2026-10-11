@@ -29,6 +29,7 @@ const (
 	scannerFoundVulnerabilities = 1
 	scannerFoundNoPackages      = 128
 	stderrTail                  = 400
+	scanFailed                  = "scanning %s: %s"
 )
 
 // OSVImageScannerRepository scans a container image with OSV-Scanner -- its OS
@@ -68,7 +69,7 @@ func (r *OSVImageScannerRepository) Scan(reference string) (entities.ImageScan, 
 		return scan, nil
 	}
 	if err := r.installOnce(); err != nil {
-		return entities.ImageScan{}, repositories.NewLookupError("scanning %s: %s", reference, err)
+		return entities.ImageScan{}, repositories.NewLookupError(scanFailed, reference, err)
 	}
 	r.slots <- struct{}{}
 	defer func() { <-r.slots }()
@@ -113,11 +114,11 @@ func (r *OSVImageScannerRepository) scan(reference string) (entities.ImageScan, 
 	}
 	report, err := r.run(directory)
 	if err != nil {
-		return entities.ImageScan{}, repositories.NewLookupError("scanning %s: %s", reference, err)
+		return entities.ImageScan{}, repositories.NewLookupError(scanFailed, reference, err)
 	}
 	findings, err := ParseImageScanReport(report)
 	if err != nil {
-		return entities.ImageScan{}, repositories.NewLookupError("scanning %s: %s", reference, err)
+		return entities.ImageScan{}, repositories.NewLookupError(scanFailed, reference, err)
 	}
 	return entities.ImageScan{Reference: reference, Findings: findings}, nil
 }
@@ -231,7 +232,7 @@ func (r *FixtureImageScannerRepository) Scan(reference string) (entities.ImageSc
 			Severity  string   `json:"severity"`
 		} `json:"findings"`
 	}
-	if decodeErr := json.Unmarshal(raw, &answer); decodeErr != nil {
+	if json.Unmarshal(raw, &answer) != nil {
 		return entities.ImageScan{}, repositories.NewLookupError("fixture scan:%s is not a scan", reference)
 	}
 	scan := entities.ImageScan{Reference: reference, Skipped: answer.Skipped}

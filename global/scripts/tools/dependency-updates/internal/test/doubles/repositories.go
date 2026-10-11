@@ -143,6 +143,9 @@ func (s *StubAdvisories) FindAll(
 	return found, nil
 }
 
+// notFound is a URL a stub has no answer for.
+const notFound = "%s -> HTTP 404"
+
 // StubArtifacts answers with canned digests, documents and file contents, by
 // URL; anything it does not know is a 404.
 type StubArtifacts struct {
@@ -155,7 +158,7 @@ type StubArtifacts struct {
 func (s *StubArtifacts) AssetDigest(url string) (string, string, error) {
 	digest, found := s.Digests[url]
 	if !found {
-		return "", "", repositories.NewNotFoundError("%s -> HTTP 404", url)
+		return "", "", repositories.NewNotFoundError(notFound, url)
 	}
 	return digest, "GitHub's recorded digest of the release asset", nil
 }
@@ -164,7 +167,7 @@ func (s *StubArtifacts) AssetDigest(url string) (string, string, error) {
 func (s *StubArtifacts) Text(url string) (string, error) {
 	text, found := s.Texts[url]
 	if !found {
-		return "", repositories.NewNotFoundError("%s -> HTTP 404", url)
+		return "", repositories.NewNotFoundError(notFound, url)
 	}
 	return text, nil
 }
@@ -173,7 +176,7 @@ func (s *StubArtifacts) Text(url string) (string, error) {
 func (s *StubArtifacts) Content(url string) ([]byte, error) {
 	content, found := s.Contents[url]
 	if !found {
-		return nil, repositories.NewNotFoundError("%s -> HTTP 404", url)
+		return nil, repositories.NewNotFoundError(notFound, url)
 	}
 	return []byte(content), nil
 }

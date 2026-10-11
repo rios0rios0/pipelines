@@ -321,7 +321,7 @@ func (r *FixtureAdvisoriesRepository) FindAll(
 			return nil, repositories.NewLookupError("no fixture entry for %s", key)
 		}
 		var records []osvVulnerability
-		if decodeErr := json.Unmarshal(raw, &records); decodeErr != nil {
+		if json.Unmarshal(raw, &records) != nil {
 			return nil, repositories.NewLookupError("fixture %s is not a list of OSV records", key)
 		}
 		advisories := make([]entities.Advisory, 0, len(records))

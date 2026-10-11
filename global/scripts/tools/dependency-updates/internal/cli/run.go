@@ -62,7 +62,7 @@ var errUsage = errors.New("usage")
 func Run(arguments []string, stdout, stderr io.Writer) int {
 	workdir, err := os.Getwd()
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "ERROR: %s\n", err)
+		_, _ = fmt.Fprintf(stderr, errorLine, err)
 		return exitLookupFailed
 	}
 	return RunIn(workdir, arguments, stdout, stderr)
@@ -81,6 +81,9 @@ func RunIn(workdir string, arguments []string, stdout, stderr io.Writer) int {
 	}
 	return runCheck(workdir, arguments, stdout, stderr)
 }
+
+// errorLine is how a failure is reported on the console.
+const errorLine = "ERROR: %s\n"
 
 type runOptions struct {
 	repoDir      string
@@ -319,7 +322,7 @@ func runCheck(workdir string, arguments []string, stdout, stderr io.Writer) int 
 	}
 	wiring, err := newContainer(absolute(workdir, options.repoDir), fixture, options, stderr)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "ERROR: %s\n", err)
+		_, _ = fmt.Fprintf(stderr, errorLine, err)
 		return exitLookupFailed
 	}
 	defer wiring.close()
@@ -381,19 +384,19 @@ func check(wiring *container, options runOptions, reportDir string, offline bool
 	}
 	console.Errors(result)
 	if err := os.MkdirAll(reportDir, reportDirMode); err != nil {
-		console.Errorf("ERROR: %s\n", err)
+		console.Errorf(errorLine, err)
 		return exitLookupFailed
 	}
 	if apply != nil {
 		record, err := writePullRequest(wiring, options, result, *apply, reportDir, console)
 		if err != nil {
-			console.Errorf("ERROR: %s\n", err)
+			console.Errorf(errorLine, err)
 			return exitLookupFailed
 		}
 		pullRequest = record
 	}
 	if err := writeReports(result, apply, pullRequest, reportDir); err != nil {
-		console.Errorf("ERROR: %s\n", err)
+		console.Errorf(errorLine, err)
 		return exitLookupFailed
 	}
 	console.Printf("\nReports written to %s\n", reportDir)
@@ -617,7 +620,7 @@ func verify(
 ) int {
 	wiring, err := newContainer(headRoot, fixture, options, nil)
 	if err != nil {
-		console.Errorf("ERROR: %s\n", err)
+		console.Errorf(errorLine, err)
 		return exitLookupFailed
 	}
 	defer wiring.close()
@@ -630,7 +633,7 @@ func verify(
 	result := wiring.verifyPullRequestCommand(base).Execute()
 	console.Verification(result)
 	if err = os.MkdirAll(reportDir, reportDirMode); err != nil {
-		console.Errorf("ERROR: %s\n", err)
+		console.Errorf(errorLine, err)
 		return exitLookupFailed
 	}
 	if err = writeFiles(reportDir, map[string]string{
@@ -639,7 +642,7 @@ func verify(
 		// that touches none.
 		"changes.txt": strconv.Itoa(len(result.Changes)) + "\n",
 	}); err != nil {
-		console.Errorf("ERROR: %s\n", err)
+		console.Errorf(errorLine, err)
 		return exitLookupFailed
 	}
 	console.Printf("\nReport written to %s\n", reportDir)

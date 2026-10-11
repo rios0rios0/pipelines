@@ -46,7 +46,7 @@ func (r *GitHubSourceRepository) object(target string) (gitObject, error) {
 // correctly and resolve to nothing a runner can check out, so the chain is
 // followed to the commit.
 func (r *GitHubSourceRepository) TagCommit(repository, tag string) (string, error) {
-	target, err := r.object(gitHubAPI + "/repos/" + repository + "/git/ref/tags/" + escapePath(tag))
+	target, err := r.object(gitHubAPI + reposPath + repository + "/git/ref/tags/" + escapePath(tag))
 	if err != nil {
 		return "", err
 	}
@@ -64,7 +64,7 @@ func (r *GitHubSourceRepository) TagCommit(repository, tag string) (string, erro
 			}
 			return "", repositories.NewLookupError("%s@%s points at %s, not a commit", repository, tag, kind)
 		}
-		if target, err = r.object(gitHubAPI + "/repos/" + repository + "/git/tags/" + sha); err != nil {
+		if target, err = r.object(gitHubAPI + reposPath + repository + "/git/tags/" + sha); err != nil {
 			return "", err
 		}
 	}
@@ -73,7 +73,7 @@ func (r *GitHubSourceRepository) TagCommit(repository, tag string) (string, erro
 
 // Compare relates two commits the way GitHub's compare view does.
 func (r *GitHubSourceRepository) Compare(repository, base, head string) (entities.Comparison, error) {
-	target := gitHubAPI + "/repos/" + repository + "/compare/" + base + "..." + head + "?per_page=1"
+	target := gitHubAPI + reposPath + repository + "/compare/" + base + "..." + head + "?per_page=1"
 	content, err := r.transport.Get(target, GitHubHeaders(), MaxPackumentBytes)
 	if err != nil {
 		return entities.Comparison{}, err

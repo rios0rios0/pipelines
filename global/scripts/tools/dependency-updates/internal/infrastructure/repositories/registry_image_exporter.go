@@ -106,7 +106,7 @@ func (e *ImageExporter) manifest(base, digest string, headers map[string]string)
 	if err != nil {
 		return manifest, err
 	}
-	if "sha256:"+entities.SHA256Hex(content) != digest {
+	if sha256Prefix+entities.SHA256Hex(content) != digest {
 		return manifest, repositories.NewLookupError(
 			"%s -> a manifest whose SHA-256 is not the digest asked for",
 			target,
@@ -162,14 +162,14 @@ func (e *ImageExporter) write(
 		return err
 	}
 	archive := tar.NewWriter(file)
-	configName := strings.TrimPrefix(manifest.Config.Digest, "sha256:") + ".json"
+	configName := strings.TrimPrefix(manifest.Config.Digest, sha256Prefix) + ".json"
 	err = e.blob(base, headers, manifest.Config, configName, archive)
 	layers := make([]string, 0, len(manifest.Layers))
 	for _, layer := range manifest.Layers {
 		if err != nil {
 			break
 		}
-		name := strings.TrimPrefix(layer.Digest, "sha256:") + ".tar"
+		name := strings.TrimPrefix(layer.Digest, sha256Prefix) + ".tar"
 		err = e.blob(base, headers, layer, name, archive)
 		layers = append(layers, name)
 	}
@@ -214,7 +214,7 @@ func (e *ImageExporter) blob(
 			descriptor.Size,
 		)
 	}
-	if "sha256:"+hex.EncodeToString(hash.Sum(nil)) != descriptor.Digest {
+	if sha256Prefix+hex.EncodeToString(hash.Sum(nil)) != descriptor.Digest {
 		return repositories.NewLookupError("%s -> bytes whose SHA-256 is not the digest the manifest names", target)
 	}
 	return nil

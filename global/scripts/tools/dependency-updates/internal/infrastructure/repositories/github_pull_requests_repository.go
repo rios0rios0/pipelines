@@ -25,7 +25,7 @@ func NewGitHubPullRequestsRepository(transport Transport, api string) *GitHubPul
 // ClosedPullRequests are the closed pull requests opened from `branch`.
 func (r *GitHubPullRequestsRepository) ClosedPullRequests(repository, branch string) ([]entities.PullRequest, error) {
 	owner, _, _ := strings.Cut(repository, "/")
-	target := r.api + "/repos/" + repository + "/pulls?state=closed&head=" +
+	target := r.api + reposPath + repository + "/pulls?state=closed&head=" +
 		url.QueryEscape(owner+":"+branch) + "&per_page=100"
 	content, err := r.transport.Get(target, GitHubHeaders(), MaxDocumentBytes)
 	if err != nil {
@@ -52,7 +52,7 @@ func (r *GitHubPullRequestsRepository) ClosedPullRequests(repository, branch str
 
 // BranchCommits are the commits on `branch` that `base` lacks.
 func (r *GitHubPullRequestsRepository) BranchCommits(repository, base, branch string) ([]entities.Commit, error) {
-	target := r.api + "/repos/" + repository + "/compare/" + escapePath(base) + "..." + escapePath(branch)
+	target := r.api + reposPath + repository + "/compare/" + escapePath(base) + "..." + escapePath(branch)
 	content, err := r.transport.Get(target, GitHubHeaders(), MaxPackumentBytes)
 	if err != nil {
 		return nil, err

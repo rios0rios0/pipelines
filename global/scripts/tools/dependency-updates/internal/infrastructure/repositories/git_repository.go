@@ -12,6 +12,26 @@ import (
 	"time"
 )
 
+// gitDirectories are where git is run from: the system's own directories,
+// which no job can write to. PATH is never consulted for it -- on a shared or
+// self-hosted runner a directory a job CAN write to may come first in PATH, and
+// whatever `git` it holds would run with this command's access to the
+// repository.
+func gitDirectories() []string {
+	return []string{"/usr/bin", "/bin", "/usr/local/bin"}
+}
+
+// gitBinary is the first git found in gitDirectories.
+func gitBinary() (string, error) {
+	for _, directory := range gitDirectories() {
+		candidate := filepath.Join(directory, "git")
+		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("git was not found in %s", strings.Join(gitDirectories(), ", "))
+}
+
 const (
 	gitTimeout = 30 * time.Second
 	// mergeFileError is the exit status `git merge-file` reserves for a
@@ -40,9 +60,13 @@ func (r *GitMergeRepository) Merge(ours, base, theirs string) (string, int, erro
 			return "", 0, writeErr
 		}
 	}
+	git, err := gitBinary()
+	if err != nil {
+		return "", 0, err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
 	defer cancel()
-	command := exec.CommandContext(ctx, "git", "merge-file", "-p", "-L", "ours", "-L", "base", "-L", "theirs",
+	command := exec.CommandContext(ctx, git, "merge-file", "-p", "-L", "ours", "-L", "base", "-L", "theirs",
 		"ours", "base", "theirs")
 	command.Dir = directory
 	var stdout, stderr bytes.Buffer
@@ -71,9 +95,13 @@ func NewGitHistoryRepository(root string) *GitHistoryRepository {
 
 // HeadCommitTime is when HEAD was committed.
 func (r *GitHistoryRepository) HeadCommitTime() (time.Time, error) {
+	git, err := gitBinary()
+	if err != nil {
+		return time.Time{}, err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
 	defer cancel()
-	command := exec.CommandContext(ctx, "git", "log", "-1", "--format=%cI", "HEAD")
+	command := exec.CommandContext(ctx, git, "log", "-1", "--format=%cI", "HEAD")
 	command.Dir = r.root
 	output, err := command.Output()
 	if err != nil {

@@ -59,7 +59,7 @@ func (r *ReleaseArtifactsRepository) recordedDigest(repository, escapedTag, esca
 	if err != nil {
 		name = escapedAsset
 	}
-	content, err := r.transport.Get(gitHubAPI+"/repos/"+repository+"/releases/tags/"+url.PathEscape(tag),
+	content, err := r.transport.Get(gitHubAPI+reposPath+repository+"/releases/tags/"+url.PathEscape(tag),
 		GitHubHeaders(), MaxDocumentBytes)
 	if err != nil {
 		return "", err

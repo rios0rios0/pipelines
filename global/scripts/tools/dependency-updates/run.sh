@@ -68,6 +68,7 @@ needs_scanner=false
 for argument in "$@"; do
   case "$argument" in
     verify | --apply) needs_scanner=true ;;
+    *) ;;
   esac
 done
 # A fixture answers the scans too, so an offline run never downloads a scanner.
@@ -80,6 +81,7 @@ for argument in "$@"; do
       --osv-scanner | --osv-scanner=* | -osv-scanner | -osv-scanner=*)
       needs_scanner=false
       ;;
+    *) ;;
   esac
 done
 if [ "$needs_scanner" = true ]; then

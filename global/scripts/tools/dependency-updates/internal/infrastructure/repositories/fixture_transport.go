@@ -73,7 +73,7 @@ func (t *FixtureTransport) SHA256(url string) (string, error) {
 		return "", err
 	}
 	var digest string
-	if decodeErr := json.Unmarshal(raw, &digest); decodeErr != nil {
+	if json.Unmarshal(raw, &digest) != nil {
 		return "", repositories.NewLookupError("fixture SHA256 %s is not a string", url)
 	}
 	return digest, nil

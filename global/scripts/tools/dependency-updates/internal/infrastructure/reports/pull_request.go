@@ -4,10 +4,14 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/rios0rios0/pipelines/global/scripts/tools/dependency-updates/internal/domain/commands"
 	"github.com/rios0rios0/pipelines/global/scripts/tools/dependency-updates/internal/domain/entities"
 )
+
+// knownVulnerabilities is how the pull request counts advisories.
+const knownVulnerabilities = "known vulnerabilities"
 
 // maxBodyLength keeps the body under GitHub's 65536-character limit. Far beyond
 // any real run, but a truncated body beats a pull request that cannot be opened.
@@ -71,7 +75,7 @@ func Title(applied []*entities.Task, fixes []entities.CopyChange) string {
 		title := fmt.Sprintf("%s(deps): bumped %s to newer upstream releases", kind,
 			Plural(len(applied), "pinned dependency", "pinned dependencies"))
 		if fixed := countFixed(applied); fixed > 0 {
-			title += ", fixing " + Plural(fixed, "known vulnerability", "known vulnerabilities")
+			title += ", fixing " + Plural(fixed, "known vulnerability", knownVulnerabilities)
 		}
 		return title
 	}
@@ -243,7 +247,7 @@ func securitySection(applied []*entities.Task) []string {
 		return nil
 	}
 	lines := []string{fmt.Sprintf("## Security (%s fixed)", Plural(countFixed(applied), "known vulnerability",
-		"known vulnerabilities")), "", "These pins run a release with a published advisory today. Merging removes it."}
+		knownVulnerabilities)), "", "These pins run a release with a published advisory today. Merging removes it."}
 	lines = append(lines, "")
 	for _, task := range fixing {
 		line := fmt.Sprintf("- `%s` `%s` -> `%s` fixes %s", task.Label, task.Current, task.Apply.New,
@@ -285,7 +289,7 @@ func imagesSection(applied []*entities.Task) []string {
 		return nil
 	}
 	lines := append([]string{fmt.Sprintf("## Container images (%d)", len(images)), ""},
-		table("image", "pinned digest", "proposed digest", "known vulnerabilities")...)
+		table("image", "pinned digest", "proposed digest", knownVulnerabilities)...)
 	for _, task := range images {
 		lines = append(lines, fmt.Sprintf("| `%s` | `%s` | `%s` | %s |", task.Label, ShortDigest(task.Current),
 			ShortDigest(task.Apply.New), imageNote(task.Apply.Image)))
@@ -426,9 +430,9 @@ func ageNote(task *entities.Task) string {
 	case target.Published.Unix() == 0:
 		return "old enough for any cooldown"
 	case task.Selection.Waived:
-		return "published " + target.Published.Format("2006-01-02") + "; cooldown waived to fix a known vulnerability"
+		return "published " + target.Published.Format(time.DateOnly) + "; cooldown waived to fix a known vulnerability"
 	default:
-		return "published " + target.Published.Format("2006-01-02")
+		return "published " + target.Published.Format(time.DateOnly)
 	}
 }
 
@@ -530,7 +534,7 @@ func heldSection(held []*entities.Task) []string {
 		release := task.Selection.Held
 		when := "an unknown date, so the cooldown cannot be shown to have passed"
 		if !release.Published.IsZero() {
-			when = release.Published.Format("2006-01-02")
+			when = release.Published.Format(time.DateOnly)
 		}
 		lines = append(lines, fmt.Sprintf("- `%s` `%s` (published %s)", task.Label, MDSafe(release.Version), when))
 	}

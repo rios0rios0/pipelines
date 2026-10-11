@@ -40,8 +40,10 @@ const (
 	// the runner's disk.
 	maxDownloadBytes = 512 << 20
 	maxRedirects     = 10
-	hashChunkBytes   = 1 << 20
-	httpsScheme      = "https"
+	// failedRequest is a request that got no usable answer, and why.
+	failedRequest  = "%s -> %s"
+	hashChunkBytes = 1 << 20
+	httpsScheme    = "https"
 	// maxAttempts bounds how often one request is made. A gateway error or a
 	// dropped connection is asked again, after retryBackoff and then twice
 	// that: a 502 from the advisory database must not fail a gate that the same
@@ -132,7 +134,7 @@ func (t *HTTPTransport) do(
 				_ = response.Body.Close()
 			}
 		case sendErr != nil:
-			return nil, repositories.NewLookupError("%s -> %s", target, sendErr)
+			return nil, repositories.NewLookupError(failedRequest, target, sendErr)
 		case response.StatusCode >= http.StatusMultipleChoices:
 			_ = response.Body.Close()
 			return nil, statusError(target, response.StatusCode)
@@ -217,7 +219,7 @@ func (t *HTTPTransport) Get(target string, headers map[string]string, limit int6
 	defer func() { _ = response.Body.Close() }()
 	content, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
 	if err != nil {
-		return nil, repositories.NewLookupError("%s -> %s", target, err)
+		return nil, repositories.NewLookupError(failedRequest, target, err)
 	}
 	if int64(len(content)) > limit {
 		return nil, repositories.NewLookupError("%s -> larger than %d bytes", target, limit)
@@ -238,7 +240,7 @@ func (t *HTTPTransport) SHA256(target string) (string, error) {
 	hash := sha256.New()
 	written, err := io.CopyBuffer(hash, io.LimitReader(response.Body, maxDownloadBytes+1), make([]byte, hashChunkBytes))
 	if err != nil {
-		return "", repositories.NewLookupError("%s -> %s", target, err)
+		return "", repositories.NewLookupError(failedRequest, target, err)
 	}
 	if written > maxDownloadBytes {
 		return "", repositories.NewLookupError(
@@ -298,7 +300,7 @@ func (t *HTTPTransport) Post(target string, body []byte) ([]byte, error) {
 	defer func() { _ = response.Body.Close() }()
 	content, err := io.ReadAll(io.LimitReader(response.Body, MaxDocumentBytes+1))
 	if err != nil {
-		return nil, repositories.NewLookupError("%s -> %s", target, err)
+		return nil, repositories.NewLookupError(failedRequest, target, err)
 	}
 	if len(content) > MaxDocumentBytes {
 		return nil, repositories.NewLookupError("%s -> larger than %d bytes", target, MaxDocumentBytes)

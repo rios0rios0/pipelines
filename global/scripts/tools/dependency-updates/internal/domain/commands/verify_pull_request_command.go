@@ -328,36 +328,7 @@ func sortedKeys(values map[string]string) []string {
 func (c *VerifyPullRequestCommand) lookupAdvisories(
 	changes []*change, headTasks []*entities.Task,
 ) (map[entities.AdvisoryQuery][]entities.Advisory, error) {
-	var queries []entities.AdvisoryQuery
-	for _, item := range changes {
-		if item.task == nil {
-			continue
-		}
-		c.identifyChanged(item)
-		if item.task.Security.Checked {
-			queries = append(
-				queries,
-				entities.AdvisoryQuery{Package: item.task.Security.Package, Version: item.task.Security.Version},
-			)
-			if item.baseTask != nil && item.baseTask.Security.Checked {
-				queries = append(queries, entities.AdvisoryQuery{
-					Package: item.baseTask.Security.Package, Version: item.baseTask.Security.Version,
-				})
-			}
-		}
-	}
-	for _, task := range headTasks {
-		identify(task)
-		if task.Security.Checked && !isRangePin(task) {
-			queries = append(
-				queries,
-				entities.AdvisoryQuery{Package: task.Security.Package, Version: task.Security.Version},
-			)
-		} else {
-			task.Security.Checked = false
-		}
-	}
-	found, err := c.deps.Advisories.FindAll(queries)
+	found, err := c.deps.Advisories.FindAll(append(c.changeQueries(changes), headQueries(headTasks)...))
 	if err != nil {
 		return nil, err
 	}
@@ -373,6 +344,45 @@ func (c *VerifyPullRequestCommand) lookupAdvisories(
 		}
 	}
 	return found, nil
+}
+
+// changeQueries are the lookups for both sides of every change: the base's
+// version only when the head's is asked about too.
+func (c *VerifyPullRequestCommand) changeQueries(changes []*change) []entities.AdvisoryQuery {
+	var queries []entities.AdvisoryQuery
+	for _, item := range changes {
+		if item.task == nil {
+			continue
+		}
+		c.identifyChanged(item)
+		for _, task := range []*entities.Task{item.task, item.baseTask} {
+			if task != nil && item.task.Security.Checked && task.Security.Checked {
+				queries = append(
+					queries,
+					entities.AdvisoryQuery{Package: task.Security.Package, Version: task.Security.Version},
+				)
+			}
+		}
+	}
+	return queries
+}
+
+// headQueries are the lookups for every pin on the head. A range pin is left
+// unasked: npm resolves it at run time.
+func headQueries(headTasks []*entities.Task) []entities.AdvisoryQuery {
+	var queries []entities.AdvisoryQuery
+	for _, task := range headTasks {
+		identify(task)
+		if task.Security.Checked && !isRangePin(task) {
+			queries = append(
+				queries,
+				entities.AdvisoryQuery{Package: task.Security.Package, Version: task.Security.Version},
+			)
+		} else {
+			task.Security.Checked = false
+		}
+	}
+	return queries
 }
 
 // identifyChanged sets which versions of a changed pin are asked about; a range

@@ -14,6 +14,9 @@ import (
 
 const (
 	gitHubAPI = "https://api.github.com"
+	// reposPath leads every repository's resource on a GitHub API.
+	reposPath   = "/repos/"
+	npmRegistry = "https://registry.npmjs.org/"
 	// goProxyInfoBudget bounds the `.info` lookups one Go module's listing may
 	// cost: the module proxy dates each version separately.
 	goProxyInfoBudget = 20
@@ -76,7 +79,7 @@ func (r *UpstreamReleasesRepository) Latest(task *entities.Task) (string, error)
 	case entities.KindGitHubRelease:
 		return r.latestGitHubRelease(task)
 	case entities.KindGitHubTag:
-		return r.newestTag(gitHubAPI+"/repos/"+task.Coord+"/tags?per_page=100", task)
+		return r.newestTag(gitHubAPI+reposPath+task.Coord+"/tags?per_page=100", task)
 	case entities.KindGitLabTag:
 		return r.newestTag(gitLabProject(task.Coord)+"/repository/tags?per_page=100", task)
 	case entities.KindPyPI:
@@ -100,7 +103,7 @@ func (r *UpstreamReleasesRepository) List(task *entities.Task) ([]entities.Relea
 	case entities.KindGitHubRelease:
 		return r.listGitHubReleases(task)
 	case entities.KindGitHubTag:
-		return r.listTags(gitHubAPI+"/repos/"+task.Coord+"/tags?per_page=100", task)
+		return r.listTags(gitHubAPI+reposPath+task.Coord+"/tags?per_page=100", task)
 	case entities.KindGitLabTag:
 		return r.listGitLabReleases(task)
 	case entities.KindPyPI:
@@ -125,7 +128,7 @@ func (r *UpstreamReleasesRepository) fixtureEntry(task *entities.Task) (fixtureR
 	if json.Unmarshal(raw, &answer.Latest) == nil {
 		return answer, nil
 	}
-	if decodeErr := json.Unmarshal(raw, &answer); decodeErr != nil {
+	if json.Unmarshal(raw, &answer) != nil {
 		return fixtureReleases{}, repositories.NewLookupError("fixture %s is neither a version nor a release list", key)
 	}
 	return answer, nil
@@ -177,7 +180,7 @@ func (r *UpstreamReleasesRepository) latestGitHubRelease(task *entities.Task) (s
 	if task.TrackMajor == "" {
 		var latest gitHubRelease
 		if err := r.getJSON(
-			gitHubAPI+"/repos/"+task.Coord+"/releases/latest",
+			gitHubAPI+reposPath+task.Coord+"/releases/latest",
 			GitHubHeaders(),
 			MaxDocumentBytes,
 			&latest,
@@ -202,7 +205,7 @@ func (r *UpstreamReleasesRepository) latestGitHubRelease(task *entities.Task) (s
 func (r *UpstreamReleasesRepository) listGitHubReleases(task *entities.Task) ([]entities.Release, error) {
 	var listed []gitHubRelease
 	if err := r.getJSON(
-		gitHubAPI+"/repos/"+task.Coord+"/releases?per_page=100",
+		gitHubAPI+reposPath+task.Coord+"/releases?per_page=100",
 		GitHubHeaders(),
 		MaxDocumentBytes,
 		&listed,
@@ -351,11 +354,11 @@ func (r *UpstreamReleasesRepository) latestNpm(task *entities.Task) (string, err
 		var latest struct {
 			Version string `json:"version"`
 		}
-		err := r.getJSON("https://registry.npmjs.org/"+task.Coord+"/latest", nil, MaxDocumentBytes, &latest)
+		err := r.getJSON(npmRegistry+task.Coord+"/latest", nil, MaxDocumentBytes, &latest)
 		return latest.Version, err
 	}
 	var packument npmPackument
-	if err := r.getJSON("https://registry.npmjs.org/"+task.Coord, nil, MaxPackumentBytes, &packument); err != nil {
+	if err := r.getJSON(npmRegistry+task.Coord, nil, MaxPackumentBytes, &packument); err != nil {
 		return "", err
 	}
 	releases := make([]entities.Release, 0, len(packument.Versions))
@@ -370,7 +373,7 @@ func (r *UpstreamReleasesRepository) latestNpm(task *entities.Task) (string, err
 
 func (r *UpstreamReleasesRepository) listNpm(task *entities.Task) ([]entities.Release, error) {
 	var packument npmPackument
-	if err := r.getJSON("https://registry.npmjs.org/"+task.Coord, nil, MaxPackumentBytes, &packument); err != nil {
+	if err := r.getJSON(npmRegistry+task.Coord, nil, MaxPackumentBytes, &packument); err != nil {
 		return nil, err
 	}
 	releases := make([]entities.Release, 0, len(packument.Versions))
@@ -461,22 +464,25 @@ func (r *UpstreamReleasesRepository) listGoProxy(task *entities.Task) ([]entitie
 func newest(releases []entities.Release, task *entities.Task) string {
 	best := ""
 	for _, release := range releases {
-		if release.Prerelease || len(entities.Parts(release.Version)) == 0 {
-			continue
-		}
-		if task.HasFamily && entities.IsTaggedKind(task.Kind) {
-			if family, found := entities.TagFamily(release.Version); !found || family != task.Family {
-				continue
-			}
-		}
-		if task.TrackMajor != "" && !entities.InMajor(release.Version, task.TrackMajor) {
-			continue
-		}
-		if best == "" || entities.CompareVersions(release.Version, best) > 0 {
+		if inReleaseLine(release, task) && (best == "" || entities.CompareVersions(release.Version, best) > 0) {
 			best = release.Version
 		}
 	}
 	return best
+}
+
+// inReleaseLine is true for a final, semver-shaped release in the task's
+// release line and, when held, its major.
+func inReleaseLine(release entities.Release, task *entities.Task) bool {
+	if release.Prerelease || len(entities.Parts(release.Version)) == 0 {
+		return false
+	}
+	if task.HasFamily && entities.IsTaggedKind(task.Kind) {
+		if family, found := entities.TagFamily(release.Version); !found || family != task.Family {
+			return false
+		}
+	}
+	return task.TrackMajor == "" || entities.InMajor(release.Version, task.TrackMajor)
 }
 
 func qualifiers(task *entities.Task) string {

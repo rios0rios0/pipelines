@@ -82,10 +82,28 @@ on:
           The caller must declare `on: workflow_dispatch:` and grant the job that calls this
           workflow `actions: write`, beside the `contents: write` the release itself needs. Off by
           default: a caller that has not granted `actions: write` would fail the release job.
+      version_build_arg:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Name of the Dockerfile `ARG` that receives the image's version (e.g. `VERSION`), so a
+          binary built with `-ldflags "-X <package>.Version=..."` reports the build it came from
+          instead of the `ARG`'s default. The version is the release this run cuts, the tag on a
+          tag build, and the commit's first 7 characters otherwise. Empty passes nothing, which
+          is the default: the name is the consumer's to pick, since a project may already use
+          `ARG VERSION` for something else.
     secrets:
       sonar_token:
         description: 'SonarQube authentication token'
         required: false
+    outputs:
+      tag_name:
+        description: |
+          The release version `delivery > release` cut in this run, empty when it cut none.
+          Exposed so a composed workflow can hand a deploy the same version this run's image
+          carries.
+        value: ${{ jobs.delivery-release.outputs.tag_name }}
 
 jobs:
   go:
@@ -126,5 +144,6 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/docker@main'
         with:
           tag_name: "${{ needs.delivery-release.outputs.tag_name }}"
+          version_build_arg: "${{ inputs.version_build_arg }}"
     needs: [ 'go', 'delivery-release' ]
     if: "!cancelled() && !failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))"

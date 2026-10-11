@@ -28,12 +28,63 @@ inputs:
     type: 'string'
     required: false
     default: 'linux/amd64,linux/arm64'
+  version_build_arg:
+    description: |
+      Name of the Dockerfile `ARG` that receives the image's version (e.g.
+      `VERSION`), passed as a build argument. The version is `tag_name` when
+      the release job has just cut one, the tag on a tag build, and the
+      commit's first 7 characters otherwise -- resolved by the same helper the
+      Fly.io deploy uses, so one commit built by both reports one version.
+      Empty, the default, passes nothing: the name is the consumer's to pick,
+      since a project may already use `ARG VERSION` for something else.
+    type: 'string'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
   steps:
     - name: 'Checkout code'
       uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
+
+    # The version is resolved BEFORE the registry login and the builder setup, so
+    # a malformed name stops the job before anything is built. Nothing downstream
+    # would stop it: a build argument no `ARG` declares is ignored rather than
+    # refused, so `VERSION ` (a trailing space) would push an image still
+    # reporting its default -- the state opting in exists to end. Both steps are
+    # skipped when the caller does not opt in, so they cost such a caller nothing.
+    - name: 'Get Scripts'
+      uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+      if: "inputs.version_build_arg != ''"
+
+    - name: 'Resolve the build version'
+      id: 'version'
+      shell: 'bash'
+      run: |
+        . "$SCRIPTS_DIR/global/scripts/shared/build-version.sh"
+
+        if ! build_arg_name_is_valid "$VERSION_BUILD_ARG"; then
+          echo "::error::version_build_arg must name a Dockerfile ARG (letters, digits and underscores, not starting with a digit), got '$VERSION_BUILD_ARG'. Nothing has been built."
+          exit 1
+        fi
+
+        if ! VERSION=$(build_version "$TAG_NAME"); then
+          echo "::error::version_build_arg is set, but no version could be resolved from the release version, the tag or the commit. Nothing has been built."
+          exit 1
+        fi
+
+        # Warned, not refused: the check reads the file line by line.
+        if [ -f "$DOCKERFILE" ] && ! build_arg_is_declared "$DOCKERFILE" "$VERSION_BUILD_ARG"; then
+          echo "::warning::$DOCKERFILE declares no 'ARG $VERSION_BUILD_ARG', so the version passed to it reaches nothing."
+        fi
+
+        echo "Build version: $VERSION_BUILD_ARG=$VERSION"
+        echo "build_args=$VERSION_BUILD_ARG=$VERSION" >> "$GITHUB_OUTPUT"
+      env:
+        VERSION_BUILD_ARG: '${{ inputs.version_build_arg }}'
+        TAG_NAME: '${{ inputs.tag_name }}'
+        DOCKERFILE: '.ci/stages/40-delivery/app.Dockerfile'
+      if: "inputs.version_build_arg != ''"
 
     - name: 'Compute tags from release version'
       id: 'release-tags'
@@ -97,3 +148,4 @@ runs:
         push: true
         platforms: '${{ inputs.platforms }}'
         tags: '${{ inputs.tags || steps.release-tags.outputs.tags || steps.meta.outputs.tags }}'
+        build-args: '${{ steps.version.outputs.build_args }}'

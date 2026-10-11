@@ -363,6 +363,29 @@ jobs:
     uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'
 ```
 
+#### Version Build Argument (Go with Docker)
+
+A Dockerfile that compiles its version in — `ARG VERSION=dev`, then
+`-ldflags "-X <package>.Version=${VERSION}"` — reports `dev` on every image unless the build passes
+the argument. Name the `ARG` with `version_build_arg` and the image delivery passes it:
+
+```yaml
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'
+    with:
+      version_build_arg: 'VERSION'
+```
+
+The version is the release `delivery > release` cuts in the run, the tag on a tag build, and the
+commit's first 7 characters otherwise. `go-flyio.yaml` takes the same input and hands it to both
+builds of the commit — the image pushed to the registry and the one Fly.io builds from source — and
+both resolve it through `global/scripts/shared/build-version.sh`, so a deploy reports one release
+wherever it runs. Empty, the default, passes nothing, because the name is the project's to choose: a
+project may already use `ARG VERSION` for something else. A malformed name fails the job before
+anything is built, and a Dockerfile that declares no such `ARG` gets a warning.
+`make test-build-version` covers it.
+
 #### Usage Example (Claude Review and Claude Mention)
 
 `reusable-claude-review.yaml` posts an automated review on pull requests — not on drafts, forks
@@ -1886,7 +1909,7 @@ stdin instead.
 | Vercel | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `VERCEL_WORKING_DIRECTORY`, `VERCEL_COMMERCIAL`, `VERCEL_PLAN` |
 | Render | `RENDER_API_KEY` + `RENDER_SERVICE_ID`, **or** `RENDER_DEPLOY_HOOK_URL` | `RENDER_POLL_TIMEOUT`, `RENDER_POLL_INTERVAL` |
 | Netlify | `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID` | `NETLIFY_OUTPUT_DIRECTORY`, `NETLIFY_DEPLOY_MESSAGE` |
-| Fly.io | `FLY_API_TOKEN` | `FLY_APP_NAME`, `FLY_ORG`, `FLY_MACHINE_COUNT`, `FLY_CONFIG`, `FLY_STRATEGY` |
+| Fly.io | `FLY_API_TOKEN` | `FLY_APP_NAME`, `FLY_ORG`, `FLY_MACHINE_COUNT`, `FLY_CONFIG`, `FLY_STRATEGY`, `FLY_VERSION_BUILD_ARG`, `FLY_APP_VERSION` |
 
 Set `FLY_MACHINE_COUNT` to pin how many machines the app runs. Fly adds a spare machine the first
 time it fills a process group, which is right for a stateless app and wrong for a process that is
@@ -1914,6 +1937,17 @@ The app to create is named by `FLY_APP_NAME`, or by `app = "..."` in the committ
 that variable is unset — the same two sources the deploy itself uses, so the configuration
 `fly_app_name` documents as optional is not one where `FLY_ORG` quietly does nothing. When neither
 yields a name the step is skipped with a warning rather than in silence.
+
+Set `FLY_VERSION_BUILD_ARG` to the name of a Dockerfile `ARG` (e.g. `VERSION`) to hand the app its
+version with `--build-arg`. The deploy builds from source on Fly's builder, so a Dockerfile that
+compiles its version in otherwise reports its default on every deploy. The version is
+`FLY_APP_VERSION` when set; otherwise it is the tag on a tag build, or the commit's first 7
+characters on any other, read from whichever of the three platforms is running. It is opt-in because the name
+is the project's to choose. A malformed name, or a version that is not one word, fails the job
+before anything is deployed, and a Dockerfile that declares no such `ARG` — the one `fly.toml`'s
+`[build] dockerfile` names, else the `Dockerfile` beside it — gets a warning. On GitHub Actions
+this is `go-flyio.yaml`'s `version_build_arg` (see Version Build Argument above), which also passes
+the release a bump merge has just cut, so the deploy and the image pushed beside it agree.
 
 Prefer Render's **API key** over its deploy hook. A deploy hook is fire-and-forget — Render returns
 success for "request accepted", so the job goes green even when the build that follows fails. With

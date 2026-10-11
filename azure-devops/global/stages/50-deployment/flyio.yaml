@@ -20,6 +20,15 @@ parameters:
   - name: 'STRATEGY'
     type: 'string'
     default: ''
+  # Name of the Dockerfile `ARG` that receives the app's version (e.g. `VERSION`);
+  # empty passes nothing. `APP_VERSION` sets the value; empty derives it: the tag
+  # on a tag build, the commit's first 7 characters otherwise.
+  - name: 'VERSION_BUILD_ARG'
+    type: 'string'
+    default: ''
+  - name: 'APP_VERSION'
+    type: 'string'
+    default: ''
   - name: 'ENVIRONMENT'
     type: 'string'
     default: 'production'
@@ -46,6 +55,8 @@ jobs:
           FLY_MACHINE_COUNT: ${{ parameters.MACHINE_COUNT }}
           FLY_CONFIG: ${{ parameters.CONFIG }}
           FLY_STRATEGY: ${{ parameters.STRATEGY }}
+          FLY_VERSION_BUILD_ARG: ${{ parameters.VERSION_BUILD_ARG }}
+          FLY_APP_VERSION: ${{ parameters.APP_VERSION }}
           DEPLOY_ENVIRONMENT: ${{ parameters.ENVIRONMENT }}
           DEPLOY_DRY_RUN: ${{ lower(parameters.DRY_RUN) }}
 

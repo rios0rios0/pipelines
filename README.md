@@ -216,7 +216,8 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 | `checks.yaml`                | Rebase and changelog gate for a repository with no build | any |
 | `release.yaml`               | Tag and GitHub Release from a bump commit  | any           |
 | `update-major-version-tag.yaml` | Moving `vN` tag for action consumers    | any           |
-| `dependency-updates.yaml`    | Twice-weekly pull request bumping stale pinned dependencies | all |
+| `dependency-updates.yaml`    | Twice-weekly pull request bumping stale pinned dependencies, never to a known-vulnerable release | all |
+| `dependency-updates-verify.yaml` | Required check proving a pull request's pin changes introduce no known vulnerability | all |
 | `reusable-claude-review.yaml`  | `Claude Review` — automated review on pull requests (not drafts, forks or automation branches) | any |
 | `reusable-claude-mention.yaml` | `Claude Mention` — responds to `@claude` mentions | any  |
 
@@ -1246,14 +1247,55 @@ merged for you: the pull request is how you see the updates and decide.
 | Surface | Question | What the pull request changes |
 |---------|----------|-------------------------------|
 | GitHub Actions | is there a newer release for that action? | the commit SHA the new release tag points at, and the `# vX.Y.Z` comment |
-| Container images | does the pinned tag still resolve to the digest we pinned? | the digest the same tag resolves to now |
+| Container images | does the pinned tag still resolve to the digest we pinned? | the digest the same tag resolves to now, once a scan shows the rebuild brings no new known vulnerability |
 | Binaries and packages | is there a newer version upstream? | the version, and every SHA-256 of the new release's assets |
+| Vendored files | is there a newer upstream release of a file copied here? | the file, upstream's change re-merged onto this repository's adjustments |
 | Inline copies | do the two copies of a value still agree? | every copy, so a template that cannot read the manifest is not left behind |
+
+**Nothing known to be unsafe is ever proposed.** Every pin here runs in every
+repository that consumes this library, so a bad update is not one repository's
+problem. Every release a pin could move to -- and the version it runs today --
+is checked against [OSV.dev](https://osv.dev), which aggregates GitHub's reviewed
+and malware advisories, the OpenSSF malicious-packages feed, the Go
+vulnerability database, PyPA and RubySec:
+
+| Situation | What the workflow does |
+|-----------|------------------------|
+| the newest release carries an advisory the pin does not already have | skips it for the newest older release that does not, and lists it as refused |
+| a release is a known malicious publication (`MAL-*`, or a malware GHSA) | never proposes it, and no acceptance can change that |
+| the pin in use has a known advisory | proposes the release that fixes it **at once** -- the cooldown does not apply -- as a `fix(deps)` pull request with a `Security` changelog entry, and the run stays **red** until it is merged |
+| no release fixes it yet | the run stays red and the summary says so, until one does or the advisory is accepted (below) |
+| a release is younger than the cooldown | holds it back and proposes the newest older release past it; most hijacked releases are found and pulled within days, and no advisory database knows about one published an hour ago |
+| a container image rebuild carries a known vulnerability the pinned image does not | keeps the pinned digest, lists the rebuild as refused, and the run goes red; the vulnerabilities a rebuild *fixes* are listed in the pull request |
+
+The cooldown is **seven days** by default, following the analysis behind it
+(most 2024–2025 supply-chain compromises were pulled within a week; Dependabot's
+own default is three days and, like this, it waives the wait for security fixes).
+A pin's own `cooldown=<days>` option, or `.dependency-updates.json`, changes it.
+GitHub Actions advisories are evaluated here rather than by OSV, which publishes
+their ranges but does not order action versions -- asked about the compromised
+`tj-actions/changed-files@v45.0.7` by version, OSV answers "no vulnerabilities".
+
+**The golangci-lint configuration is tracked the same way.** The shared
+`.golangci.yml` is Marat Reimers' [golden config](https://github.com/maratori/golangci-lint-config)
+with this repository's adjustments on top. A new upstream release is re-merged
+onto those adjustments with a three-way merge (from the upstream file the copy
+was taken from, whose SHA-256 is committed), refused on any conflict, held at or
+below the pinned golangci-lint binary -- a config naming a linter the binary
+lacks fails every consumer -- and the pull request lists every linter it
+switches on or off, because that changes what every Go consumer's lint job reports.
 
 Images are checked by **digest, not tag**, because that is the question worth
 asking of a container: `python:3.13-slim` is rebuilt with patched system packages
 under the same tag, so "is there a newer tag" would miss every security rebuild.
 Moving to a different tag stays your decision; the workflow never makes it.
+A rebuild is usually a security refresh, but not always, so each one is
+**scanned against the image it replaces**: both digests are exported straight
+from the registry (no Docker daemon; every layer checked against its digest) and
+scanned with [OSV-Scanner](https://google.github.io/osv-scanner/), which reads
+the image's OS packages and the artifacts it ships against the same OSV.dev
+database. Only the difference counts -- a Debian-based image always carries open
+CVEs, and failing on those would block the rebuilds that fix them.
 
 Each pull request lists every update with a link to its release, flags major
 bumps, and says where every new digest came from -- the digest GitHub recorded
@@ -1270,8 +1312,11 @@ where there is one. To decide:
 The run goes **red** only when it needs you for something a pull request cannot
 carry: an update it could not apply safely (an asset the new release renamed, a
 checksum that disagrees with the release, a version name it will not write into
-a shell file), a pin with no annotation to check it by, or an upstream it could
-not reach. Everything else is in the pull request and the run stays green.
+a shell file, a vendored file whose merge conflicts, an image rebuild that brings
+a new known vulnerability), a pin with no annotation to check it by, an upstream
+or the advisory database it could not reach, or a known vulnerability in a pin in
+use. Everything else is in the pull request and the run
+stays green.
 
 **Setting it up: give it a token.** The default `GITHUB_TOKEN` can never change a
 file under `.github/workflows/` -- GitHub does not offer that permission to it, by
@@ -1333,15 +1378,87 @@ cannot be completed exits `2` and is deliberately never reported as "up to date"
 
 Each pin in `pinned-versions.sh` carries a `# upstream:` annotation naming where
 its releases come from, and each digest an `# asset:` annotation naming the file
-it is of (plus, where the publisher ships one, a `# checksums:` manifest). A pin
-or digest without its annotation is reported as untracked and fails, rather than
-being skipped quietly. To silence a genuinely rolling reference such as
-`alpine:edge`, or a dependency you have decided to stay on, add it to
+it is of (plus, where the publisher ships one, a `# checksums:` manifest). A
+binary also names where its advisories are published -- `# osv: Go
+github.com/gruntwork-io/terragrunt` -- or says `# osv: none` where no advisory
+database covers it; a pypi, npm, rubygems or goproxy pin is already a package.
+A pin or digest without its annotation is reported as untracked and fails,
+rather than being skipped quietly: silence would read as "no known
+vulnerabilities". Decisions about a repository's own pins live in
 `.dependency-updates.json`:
 
 ```json
-{ "ignore": ["alpine:edge"] }
+{
+  "ignore": ["alpine:edge"],
+  "cooldown": { "days": 7, "exempt": ["rios0rios0/*"] },
+  "vulnerabilities": {
+    "accept": [
+      { "id": "GHSA-xxxx-xxxx-xxxx", "reason": "the vulnerable code path is never reached here", "until": "2026-12-31" }
+    ]
+  }
+}
 ```
+
+`ignore` silences a genuinely rolling reference such as `alpine:edge`, or a
+dependency you have decided to stay on. An acceptance needs a reason and an
+expiry date -- accepting a known vulnerability forever, or without saying why, is
+not a decision anyone can review -- and it never covers a malicious package.
+
+### Proving a dependency pull request
+
+`dependency-updates-verify.yaml` runs on every pull request and proves, from the
+pull request's **diff** rather than from the generator's word, that every pinned
+dependency it moves is safe to merge. That covers the scheduled pull request, a
+commit someone pushes onto it, and a bump a person writes by hand alike. Each
+changed pin must pass every check that applies to it:
+
+| Check | Fails when |
+|-------|-----------|
+| advisories | the new version carries an advisory the old one did not, or is a known malicious release |
+| cooldown | the release is younger than the cooldown and fixes no known vulnerability of the version it replaces |
+| integrity | a committed SHA-256 is not the one upstream published, or disagrees with the publisher's checksum manifest |
+| provenance | an action's commit is not the commit its version tag names |
+| history | an action's new commit does not descend from the one pinned before -- the shape of a re-pointed tag |
+| vendored | a vendored file is not exactly upstream's change merged onto the base's adjustments |
+| registry | an image digest does not exist in the repository it is pinned under |
+| scan | a re-pinned image carries a known vulnerability, or a malicious package, that the image it replaces did not |
+
+A check that cannot be completed fails too: an unproven change is not a passing
+one. The verdict is posted on the pull request as one comment, updated on every
+push, and in the job summary. Make **`security > verify:dependency-updates`** a
+required status check to turn the proof into a gate; the workflow has no path
+filter on purpose, so it reports on every pull request, and one that moves no pin
+passes in seconds without asking the network anything -- an outage of the
+advisory database can hold up a pull request that moves a pin, never one that
+does not. A brief one is ridden out: a gateway error or dropped connection is
+retried twice before a lookup counts as failed. From another repository:
+
+```yaml
+on:
+  pull_request:
+
+jobs:
+  verify-dependency-updates:
+    uses: 'rios0rios0/pipelines/.github/workflows/dependency-updates-verify.yaml@main'
+    permissions:
+      contents: 'read'
+      pull-requests: 'write'
+```
+
+The same check by hand, against any two checkouts:
+
+```bash
+./global/scripts/tools/dependency-updates/run.sh verify --base-dir ../main-checkout --repo-dir .
+```
+
+Container images are scanned with OSV-Scanner, installed at the pinned version
+and verified by checksum, as every other tool here is, the first time an image
+actually needs scanning; an
+image it cannot scan -- one with no `linux/amd64` build, or with Windows layers --
+is a warning that says so, never a pass. Snyk was considered and not used: it
+needs an account token, which GitHub never gives a pull request from a fork, and
+its free tier is metered, so the gate could go red for a reason that has nothing
+to do with the change.
 
 ### Bumping a pinned tool
 
@@ -1353,7 +1470,9 @@ deliberately:
 2. Replace every `*_SHA256_*` for that tool, taken from the upstream checksum
    manifest. Never carry an old digest forward.
 3. Run `make test-supply-chain`, and `./global/scripts/tools/dependency-updates/run.sh --verify-assets`
-   if you touched an `# asset:` or `# checksums:` annotation.
+   if you touched an `# asset:` or `# checksums:` annotation. The pull request is then held to the
+   same verification as the scheduled one (see above), so a version with a known vulnerability, or
+   one younger than the cooldown, fails it.
 
 Every version is also overridable from the environment, so an operator can
 respond to an upstream CVE without waiting for a release here:

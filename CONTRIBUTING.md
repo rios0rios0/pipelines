@@ -8,6 +8,7 @@ development practices, refer to the **[Development Guide](https://github.com/rio
 ## Prerequisites
 
 - [Make](https://www.gnu.org/software/make/)
+- [Go](https://go.dev/dl/) 1.25+ (builds and tests the Go helpers, such as the dependency-update checker)
 - [chlog](https://github.com/luizjhonata/chlog) (`go install github.com/luizjhonata/chlog@latest`)
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) v2+
 - [Bash](https://www.gnu.org/software/bash/) 4+
@@ -24,6 +25,12 @@ development practices, refer to the **[Development Guide](https://github.com/rio
 5. For Go script changes specifically:
    ```bash
    make test-go-script
+   ```
+   and for the Go helpers (the root `go.mod`, such as `global/scripts/tools/dependency-updates/`) --
+   new helpers are written in Go or POSIX shell, not Python:
+   ```bash
+   make test-go-helpers
+   make lint-go-helpers
    ```
 6. Validate across platforms (GitHub Actions, GitLab CI, Azure DevOps) when modifying templates
 7. For anything under `.github/workflows/`, read the

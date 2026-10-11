@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, docker-multi-arch, basic-checks, fixture-isolation, gitignore, hadolint-discovery, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, dependency-updates, azure-step-names, azure-secret-env, containers-detect, report-uploads)
+- `make test` - Run all validation tests (Go helpers, Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, docker-multi-arch, basic-checks, fixture-isolation, gitignore, hadolint-discovery, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, dependency-updates, azure-step-names, azure-secret-env, containers-detect, report-uploads)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-go-module-toolchain` - Test that every `go.mod` toolchain directive is readable by the images/analysers that consume it specifically
 - `make test-go-tool-staleness` - Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves specifically
@@ -49,6 +49,8 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-supply-chain` - Test the supply-chain pinning contract (actions, images, binaries, packages) specifically
 - `make test-runner-cache-gating` - Test that no GitHub Actions cache restores into `$HOME` on a self-hosted runner specifically
 - `make test-dependency-updates` - Test the dependency-update checker specifically
+- `make test-go-helpers` - Run the Go helpers' unit tests (`go test ./...` over the root module; offline)
+- `make lint-go-helpers` - Lint the Go helpers with the shared golden golangci-lint configuration (downloads the pinned golangci-lint)
 - `make test-azure-step-names` - Test Azure DevOps step-name uniqueness across expanded templates specifically
 - `make test-azure-secret-env` - Test that every Azure DevOps step consuming a credential maps it through `env:` specifically
 - `make test-report-uploads` - Test that no GitHub Actions report upload can fail its job, while mandatory reports stay enforced, specifically
@@ -63,7 +65,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - **Azure DevOps:** Template `azure-devops/golang/go-docker.yaml@pipelines`
 
 **SAST Tools:** Gitleaks, CodeQL, Semgrep, Hadolint, ShellCheck
-**SCA Tools:** govulncheck (Go), Safety (Python), OWASP Dependency-Check (Java), yarn npm audit (JavaScript/Yarn), npm audit (JavaScript/npm), Composer Audit (PHP), bundler-audit (Ruby), OSV-Scanner (Dart)
+**SCA Tools:** govulncheck (Go), Safety (Python), OWASP Dependency-Check (Java), yarn npm audit (JavaScript/Yarn), npm audit (JavaScript/npm), Composer Audit (PHP), bundler-audit (Ruby), OSV-Scanner (Dart, and container image rebuilds in the dependency-update checks)
 **Quality Tools:** SonarQube, Dependency Track
 **Performance:** Security scans 2-10min, Container builds 5-30min
 **Architecture:** 5-stage pipeline (Code Check [lint + basic-checks] → Security → Tests → Management → Delivery)
@@ -95,7 +97,20 @@ forgotten annotation at a time while the job stays green, and a digest with no `
 be bumped. Write the `# asset:` URL exactly as the installer composes its download, then run
 `./global/scripts/tools/dependency-updates/run.sh --verify-assets`: the automated bump refuses a pin
 whose template does not reproduce the committed digest. A value written a second time in a template
-with no `SCRIPTS_DIR` needs a row in `INLINE_COPIES` (`check_updates.py`), or the bump leaves it behind.
+with no `SCRIPTS_DIR` needs a row in `InlineCopies`
+(`global/scripts/tools/dependency-updates/internal/domain/entities/scanning.go`), or the bump leaves it
+behind. A binary also needs `# osv: <ecosystem> <package>` (or `# osv: none`) naming where its
+advisories are published, or it fails as untracked.
+
+The checker is Go (`go.mod` at the repository root), built from the checkout on every run by
+`global/scripts/shared/go-helper.sh`; no Python helper remains in it. It never proposes a release that
+introduces a known vulnerability or is a known malicious publication (OSV.dev), forces the fix of a
+vulnerable pin in use, holds everything else for a seven-day cooldown, and scans every container image
+rebuild against the image it replaces with OSV-Scanner. `dependency-updates-verify.yaml`
+(`run.sh verify --base-dir <base> --repo-dir <head>`) re-proves every pin a pull request moves from its
+diff; `security > verify:dependency-updates` is meant to be a required check, so a pull request that
+moves no pin must keep asking the network nothing -- `test-dependency-updates.sh` runs it live with every
+connection refused.
 
 ## Working Effectively
 
@@ -860,6 +875,7 @@ make test-working-directory
 make test-supply-chain
 make test-runner-cache-gating
 make test-dependency-updates
+make test-go-helpers
 make test-azure-step-names
 make test-azure-secret-env
 make test-report-uploads
@@ -875,7 +891,7 @@ Test scripts are located in `.github/tests/`.
 
 ### Environment Requirements
 - Docker (for container builds and security tools)
-- Go (for GoLang pipelines)
+- Go 1.25+ (for GoLang pipelines, and to build and test the Go helpers such as the dependency-update checker)
 - Python 3 (for script dependencies and Python pipelines)
 - Make (for build automation)
 - Network access (for downloading tools and dependencies)

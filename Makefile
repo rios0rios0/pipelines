@@ -2,7 +2,7 @@ TAG := latest
 ROOT := global/containers
 CONTAINER_REGISTRY = ghcr.io/rios0rios0/pipelines
 
-.PHONY: login setup-buildx build build-and-push test-dependency-track test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-terra-coverage test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-terra-test-roots test-docker-multi-arch test-build-version test-containers-detect test-basic-checks test-gitignore test-sast-gate test-hadolint-discovery test-codeql-scope test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test-javascript-pipeline test-terra-pipeline test-workflow-composition test-working-directory test-supply-chain test-runner-cache-gating test-azure-step-names test-azure-secret-env test-dependency-updates test-go-module-toolchain test-report-uploads test-golangci-scanner-markers check-dependency-updates apply-dependency-updates test
+.PHONY: login setup-buildx build build-and-push test-go-helpers lint-go-helpers test-dependency-track test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-terra-coverage test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-terra-test-roots test-docker-multi-arch test-build-version test-containers-detect test-basic-checks test-gitignore test-sast-gate test-hadolint-discovery test-codeql-scope test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test-javascript-pipeline test-terra-pipeline test-workflow-composition test-working-directory test-supply-chain test-runner-cache-gating test-azure-step-names test-azure-secret-env test-dependency-updates test-go-module-toolchain test-report-uploads test-golangci-scanner-markers check-dependency-updates apply-dependency-updates test
 
 login:
 	docker login $(CONTAINER_REGISTRY)
@@ -215,6 +215,18 @@ test-runner-cache-gating:
 	@echo "Running self-hosted runner cache gating validation..."
 	@./.github/tests/test-runner-cache-gating.sh
 
+# The Go helpers' own unit tests: every package of the root module. Offline --
+# the network-facing code is tested against local TLS servers and fixtures.
+test-go-helpers:
+	@echo "Running the Go helpers' unit tests..."
+	@go test -count=1 ./...
+
+# Lints the Go helpers with the golden configuration every Go consumer of this
+# library is held to. Not part of `make test`: it downloads the pinned
+# golangci-lint, which a test target must not do.
+lint-go-helpers:
+	@./global/scripts/languages/golang/golangci-lint/run.sh
+
 test-dependency-updates:
 	@echo "Running dependency-update checker validation..."
 	@./.github/tests/test-dependency-updates.sh
@@ -248,5 +260,5 @@ test-report-uploads:
 	@echo "Running GitHub Actions report-upload contract validation..."
 	@./.github/tests/test-report-uploads.sh
 
-test: test-dependency-track test-go-module-toolchain test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-go-tool-staleness test-lambda test-yaml-merge test-golangci-scanner-markers test-sonarqube test-release-tag-idempotency test-tftest-gen test-terra-coverage test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-terra-test-roots test-docker-multi-arch test-build-version test-basic-checks test-fixture-isolation test-gitignore test-sast-gate test-hadolint-discovery test-codeql-scope test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-release-promotion test-deploy-providers test-memory-detection test-dart-pipeline test-javascript-pipeline test-terra-pipeline test-workflow-composition test-working-directory test-supply-chain test-runner-cache-gating test-azure-step-names test-azure-secret-env test-dependency-updates test-containers-detect test-report-uploads
+test: test-dependency-track test-go-helpers test-go-module-toolchain test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-integration-scope test-go-tool-staleness test-lambda test-yaml-merge test-golangci-scanner-markers test-sonarqube test-release-tag-idempotency test-tftest-gen test-terra-coverage test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-terra-test-roots test-docker-multi-arch test-build-version test-basic-checks test-fixture-isolation test-gitignore test-sast-gate test-hadolint-discovery test-codeql-scope test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-release-promotion test-deploy-providers test-memory-detection test-dart-pipeline test-javascript-pipeline test-terra-pipeline test-workflow-composition test-working-directory test-supply-chain test-runner-cache-gating test-azure-step-names test-azure-secret-env test-dependency-updates test-containers-detect test-report-uploads
 	@echo "All tests completed successfully!"

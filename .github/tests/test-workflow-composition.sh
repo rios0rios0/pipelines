@@ -60,7 +60,7 @@ export SCRIPTS_DIR
 WORKFLOWS_DIR="$SCRIPTS_DIR/.github/workflows"
 
 # Reusable workflows whose name carries a hyphen WITHOUT being `<toolchain>-`
-# anything. All five are deliberate and none composes a base:
+# anything. All six are deliberate and none composes a base:
 #
 #   flutter-artifacts.yaml        `flutter` is a toolchain in its own right (see
 #                                 the naming table in CLAUDE.md) and Dart's
@@ -74,6 +74,12 @@ WORKFLOWS_DIR="$SCRIPTS_DIR/.github/workflows"
 #                                 `dependency.yaml` for it to be a target of --
 #                                 the hyphen is part of one name rather than a
 #                                 `<toolchain>-<target>` split.
+#   dependency-updates-verify.yaml the security gate on a pull request that
+#                                 moves pins: it proves the diff of ANY such
+#                                 pull request, not only the scheduled one, so
+#                                 it is a check of its own rather than a stage
+#                                 `dependency-updates.yaml` composes, and
+#                                 `-verify` is not a delivery or provider suffix.
 #   reusable-claude-review.yaml   code review by Claude on every pull request.
 #                                 The `reusable-` prefix marks the definition
 #                                 apart from the caller repository's name
@@ -85,7 +91,7 @@ WORKFLOWS_DIR="$SCRIPTS_DIR/.github/workflows"
 #
 # Anything else added here needs a reason of the same kind. "It did not fit the
 # standard" is not one; that is the finding, not the exemption.
-STANDALONE='flutter-artifacts.yaml update-major-version-tag.yaml dependency-updates.yaml reusable-claude-review.yaml reusable-claude-mention.yaml'
+STANDALONE='flutter-artifacts.yaml update-major-version-tag.yaml dependency-updates.yaml dependency-updates-verify.yaml reusable-claude-review.yaml reusable-claude-mention.yaml'
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

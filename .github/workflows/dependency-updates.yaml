@@ -14,14 +14,34 @@ name: 'Dependency Updates'
 # re-resolve an image digest before it could even be correct, and that a wrong
 # one is a supply-chain change nobody reviewed. Both halves still hold, and the
 # pull request answers them: every value in it is resolved from the release
-# itself (`check_updates.py`, "WHAT `--apply` WRITES"), and nothing in it reaches
-# the default branch until a person merges it. What changed is only who does the
-# typing. The red list sat on every run for weeks at a time, and a check that is
-# always red is a check nobody reads.
+# itself (the `ApplyUpdatesCommand` in `global/scripts/tools/dependency-updates`),
+# and nothing in it reaches the default branch until a person merges it. What
+# changed is only who does the typing. The red list sat on every run for weeks
+# at a time, and a check that is always red is a check nobody reads.
+#
+# Because a bad pin here is executed by every repository that consumes this
+# library, the updater is also the first security gate, and it never proposes
+# what it knows to be unsafe. Every candidate release is checked against OSV.dev
+# -- GitHub's reviewed and malware advisories, the OpenSSF malicious-packages
+# feed, the Go vulnerability database, PyPA and RubySec:
+#
+#   - a release that would INTRODUCE an advisory the pin does not already have,
+#     or that is a known malicious publication, is never proposed (an older safe
+#     release is, when one exists);
+#   - a pin in use with a known advisory gets its fix proposed AT ONCE, and the
+#     job stays red until that fix is merged -- a known vulnerability is not
+#     left to wait for somebody to notice;
+#   - any other release waits out a cooldown (seven days by default), because
+#     no database knows about a release hijacked an hour ago, and most such
+#     releases are found and pulled within days.
+#
+# `dependency-updates-verify.yaml` then proves the pull request itself, from its
+# diff, before it is merged.
 #
 # The job is still RED when it cannot do its job: an update it could not apply
-# safely, a pin with no annotation to check it by, or an upstream it could not
-# reach. Each of those needs a person in a way a pull request cannot carry.
+# safely, a pin with no annotation to check it by, an upstream or the advisory
+# database it could not reach, or a known vulnerability in a pin in use. Each
+# of those needs a person in a way a pull request cannot carry.
 on:
   schedule:
     # Monday and Thursday at 06:00 UTC. Twice a week is the useful cadence: a
@@ -86,9 +106,6 @@ jobs:
       cancel-in-progress: false
     env:
       BRANCH: "${{ inputs.branch || 'chore/dependency-updates' }}"
-      # The checker's two scripts import each other; nothing should leave
-      # bytecode in the checkout they were imported from.
-      PYTHONDONTWRITEBYTECODE: '1'
     steps:
       # Three modes, decided once so every step below reads the same answer:
       #
@@ -187,6 +204,23 @@ jobs:
           path: '.pipelines'
           persist-credentials: false
 
+      # The checker is Go, built from the `.pipelines` checkout by `run.sh` on
+      # every run (`global/scripts/shared/go-helper.sh`). It downloads no module
+      # to build -- the helpers are standard-library only -- so the toolchain is
+      # the one thing it needs.
+      - name: 'Setup Go'
+        uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
+        with:
+          go-version: '1.27.2'
+          cache-dependency-path: '.pipelines/go.sum'
+          # See `github/golang/stages/10-code-check/golangci-lint/action.yaml` for the measured
+          # reason this is gated: on a self-hosted runner GOMODCACHE and GOCACHE persist on local
+          # disk, the restore untars over files that already exist, `tar` exits 2 and the entire
+          # download is discarded. `runs-on` is hard-coded to a hosted runner here, so the
+          # expression is a no-op today; it is written anyway so the rule `make
+          # test-runner-cache-gating` enforces needs no exemption list.
+          cache: ${{ runner.environment != 'self-hosted' }}
+
       - name: 'Check for dependency updates'
         id: 'check'
         shell: 'bash'
@@ -273,7 +307,7 @@ jobs:
           FINGERPRINT: '${{ steps.check.outputs.fingerprint }}'
         run: |
           set -euo pipefail
-          python3 "$GITHUB_WORKSPACE/.pipelines/global/scripts/tools/dependency-updates/pull_request_guard.py" \
+          "$GITHUB_WORKSPACE/.pipelines/global/scripts/tools/dependency-updates/run.sh" guard \
             --repository "$GITHUB_REPOSITORY" --branch "$BRANCH" --base "$BASE" \
             --fingerprint "$FINGERPRINT" | tee -a "$GITHUB_OUTPUT"
 
@@ -356,10 +390,10 @@ jobs:
           STATUS: '${{ steps.check.outputs.status }}'
         run: |
           if [ "$STATUS" = '2' ]; then
-            echo "::error::An upstream could not be reached, so this run cannot say what is current. The pull request was left as it was -- see the job summary."
+            echo "::error::An upstream or the advisory database could not be reached, so this run cannot say what is current or safe. The pull request was left as it was -- see the job summary."
           elif [ "$MODE" = 'pull-request' ]; then
-            echo "::error::Some updates need a person: see the job summary. Everything that could be applied is in the pull request."
+            echo "::error::A person is needed: an update could not be applied safely, a pin cannot be checked, or a pin in use has a known vulnerability -- see the job summary. Everything that could be applied safely is in the pull request; merging it removes every vulnerability it fixes."
           else
-            echo "::error::Pinned dependencies are out of date -- see the job summary for the list."
+            echo "::error::Pinned dependencies are out of date or known to be vulnerable -- see the job summary for the list."
           fi
           exit 1

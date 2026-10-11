@@ -100,17 +100,20 @@ echo ""
 echo "1. Every go.mod is paired with a builder that can read it"
 # ---------------------------------------------------------------------------
 # The pairing rule is positional and deliberately dumb: a `go.mod` is compiled by
-# the Dockerfile of the container folder it lives under. That is the only
-# arrangement this repository has, and a clever rule would quietly stop matching
-# the day somebody adds a second one -- which is the failure mode this whole file
-# exists to prevent. A module with no Dockerfile above it is reported rather than
-# skipped, for the same reason.
+# the Dockerfile of the container folder it lives under. A clever rule would
+# quietly stop matching the day somebody adds a second arrangement -- which is the
+# failure mode this whole file exists to prevent -- so a module with no Dockerfile
+# above it is reported rather than skipped. The one exception is the repository's
+# own module at the root, which holds the Go helpers and has a pairing of its own
+# (section 1b), written when it was added rather than assumed.
+ROOT_MODULE="$SCRIPTS_DIR/go.mod"
 MODULE_COUNT=0
 FINDINGS=""
 
 while IFS= read -r gomod; do
   [[ -z "$gomod" ]] && continue
   MODULE_COUNT=$((MODULE_COUNT + 1))
+  [[ "$gomod" == "$ROOT_MODULE" ]] && continue
 
   directive="$(grep -oE '^go [0-9]+(\.[0-9]+)*' "$gomod" | head -1 | awk '{print $2}')"
   if [[ -z "$directive" ]]; then
@@ -146,6 +149,75 @@ done < <(find "$SCRIPTS_DIR" -type f -name 'go.mod' -not -path '*/.git/*' | sort
 
 assert_empty "no go.mod declares a directive its builder image cannot read" "$FINDINGS"
 assert_true "at least one Go module was actually examined" "[[ $MODULE_COUNT -ge 1 ]]"
+echo ""
+
+# ---------------------------------------------------------------------------
+echo "1b. The root module is paired with every workflow that builds it"
+# ---------------------------------------------------------------------------
+# The root `go.mod` holds the Go helpers. No Dockerfile builds it: each helper's
+# `run.sh` compiles it on the runner through `global/scripts/shared/go-helper.sh`,
+# so its builders are the workflows that run a helper, and the Go they provision.
+# The relationship is the one section 1 asserts -- no builder older than the
+# directive -- and the builders are FOUND rather than listed: every `run.sh` that
+# sits beside a `main.go` of this module is a helper, and every GitHub Actions file
+# naming one (or running `make test`, which runs the helpers' tests) is a builder.
+# A helper added later is then covered without anyone remembering this file.
+if [[ -f "$ROOT_MODULE" ]]; then
+  ROOT_DIRECTIVE="$(grep -oE '^go [0-9]+(\.[0-9]+)*' "$ROOT_MODULE" | head -1 | awk '{print $2}')"
+  assert_true "the root module declares a 'go' directive" "[[ -n '$ROOT_DIRECTIVE' ]]"
+
+  # A `main.go` under a NESTED module belongs to that module, not this one.
+  NESTED_MODULES="$(find "$SCRIPTS_DIR" -mindepth 2 -type f -name 'go.mod' -not -path '*/.git/*' -exec dirname {} \;)"
+  HELPERS=()
+  while IFS= read -r main; do
+    [[ -z "$main" ]] && continue
+    dir="$(dirname "$main")"
+    nested=false
+    while IFS= read -r module_dir; do
+      [[ -n "$module_dir" && "$dir/" == "$module_dir/"* ]] && nested=true
+    done <<< "$NESTED_MODULES"
+    if [[ "$nested" == false && -f "$dir/run.sh" ]]; then
+      HELPERS+=("${dir#"$SCRIPTS_DIR"/}/run.sh")
+    fi
+  done < <(find "$SCRIPTS_DIR" -type f -name 'main.go' -not -path '*/.git/*' | sort)
+  assert_true "the root module's helpers were found (${#HELPERS[@]})" "[[ ${#HELPERS[@]} -ge 1 ]]"
+
+  BUILDERS=()
+  while IFS= read -r file; do
+    builds=false
+    for helper in "${HELPERS[@]}"; do
+      grep -qF "$helper" "$file" && builds=true
+    done
+    grep -qE '^ *run: *make test *$' "$file" && builds=true
+    [[ "$builds" == true ]] && BUILDERS+=("$file")
+  done < <(find "$SCRIPTS_DIR/.github/workflows" "$SCRIPTS_DIR/github" -type f -name '*.yaml' | sort)
+  assert_true "the workflows that build it were found (${#BUILDERS[@]})" "[[ ${#BUILDERS[@]} -ge 1 ]]"
+
+  FINDINGS=""
+  for file in "${BUILDERS[@]}"; do
+    versions="$(grep -oE "go-version: *'[0-9]+(\.[0-9]+)*'" "$file" | grep -oE "[0-9]+(\.[0-9]+)*" || true)"
+    if [[ -z "$versions" ]]; then
+      FINDINGS+="${file#"$SCRIPTS_DIR"/}: builds a Go helper with no 'go-version' pinned, so nothing pins the Go that builds it"$'\n'
+      continue
+    fi
+    for version in $versions; do
+      if ! version_le "$ROOT_DIRECTIVE" "$version"; then
+        FINDINGS+="${file#"$SCRIPTS_DIR"/}: go-version '$version' is older than go.mod's 'go $ROOT_DIRECTIVE' -- go build will refuse to parse it"$'\n'
+      fi
+    done
+  done
+  assert_empty "every workflow that builds a Go helper provisions a Go that can read go.mod" "$FINDINGS"
+
+  # GitLab CI and Azure DevOps have no pairing rule here yet: a template there
+  # running a helper would build it with whatever Go its image carries, checked by
+  # nothing. So one is reported until this file learns that platform's rule.
+  UNPAIRED=""
+  for helper in "${HELPERS[@]}"; do
+    UNPAIRED+="$(grep -rlF "$helper" "$SCRIPTS_DIR/gitlab" "$SCRIPTS_DIR/azure-devops" 2> /dev/null \
+      | sed "s|^$SCRIPTS_DIR/||" || true)"
+  done
+  assert_empty "no GitLab CI or Azure DevOps template runs a Go helper this file cannot pair" "$UNPAIRED"
+fi
 echo ""
 
 # ---------------------------------------------------------------------------

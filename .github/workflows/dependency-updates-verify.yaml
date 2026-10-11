@@ -1,0 +1,167 @@
+name: 'Dependency Updates Verification'
+
+# Proves, on the pull request itself, that the pinned dependencies it moves are
+# safe to merge -- and fails the check when they are not.
+#
+# Every pin in this library runs in every repository that consumes it, so a
+# pull request that moves one is a change to all of them at once. The scheduled
+# `Dependency Updates` workflow never proposes what it knows to be unsafe, but
+# a check that only trusts the generator is no check: this one reads the pull
+# request's DIFF -- its base checkout against its head -- and re-proves every
+# changed pin independently. That covers the scheduled pull request, a commit
+# somebody pushed onto it, and a dependency bump a person wrote by hand alike.
+#
+# Each changed pin must clear every check that applies to it:
+#
+#   advisories  no advisory the old version did not already have, and nothing
+#               known to be malicious (OSV.dev: GitHub's reviewed and malware
+#               advisories, the OpenSSF malicious-packages feed, the Go
+#               vulnerability database, PyPA and RubySec)
+#   cooldown    a release public for the cooldown (seven days by default),
+#               unless it fixes a known vulnerability of the version it replaces
+#   integrity   every committed SHA-256 is the one upstream published, matching
+#               the publisher's checksum manifest where there is one
+#   provenance  an action's commit is the commit its version tag names, and it
+#   history     descends from the commit pinned before
+#   vendored    a vendored file is exactly upstream's change merged onto the
+#               adjustments the base carried -- nothing smuggled in beside it
+#   registry    an image digest exists in the repository it is pinned under
+#
+# A check that cannot be completed -- an upstream or the advisory database out
+# of reach -- fails too: an unproven change is not a passing one.
+#
+# Make `security > verify:dependency-updates` a REQUIRED status check to turn the
+# proof into a gate. It runs on every pull request, with no path filter: a
+# required check gated by paths never reports on a pull request outside them,
+# and blocks it forever. A pull request that moves no pin passes in seconds.
+on:
+  pull_request:
+  workflow_call:
+
+jobs:
+  verify-dependency-updates:
+    name: 'security > verify:dependency-updates'
+    # Only a pull request has a base to compare against.
+    if: "github.event_name == 'pull_request'"
+    runs-on: 'ubuntu-latest'
+    timeout-minutes: 30
+    # `pull-requests: write` posts the verification on the pull request. A pull
+    # request from a fork gets a read-only token whatever is asked for here, so
+    # its comment fails -- that step is optional -- and the check itself still
+    # runs: it needs no secret.
+    permissions:
+      contents: 'read'
+      pull-requests: 'write'
+    steps:
+      # Both checkouts without credentials: the verification reads files and
+      # asks public APIs, and has no reason to hold a token that could push.
+      - name: 'Checkout the pull request'
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
+        with:
+          path: 'head'
+          persist-credentials: false
+
+      - name: 'Checkout its base'
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
+        with:
+          ref: '${{ github.event.pull_request.base.sha }}'
+          path: 'base'
+          persist-credentials: false
+
+      # The verifier lives in THIS repository; under `workflow_call` the
+      # checkouts above are the consumer's. Same resolution as
+      # `dependency-updates.yaml`: the ref follows `job.workflow_ref`, so a
+      # consumer calling this `@<tag>` gets the verifier from that tag.
+      - name: 'Resolve pipelines ref'
+        id: 'pipelines-ref'
+        shell: 'bash'
+        env:
+          JOB_WORKFLOW_REF: '${{ job.workflow_ref }}'
+        run: |
+          ref="${JOB_WORKFLOW_REF:-${GITHUB_WORKFLOW_REF}}"
+          ref="${ref##*@}"
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+
+      - name: 'Checkout pipelines repo for the verifier'
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
+        with:
+          repository: 'rios0rios0/pipelines'
+          ref: '${{ steps.pipelines-ref.outputs.ref }}'
+          path: '.pipelines'
+          persist-credentials: false
+
+      - name: 'Setup Go'
+        uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
+        with:
+          go-version: '1.27.2'
+          cache-dependency-path: '.pipelines/go.sum'
+          # See `github/golang/stages/10-code-check/golangci-lint/action.yaml` for the measured
+          # reason this is gated: on a self-hosted runner GOMODCACHE and GOCACHE persist on local
+          # disk, the restore untars over files that already exist, `tar` exits 2 and the entire
+          # download is discarded. `runs-on` is hard-coded to a hosted runner here, so the
+          # expression is a no-op today; it is written anyway so the rule `make
+          # test-runner-cache-gating` enforces needs no exemption list.
+          cache: ${{ runner.environment != 'self-hosted' }}
+
+      - name: 'Verify the pinned dependencies this pull request moves'
+        id: 'verify'
+        shell: 'bash'
+        env:
+          # The public APIs it reads allow 60 unauthenticated requests an hour.
+          GITHUB_TOKEN: '${{ github.token }}'
+        run: |
+          set -uo pipefail
+          status=0
+          "$GITHUB_WORKSPACE/.pipelines/global/scripts/tools/dependency-updates/run.sh" verify \
+            --base-dir "$GITHUB_WORKSPACE/base" --repo-dir "$GITHUB_WORKSPACE/head" || status=$?
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          changes="$(cat build/reports/dependency-updates-verify/changes.txt 2>/dev/null || echo 0)"
+          echo "changes=${changes}" >> "$GITHUB_OUTPUT"
+
+      - name: 'Publish the verification to the job summary'
+        if: 'always()'
+        shell: 'bash'
+        run: |
+          report='build/reports/dependency-updates-verify/verification.md'
+          if [ -f "$report" ]; then
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'The verification produced no report -- it failed before writing one.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # The proof, where the reviewer reads: one comment, updated on every run.
+      # Only when the pull request moves a pin, so every other pull request
+      # stays free of it.
+      - name: 'Comment the verification on the pull request'
+        if: "!cancelled() && steps.verify.outputs.changes != '' && steps.verify.outputs.changes != '0'"
+        uses: 'marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88' # v3.0.5
+        with:
+          header: 'dependency-updates-verification'
+          path: 'build/reports/dependency-updates-verify/verification.md'
+        continue-on-error: true
+
+      - name: 'Upload the verification'
+        if: 'always()'
+        uses: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9' # v7.0.2
+        with:
+          name: 'dependency-updates-verification'
+          path: 'build/reports/dependency-updates-verify/'
+          if-no-files-found: 'warn'
+          overwrite: 'true'
+          retention-days: 30
+        # A refused upload (e.g. `Artifact storage quota has been hit`) must not fail the job:
+        # the report is evidence, and the step below already decides pass or fail.
+        continue-on-error: true
+
+      - name: 'Fail when the pull request is not verified'
+        if: "!cancelled() && steps.verify.outcome == 'success' && steps.verify.outputs.status != '0'"
+        shell: 'bash'
+        env:
+          STATUS: '${{ steps.verify.outputs.status }}'
+        run: |
+          if [ "$STATUS" = '2' ]; then
+            echo "::error::A change could not be verified -- an upstream or the advisory database was out of reach -- and an unproven change is not a passing one. Re-run the job."
+          else
+            echo "::error::A pinned dependency this pull request moves failed verification -- see the job summary or the pull request comment for which check, and why."
+          fi
+          exit 1

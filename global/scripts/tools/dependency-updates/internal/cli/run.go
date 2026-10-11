@@ -381,6 +381,8 @@ func check(wiring *container, options runOptions, reportDir string, offline bool
 		applied := wiring.applyCommand().Execute(result)
 		apply = &applied
 		console.Applied(applied)
+	} else {
+		console.Refused(result.Refused())
 	}
 	console.Errors(result)
 	if err := os.MkdirAll(reportDir, reportDirMode); err != nil {
@@ -499,10 +501,10 @@ func checkStatus(
 	if apply != nil {
 		return applyStatus(*apply, result, vulnerable, console)
 	}
-	proposals := len(result.Proposals())
-	if proposals > 0 || len(result.Drift) > 0 || len(result.Untracked) > 0 || vulnerable > 0 {
-		console.Printf("\n%d update(s), %d drifted copy/copies, %d untracked pin(s), %d known-vulnerable pin(s).\n",
-			proposals, len(result.Drift), len(result.Untracked), vulnerable)
+	proposals, refused := len(result.Proposals()), len(result.Refused())
+	if proposals > 0 || refused > 0 || len(result.Drift) > 0 || len(result.Untracked) > 0 || vulnerable > 0 {
+		console.Printf("\n%d update(s), %d refused, %d drifted copy/copies, %d untracked pin(s), "+
+			"%d known-vulnerable pin(s).\n", proposals, refused, len(result.Drift), len(result.Untracked), vulnerable)
 		return exitNeedsPerson
 	}
 	console.Printf("\nEvery pinned dependency is current.\n")
@@ -638,9 +640,9 @@ func verify(
 	}
 	if err = writeFiles(reportDir, map[string]string{
 		"verification.md": reports.Verification(result),
-		// How many pins moved: what lets a workflow stay silent on a pull request
-		// that touches none.
-		"changes.txt": strconv.Itoa(len(result.Changes)) + "\n",
+		// How many pins moved, or copies of one were left behind: what lets a
+		// workflow stay silent on a pull request that touches none.
+		"changes.txt": strconv.Itoa(len(result.Changes)+len(result.Drift)) + "\n",
 	}); err != nil {
 		console.Errorf(errorLine, err)
 		return exitLookupFailed

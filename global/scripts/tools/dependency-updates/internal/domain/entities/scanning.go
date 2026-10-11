@@ -155,10 +155,12 @@ type Drift struct {
 	Manifest string
 }
 
-// SourceText is one scanned file: its repository path and its contents.
+// SourceText is one scanned file: its repository path, its contents, and
+// whether it is a Dockerfile, whose images are its `FROM` lines.
 type SourceText struct {
-	Path string
-	Text string
+	Path       string
+	Text       string
+	Dockerfile bool
 }
 
 // FindDrift lists every copy in `files` that disagrees with `expected`, copy by

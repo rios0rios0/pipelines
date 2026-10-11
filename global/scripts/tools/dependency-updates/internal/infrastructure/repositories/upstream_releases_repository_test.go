@@ -151,6 +151,60 @@ func TestUpstreamReleasesRepositoryRegistries(t *testing.T) {
 	})
 }
 
+func TestUpstreamReleasesRepositoryGoToolchain(t *testing.T) {
+	t.Parallel()
+
+	module := "https://proxy.golang.org/golang.org/toolchain"
+	listing := "v0.0.1-go1.26.9.linux-amd64\nv0.0.1-go1.27.0.linux-amd64\nv0.0.1-go1.27.1.linux-amd64\n" +
+		"v0.0.1-go1.27.2.darwin-arm64\nv0.0.1-go1.27.2.linux-amd64\nv0.0.1-go1.28rc1.linux-amd64\n"
+	goTask := func(current, line string) *entities.Task {
+		return &entities.Task{
+			Kind: entities.KindGoToolchain, Coord: "golang.org/toolchain", Current: current, Track: line,
+		}
+	}
+
+	t.Run("should answer the newest final Go release in the pin's line", func(t *testing.T) {
+		t.Parallel()
+		// given
+		repository := liveReleases(t, map[string]any{"GET " + module + "/@v/list": listing})
+
+		// when
+		current, previous := goTask("1.27.1", "1.27"), goTask("1.26.6", "1.26")
+		latest, latestErr := repository.Latest(current)
+		held, heldErr := repository.Latest(previous)
+
+		// then
+		require.NoError(t, latestErr)
+		require.NoError(t, heldErr)
+		assert.Equal(t, "1.27.2", latest, "a release candidate of the next line is neither final nor in the line")
+		assert.Equal(t, "1.26.9", held)
+	})
+
+	t.Run("should date the pinned release and every newer one in its line", func(t *testing.T) {
+		t.Parallel()
+		// given
+		info := func(version, published string) map[string]any {
+			return map[string]any{"Version": "v0.0.1-go" + version + ".linux-amd64", "Time": published}
+		}
+		repository := liveReleases(t, map[string]any{
+			"GET " + module + "/@v/list":                             listing,
+			"GET " + module + "/@v/v0.0.1-go1.27.1.linux-amd64.info": info("1.27.1", "2026-08-28T16:20:06Z"),
+			"GET " + module + "/@v/v0.0.1-go1.27.2.linux-amd64.info": info("1.27.2", "2026-10-02T20:28:03Z"),
+		})
+
+		// when
+		releases, err := repository.List(goTask("1.27.1", "1.27"))
+
+		// then
+		require.NoError(t, err)
+		published := map[string]string{}
+		for _, release := range releases {
+			published[release.Version] = release.Published.Format(time.DateOnly)
+		}
+		assert.Equal(t, map[string]string{"1.27.2": "2026-10-02", "1.27.1": "2026-08-28"}, published)
+	})
+}
+
 func TestUpstreamReleasesRepositoryFixture(t *testing.T) {
 	t.Parallel()
 

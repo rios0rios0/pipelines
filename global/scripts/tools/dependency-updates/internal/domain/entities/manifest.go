@@ -43,27 +43,29 @@ type Digest struct {
 }
 
 // AdvisorySource is where a pin's known vulnerabilities are looked up, from a
-// `# osv: <ecosystem> <package>` annotation. `# osv: none` records, in review,
+// `# osv: <ecosystem> <package>...` annotation. Most pins are one package; the
+// Go toolchain is filed under two, `stdlib` for the standard library and
+// `toolchain` for the `go` command itself. `# osv: none` records, in review,
 // that no advisory database covers the artifact -- a tool with no package
 // identity, a configuration file -- so its absence is a decision rather than a
 // gap that reads as "no known vulnerabilities".
 type AdvisorySource struct {
 	Ecosystem string
-	Package   string
+	Packages  []string
 	None      bool
 }
 
 // ManifestEntry is one pin of `pinned-versions.sh` with the annotations that say
 // how to check it, how to rewrite it, and where its advisories come from.
 type ManifestEntry struct {
-	Kind       string
-	Name       string
-	Var        string
-	Style      PinStyle
-	SpecValue  string
-	Current    string
-	Coord      string
-	TrackMajor string
+	Kind      string
+	Name      string
+	Var       string
+	Style     PinStyle
+	SpecValue string
+	Current   string
+	Coord     string
+	Track     string
 	// Ceiling names another pin this one may never move past: the golden
 	// golangci-lint configuration must not name a linter the pinned binary
 	// does not have.
@@ -85,7 +87,7 @@ var (
 	upstreamAnnotation  = regexp.MustCompile(`^#\s*upstream:\s*([a-z-]+)\s+(\S+)(.*)$`)
 	checksumsAnnotation = regexp.MustCompile(`^#\s*checksums:\s*(\S+)\s*$`)
 	assetAnnotation     = regexp.MustCompile(`^#\s*asset:\s*(\S+)\s*$`)
-	osvAnnotation       = regexp.MustCompile(`^#\s*osv:\s*(\S+)(?:\s+(\S+))?\s*$`)
+	osvAnnotation       = regexp.MustCompile(`^#\s*osv:\s*(\S+)((?:\s+\S+)*)\s*$`)
 	vendoredAnnotation  = regexp.MustCompile(`^#\s*vendored:\s*(\S+)\s*$`)
 	pinLine             = regexp.MustCompile(`^([A-Z0-9_]+)_PINNED_VERSION="([^"]*)"`)
 	specLine            = regexp.MustCompile(`^([A-Z0-9_]+)_SPEC="\$\{[A-Z0-9_]+:-([^}"]*)\}"`)
@@ -112,7 +114,7 @@ func SpecVersion(value string) string {
 //
 //	# upstream:  <kind> <coordinate> [track=<major>] [ceiling=<PIN>] [cooldown=<days>]
 //	# checksums: <url with {version}>       the publisher's checksum manifest
-//	# osv:       <ecosystem> <package>|none  where advisories are looked up
+//	# osv:       <ecosystem> <package>...|none  where advisories are looked up
 //	# vendored:  <repository path>           a file copied from the release
 //	# asset:     <url with {version}>       above a digest -- the file it is of
 //
@@ -127,9 +129,9 @@ func ParseManifest(text string) []ManifestEntry {
 }
 
 type pendingUpstream struct {
-	kind, coord, trackMajor, ceiling string
-	cooldownDays                     int
-	hasCooldown                      bool
+	kind, coord, track, ceiling string
+	cooldownDays                int
+	hasCooldown                 bool
 }
 
 type manifestParser struct {
@@ -177,7 +179,9 @@ func (p *manifestParser) annotation(stripped string) bool {
 		return true
 	}
 	if match := osvAnnotation.FindStringSubmatch(stripped); match != nil {
-		p.advisories = &AdvisorySource{Ecosystem: match[1], Package: match[2], None: match[1] == KindNone}
+		p.advisories = &AdvisorySource{
+			Ecosystem: match[1], Packages: strings.Fields(match[2]), None: match[1] == KindNone,
+		}
 		return true
 	}
 	if match := vendoredAnnotation.FindStringSubmatch(stripped); match != nil {
@@ -200,7 +204,7 @@ func parseUpstreamOptions(kind, coord, options string) *pendingUpstream {
 		}
 		switch key {
 		case "track":
-			upstream.trackMajor = value
+			upstream.track = value
 		case "ceiling":
 			upstream.ceiling = value
 		case "cooldown":
@@ -238,7 +242,7 @@ func (p *manifestParser) addPin(name, value string, style PinStyle) {
 	if p.upstream != nil {
 		entry.Kind = p.upstream.kind
 		entry.Coord = p.upstream.coord
-		entry.TrackMajor = p.upstream.trackMajor
+		entry.Track = p.upstream.track
 		entry.Ceiling = p.upstream.ceiling
 		entry.CooldownDays, entry.HasCooldown = p.upstream.cooldownDays, p.upstream.hasCooldown
 		entry.Checksums = p.checksums

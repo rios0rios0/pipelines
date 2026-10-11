@@ -30,6 +30,7 @@ const (
 	CheckHistory     = "history"
 	CheckRegistry    = "registry"
 	CheckScan        = "scan"
+	CheckCopies      = "copies"
 )
 
 // Finding is one check's verdict on one changed pin.
@@ -41,8 +42,11 @@ type Finding struct {
 
 // VerifiedChange is one pin a pull request moves, and what each check found.
 type VerifiedChange struct {
-	Group    entities.Group
-	Label    string
+	Group entities.Group
+	Label string
+	// Retagged is, for an image moved to another tag, the name it had: a
+	// `golang:` image following its Go pin to a new release.
+	Retagged string
 	From     string
 	To       string
 	Findings []Finding
@@ -73,6 +77,9 @@ type VerifyResult struct {
 	Vulnerable []*entities.Task
 	// AdvisoryError is set when the advisory database could not be consulted.
 	AdvisoryError string
+	// Drift are the copies the head leaves disagreeing with their pin that the
+	// base did not: a pin moved without them, or a copy edited away from it.
+	Drift []entities.Drift
 }
 
 // Exit is the status a verification exits with: 2 when something could not be
@@ -88,7 +95,7 @@ func (r VerifyResult) Exit() int {
 	switch {
 	case worst == VerdictError || r.AdvisoryError != "":
 		return exitLookupFailed
-	case worst == VerdictFail:
+	case worst == VerdictFail || len(r.Drift) > 0:
 		return exitNeedsPerson
 	default:
 		return 0
@@ -142,12 +149,13 @@ func NewVerifyPullRequestCommand(deps VerifyDependencies) *VerifyPullRequestComm
 
 // change is one pin the diff moves, with both sides.
 type change struct {
-	result    VerifiedChange
-	task      *entities.Task
-	baseEntry *entities.ManifestEntry
-	baseTask  *entities.Task
-	sha       string
-	reference string
+	result        VerifiedChange
+	task          *entities.Task
+	baseEntry     *entities.ManifestEntry
+	baseTask      *entities.Task
+	sha           string
+	reference     string
+	baseReference string
 }
 
 // Execute verifies every pin the pull request moves.
@@ -161,7 +169,7 @@ func (c *VerifyPullRequestCommand) Execute() VerifyResult {
 	changes = append(changes, c.actionChanges(baseTasks)...)
 	changes = append(changes, c.imageChanges()...)
 
-	result := VerifyResult{Untracked: untracked}
+	result := VerifyResult{Untracked: untracked, Drift: c.introducedDrift(baseManifest, headManifest)}
 	// A pull request that moves no pin has nothing to prove, so it asks nothing.
 	// This check is required on EVERY pull request: one that consulted the
 	// advisory database regardless would block them all while it is unreachable.
@@ -196,7 +204,7 @@ func (c *VerifyPullRequestCommand) manifestChanges(
 		}
 		task := &entities.Task{
 			Group: entities.GroupManifest, Label: head.Name, Kind: head.Kind, Coord: head.Coord,
-			TrackMajor: head.TrackMajor, Current: head.Current, Entry: head,
+			Track: head.Track, Current: head.Current, Entry: head,
 		}
 		if entities.IsTaggedKind(head.Kind) {
 			task.Family, task.HasFamily = entities.TagFamily(head.Current)
@@ -225,6 +233,25 @@ func (c *VerifyPullRequestCommand) manifestChanges(
 		changes = append(changes, item)
 	}
 	return changes
+}
+
+// introducedDrift is every copy the head leaves disagreeing with its pin that
+// the base did not. Drift the base already carried is the scheduled run's to
+// realign, not this pull request's to answer for. Read from the files alone,
+// so it holds even for a pull request that moves no pin.
+func (c *VerifyPullRequestCommand) introducedDrift(
+	baseManifest, headManifest []entities.ManifestEntry,
+) []entities.Drift {
+	before := FindDrift(c.deps.Base, baseManifest)
+	var introduced []entities.Drift
+	for _, drift := range FindDrift(c.deps.Head, headManifest) {
+		if !slices.ContainsFunc(before, func(old entities.Drift) bool {
+			return old.Name == drift.Name && old.File == drift.File && old.Inline == drift.Inline
+		}) {
+			introduced = append(introduced, drift)
+		}
+	}
+	return introduced
 }
 
 func sameDigests(left, right []entities.Digest) bool {
@@ -293,14 +320,47 @@ func (c *VerifyPullRequestCommand) imageChanges() []*change {
 			reference: reference,
 			result:    VerifiedChange{Group: entities.GroupImage, Label: label, To: digest},
 		}
-		for baseReference := range baseImages {
-			if baseLabel, baseDigest, _ := strings.Cut(baseReference, "@"); baseLabel == label {
-				item.result.From = baseDigest
+		if base := replacedImage(baseImages, reference); base != "" {
+			baseLabel, baseDigest, _ := strings.Cut(base, "@")
+			item.baseReference, item.result.From = base, baseDigest
+			if baseLabel != label {
+				item.result.Retagged = baseLabel
 			}
 		}
 		changes = append(changes, item)
 	}
 	return changes
+}
+
+// replacedImage is the base reference an image of the head replaces: the same
+// name at another digest or -- for a `golang:` image its Go pin moved to the
+// tag of another release -- the same variant on the same release line, or,
+// failing that, the base's only image of that variant. Empty for an image the
+// base has nothing like, which is reviewed as a new dependency.
+func replacedImage(baseImages map[string]string, reference string) string {
+	label, _, _ := strings.Cut(reference, "@")
+	image, isGo := entities.ParseGoImage(reference)
+	var sameLine, sameVariant []string
+	for _, base := range sortedKeys(baseImages) {
+		baseLabel, _, _ := strings.Cut(base, "@")
+		if baseLabel == label {
+			return base
+		}
+		if previous, wasGo := entities.ParseGoImage(base); isGo && wasGo && previous.Variant == image.Variant {
+			sameVariant = append(sameVariant, base)
+			if previous.Line() == image.Line() {
+				sameLine = append(sameLine, base)
+			}
+		}
+	}
+	switch {
+	case len(sameLine) > 0:
+		return sameLine[0]
+	case len(sameVariant) == 1:
+		return sameVariant[0]
+	default:
+		return ""
+	}
 }
 
 func images(workspace repositories.WorkspaceRepository) map[string]string {
@@ -335,9 +395,8 @@ func (c *VerifyPullRequestCommand) lookupAdvisories(
 	today := c.deps.Now.UTC().Format(dateLayout)
 	for _, task := range headTasks {
 		if task.Security.Checked {
-			query := entities.AdvisoryQuery{Package: task.Security.Package, Version: task.Security.Version}
 			task.Security.Current = entities.Unaccepted(
-				liveAdvisories(found[query]),
+				liveAdvisories(task.Security.Answer(found, task.Security.Version)),
 				c.deps.Settings.Acceptances,
 				today,
 			)
@@ -357,10 +416,7 @@ func (c *VerifyPullRequestCommand) changeQueries(changes []*change) []entities.A
 		c.identifyChanged(item)
 		for _, task := range []*entities.Task{item.task, item.baseTask} {
 			if task != nil && item.task.Security.Checked && task.Security.Checked {
-				queries = append(
-					queries,
-					entities.AdvisoryQuery{Package: task.Security.Package, Version: task.Security.Version},
-				)
+				queries = append(queries, task.Security.Queries(task.Security.Version)...)
 			}
 		}
 	}
@@ -374,10 +430,7 @@ func headQueries(headTasks []*entities.Task) []entities.AdvisoryQuery {
 	for _, task := range headTasks {
 		identify(task)
 		if task.Security.Checked && !isRangePin(task) {
-			queries = append(
-				queries,
-				entities.AdvisoryQuery{Package: task.Security.Package, Version: task.Security.Version},
-			)
+			queries = append(queries, task.Security.Queries(task.Security.Version)...)
 		} else {
 			task.Security.Checked = false
 		}
@@ -412,6 +465,9 @@ func (c *VerifyPullRequestCommand) verify(
 		if registry.Verdict == VerdictPass {
 			item.result.Findings = append(item.result.Findings, c.scanFinding(item))
 		}
+		if finding, isGo := goImageFinding(item.reference, headManifest); isGo {
+			item.result.Findings = append(item.result.Findings, finding)
+		}
 		return
 	case entities.GroupAction:
 		item.result.Findings = append(item.result.Findings, c.actionFindings(item)...)
@@ -433,8 +489,8 @@ func (c *VerifyPullRequestCommand) sides(
 		if task == nil || !task.Security.Checked {
 			return nil
 		}
-		query := entities.AdvisoryQuery{Package: task.Security.Package, Version: task.Security.Version}
-		return entities.Unaccepted(liveAdvisories(advisories[query]), c.deps.Settings.Acceptances, today)
+		return entities.Unaccepted(
+			liveAdvisories(task.Security.Answer(advisories, task.Security.Version)), c.deps.Settings.Acceptances, today)
 	}
 	return lookup(item.baseTask), lookup(item.task)
 }
@@ -585,7 +641,7 @@ func (c *VerifyPullRequestCommand) scanFinding(item *change) Finding {
 	if item.result.From == "" {
 		return c.newImageFinding(item.reference)
 	}
-	evidence, err := CompareImages(c.deps.Scanner, ProposedImage(item.reference, item.result.From), item.reference)
+	evidence, err := CompareImages(c.deps.Scanner, item.baseReference, item.reference)
 	switch {
 	case err != nil:
 		return Finding{Verdict: VerdictError, Check: CheckScan, Detail: err.Error()}
@@ -604,6 +660,29 @@ func (c *VerifyPullRequestCommand) scanFinding(item *change) Finding {
 		)
 	}
 	return Finding{Verdict: VerdictPass, Check: CheckScan, Detail: detail}
+}
+
+// goImageFinding holds a re-pinned `golang:` image to the Go pin of its line:
+// its tag must name the release the pin does. Not a finding at all when the
+// head pins no Go, as in every consumer of this library.
+func goImageFinding(reference string, manifest []entities.ManifestEntry) (Finding, bool) {
+	image, isGo := entities.ParseGoImage(reference)
+	if !isGo || !entities.HasGoPins(manifest) {
+		return Finding{}, false
+	}
+	pin := entities.GoPin(manifest, image.Release)
+	switch {
+	case pin == nil:
+		return Finding{Verdict: VerdictFail, Check: CheckCopies, Detail: fmt.Sprintf(
+			"no Go pin holds the %s line, so nothing vouches for Go `%s`: add one, or move the image to a pinned line",
+			image.Line(), image.Release)}, true
+	case !entities.SameValue(pin.Var, image.Release, pin.Current):
+		return Finding{Verdict: VerdictFail, Check: CheckCopies, Detail: fmt.Sprintf(
+			"names Go `%s`, but `%s` pins `%s`", image.Release, pin.Name, pin.Current)}, true
+	default:
+		return Finding{Verdict: VerdictPass, Check: CheckCopies, Detail: fmt.Sprintf(
+			"names Go `%s`, the release `%s` pins", image.Release, pin.Name)}, true
+	}
 }
 
 func (c *VerifyPullRequestCommand) newImageFinding(reference string) Finding {

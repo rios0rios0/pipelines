@@ -134,6 +134,84 @@ func TestVerification(t *testing.T) {
 		// then
 		assert.Contains(t, report, "**Not verified:**")
 	})
+
+	t.Run("should name a moved image by both its tags and list the copies left behind", func(t *testing.T) {
+		t.Parallel()
+		// given
+		result := commands.VerifyResult{
+			Changes: []commands.VerifiedChange{{
+				Group: entities.GroupImage, Label: "golang:1.27.2-bookworm", Retagged: "golang:1.27.1-bookworm",
+				From: "sha256:" + strings.Repeat("a", 64), To: "sha256:" + strings.Repeat("c", 64),
+				Findings: []commands.Finding{{Verdict: commands.VerdictPass, Check: commands.CheckCopies}},
+			}},
+			Drift: []entities.Drift{
+				{Name: "GO_PINNED_VERSION", File: ".github/workflows/ci.yaml", Inline: "1.27.1", Manifest: "1.27.2"},
+			},
+		}
+
+		// when
+		report := reports.Verification(result)
+
+		// then
+		assert.Contains(t, report, "| `golang:1.27.1-bookworm` -> `golang:1.27.2-bookworm` |")
+		assert.Contains(t, report, "<code>golang:1.27.1-bookworm</code> -&gt; <code>golang:1.27.2-bookworm</code>")
+		assert.Contains(t, report, "## Copies this pull request leaves out of step")
+		assert.Contains(t, report, "| `GO_PINNED_VERSION` | `.github/workflows/ci.yaml` | `1.27.1` | `1.27.2` |")
+		assert.Contains(t, report, "**Not verified:**")
+	})
+
+	t.Run("should not call a pull request with only a stray copy one that moves nothing", func(t *testing.T) {
+		t.Parallel()
+		// given
+		result := commands.VerifyResult{Drift: []entities.Drift{
+			{Name: "GO_PINNED_VERSION", File: ".github/workflows/ci.yaml", Inline: "1.26.0", Manifest: "1.27.2"},
+		}}
+
+		// when
+		report := reports.Verification(result)
+
+		// then
+		assert.NotContains(t, report, "nothing to verify")
+		assert.Contains(t, report, "leaves copies of one out of step")
+	})
+}
+
+func TestImageUpdateNames(t *testing.T) {
+	t.Parallel()
+
+	moved := &entities.Task{
+		Group: entities.GroupImage, Label: "golang:1.27.1-bookworm", Kind: entities.KindImage,
+		Coord: "golang:1.27.1-bookworm@sha256:" + strings.Repeat("a", 64), Current: "sha256:" + strings.Repeat("a", 64),
+		Retag: "golang:1.27.2-bookworm", Latest: "sha256:" + strings.Repeat("c", 64), Outdated: true,
+		Apply: &entities.Plan{New: "sha256:" + strings.Repeat("c", 64), Image: &entities.ImagePlan{}},
+	}
+
+	t.Run("should title a lone Go image move by both its tags", func(t *testing.T) {
+		t.Parallel()
+		// given / when
+		title := reports.Title([]*entities.Task{moved}, nil)
+
+		// then
+		assert.Equal(t, "chore(deps): moved `golang:1.27.1-bookworm` to `golang:1.27.2-bookworm`, "+
+			"the release its Go pin names", title)
+	})
+
+	t.Run("should list a check's refusal for a person when nothing is applied", func(t *testing.T) {
+		t.Parallel()
+		// given
+		refused := *moved
+		refused.Retag, refused.Outdated = "", false
+		refused.Refused = "the registry has no `golang:1.27.2-alpine3.24`"
+		check := commands.CheckResult{Tasks: []*entities.Task{&refused}}
+
+		// when
+		summary := reports.Summary(check, nil)
+
+		// then
+		assert.Contains(t, summary, "## Updates that need a person (1)")
+		assert.Contains(t, summary, "the registry has no")
+		assert.NotContains(t, summary, "Every pinned dependency is current.")
+	})
 }
 
 func TestMarkdownSafety(t *testing.T) {

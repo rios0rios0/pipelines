@@ -54,17 +54,23 @@ func NewApplyUpdatesCommand(
 // Execute prepares every proposal against upstream, in parallel and before any
 // file is touched, then writes the ones that prepared cleanly.
 func (c *ApplyUpdatesCommand) Execute(check CheckResult) ApplyResult {
+	// What the check already refused, read before preparing sets any more.
+	result := ApplyResult{Refused: check.Refused()}
 	proposals := check.Proposals()
 	parallel(c.jobs, proposals, c.prepare)
 
 	before := entities.ManifestValues(check.Manifest)
 	targets := maps.Clone(before)
-	var result ApplyResult
 	for _, task := range proposals {
 		if task.Apply == nil || task.Refused != "" || task.Error != "" {
 			if task.Refused != "" {
 				result.Refused = append(result.Refused, task)
 			}
+			continue
+		}
+		if err := followsWrittenPin(task, targets); err != nil {
+			task.Refused = err.Error()
+			result.Refused = append(result.Refused, task)
 			continue
 		}
 		if err := c.write(task, targets); err != nil {
@@ -80,8 +86,23 @@ func (c *ApplyUpdatesCommand) Execute(check CheckResult) ApplyResult {
 		task.Applied = true
 		result.Applied = append(result.Applied, task)
 	}
-	result.Fixes = c.alignCopies(targets, before)
+	result.Fixes = c.alignCopies(check.Manifest, targets, before)
 	return result
+}
+
+// followsWrittenPin refuses to move a `golang:` image to a release its pin is
+// not moving to. The images are written after the pins, so a pin whose own
+// update was refused keeps its images where they are.
+func followsWrittenPin(task *entities.Task, targets map[string]string) error {
+	if task.Retag == "" {
+		return nil
+	}
+	image, _ := entities.ParseGoImage(task.Retag)
+	if want := targets[task.Follows.Var]; !entities.SameValue(task.Follows.Var, image.Release, want) {
+		return entities.Refuse("`%s` follows `%s`, which this run leaves at `%s`, so it stays where it is",
+			task.Label, task.Follows.Name, want)
+	}
+	return nil
 }
 
 func (c *ApplyUpdatesCommand) prepare(task *entities.Task) {
@@ -393,7 +414,7 @@ func (c *ApplyUpdatesCommand) prepareImage(task *entities.Task) (*entities.Plan,
 	if c.scanner == nil {
 		return plan, nil
 	}
-	evidence, err := CompareImages(c.scanner, task.Coord, ProposedImage(task.Coord, task.Latest))
+	evidence, err := CompareImages(c.scanner, task.Coord, ProposedReference(task))
 	if err != nil {
 		return nil, err
 	}
@@ -414,6 +435,15 @@ const maxListed = 5
 func ProposedImage(reference, digest string) string {
 	name, _, _ := strings.Cut(reference, "@")
 	return name + "@" + digest
+}
+
+// ProposedReference is the reference an image update writes: the same name at
+// the new digest, or -- for a `golang:` image whose pin moved -- the new tag's.
+func ProposedReference(task *entities.Task) string {
+	if task.Retag != "" {
+		return task.Retag + "@" + task.Latest
+	}
+	return ProposedImage(task.Coord, task.Latest)
 }
 
 // CompareImages scans the image pinned today and the one proposed, and says
@@ -449,9 +479,12 @@ func (c *ApplyUpdatesCommand) write(task *entities.Task, targets map[string]stri
 			}
 		}
 	case entities.GroupImage:
-		before, _, _ := strings.Cut(task.Coord, "@")
+		name, _, _ := strings.Cut(task.Coord, "@")
+		if task.Retag != "" {
+			name = task.Retag
+		}
 		for _, path := range InlineFiles(c.workspace) {
-			text, count := entities.RepinImage(c.workspace.Text(path), task.Coord, before+"@"+task.Apply.New)
+			text, count := entities.RepinImage(c.workspace.Text(path), task.Coord, name+"@"+task.Apply.New)
 			if count > 0 && c.workspace.Set(path, text) {
 				task.Rewritten += count
 			}
@@ -484,8 +517,11 @@ func (c *ApplyUpdatesCommand) writeManifest(task *entities.Task, targets map[str
 
 // alignCopies brings every inline copy to the value its manifest variable now
 // holds, so a template with no SCRIPTS_DIR cannot be left behind on the version
-// the manifest just left.
-func (c *ApplyUpdatesCommand) alignCopies(targets, before map[string]string) []entities.CopyChange {
+// the manifest just left -- the Go inputs included, each to the pin of its line.
+func (c *ApplyUpdatesCommand) alignCopies(
+	manifest []entities.ManifestEntry,
+	targets, before map[string]string,
+) []entities.CopyChange {
 	var fixes []entities.CopyChange
 	for _, inline := range entities.InlineCopies() {
 		want, tracked := targets[inline.Var]
@@ -501,6 +537,15 @@ func (c *ApplyUpdatesCommand) alignCopies(targets, before map[string]string) []e
 			if len(changed) > 0 && c.workspace.Set(path, text) {
 				fixes = append(fixes, changed...)
 			}
+		}
+	}
+	if !entities.HasGoPins(manifest) {
+		return fixes
+	}
+	for _, path := range InlineFiles(c.workspace) {
+		text, changed := entities.AlignGoCopies(c.workspace.Text(path), path, manifest, targets)
+		if len(changed) > 0 && c.workspace.Set(path, text) {
+			fixes = append(fixes, changed...)
 		}
 	}
 	return fixes

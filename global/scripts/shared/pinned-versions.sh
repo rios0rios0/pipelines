@@ -36,16 +36,18 @@
 # pinning stops a dependency moving without a decision, and the annotation is
 # how the decision gets prompted. The shape is:
 #
-#   # upstream: <kind> <coordinate> [track=<major>] [ceiling=<PIN>] [cooldown=<days>]
+#   # upstream: <kind> <coordinate> [track=<line>] [ceiling=<PIN>] [cooldown=<days>]
 #
 #   kind         one of github-release, github-tag, gitlab-tag, pypi, npm,
-#                rubygems, goproxy
+#                rubygems, goproxy, go-toolchain
 #   coordinate   owner/repo, a project path, or a package/module name
-#   track=<n>    only report releases INSIDE major <n>. Used where a pin is
-#                deliberately held back: GoReleaser is on 1.x because 2.x is a
-#                breaking configuration change, so reporting 2.x every run would
-#                be reporting a migration as an update until somebody muted the
-#                check.
+#   track=<n>    only report releases INSIDE the line <n> names: a major (`1`)
+#                or a minor line (`1.27`). Used where a pin is deliberately
+#                held back: GoReleaser is on 1.x because 2.x is a breaking
+#                configuration change, so reporting 2.x every run would be
+#                reporting a migration as an update until somebody muted the
+#                check; Go is held to a minor line because moving every
+#                consumer's builds to a new Go is a decision, not a patch.
 #   ceiling=PIN  never move past the version of another pin here: the golden
 #                golangci-lint configuration must not name a linter the pinned
 #                golangci-lint binary does not have.
@@ -69,7 +71,10 @@
 # rubygems or goproxy pin IS a package, so it needs nothing more. A binary
 # names the package it is built from:
 #
-#   # osv: <ecosystem> <package>     e.g. `# osv: Go github.com/gruntwork-io/terragrunt`
+#   # osv: <ecosystem> <package>...  e.g. `# osv: Go github.com/gruntwork-io/terragrunt`;
+#                                    Go itself is `# osv: Go stdlib toolchain`, the
+#                                    standard library's advisories and the `go`
+#                                    command's, which are filed apart
 #   # osv: none                      no advisory database covers it -- say why
 #
 # A binary with neither is reported as untracked, for the same reason a pin

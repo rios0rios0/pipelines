@@ -166,19 +166,45 @@ func TestCompareVersions(t *testing.T) {
 	})
 }
 
-func TestInMajor(t *testing.T) {
+func TestInLine(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should accept a release inside the major whether or not the major is written with v", func(t *testing.T) {
 		t.Parallel()
 		// given / when
-		plain := entities.InMajor("1.26.2", "1")
-		prefixed := entities.InMajor("v1.26.2", "v1")
-		outside := entities.InMajor("2.0.0", "1")
+		plain := entities.InLine("1.26.2", "1")
+		prefixed := entities.InLine("v1.26.2", "v1")
+		outside := entities.InLine("2.0.0", "1")
 
 		// then
 		assert.True(t, plain)
 		assert.True(t, prefixed)
 		assert.False(t, outside)
+	})
+
+	t.Run("should hold a minor line to its own patch releases", func(t *testing.T) {
+		t.Parallel()
+		// given / when
+		patch := entities.InLine("1.27.2", "1.27")
+		nextMinor := entities.InLine("1.28.0", "1.27")
+		sharedPrefix := entities.InLine("1.270.0", "1.27")
+		tooShort := entities.InLine("1", "1.27")
+
+		// then
+		assert.True(t, patch)
+		assert.False(t, nextMinor)
+		assert.False(t, sharedPrefix, "1.270 shares the characters of 1.27, not the line")
+		assert.False(t, tooShort)
+	})
+
+	t.Run("should name a major and a minor line the way a sentence does", func(t *testing.T) {
+		t.Parallel()
+		// given / when
+		major := entities.LineName("v1")
+		minor := entities.LineName("1.27")
+
+		// then
+		assert.Equal(t, "major 1", major)
+		assert.Equal(t, "the 1.27 line", minor)
 	})
 }

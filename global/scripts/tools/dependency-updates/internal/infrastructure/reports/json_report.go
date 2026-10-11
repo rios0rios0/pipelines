@@ -16,6 +16,7 @@ type jsonTask struct {
 	Current  string `json:"current"`
 	Latest   string `json:"latest"`
 	Proposed string `json:"proposed,omitempty"`
+	Retag    string `json:"retag,omitempty"`
 	Outdated bool   `json:"outdated"`
 	Error    string `json:"error,omitempty"`
 	Refused  string `json:"refused,omitempty"`
@@ -86,7 +87,7 @@ type jsonReport struct {
 func toJSONTask(task *entities.Task) jsonTask {
 	return jsonTask{
 		Group: string(task.Group), Label: task.Label, Kind: task.Kind, Coord: task.Coord, Current: task.Current,
-		Latest: task.Latest, Proposed: task.Proposed(), Outdated: task.Outdated, Error: task.Error,
+		Latest: task.Latest, Proposed: task.Proposed(), Retag: task.Retag, Outdated: task.Outdated, Error: task.Error,
 		Refused: task.Refused, Applied: task.Applied,
 	}
 }

@@ -486,3 +486,100 @@ func TestVerifyPullRequestCommandImages(t *testing.T) {
 		assert.Equal(t, commands.VerdictWarn, findingOf(t, result.Changes[0], commands.CheckScan).Verdict)
 	})
 }
+
+func TestVerifyPullRequestCommandGoToolchain(t *testing.T) {
+	t.Parallel()
+
+	oldImage := "golang:1.27.1-bookworm@" + goDigest("a")
+	newImage := "golang:1.27.2-bookworm@" + goDigest("c")
+	bump := func(input, image string) verifyCase {
+		return verifyCase{
+			base:       goPinned("1.27.1", "1.27.1", oldImage),
+			head:       goPinned("1.27.2", input, image),
+			releases:   goReleases(nil),
+			advisories: goAdvisories(),
+			images:     &doubles.StubImages{Existing: []string{image}},
+			scanner: &doubles.StubImageScanner{Scans: map[string]entities.ImageScan{
+				oldImage: {Findings: []entities.ImageFinding{finding("stdlib", "GO-2026-6603", "HIGH")}},
+				image:    {},
+			}},
+		}
+	}
+	imageChange := func(t *testing.T, result commands.VerifyResult) commands.VerifiedChange {
+		t.Helper()
+		for _, change := range result.Changes {
+			if change.Group == entities.GroupImage {
+				return change
+			}
+		}
+		require.Fail(t, "no image change")
+		return commands.VerifiedChange{}
+	}
+
+	t.Run("should verify a Go bump that takes its inputs and images with it", func(t *testing.T) {
+		t.Parallel()
+		// given
+		scenario := bump("1.27.2", newImage)
+
+		// when
+		result := scenario.run()
+
+		// then
+		assert.Zero(t, result.Exit(), "%+v", result.Changes)
+		image := imageChange(t, result)
+		assert.Equal(t, "golang:1.27.1-bookworm", image.Retagged)
+		assert.Contains(t, findingOf(t, image, commands.CheckScan).Detail, "it fixes 1")
+		assert.Equal(t, commands.VerdictPass, findingOf(t, image, commands.CheckCopies).Verdict)
+		assert.Contains(t, findingOf(t, result.Changes[0], commands.CheckAdvisories).Detail, "GO-2026-6601")
+		assert.Empty(t, result.Drift)
+	})
+
+	t.Run("should fail a Go bump that leaves an input behind", func(t *testing.T) {
+		t.Parallel()
+		// given
+		scenario := bump("1.27.1", newImage)
+
+		// when
+		result := scenario.run()
+
+		// then
+		assert.Equal(t, 1, result.Exit())
+		assert.Equal(t, []entities.Drift{
+			{Name: "GO_PINNED_VERSION", File: goWorkflow, Inline: "1.27.1", Manifest: "1.27.2"},
+		}, result.Drift)
+	})
+
+	t.Run("should fail an image moved to another release than its pin names", func(t *testing.T) {
+		t.Parallel()
+		// given
+		scenario := bump("1.27.2", "golang:1.27.3-bookworm@"+goDigest("e"))
+
+		// when
+		result := scenario.run()
+
+		// then
+		finding := findingOf(t, imageChange(t, result), commands.CheckCopies)
+		assert.Equal(t, commands.VerdictFail, finding.Verdict)
+		assert.Contains(t, finding.Detail, "names Go `1.27.3`, but `GO` pins `1.27.2`")
+	})
+
+	t.Run("should fail a copy edited away from its pin without asking the network", func(t *testing.T) {
+		t.Parallel()
+		// given
+		scenario := verifyCase{
+			base:        goPinned("1.27.2", "1.27.2", newImage),
+			head:        goPinned("1.27.2", "1.27.1", newImage),
+			releases:    &doubles.StubReleases{},
+			unreachable: repositories.NewLookupError("api.osv.dev -> HTTP 503"),
+		}
+
+		// when
+		result := scenario.run()
+
+		// then
+		assert.Empty(t, result.Changes)
+		assert.Empty(t, result.AdvisoryError)
+		assert.Len(t, result.Drift, 1)
+		assert.Equal(t, 1, result.Exit())
+	})
+}

@@ -278,3 +278,27 @@ func TestIntroducedAndResolved(t *testing.T) {
 		assert.Equal(t, []string{"GHSA-old"}, entities.AdvisoryIDs(resolved))
 	})
 }
+
+func TestSecurityStatusAnswer(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should ask about every package and count an issue filed under two of them once", func(t *testing.T) {
+		t.Parallel()
+		// given
+		stdlib := entities.Package{Ecosystem: entities.EcosystemGo, Name: "stdlib"}
+		toolchain := entities.Package{Ecosystem: entities.EcosystemGo, Name: "toolchain"}
+		status := entities.SecurityStatus{Packages: []entities.Package{stdlib, toolchain}}
+		shared := entities.Advisory{ID: "GO-2026-3"}
+		found := map[entities.AdvisoryQuery][]entities.Advisory{
+			{Package: stdlib, Version: "1.27.1"}:    {{ID: "GO-2026-1"}, shared},
+			{Package: toolchain, Version: "1.27.1"}: {{ID: "GO-2026-2"}, shared},
+		}
+
+		// when
+		queries, answer := status.Queries("1.27.1"), status.Answer(found, "1.27.1")
+
+		// then
+		assert.Len(t, queries, 2)
+		assert.Equal(t, []string{"GO-2026-1", "GO-2026-3", "GO-2026-2"}, entities.AdvisoryIDs(answer))
+	})
+}

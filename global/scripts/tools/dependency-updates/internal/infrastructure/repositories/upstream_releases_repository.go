@@ -20,6 +20,12 @@ const (
 	// goProxyInfoBudget bounds the `.info` lookups one Go module's listing may
 	// cost: the module proxy dates each version separately.
 	goProxyInfoBudget = 20
+	// goToolchainPrefix and goToolchainBuild frame a Go release in the
+	// toolchain module's versions. Every platform is published at once, as
+	// `golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64`; the linux/amd64
+	// build is the one the releases are read from.
+	goToolchainPrefix = "v0.0.1-go"
+	goToolchainBuild  = ".linux-amd64"
 )
 
 // goProxyCapital is how the module proxy escapes an upper-case letter: it
@@ -90,6 +96,8 @@ func (r *UpstreamReleasesRepository) Latest(task *entities.Task) (string, error)
 		return r.latestRubyGems(task)
 	case entities.KindGoProxy:
 		return r.latestGoProxy(task)
+	case entities.KindGoToolchain:
+		return r.latestGoToolchain(task)
 	}
 	return "", repositories.NewLookupError("unknown upstream kind '%s'", task.Kind)
 }
@@ -114,6 +122,8 @@ func (r *UpstreamReleasesRepository) List(task *entities.Task) ([]entities.Relea
 		return r.listRubyGems(task)
 	case entities.KindGoProxy:
 		return r.listGoProxy(task)
+	case entities.KindGoToolchain:
+		return r.listGoToolchain(task)
 	}
 	return nil, repositories.NewLookupError("unknown upstream kind '%s'", task.Kind)
 }
@@ -177,7 +187,7 @@ type gitHubRelease struct {
 // major: GoReleaser 1.x needs the newest release WITHIN 1.x, or the check
 // reports a migration as an update every run, forever.
 func (r *UpstreamReleasesRepository) latestGitHubRelease(task *entities.Task) (string, error) {
-	if task.TrackMajor == "" {
+	if task.Track == "" {
 		var latest gitHubRelease
 		if err := r.getJSON(
 			gitHubAPI+reposPath+task.Coord+"/releases/latest",
@@ -308,14 +318,14 @@ func (r *UpstreamReleasesRepository) latestPyPI(task *entities.Task) (string, er
 	if err != nil {
 		return "", err
 	}
-	if task.TrackMajor == "" {
+	if task.Track == "" {
 		return project.Info.Version, nil
 	}
 	releases, _ := r.listPyPI(task)
 	if best := newest(releases, task); best != "" {
 		return best, nil
 	}
-	return "", repositories.NewLookupError("no %s release within major %s", task.Coord, task.TrackMajor)
+	return "", repositories.NewLookupError("no %s release within %s", task.Coord, entities.LineName(task.Track))
 }
 
 // listPyPI dates each release by its first upload. A release whose every file
@@ -350,7 +360,7 @@ type npmPackument struct {
 }
 
 func (r *UpstreamReleasesRepository) latestNpm(task *entities.Task) (string, error) {
-	if task.TrackMajor == "" {
+	if task.Track == "" {
 		var latest struct {
 			Version string `json:"version"`
 		}
@@ -459,8 +469,66 @@ func (r *UpstreamReleasesRepository) listGoProxy(task *entities.Task) ([]entitie
 	return releases, nil
 }
 
+// goToolchainReleases are the Go releases the module proxy serves to
+// GOTOOLCHAIN -- the same artifacts `go` downloads, covered by the checksum
+// database -- as plain versions (`1.27.2`, `1.28rc1`), pre-releases marked.
+func (r *UpstreamReleasesRepository) goToolchainReleases(task *entities.Task) ([]entities.Release, error) {
+	content, err := r.transport.Get(goProxyModule(task.Coord)+"/@v/list", nil, MaxDocumentBytes)
+	if err != nil {
+		return nil, err
+	}
+	var releases []entities.Release
+	for line := range strings.FieldsSeq(string(content)) {
+		build, isToolchain := strings.CutPrefix(line, goToolchainPrefix)
+		version, isPlatform := strings.CutSuffix(build, goToolchainBuild)
+		if isToolchain && isPlatform {
+			releases = append(releases, entities.Release{Version: version, Prerelease: entities.IsPrerelease(version)})
+		}
+	}
+	return releases, nil
+}
+
+// latestGoToolchain is the newest final Go release in the pin's line.
+func (r *UpstreamReleasesRepository) latestGoToolchain(task *entities.Task) (string, error) {
+	releases, err := r.goToolchainReleases(task)
+	if err != nil {
+		return "", err
+	}
+	if best := newest(releases, task); best != "" {
+		return best, nil
+	}
+	return "", repositories.NewLookupError("no Go release found%s", qualifiers(task))
+}
+
+// listGoToolchain dates the pinned Go release and every newer final one in the
+// pin's line, newest first, from the `.info` of each one's build.
+func (r *UpstreamReleasesRepository) listGoToolchain(task *entities.Task) ([]entities.Release, error) {
+	releases, err := r.goToolchainReleases(task)
+	if err != nil {
+		return nil, err
+	}
+	var candidates []entities.Release
+	for _, release := range releases {
+		if !release.Prerelease && !entities.IsNewer(release.Version, task.Current) &&
+			(task.Track == "" || entities.InLine(release.Version, task.Track)) {
+			candidates = append(candidates, release)
+		}
+	}
+	entities.NewestFirst(candidates)
+	dated := make([]entities.Release, 0, min(len(candidates), goProxyInfoBudget))
+	for _, release := range candidates[:min(len(candidates), goProxyInfoBudget)] {
+		var info goProxyInfo
+		target := goProxyModule(task.Coord) + "/@v/" + goToolchainPrefix + release.Version + goToolchainBuild + ".info"
+		if infoErr := r.getJSON(target, nil, MaxDocumentBytes, &info); infoErr != nil {
+			return nil, infoErr
+		}
+		dated = append(dated, entities.Release{Version: release.Version, Published: parseTime(info.Time)})
+	}
+	return dated, nil
+}
+
 // newest is the highest semver-shaped release inside the task's release line
-// and, when held, its major.
+// and, when held, the line `track=` names.
 func newest(releases []entities.Release, task *entities.Task) string {
 	best := ""
 	for _, release := range releases {
@@ -472,7 +540,7 @@ func newest(releases []entities.Release, task *entities.Task) string {
 }
 
 // inReleaseLine is true for a final, semver-shaped release in the task's
-// release line and, when held, its major.
+// release line and, when held, the line `track=` names.
 func inReleaseLine(release entities.Release, task *entities.Task) bool {
 	if release.Prerelease || len(entities.Parts(release.Version)) == 0 {
 		return false
@@ -482,13 +550,13 @@ func inReleaseLine(release entities.Release, task *entities.Task) bool {
 			return false
 		}
 	}
-	return task.TrackMajor == "" || entities.InMajor(release.Version, task.TrackMajor)
+	return task.Track == "" || entities.InLine(release.Version, task.Track)
 }
 
 func qualifiers(task *entities.Task) string {
 	var words []string
-	if task.TrackMajor != "" {
-		words = append(words, "within major "+task.TrackMajor)
+	if task.Track != "" {
+		words = append(words, "within "+entities.LineName(task.Track))
 	}
 	if task.HasFamily && task.Family != "" {
 		words = append(words, "in the `"+task.Family+"` release line")

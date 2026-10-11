@@ -266,3 +266,64 @@ func TestApplyUpdatesCommandImageScan(t *testing.T) {
 		assert.Contains(t, workspace.Text(".github/workflows/ci.yaml"), newReference)
 	})
 }
+
+func TestApplyUpdatesCommandGoToolchain(t *testing.T) {
+	t.Parallel()
+
+	oldImage := "golang:1.27.1-bookworm@" + goDigest("a")
+	newImage := "golang:1.27.2-bookworm@" + goDigest("c")
+	scanner := func() *doubles.StubImageScanner {
+		return &doubles.StubImageScanner{Scans: map[string]entities.ImageScan{
+			oldImage: {Findings: []entities.ImageFinding{finding("stdlib", "GO-2026-6603", "HIGH")}},
+			newImage: {},
+		}}
+	}
+
+	t.Run("should move the pin, its inputs and its images together, scanning each image first", func(t *testing.T) {
+		t.Parallel()
+		// given
+		scenario := applyCase{
+			files:    goPinned("1.27.1", "1.27.1", oldImage),
+			releases: goReleases(map[string]string{oldImage: goDigest("a"), "golang:1.27.2-bookworm": goDigest("c")}),
+			merger:   &doubles.StubMerger{},
+			scanner:  scanner(),
+		}
+
+		// when
+		result, workspace := scenario.run()
+
+		// then
+		require.Len(t, result.Applied, 2)
+		assert.Contains(t, workspace.Text(entities.ManifestPath), `GO_PINNED_VERSION="1.27.2"`)
+		assert.Contains(t, workspace.Text(goWorkflow), "go-version: '1.27.2'")
+		assert.Contains(t, workspace.Text(goWorkflow), "image: '"+newImage+"'")
+		image := labelled(t, result.Applied, "golang:1.27.1-bookworm")
+		require.NotNil(t, image.Apply.Image)
+		assert.Len(t, image.Apply.Image.Fixed, 1, "the old image's standard-library issue is gone from the new one")
+		require.Len(t, result.Fixes, 1)
+		assert.Equal(t, "GO_PINNED_VERSION", result.Fixes[0].Var)
+	})
+
+	t.Run("should keep the image where it is when its pin's own update is refused", func(t *testing.T) {
+		t.Parallel()
+		// given
+		files := goPinned("1.27.1", "1.27.1", oldImage)
+		files[entities.ManifestPath] += `GO_SHA256_AMD64="` + strings.Repeat("d", 64) + "\"\n"
+		scenario := applyCase{
+			files:    files,
+			releases: goReleases(map[string]string{oldImage: goDigest("a"), "golang:1.27.2-bookworm": goDigest("c")}),
+			merger:   &doubles.StubMerger{},
+			scanner:  scanner(),
+		}
+
+		// when
+		result, workspace := scenario.run()
+
+		// then
+		assert.Empty(t, result.Applied)
+		image := labelled(t, result.Refused, "golang:1.27.1-bookworm")
+		assert.Contains(t, image.Refused, "follows `GO`, which this run leaves at `1.27.1`")
+		assert.Contains(t, workspace.Text(goWorkflow), "image: '"+oldImage+"'")
+		assert.Contains(t, workspace.Text(goWorkflow), "go-version: '1.27.1'")
+	})
+}

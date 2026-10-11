@@ -61,6 +61,15 @@ func ShortDigest(digest string) string {
 	return trimmed[:min(len(trimmed), shortDigestLength)]
 }
 
+// ImageName is how a report names an image update: the image, or -- for a
+// `golang:` image its Go pin moves to another release -- both of its names.
+func ImageName(task *entities.Task) string {
+	if task.Retag != "" {
+		return task.Label + " -> " + task.Retag
+	}
+	return task.Label
+}
+
 func shown(task *entities.Task, value string) string {
 	if task.Group == entities.GroupImage {
 		return ShortDigest(value)

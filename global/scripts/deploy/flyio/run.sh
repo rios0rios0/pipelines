@@ -26,6 +26,7 @@ if [ -z "$SCRIPTS_DIR" ]; then
 fi
 TOOL_NAME="deploy-flyio" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
 . "$SCRIPTS_DIR/global/scripts/deploy/common.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/build-version.sh"
 
 deploy_require_env "FLY_API_TOKEN" \
   "Generate one with 'flyctl tokens create deploy' and expose it to the job as a secret."
@@ -60,6 +61,63 @@ if [ -n "${FLY_MACHINE_COUNT:-}" ]; then
       exit 1
       ;;
   esac
+fi
+
+# The version handed to the image, when the consumer opts in by NAMING the
+# Dockerfile `ARG` that receives it: FLY_VERSION_BUILD_ARG. A Dockerfile that
+# compiles its version in otherwise reports its default -- `dev`, on every
+# deploy -- because `--remote-only` builds from source on Fly's builder and
+# nothing else passes the argument. FLY_APP_VERSION sets the value outright;
+# left empty, it is the tag on a tag build and the commit otherwise, resolved by
+# the same helper the GitHub image delivery uses, so a commit built in both
+# places reports one version.
+#
+# OPT-IN, because the name is the consumer's to choose. A build argument this
+# script passed on its own would land in any project already using `ARG VERSION`
+# for something else -- a pinned tool's version, say -- and override it without
+# a word.
+#
+# Validated HERE, before the CLI is downloaded and before anything is deployed,
+# for the reason FLY_MACHINE_COUNT is: nothing downstream rejects a malformed
+# name. A build argument no `ARG` declares is ignored rather than refused, so the
+# deploy would succeed with an image still reporting its default.
+if [ -n "${FLY_VERSION_BUILD_ARG:-}" ]; then
+  if ! build_arg_name_is_valid "$FLY_VERSION_BUILD_ARG"; then
+    echo "ERROR: FLY_VERSION_BUILD_ARG must name a Dockerfile ARG (letters, digits and underscores, not starting with a digit), got '$FLY_VERSION_BUILD_ARG'." >&2
+    echo "Nothing has been deployed. Check the value for stray whitespace or quotes." >&2
+    exit 1
+  fi
+
+  if ! FLY_RESOLVED_VERSION=$(build_version "${FLY_APP_VERSION:-}"); then
+    if [ -n "${FLY_APP_VERSION:-}" ]; then
+      echo "ERROR: FLY_APP_VERSION must be a single word, with no whitespace, got '$FLY_APP_VERSION'." >&2
+    else
+      echo "ERROR: FLY_VERSION_BUILD_ARG is set, but no version could be resolved: the CI platform exposes no tag or commit, and this is not a git checkout." >&2
+    fi
+    echo "Nothing has been deployed." >&2
+    exit 1
+  fi
+
+  # The one silent miss left is a valid name the Dockerfile never declares. It
+  # warns rather than fails, since the check reads the file line by line, and it
+  # reads only a file that is there: the config's `[build] dockerfile`, relative
+  # to the config's own directory as flyctl resolves it, else that directory's
+  # `Dockerfile`, which is where flyctl looks when the config names none.
+  FLY_DOCKERFILE=""
+  if [ -f "$FLY_CONFIG" ]; then
+    FLY_DOCKERFILE=$(sed -n -e '/^[[:space:]]*\[build\][[:space:]]*$/,/^[[:space:]]*\[/{' \
+      -e "s/^[[:space:]]*dockerfile[[:space:]]*=[[:space:]]*[\"']\\([^\"']*\\)[\"'].*/\\1/p" \
+      -e '}' "$FLY_CONFIG" | head -n 1)
+  fi
+  case "$FLY_DOCKERFILE" in
+    /*) ;;
+    *) FLY_DOCKERFILE="$(dirname "$FLY_CONFIG")/${FLY_DOCKERFILE:-Dockerfile}" ;;
+  esac
+  if [ -f "$FLY_DOCKERFILE" ] && ! build_arg_is_declared "$FLY_DOCKERFILE" "$FLY_VERSION_BUILD_ARG"; then
+    echo "WARNING: '$FLY_DOCKERFILE' declares no 'ARG $FLY_VERSION_BUILD_ARG', so the version passed to it reaches nothing." >&2
+  fi
+
+  echo "Build version: $FLY_VERSION_BUILD_ARG=$FLY_RESOLVED_VERSION"
 fi
 
 # A dry run only resolves and records the command line, so downloading the CLI
@@ -243,6 +301,9 @@ if [ -f "$FLY_CONFIG" ]; then
 fi
 if [ -n "${FLY_STRATEGY:-}" ]; then
   set -- "$@" --strategy "$FLY_STRATEGY"
+fi
+if [ -n "${FLY_VERSION_BUILD_ARG:-}" ]; then
+  set -- "$@" --build-arg "$FLY_VERSION_BUILD_ARG=$FLY_RESOLVED_VERSION"
 fi
 
 # `--ha=false` when the app is pinned to a single machine. Fly's deploy creates a SPARE

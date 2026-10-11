@@ -25,6 +25,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-terraform-provider-mirror` - Test the local Terraform provider mirror specifically
 - `make test-terra-test-roots` - Test the terra-test tier's opt-in root-module run (`TERRA_TEST_ROOTS`) specifically
 - `make test-docker-multi-arch` - Test 40-delivery/docker multi-arch contract specifically
+- `make test-build-version` - Test the version build argument (shared helper, GitHub image delivery, Fly.io deploy, Go workflow wiring) specifically
 - `make test-containers-detect` - Test the Container Images change detection (deleted/renamed folders, dispatch inputs) specifically
 - `make test-basic-checks` - Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) specifically
 - `make test-fixture-isolation` - Test that every suite builds its fixtures in mktemp space and guards every `cd` specifically
@@ -835,6 +836,7 @@ make test-terraform-validate
 make test-terraform-provider-mirror
 make test-terra-test-roots
 make test-docker-multi-arch
+make test-build-version
 make test-containers-detect
 make test-basic-checks
 make test-fixture-isolation

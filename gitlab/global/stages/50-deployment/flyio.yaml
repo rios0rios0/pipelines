@@ -17,6 +17,10 @@ include:
 #   ORG-SCOPED token (`flyctl tokens create org`), which manages every app in
 #   the organisation; an app-scoped deploy token cannot create apps. Leave it
 #   unset to keep the tighter app-scoped token and create apps by hand.
+#   FLY_VERSION_BUILD_ARG -- name of the Dockerfile `ARG` that receives the app's
+#   version (e.g. `VERSION`), passed to Fly's build with `--build-arg`. Unset
+#   passes nothing. FLY_APP_VERSION sets the value; unset derives it: the tag on
+#   a tag pipeline, the commit's first 7 characters otherwise.
 #
 # No Docker-in-Docker service: the script passes `--remote-only`, so the image
 # is built on Fly's builder. That is the whole reason this job can run on an

@@ -115,7 +115,14 @@ run_provider() {
       NETLIFY_AUTH_TOKEN NETLIFY_SITE_ID NETLIFY_OUTPUT_DIRECTORY NETLIFY_DEPLOY_MESSAGE \
       RENDER_API_KEY RENDER_SERVICE_ID RENDER_SERVICE_NAME RENDER_DEPLOY_HOOK_URL \
       FLY_API_TOKEN FLY_APP_NAME FLY_ORG FLY_MACHINE_COUNT FLY_CONFIG FLY_STRATEGY \
+      FLY_VERSION_BUILD_ARG FLY_APP_VERSION \
       DEPLOY_ENVIRONMENT
+    # The CI platform's own description of the build, which the Fly version is
+    # derived from. Cleared for the same reason: this suite runs INSIDE GitHub
+    # Actions, where these are always set, so a case that did not clear them
+    # would assert the CI run's own commit rather than its fixture.
+    unset GITHUB_REF_TYPE GITHUB_REF_NAME GITHUB_SHA CI_COMMIT_TAG CI_COMMIT_SHA \
+      BUILD_SOURCEBRANCH BUILD_SOURCEVERSION
     export SCRIPTS_DIR
     export DEPLOY_DRY_RUN=true
     env "$@" sh "$SCRIPTS_DIR/global/scripts/deploy/$provider/run.sh"
@@ -603,6 +610,121 @@ assert_true "flyio: GitLab documents FLY_MACHINE_COUNT" \
 # these steps read must arrive through `env:`.
 assert_true "flyio: no workflow_call input is interpolated into a run: body" \
   "! awk '/^ *run:/,/^ *(shell|env|with|if|-|jobs):/' '$GO_FLYIO' | grep -q 'inputs\.'"
+
+# The version build argument. `--remote-only` builds from source on Fly's builder, so a
+# Dockerfile that compiles its version in (`ARG VERSION=dev`, then `-ldflags -X`) reported
+# its default on every deploy: nothing passed the argument. Opting in is NAMING the `ARG`.
+SHA='0123456789abcdef0123456789abcdef01234567'
+
+# Off unless named, even with every platform variable present: a build argument this
+# script chose on its own would override a project's unrelated `ARG VERSION`.
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp \
+  GITHUB_REF_TYPE=tag GITHUB_REF_NAME=1.2.3 GITHUB_SHA="$SHA"
+assert_equals "flyio: no build argument is passed unless one is named" \
+  "flyctl deploy --remote-only --app my-mvp" "$CMD"
+
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_VERSION_BUILD_ARG=VERSION \
+  GITHUB_REF_TYPE=branch GITHUB_REF_NAME=main GITHUB_SHA="$SHA"
+assert_equals "flyio: a branch build passes the commit's first 7 characters" \
+  "flyctl deploy --remote-only --app my-mvp --build-arg VERSION=0123456" "$CMD"
+assert_no_leak "flyio: the API token is never recorded with a version build argument"
+
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_VERSION_BUILD_ARG=VERSION \
+  GITHUB_REF_TYPE=tag GITHUB_REF_NAME=1.2.3 GITHUB_SHA="$SHA"
+assert_equals "flyio: a tag build passes the tag" \
+  "flyctl deploy --remote-only --app my-mvp --build-arg VERSION=1.2.3" "$CMD"
+
+# The explicit value is how `go-flyio.yaml` hands over the release a bump merge has just
+# cut: that deploy runs on the branch, and would otherwise report the commit while the
+# image pushed in the same run reports the release.
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_VERSION_BUILD_ARG=VERSION \
+  FLY_APP_VERSION=2.0.0 GITHUB_REF_TYPE=branch GITHUB_REF_NAME=main GITHUB_SHA="$SHA"
+assert_equals "flyio: FLY_APP_VERSION wins over what the platform describes" \
+  "flyctl deploy --remote-only --app my-mvp --build-arg VERSION=2.0.0" "$CMD"
+
+# One script on three platforms, so each platform's description of the build is read.
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_VERSION_BUILD_ARG=VERSION \
+  CI_COMMIT_TAG=3.0.0 CI_COMMIT_SHA="$SHA"
+assert_equals "flyio: a GitLab tag pipeline passes the tag" \
+  "flyctl deploy --remote-only --app my-mvp --build-arg VERSION=3.0.0" "$CMD"
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_VERSION_BUILD_ARG=VERSION \
+  CI_COMMIT_SHA="$SHA"
+assert_equals "flyio: a GitLab branch pipeline passes the commit" \
+  "flyctl deploy --remote-only --app my-mvp --build-arg VERSION=0123456" "$CMD"
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_VERSION_BUILD_ARG=VERSION \
+  BUILD_SOURCEBRANCH=refs/tags/release/4.0.0 BUILD_SOURCEVERSION="$SHA"
+assert_equals "flyio: an Azure DevOps tag build passes the whole tag, not its last segment" \
+  "flyctl deploy --remote-only --app my-mvp --build-arg VERSION=release/4.0.0" "$CMD"
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_VERSION_BUILD_ARG=VERSION \
+  BUILD_SOURCEBRANCH=refs/heads/main BUILD_SOURCEVERSION="$SHA"
+assert_equals "flyio: an Azure DevOps branch build passes the commit" \
+  "flyctl deploy --remote-only --app my-mvp --build-arg VERSION=0123456" "$CMD"
+
+# A malformed name is refused before anything is deployed, because nothing downstream
+# refuses it: a build argument no `ARG` declares is ignored, so `VERSION ` would deploy an
+# image still reporting its default, the state opting in exists to end.
+for name in 'VERSION ' '9VERSION' 'APP-VERSION'; do
+  run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp "FLY_VERSION_BUILD_ARG=$name" \
+    GITHUB_SHA="$SHA"
+  assert_true "flyio: the build argument name '$name' fails the job" "[[ $STATUS -eq 1 ]]"
+  assert_true "flyio: the name '$name' is refused before anything is deployed" "[[ -z \"\$CMD\" ]]"
+done
+assert_true "flyio: the rejection names what a build argument name may contain" \
+  "grep -q 'must name a Dockerfile ARG' <<< \"\$OUT\""
+
+# A newline inside the value would reach a NEWLINE-separated build-args list as a second
+# argument, so a value that is not one word is refused rather than passed on.
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_VERSION_BUILD_ARG=VERSION \
+  "FLY_APP_VERSION=$(printf '1.0\nOTHER=1')"
+assert_true "flyio: a version that is not one word fails the job" "[[ $STATUS -eq 1 ]]"
+assert_true "flyio: a version that is not one word deploys nothing" "[[ -z \"\$CMD\" ]]"
+
+# Opted in and nothing to resolve: no platform variable and no git checkout. Fails rather
+# than deploying the default, since "opted in and got nothing" must never be silent.
+# GIT_CEILING_DIRECTORIES keeps `git` from finding a repository ABOVE the throwaway
+# project, which would make this case depend on where the suite happens to run.
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_VERSION_BUILD_ARG=VERSION \
+  GIT_CEILING_DIRECTORIES="$WORK_DIR"
+assert_true "flyio: a version that cannot be resolved fails the job" "[[ $STATUS -eq 1 ]]"
+assert_true "flyio: an unresolvable version deploys nothing" "[[ -z \"\$CMD\" ]]"
+assert_true "flyio: the failure says no version could be resolved" \
+  "grep -q 'no version could be resolved' <<< \"\$OUT\""
+
+# A valid name the Dockerfile never declares is the one silent miss left, so it warns. The
+# Dockerfile is the one `[build] dockerfile` names, relative to the config's directory, else
+# that directory's `Dockerfile`. Both live outside the project directory, which
+# `run_provider` wipes before each run.
+mkdir -p "$WORK_DIR/fly-version/.ci"
+printf 'app = "my-mvp"\n\n[build]\n  dockerfile = ".ci/app.Dockerfile"\n\n[env]\n  PORT = "8080"\n' \
+  > "$WORK_DIR/fly-version/fly.toml"
+printf 'FROM scratch\nARG VERSION=dev\n' > "$WORK_DIR/fly-version/.ci/app.Dockerfile"
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_CONFIG="$WORK_DIR/fly-version/fly.toml" \
+  FLY_VERSION_BUILD_ARG=VERSION GITHUB_SHA="$SHA"
+assert_true "flyio: a Dockerfile that declares the ARG raises no warning" \
+  "! grep -q 'declares no' <<< \"\$OUT\""
+printf 'FROM scratch\n' > "$WORK_DIR/fly-version/.ci/app.Dockerfile"
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_CONFIG="$WORK_DIR/fly-version/fly.toml" \
+  FLY_VERSION_BUILD_ARG=VERSION GITHUB_SHA="$SHA"
+assert_true "flyio: a Dockerfile named by [build] that lacks the ARG warns" \
+  "grep -q \"declares no 'ARG VERSION'\" <<< \"\$OUT\""
+# ...and only warns: the check reads the file line by line, so it must never cost a deploy.
+assert_true "flyio: the missing ARG does not stop the deploy" \
+  "[[ $STATUS -eq 0 ]] && grep -q -- '--build-arg VERSION=0123456' <<< \"\$CMD\""
+printf 'app = "my-mvp"\n' > "$WORK_DIR/fly-version/fly.toml"
+printf 'FROM scratch\n' > "$WORK_DIR/fly-version/Dockerfile"
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_CONFIG="$WORK_DIR/fly-version/fly.toml" \
+  FLY_VERSION_BUILD_ARG=VERSION GITHUB_SHA="$SHA"
+assert_true "flyio: with no [build] dockerfile, the config directory's Dockerfile is checked" \
+  "grep -q \"fly-version/Dockerfile' declares no 'ARG VERSION'\" <<< \"\$OUT\""
+
+# The wiring contract again: the knob on all three platforms, and through `go-flyio.yaml`
+# to BOTH builds of the commit -- the registry image and Fly's own.
+assert_true "flyio: GitHub action forwards FLY_VERSION_BUILD_ARG and FLY_APP_VERSION" \
+  "grep -q 'FLY_VERSION_BUILD_ARG' '$SCRIPTS_DIR/github/global/stages/50-deployment/flyio/action.yaml' && grep -q 'FLY_APP_VERSION' '$SCRIPTS_DIR/github/global/stages/50-deployment/flyio/action.yaml'"
+assert_true "flyio: Azure template forwards FLY_VERSION_BUILD_ARG and FLY_APP_VERSION" \
+  "grep -q 'FLY_VERSION_BUILD_ARG' '$SCRIPTS_DIR/azure-devops/global/stages/50-deployment/flyio.yaml' && grep -q 'FLY_APP_VERSION' '$SCRIPTS_DIR/azure-devops/global/stages/50-deployment/flyio.yaml'"
+assert_true "flyio: GitLab template documents FLY_VERSION_BUILD_ARG and FLY_APP_VERSION" \
+  "grep -q 'FLY_VERSION_BUILD_ARG' '$SCRIPTS_DIR/gitlab/global/stages/50-deployment/flyio.yaml' && grep -q 'FLY_APP_VERSION' '$SCRIPTS_DIR/gitlab/global/stages/50-deployment/flyio.yaml'"
 echo ""
 
 # ---------------------------------------------------------------------------

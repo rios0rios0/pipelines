@@ -203,6 +203,17 @@ on:
         description: |
           Deployment strategy (`rolling`, `immediate`, `canary`, `bluegreen`). Left unset, Fly
           picks its own default for the app's layout.
+      version_build_arg:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Name of the Dockerfile `ARG` that receives the app's version (e.g. `VERSION`). Passed to
+          BOTH builds of the commit: the image `go-docker.yaml` pushes to the registry, and the one
+          Fly's builder makes from source for the deploy, which never sees the registry's. Each
+          gets the same value -- the release this run cuts, the tag on a tag build, the commit's
+          first 7 characters otherwise -- so an error tracker files a deploy under one release
+          wherever it runs. Empty passes nothing, which is the default.
       deployment_environment:
         type: 'string'
         required: false
@@ -278,6 +289,7 @@ jobs:
       openapi_sync_path: ${{ inputs.openapi_sync_path }}
       openapi_sync_command: ${{ inputs.openapi_sync_command }}
       promote_release: ${{ inputs.promote_release }}
+      version_build_arg: ${{ inputs.version_build_arg }}
     secrets:
       sonar_token: ${{ secrets.sonar_token }}
 
@@ -375,6 +387,11 @@ jobs:
           machine_count: "${{ inputs.fly_machine_count != '' && inputs.fly_machine_count || vars[inputs.fly_machine_count_var] }}"
           config: '${{ inputs.fly_config }}'
           strategy: '${{ inputs.fly_strategy }}'
+          version_build_arg: '${{ inputs.version_build_arg }}'
+          # The release this run cut, when it cut one. The deploy that follows a bump merge runs
+          # on the branch, where the version would otherwise fall back to the commit while the
+          # image pushed beside it reports the release.
+          version: '${{ needs.go-docker.outputs.tag_name }}'
           environment: ${{ inputs.deployment_environment != '' && inputs.deployment_environment || (github.ref_type == 'tag' && 'production' || 'staging') }}
     needs: [ 'go-docker' ]
     # `!failure()` rather than `success()` so a skipped upstream job does not take the deploy with

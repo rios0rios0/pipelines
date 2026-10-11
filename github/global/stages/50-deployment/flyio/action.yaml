@@ -35,6 +35,20 @@ inputs:
     type: 'string'
     required: false
     default: ''
+  version_build_arg:
+    description: |
+      Name of the Dockerfile `ARG` that receives the app's version (e.g. `VERSION`), passed
+      to Fly's build with `--build-arg`. Leave empty to pass nothing, which is the default.
+    type: 'string'
+    required: false
+    default: ''
+  version:
+    description: |
+      The version `version_build_arg` receives. Leave empty to derive it: the tag on a tag
+      build, the commit's first 7 characters otherwise.
+    type: 'string'
+    required: false
+    default: ''
   environment:
     description: 'Deployment environment label, recorded in the deployment report.'
     type: 'string'
@@ -67,6 +81,8 @@ runs:
         FLY_MACHINE_COUNT: '${{ inputs.machine_count }}'
         FLY_CONFIG: '${{ inputs.config }}'
         FLY_STRATEGY: '${{ inputs.strategy }}'
+        FLY_VERSION_BUILD_ARG: '${{ inputs.version_build_arg }}'
+        FLY_APP_VERSION: '${{ inputs.version }}'
         DEPLOY_ENVIRONMENT: '${{ inputs.environment }}'
         DEPLOY_DRY_RUN: '${{ inputs.dry_run }}'
 

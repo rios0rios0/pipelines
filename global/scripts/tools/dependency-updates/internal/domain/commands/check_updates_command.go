@@ -133,7 +133,7 @@ func (c *CheckUpdatesCommand) Execute(result CheckResult) CheckResult {
 // proposes -- or holds, when it proposes none -- to the tag naming that
 // release, at the digest the tag resolves to now. A tag that does not exist is
 // handed to a person: a variant is not always published for every release.
-func (c *CheckUpdatesCommand) retag(task *entities.Task, pin *entities.Task) {
+func (c *CheckUpdatesCommand) retag(task, pin *entities.Task) {
 	if task.Error != "" {
 		return
 	}

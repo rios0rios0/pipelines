@@ -539,9 +539,19 @@ func (c *ApplyUpdatesCommand) alignCopies(
 			}
 		}
 	}
+	return append(fixes, c.alignGoCopies(manifest, targets)...)
+}
+
+// alignGoCopies brings every Go input to the release the pin of its line now
+// holds; nothing, in a repository that pins no Go.
+func (c *ApplyUpdatesCommand) alignGoCopies(
+	manifest []entities.ManifestEntry,
+	targets map[string]string,
+) []entities.CopyChange {
 	if !entities.HasGoPins(manifest) {
-		return fixes
+		return nil
 	}
+	var fixes []entities.CopyChange
 	for _, path := range InlineFiles(c.workspace) {
 		text, changed := entities.AlignGoCopies(c.workspace.Text(path), path, manifest, targets)
 		if len(changed) > 0 && c.workspace.Set(path, text) {

@@ -127,12 +127,13 @@ func TestUpstreamReleasesRepositoryRegistries(t *testing.T) {
 		assert.Equal(t, map[string]bool{"2.29.2": false, "2.29.1": true}, yanked)
 	})
 
-	t.Run("should escape capitals for the Go module proxy and date only the newer versions", func(t *testing.T) {
+	t.Run("should date the pinned and every newer version, escaping capitals", func(t *testing.T) {
 		t.Parallel()
 		// given
 		module := "https://proxy.golang.org/github.com/!cyclone!d!x/cyclonedx-gomod"
 		repository := liveReleases(t, map[string]any{
 			"GET " + module + "/@v/list":         "v1.11.0\nv1.12.0\nv1.13.0\n",
+			"GET " + module + "/@v/v1.12.0.info": map[string]any{"Version": "v1.12.0", "Time": "2026-06-01T10:00:00Z"},
 			"GET " + module + "/@v/v1.13.0.info": map[string]any{"Version": "v1.13.0", "Time": "2026-09-08T20:52:42Z"},
 		})
 
@@ -141,8 +142,12 @@ func TestUpstreamReleasesRepositoryRegistries(t *testing.T) {
 
 		// then
 		require.NoError(t, err)
-		require.Len(t, releases, 1)
-		assert.Equal(t, "v1.13.0", releases[0].Version)
+		published := map[string]string{}
+		for _, release := range releases {
+			published[release.Version] = release.Published.Format(time.DateOnly)
+		}
+		assert.Equal(t, map[string]string{"v1.13.0": "2026-09-08", "v1.12.0": "2026-06-01"}, published,
+			"verifying a bump TO v1.12.0 has to find v1.12.0's age here")
 	})
 }
 

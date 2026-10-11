@@ -428,8 +428,10 @@ func (r *UpstreamReleasesRepository) latestGoProxy(task *entities.Task) (string,
 	return info.Version, err
 }
 
-// listGoProxy dates the versions newer than the pin, newest first, one `.info`
-// each -- the proxy publishes no dated listing.
+// listGoProxy dates the pinned version and every newer one, newest first, one
+// `.info` each -- the proxy publishes no dated listing. The pinned version is
+// dated too: verifying a pull request asks how old the version it moves TO is,
+// and that version is the pin there.
 func (r *UpstreamReleasesRepository) listGoProxy(task *entities.Task) ([]entities.Release, error) {
 	content, err := r.transport.Get(goProxyModule(task.Coord)+"/@v/list", nil, MaxDocumentBytes)
 	if err != nil {
@@ -437,7 +439,7 @@ func (r *UpstreamReleasesRepository) listGoProxy(task *entities.Task) ([]entitie
 	}
 	var versions []entities.Release
 	for line := range strings.FieldsSeq(string(content)) {
-		if entities.IsNewer(task.Current, line) {
+		if !entities.IsNewer(line, task.Current) {
 			versions = append(versions, entities.Release{Version: line})
 		}
 	}

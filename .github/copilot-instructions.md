@@ -106,7 +106,10 @@ The checker is Go (`go.mod` at the repository root), built from the checkout on 
 `global/scripts/shared/go-helper.sh`; no Python helper remains in it. It never proposes a release that
 introduces a known vulnerability or is a known malicious publication (OSV.dev), forces the fix of a
 vulnerable pin in use, holds everything else for a seven-day cooldown, and scans every container image
-rebuild against the image it replaces with OSV-Scanner. `dependency-updates-verify.yaml`
+rebuild against the image it replaces with OSV-Scanner. Go itself is a pin per release line
+(`# upstream: go-toolchain golang.org/toolchain track=1.27`, `# osv: Go stdlib toolchain`), and every
+`go-version:`, `GoTool@0` input and `golang:<release>` image is a copy of the pin of its line --
+`internal/domain/entities/toolchain.go`. `dependency-updates-verify.yaml`
 (`run.sh verify --base-dir <base> --repo-dir <head>`) re-proves every pin a pull request moves from its
 diff; `security > verify:dependency-updates` is meant to be a required check, so a pull request that
 moves no pin must keep asking the network nothing -- `test-dependency-updates.sh` runs it live with every

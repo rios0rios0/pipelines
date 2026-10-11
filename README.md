@@ -1251,6 +1251,7 @@ merged for you: the pull request is how you see the updates and decide.
 | Binaries and packages | is there a newer version upstream? | the version, and every SHA-256 of the new release's assets |
 | Vendored files | is there a newer upstream release of a file copied here? | the file, upstream's change re-merged onto this repository's adjustments |
 | Inline copies | do the two copies of a value still agree? | every copy, so a template that cannot read the manifest is not left behind |
+| Go toolchain | is there a newer patch of the pinned Go line, and is the Go in use vulnerable? | the pin, every `go-version:` and `GoTool@0` input, and every `golang:<release>` image -- moved to the new release's tag at its digest, after a scan against the old image |
 
 **Nothing known to be unsafe is ever proposed.** Every pin here runs in every
 repository that consumes this library, so a bad update is not one repository's
@@ -1422,6 +1423,7 @@ changed pin must pass every check that applies to it:
 | vendored | a vendored file is not exactly upstream's change merged onto the base's adjustments |
 | registry | an image digest does not exist in the repository it is pinned under |
 | scan | a re-pinned image carries a known vulnerability, or a malicious package, that the image it replaces did not |
+| copies | a moved `golang:` image names another release than its Go pin, or the pull request leaves any copy of a pin out of step with it |
 
 A check that cannot be completed fails too: an unproven change is not a passing
 one. The verdict is posted on the pull request as one comment, updated on every

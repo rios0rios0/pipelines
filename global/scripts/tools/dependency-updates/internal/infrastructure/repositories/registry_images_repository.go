@@ -87,8 +87,13 @@ func imageDigest(transport Transport, reference string) (string, error) {
 		return "", err
 	}
 	answer, err := transport.Head(fmt.Sprintf("https://%s/v2/%s/manifests/%s", registry, repository, tag), headers)
+	if repositories.IsNotFound(err) {
+		// A definite "no such tag", kept apart from a lookup that failed: the
+		// tag a Go pin moves an image to may not be published in its variant.
+		return "", repositories.NewNotFoundError(failedRequest, reference, err)
+	}
 	if err != nil {
-		return "", repositories.NewLookupError("%s -> %s", reference, err)
+		return "", repositories.NewLookupError(failedRequest, reference, err)
 	}
 	digest := answer.Get("Docker-Content-Digest")
 	if digest == "" {

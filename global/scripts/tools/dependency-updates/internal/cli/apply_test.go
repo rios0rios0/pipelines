@@ -373,3 +373,68 @@ func TestApplyCommandLineRefusals(t *testing.T) {
 		assert.Contains(t, workflow, "someorg/someaction@"+applyValues().actionOld+"' # v3.1.0")
 	})
 }
+
+func TestApplyCommandLineGoToolchain(t *testing.T) {
+	t.Parallel()
+
+	oldImage := "golang:1.27.1-bookworm@sha256:" + repeat("a", 64)
+	newImage := "golang:1.27.2-bookworm@sha256:" + repeat("c", 64)
+	goAdvisory := func(identifier, pkg string) map[string]any {
+		return map[string]any{"id": identifier, "database_specific": map[string]any{"severity": "HIGH"},
+			"affected": []any{map[string]any{
+				"package": map[string]any{"ecosystem": "Go", "name": pkg},
+				"ranges": []any{map[string]any{"type": "SEMVER", "events": []any{
+					map[string]any{"introduced": "0"}, map[string]any{"fixed": "1.27.2"},
+				}}},
+			}}}
+	}
+	answers := map[string]any{
+		"go-toolchain:golang.org/toolchain": map[string]any{"latest": "1.27.2", "releases": []any{
+			map[string]any{"version": "1.27.2", "published": "2026-10-02T20:28:03Z"},
+		}},
+		"osv:Go:stdlib":                []any{goAdvisory("GO-2026-6603", "stdlib")},
+		"osv:Go:toolchain":             []any{goAdvisory("GO-2026-6601", "toolchain")},
+		"image:" + oldImage:            "sha256:" + repeat("a", 64),
+		"image:golang:1.27.2-bookworm": "sha256:" + repeat("c", 64),
+		"scan:" + oldImage:             map[string]any{"findings": []any{}},
+		"scan:" + newImage:             map[string]any{"findings": []any{}},
+	}
+
+	t.Run("should force Go's fix through its pin, its inputs and its images in one pull request", func(t *testing.T) {
+		t.Parallel()
+		// given
+		workdir := t.TempDir()
+		writeFiles(t, filepath.Join(workdir, "repo"), map[string]string{
+			".changes/unreleased/.gitkeep": "",
+			"global/scripts/shared/pinned-versions.sh": "#!/usr/bin/env sh\n" +
+				"# upstream: go-toolchain golang.org/toolchain track=1.27\n# osv: Go stdlib toolchain\n" +
+				"GO_PINNED_VERSION=\"1.27.1\"\n",
+			".github/workflows/ci.yaml": "jobs:\n  build:\n    steps:\n" +
+				"      - with:\n          go-version: '1.27.1'\n" +
+				"    container:\n      image: '" + oldImage + "'\n",
+			"azure-devops/go.yaml": "steps:\n  - task: 'GoTool@0'\n    inputs:\n      version: '1.27'\n",
+		})
+		writeJSON(t, filepath.Join(workdir, "fixture.json"), answers)
+
+		// when
+		result := run(t, workdir, "--repo-dir", "repo", "--report", "out", "--fixture", "fixture.json", "--apply",
+			"--timestamp", "2026-10-08T06:00:00Z", "--now", "2026-10-10T06:00:00Z")
+
+		// then
+		assert.Equal(t, 1, result.exit, "the pin in use is vulnerable until the pull request is merged: %s",
+			result.output())
+		repo := filepath.Join(workdir, "repo")
+		assert.Contains(t, read(t, filepath.Join(repo, "global/scripts/shared/pinned-versions.sh")),
+			`GO_PINNED_VERSION="1.27.2"`)
+		workflow := read(t, filepath.Join(repo, ".github/workflows/ci.yaml"))
+		assert.Contains(t, workflow, "go-version: '1.27.2'")
+		assert.Contains(t, workflow, "image: '"+newImage+"'")
+		assert.Contains(t, read(t, filepath.Join(repo, "azure-devops/go.yaml")), "version: '1.27.2'")
+		title := read(t, filepath.Join(workdir, "out", "pull-request-title.txt"))
+		assert.True(t, strings.HasPrefix(title, "fix(deps):"), title)
+		body := read(t, filepath.Join(workdir, "out", "pull-request.md"))
+		assert.Contains(t, body, "`golang:1.27.1-bookworm -> golang:1.27.2-bookworm`")
+		assert.Contains(t, body, "GO-2026-6601", "the go command's own advisory is part of the fix")
+		assert.Contains(t, result.stdout, "UPDATE  golang:1.27.1-bookworm")
+	})
+}

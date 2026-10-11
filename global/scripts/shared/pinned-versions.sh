@@ -36,16 +36,18 @@
 # pinning stops a dependency moving without a decision, and the annotation is
 # how the decision gets prompted. The shape is:
 #
-#   # upstream: <kind> <coordinate> [track=<major>] [ceiling=<PIN>] [cooldown=<days>]
+#   # upstream: <kind> <coordinate> [track=<line>] [ceiling=<PIN>] [cooldown=<days>]
 #
 #   kind         one of github-release, github-tag, gitlab-tag, pypi, npm,
-#                rubygems, goproxy
+#                rubygems, goproxy, go-toolchain
 #   coordinate   owner/repo, a project path, or a package/module name
-#   track=<n>    only report releases INSIDE major <n>. Used where a pin is
-#                deliberately held back: GoReleaser is on 1.x because 2.x is a
-#                breaking configuration change, so reporting 2.x every run would
-#                be reporting a migration as an update until somebody muted the
-#                check.
+#   track=<n>    only report releases INSIDE the line <n> names: a major (`1`)
+#                or a minor line (`1.27`). Used where a pin is deliberately
+#                held back: GoReleaser is on 1.x because 2.x is a breaking
+#                configuration change, so reporting 2.x every run would be
+#                reporting a migration as an update until somebody muted the
+#                check; Go is held to a minor line because moving every
+#                consumer's builds to a new Go is a decision, not a patch.
 #   ceiling=PIN  never move past the version of another pin here: the golden
 #                golangci-lint configuration must not name a linter the pinned
 #                golangci-lint binary does not have.
@@ -69,7 +71,10 @@
 # rubygems or goproxy pin IS a package, so it needs nothing more. A binary
 # names the package it is built from:
 #
-#   # osv: <ecosystem> <package>     e.g. `# osv: Go github.com/gruntwork-io/terragrunt`
+#   # osv: <ecosystem> <package>...  e.g. `# osv: Go github.com/gruntwork-io/terragrunt`;
+#                                    Go itself is `# osv: Go stdlib toolchain`, the
+#                                    standard library's advisories and the `go`
+#                                    command's, which are filed apart
 #   # osv: none                      no advisory database covers it -- say why
 #
 # A binary with neither is reported as untracked, for the same reason a pin
@@ -198,6 +203,21 @@ OSV_SCANNER_SHA256_AMD64="ca69b3d3cd08f889a49dc0a383122f71cc528b83803671df5fd874
 OSV_SCANNER_SHA256_ARM64="2c71403eb443d05891c4f268c3ad771cf4f16e5443463fd7851ef8f454d3c7e4"
 
 # --- Language tooling --------------------------------------------------------
+
+# Go itself, one pin per release line. No template can source this file for it,
+# so the dependency-update checker keeps every copy on the pin of its line:
+# `go-version:` (GitHub Actions), the `GoTool@0` `version:` (Azure DevOps) and
+# every `golang:<release>` image (GitLab CI, Dockerfiles), which moves to the
+# new release's tag at the digest that tag resolves to. A copy on a line no pin
+# holds fails the check. The Go vulnerability database files the `go` command's
+# advisories apart from the standard library's, so both are asked about.
+# upstream: go-toolchain golang.org/toolchain track=1.27
+# osv: Go stdlib toolchain
+GO_PINNED_VERSION="1.27.2"
+# The line `global/containers/golang.1.26-awscli` is built on, and named after.
+# upstream: go-toolchain golang.org/toolchain track=1.26
+# osv: Go stdlib toolchain
+GO_1_26_PINNED_VERSION="1.26.9"
 
 # upstream: github-release golangci/golangci-lint
 # osv: Go github.com/golangci/golangci-lint/v2

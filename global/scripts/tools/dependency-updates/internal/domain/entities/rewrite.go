@@ -186,6 +186,9 @@ func Fingerprint(applied []*Task, fixes []CopyChange) string {
 	lines := make([]string, 0, len(applied)+len(fixes))
 	for _, task := range applied {
 		fields := []string{string(task.Group), task.Label, task.Apply.New, task.Apply.SHA}
+		if task.Retag != "" {
+			fields = append(fields, task.Retag)
+		}
 		for _, digest := range task.Apply.Digests {
 			fields = append(fields, digest.New)
 		}

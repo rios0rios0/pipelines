@@ -34,9 +34,12 @@ func (c *Console) Errorf(format string, arguments ...any) {
 // Findings lists what the check found.
 func (c *Console) Findings(check commands.CheckResult) {
 	for _, task := range SortedTasks(check.Outdated()) {
-		if task.Group == entities.GroupImage {
+		switch {
+		case task.Retag != "":
+			c.Printf("  UPDATE  %-52s -> %s\n", task.Label, task.Retag)
+		case task.Group == entities.GroupImage:
 			c.Printf("  UPDATE  %-52s digest moved\n", task.Label)
-		} else {
+		default:
 			c.Printf("  UPDATE  %-52s %s -> %s\n", task.Label, task.Current, task.Latest)
 		}
 	}
@@ -63,12 +66,17 @@ func (c *Console) Findings(check commands.CheckResult) {
 // Applied lists what applying did.
 func (c *Console) Applied(apply commands.ApplyResult) {
 	for _, task := range SortedTasks(apply.Applied) {
-		c.Printf("  APPLIED %-52s %s\n", task.Label, shown(task, task.Apply.New))
+		c.Printf("  APPLIED %-52s %s\n", ImageName(task), shown(task, task.Apply.New))
 	}
 	for _, fix := range apply.Fixes {
 		c.Printf("  ALIGNED %-52s %s: %s -> %s\n", fix.Var, fix.File, fix.From, fix.To)
 	}
-	for _, task := range SortedTasks(apply.Refused) {
+	c.Refused(apply.Refused)
+}
+
+// Refused lists the updates handed to a person, and why.
+func (c *Console) Refused(tasks []*entities.Task) {
+	for _, task := range SortedTasks(tasks) {
 		c.Errorf("  REFUSED %-52s %s\n", task.Label, task.Refused)
 	}
 }

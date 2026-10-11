@@ -62,6 +62,10 @@ func Title(applied []*entities.Task, fixes []entities.CopyChange) string {
 	}
 	if len(applied) == 1 && len(fixes) == 0 {
 		task := applied[0]
+		if task.Retag != "" {
+			return fmt.Sprintf("%s(deps): moved `%s` to `%s`, the release its Go pin names",
+				kind, task.Label, task.Retag)
+		}
 		if task.Group == entities.GroupImage {
 			return fmt.Sprintf("%s(deps): re-pinned `%s` to the digest its tag resolves to now", kind, task.Label)
 		}
@@ -93,7 +97,7 @@ func changeList(applied []*entities.Task, group entities.Group, moves bool) stri
 	for _, task := range rows {
 		switch {
 		case group == entities.GroupImage:
-			described = append(described, "`"+task.Label+"`")
+			described = append(described, "`"+ImageName(task)+"`")
 		case moves:
 			described = append(described, fmt.Sprintf("`%s` `%s` -> `%s`", task.Label, task.Current, task.Apply.New))
 		default:
@@ -291,7 +295,7 @@ func imagesSection(applied []*entities.Task) []string {
 	lines := append([]string{fmt.Sprintf("## Container images (%d)", len(images)), ""},
 		table("image", "pinned digest", "proposed digest", knownVulnerabilities)...)
 	for _, task := range images {
-		lines = append(lines, fmt.Sprintf("| `%s` | `%s` | `%s` | %s |", task.Label, ShortDigest(task.Current),
+		lines = append(lines, fmt.Sprintf("| `%s` | `%s` | `%s` | %s |", ImageName(task), ShortDigest(task.Current),
 			ShortDigest(task.Apply.New), imageNote(task.Apply.Image)))
 	}
 	return append(lines, "", imagesNote, "")

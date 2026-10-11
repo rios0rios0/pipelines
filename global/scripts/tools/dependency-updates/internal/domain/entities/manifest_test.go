@@ -65,7 +65,25 @@ func TestParseManifest(t *testing.T) {
 		assert.Contains(t, config.Digests[0].Asset, "{version}/.golangci.yml")
 		require.NotNil(t, entries[1].Advisories)
 		assert.Equal(t, entities.EcosystemGo, entries[1].Advisories.Ecosystem)
-		assert.Equal(t, "github.com/gruntwork-io/terragrunt", entries[1].Advisories.Package)
+		assert.Equal(t, []string{"github.com/gruntwork-io/terragrunt"}, entries[1].Advisories.Packages)
+	})
+
+	t.Run("should read every package an advisory source names, and a minor line to track", func(t *testing.T) {
+		t.Parallel()
+		// given
+		manifest := "# upstream: go-toolchain golang.org/toolchain track=1.27\n" +
+			"# osv: Go stdlib toolchain\n" +
+			"GO_PINNED_VERSION=\"1.27.2\"\n"
+
+		// when
+		entries := entities.ParseManifest(manifest)
+
+		// then
+		require.Len(t, entries, 1)
+		assert.Equal(t, entities.KindGoToolchain, entries[0].Kind)
+		assert.Equal(t, "1.27", entries[0].Track)
+		require.NotNil(t, entries[0].Advisories)
+		assert.Equal(t, []string{"stdlib", "toolchain"}, entries[0].Advisories.Packages)
 	})
 
 	t.Run("should give a digest to the pin with the longest matching name", func(t *testing.T) {

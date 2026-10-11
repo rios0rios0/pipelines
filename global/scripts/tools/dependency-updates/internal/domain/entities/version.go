@@ -173,11 +173,20 @@ func Restyle(current, latest string) string {
 	return prefix + value
 }
 
-// InMajor is true when `version` belongs to the major `major` names (`1`, or
-// `v1`): how a pin held inside a major judges a release.
-func InMajor(version, major string) bool {
-	parts := Parts(version)
-	return len(parts) > 0 && strconv.FormatInt(parts[0], 10) == strings.TrimPrefix(major, "v")
+// InLine is true when `version` belongs to the release line `line` names: a
+// major (`1`, or `v1`) or a minor line (`1.27`). It is how a pin held with
+// `track=` judges a release -- GoReleaser to 1.x, the Go toolchain to 1.27.x.
+func InLine(version, line string) bool {
+	prefix, parts := Parts(line), Parts(version)
+	return len(prefix) > 0 && len(parts) >= len(prefix) && compareParts(parts[:len(prefix)], prefix) == 0
+}
+
+// LineName is a release line as a sentence names it: `major 1`, `the 1.27 line`.
+func LineName(line string) string {
+	if len(Parts(line)) > 1 {
+		return "the " + Normalise(line) + " line"
+	}
+	return "major " + Normalise(line)
 }
 
 // IsMajor is true when moving from `current` to `proposed` changes the major.

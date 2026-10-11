@@ -21,6 +21,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/rios0rios0/pipelines/global/scripts/tools/dependency-updates/internal/domain/entities"
+	"github.com/rios0rios0/pipelines/global/scripts/tools/dependency-updates/internal/domain/repositories"
 	infrastructure "github.com/rios0rios0/pipelines/global/scripts/tools/dependency-updates/internal/infrastructure/repositories"
 )
 
@@ -187,6 +189,27 @@ func TestImageExporter(t *testing.T) {
 		// then
 		var notScannable *infrastructure.NotScannableError
 		require.ErrorAs(t, err, &notScannable)
+	})
+}
+
+func TestRegistryTagDigest(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should answer a tag the registry does not have as a definite not-found", func(t *testing.T) {
+		t.Parallel()
+		// given
+		image := newFakeImage(t, "application/vnd.docker.image.rootfs.diff.tar.gzip", "linux/amd64")
+		server, reference := image.serve(t)
+		host, _, _ := strings.Cut(reference, "/")
+		repository := infrastructure.NewUpstreamReleasesRepository(
+			infrastructure.NewHTTPTransportWithClient(server.Client()), nil)
+
+		// when
+		_, err := repository.Latest(&entities.Task{Kind: entities.KindImage, Coord: host + "/acme/tool:2.0"})
+
+		// then
+		require.Error(t, err)
+		assert.True(t, repositories.IsNotFound(err), "the tag a Go pin implies may not exist: an answer, not an outage")
 	})
 }
 

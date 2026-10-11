@@ -89,12 +89,12 @@ func (c *VerifyPullRequestCommand) manifestFindings(item *change, headManifest [
 func boundsFindings(item *change, headManifest []entities.ManifestEntry) []Finding {
 	task := item.task
 	var findings []Finding
-	if task.TrackMajor != "" && !entities.InMajor(task.Current, task.TrackMajor) {
+	if task.Track != "" && !entities.InLine(task.Current, task.Track) {
 		findings = append(findings, Finding{Verdict: VerdictFail, Check: CheckBounds, Detail: fmt.Sprintf(
-			"`%s` is outside major %s, which the pin is held to (`track=%s`)",
+			"`%s` is outside %s, which the pin is held to (`track=%s`)",
 			task.Current,
-			task.TrackMajor,
-			task.TrackMajor,
+			entities.LineName(task.Track),
+			task.Track,
 		)})
 	}
 	if ceiling := ceilingOf(task, headManifest); ceiling != "" && entities.IsNewer(ceiling, task.Current) {

@@ -3,6 +3,7 @@
 package commands
 
 import (
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -41,7 +42,15 @@ func (r CheckResult) Failed() []*entities.Task {
 
 // Proposals are the tasks the policy chose a release for.
 func (r CheckResult) Proposals() []*entities.Task {
-	return filterTasks(r.Tasks, func(task *entities.Task) bool { return task.Error == "" && task.Target() != "" })
+	return filterTasks(r.Tasks, func(task *entities.Task) bool {
+		return task.Error == "" && task.Refused == "" && task.Target() != ""
+	})
+}
+
+// Refused are the updates known to need a person before anything is applied:
+// a Go image whose pin names a release its variant is not published for.
+func (r CheckResult) Refused() []*entities.Task {
+	return filterTasks(r.Tasks, func(task *entities.Task) bool { return task.Refused != "" })
 }
 
 // Vulnerable are the tasks whose pin in use today has unaccepted advisories.
@@ -109,7 +118,47 @@ func (c *CheckUpdatesCommand) Execute(result CheckResult) CheckResult {
 	if err := c.assess(result.Tasks); err != nil {
 		result.AdvisoryError = err.Error()
 	}
+	pins := make(map[*entities.ManifestEntry]*entities.Task)
+	for _, task := range result.Tasks {
+		if task.Group == entities.GroupManifest {
+			pins[task.Entry] = task
+		}
+	}
+	followers := filterTasks(result.Tasks, func(task *entities.Task) bool { return task.Follows != nil })
+	parallel(c.jobs, followers, func(task *entities.Task) { c.retag(task, pins[task.Follows]) })
 	return result
+}
+
+// retag moves a `golang:` image whose tag names another release than its pin
+// proposes -- or holds, when it proposes none -- to the tag naming that
+// release, at the digest the tag resolves to now. A tag that does not exist is
+// handed to a person: a variant is not always published for every release.
+func (c *CheckUpdatesCommand) retag(task, pin *entities.Task) {
+	if task.Error != "" {
+		return
+	}
+	image, _ := entities.ParseGoImage(task.Coord)
+	release := task.Follows.Current
+	if pin != nil && pin.Error == "" && pin.Target() != "" {
+		release = pin.Proposed()
+	}
+	if entities.SameValue(task.Follows.Var, image.Release, release) {
+		return
+	}
+	name := image.Name(release)
+	digest, err := c.releases.Latest(&entities.Task{
+		Group: entities.GroupImage, Label: name, Kind: entities.KindImage, Coord: name,
+	})
+	switch {
+	case repositories.IsNotFound(err):
+		task.Refused = fmt.Sprintf("`%s` follows `%s`, which moves to `%s`, but the registry has no `%s`: "+
+			"move the image to a variant published for that release, or hold the pin", task.Label,
+			task.Follows.Name, release, name)
+	case err != nil:
+		task.Error = err.Error()
+	default:
+		task.Retag, task.Latest, task.Outdated = name, digest, true
+	}
 }
 
 func (c *CheckUpdatesCommand) resolve(task *entities.Task, manifest []entities.ManifestEntry) {
@@ -144,7 +193,7 @@ func (c *CheckUpdatesCommand) withinBounds(
 	if task.Group == entities.GroupImage {
 		return latest, nil
 	}
-	if task.TrackMajor != "" && !entities.InMajor(latest, task.TrackMajor) {
+	if task.Track != "" && !entities.InLine(latest, task.Track) {
 		return task.Current, nil
 	}
 	if task.HasFamily && entities.IsTaggedKind(task.Kind) {
@@ -194,10 +243,7 @@ func (c *CheckUpdatesCommand) assess(tasks []*entities.Task) error {
 		}
 		identify(task)
 		if task.Security.Checked {
-			queries = append(
-				queries,
-				entities.AdvisoryQuery{Package: task.Security.Package, Version: task.Security.Version},
-			)
+			queries = append(queries, task.Security.Queries(task.Security.Version)...)
 		}
 	}
 	found, err := c.advisories.FindAll(queries)
@@ -206,8 +252,7 @@ func (c *CheckUpdatesCommand) assess(tasks []*entities.Task) error {
 	}
 	for _, task := range tasks {
 		if task.Security.Checked {
-			query := entities.AdvisoryQuery{Package: task.Security.Package, Version: task.Security.Version}
-			affecting := liveAdvisories(found[query])
+			affecting := liveAdvisories(task.Security.Answer(found, task.Security.Version))
 			task.Security.Current = entities.Unaccepted(affecting, c.settings.Acceptances, today)
 			task.Security.Accepted = entities.Introduced(task.Security.Current, affecting)
 		}
@@ -239,10 +284,7 @@ func (c *CheckUpdatesCommand) choose(tasks []*entities.Task, today string) error
 		candidates[task] = listed
 		if task.Security.Checked {
 			for _, candidate := range listed {
-				queries = append(
-					queries,
-					entities.AdvisoryQuery{Package: task.Security.Package, Version: candidate.Version},
-				)
+				queries = append(queries, task.Security.Queries(candidate.Version)...)
 			}
 		}
 	}
@@ -252,8 +294,8 @@ func (c *CheckUpdatesCommand) choose(tasks []*entities.Task, today string) error
 	}
 	for task, listed := range candidates {
 		for index := range listed {
-			query := entities.AdvisoryQuery{Package: task.Security.Package, Version: listed[index].Version}
-			listed[index].Advisories = entities.Unaccepted(liveAdvisories(found[query]), c.settings.Acceptances, today)
+			listed[index].Advisories = entities.Unaccepted(
+				liveAdvisories(task.Security.Answer(found, listed[index].Version)), c.settings.Acceptances, today)
 		}
 		policy := entities.SelectionPolicy{Now: c.now, Cooldown: cooldownFor(task, c.settings)}
 		task.Selection = policy.Select(task.Security.Current, listed)
@@ -298,7 +340,7 @@ func (c *CheckUpdatesCommand) candidates(task *entities.Task) ([]entities.Candid
 }
 
 func sameLine(task *entities.Task, version string) bool {
-	if task.TrackMajor != "" && !entities.InMajor(version, task.TrackMajor) {
+	if task.Track != "" && !entities.InLine(version, task.Track) {
 		return false
 	}
 	if task.HasFamily && entities.IsTaggedKind(task.Kind) {
@@ -315,8 +357,8 @@ func isRangePin(task *entities.Task) bool {
 // identify sets where a pin's advisories are looked up and which version is
 // asked about.
 func identify(task *entities.Task) {
-	pkg, note, known := advisoryPackage(task)
-	task.Security = entities.SecurityStatus{Package: pkg, Checked: known, Note: note, Version: task.Current}
+	packages, note, known := advisoryPackages(task)
+	task.Security = entities.SecurityStatus{Packages: packages, Checked: known, Note: note, Version: task.Current}
 	if !known || !isRangePin(task) {
 		return
 	}
@@ -332,24 +374,31 @@ func identify(task *entities.Task) {
 	task.Security.Version = task.Latest
 }
 
-func advisoryPackage(task *entities.Task) (entities.Package, string, bool) {
+func advisoryPackages(task *entities.Task) ([]entities.Package, string, bool) {
 	switch task.Group {
 	case entities.GroupAction:
-		return entities.Package{Ecosystem: entities.EcosystemGitHubActions, Name: task.Coord}, "", true
+		return []entities.Package{{Ecosystem: entities.EcosystemGitHubActions, Name: task.Coord}}, "", true
 	case entities.GroupImage:
-		return entities.Package{}, "container images are verified by digest; their packages are not resolved here", false
+		return nil, "container images are verified by digest; their packages are not resolved here", false
 	case entities.GroupManifest:
 	}
 	if source := task.Entry.Advisories; source != nil {
-		if source.None {
-			return entities.Package{}, "`# osv: none`: no advisory database covers this artifact", false
+		switch {
+		case source.None:
+			return nil, "`# osv: none`: no advisory database covers this artifact", false
+		case len(source.Packages) == 0:
+			return nil, "`# osv: " + source.Ecosystem + "` names no package to look up", false
 		}
-		return entities.Package{Ecosystem: source.Ecosystem, Name: source.Package}, "", true
+		packages := make([]entities.Package, 0, len(source.Packages))
+		for _, name := range source.Packages {
+			packages = append(packages, entities.Package{Ecosystem: source.Ecosystem, Name: name})
+		}
+		return packages, "", true
 	}
 	if ecosystem, implied := impliedEcosystems()[task.Kind]; implied {
-		return entities.Package{Ecosystem: ecosystem, Name: task.Coord}, "", true
+		return []entities.Package{{Ecosystem: ecosystem, Name: task.Coord}}, "", true
 	}
-	return entities.Package{}, "no `# osv:` annotation", false
+	return nil, "no `# osv:` annotation", false
 }
 
 // impliedEcosystems are the upstream kinds whose coordinate IS a package name

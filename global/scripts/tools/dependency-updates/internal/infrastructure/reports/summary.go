@@ -50,6 +50,9 @@ func Summary(check commands.CheckResult, apply *commands.ApplyResult) string {
 	lines = append(lines, heldSection(check.Held())...)
 	lines = append(lines, driftSection(check.Drift)...)
 	lines = append(lines, untrackedSection(check.Untracked)...)
+	if apply == nil {
+		lines = append(lines, refusedSection(check.Refused())...)
+	}
 	lines = append(lines, errorsSection(check.Failed(), "")...)
 	if check.AdvisoryError != "" {
 		lines = append(lines, "## Advisory lookup failed", "",
@@ -60,7 +63,7 @@ func Summary(check commands.CheckResult, apply *commands.ApplyResult) string {
 		lines = append(lines, preparedSection(*apply)...)
 	}
 	if len(check.Outdated()) == 0 && len(check.Failed()) == 0 && len(check.Drift) == 0 && len(check.Untracked) == 0 &&
-		len(check.Vulnerable()) == 0 && check.AdvisoryError == "" {
+		len(check.Vulnerable()) == 0 && len(check.Refused()) == 0 && check.AdvisoryError == "" {
 		lines = append(lines, "Every pinned dependency is current.", "")
 	}
 	return strings.Join(lines, "\n")
@@ -108,7 +111,7 @@ func outdatedSection(rows []*entities.Task, group entities.Group, title string, 
 	if group == entities.GroupImage {
 		lines = append(lines, table("image", "pinned digest", "current digest")...)
 		for _, task := range rows {
-			lines = append(lines, codeRow(task.Label, task.Current[:min(len(task.Current), digestColumn)]+"...",
+			lines = append(lines, codeRow(ImageName(task), task.Current[:min(len(task.Current), digestColumn)]+"...",
 				MDSafe(task.Latest[:min(len(task.Latest), digestColumn)])+"..."))
 		}
 	} else {
@@ -172,6 +175,18 @@ func untrackedSection(untracked []entities.Untracked) []string {
 			lines,
 			fmt.Sprintf("- `%s` (pinned `%s`): no `# %s:` annotation", row.Name, row.Current, row.Missing),
 		)
+	}
+	return append(lines, "")
+}
+
+// refusedSection is the updates a check alone already knows need a person.
+func refusedSection(refused []*entities.Task) []string {
+	if len(refused) == 0 {
+		return nil
+	}
+	lines := []string{fmt.Sprintf("## Updates that need a person (%d)", len(refused)), ""}
+	for _, task := range SortedTasks(refused) {
+		lines = append(lines, bullet(task.Label, MDSafe(task.Refused)))
 	}
 	return append(lines, "")
 }

@@ -59,17 +59,43 @@ func changesTable(changes []commands.VerifiedChange) []string {
 		if change.Group == entities.GroupImage {
 			from, to = ShortDigest(from), ShortDigest(to)
 		}
-		lines = append(lines, fmt.Sprintf("| `%s` | `%s` | `%s` | %s |",
-			change.Label, MDSafe(from), MDSafe(to), verdictIcon(change.Verdict())))
+		lines = append(lines, fmt.Sprintf("| %s | `%s` | `%s` | %s |",
+			changeName(change), MDSafe(from), MDSafe(to), verdictIcon(change.Verdict())))
 	}
 	return append(lines, "")
+}
+
+// changeName names a change in Markdown: the dependency, or both names of an
+// image moved to another tag. A name is read from the pull request's own diff
+// -- a fork's, possibly -- so it is made inert like any upstream value.
+func changeName(change commands.VerifiedChange) string {
+	if change.Retagged != "" {
+		return "`" + MDSafe(change.Retagged) + "` -> `" + MDSafe(change.Label) + "`"
+	}
+	return "`" + MDSafe(change.Label) + "`"
+}
+
+// changeNameHTML is changeName inside a `<summary>`, which is HTML.
+func changeNameHTML(change commands.VerifiedChange) string {
+	if change.Retagged != "" {
+		return "<code>" + MDSafe(change.Retagged) + "</code> -&gt; <code>" + MDSafe(change.Label) + "</code>"
+	}
+	return "<code>" + MDSafe(change.Label) + "</code>"
+}
+
+// consoleName is changeName for a terminal.
+func consoleName(change commands.VerifiedChange) string {
+	if change.Retagged != "" {
+		return change.Retagged + " -> " + change.Label
+	}
+	return change.Label
 }
 
 func changeDetails(changes []commands.VerifiedChange) []string {
 	var lines []string
 	for _, change := range changes {
 		lines = append(lines,
-			"<details><summary><code>"+MDSafe(change.Label)+"</code>: "+verdictIcon(change.Verdict())+"</summary>", "")
+			"<details><summary>"+changeNameHTML(change)+": "+verdictIcon(change.Verdict())+"</summary>", "")
 		for _, finding := range change.Findings {
 			lines = append(lines,
 				fmt.Sprintf("- %s **%s**: %s", verdictIcon(finding.Verdict), finding.Check, MDText(finding.Detail)))
@@ -96,6 +122,16 @@ func verificationTail(result commands.VerifyResult) []string {
 		}
 		lines = append(lines, "")
 	}
+	if len(result.Drift) > 0 {
+		lines = append(lines, "## Copies this pull request leaves out of step", "",
+			"Each copy below no longer names what the pin it mirrors does, and did on the base branch: a pin moved "+
+				"without its copies, or a copy edited away from its pin.", "")
+		lines = append(lines, table("pin", "file", "copy", "pin")...)
+		for _, row := range result.Drift {
+			lines = append(lines, codeRow(row.Name, row.File, row.Inline, row.Manifest))
+		}
+		lines = append(lines, "")
+	}
 	if len(result.Untracked) > 0 {
 		lines = append(lines, "## Pins nothing can check", "")
 		for _, row := range result.Untracked {
@@ -107,8 +143,12 @@ func verificationTail(result commands.VerifyResult) []string {
 }
 
 func verificationHeadline(result commands.VerifyResult) string {
-	if len(result.Changes) == 0 {
+	switch {
+	case len(result.Changes) == 0 && len(result.Drift) == 0:
 		return "This pull request moves no pinned dependency: nothing to verify."
+	case len(result.Changes) == 0:
+		return "**Not verified:** this pull request moves no pinned dependency, but leaves copies of one out of step " +
+			"with its pin."
 	}
 	switch result.Exit() {
 	case 0:
@@ -117,7 +157,7 @@ func verificationHeadline(result commands.VerifyResult) string {
 			"and every digest, commit and vendored file is the one upstream published.",
 			Plural(len(result.Changes), "pinned dependency", "pinned dependencies"))
 	case 1:
-		return "**Not verified:** at least one change below failed a check, and must not be merged as it is."
+		return "**Not verified:** at least one change or copy below failed a check, and must not be merged as it is."
 	default:
 		return "**Not verified:** something below could not be checked, and an unproven change is not a passing one."
 	}
@@ -129,12 +169,15 @@ func (c *Console) Verification(result commands.VerifyResult) {
 		c.Printf("No pinned dependency changed: nothing to verify.\n")
 	}
 	for _, change := range result.Changes {
-		c.Printf("  %-6s %-52s %s -> %s\n", change.Verdict(), change.Label, change.From, change.To)
+		c.Printf("  %-6s %-52s %s -> %s\n", change.Verdict(), consoleName(change), change.From, change.To)
 		for _, finding := range change.Findings {
 			if finding.Verdict != commands.VerdictPass {
 				c.Printf("           %-11s %s\n", finding.Check, finding.Detail)
 			}
 		}
+	}
+	for _, row := range result.Drift {
+		c.Printf("  FAIL   %-52s %s has %s, the pin says %s\n", row.Name, row.File, row.Inline, row.Manifest)
 	}
 	if result.AdvisoryError != "" {
 		c.Errorf("  ERROR  advisory database: %s\n", result.AdvisoryError)

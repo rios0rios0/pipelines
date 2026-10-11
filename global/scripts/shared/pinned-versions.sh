@@ -36,7 +36,7 @@
 # pinning stops a dependency moving without a decision, and the annotation is
 # how the decision gets prompted. The shape is:
 #
-#   # upstream: <kind> <coordinate> [track=<major>]
+#   # upstream: <kind> <coordinate> [track=<major>] [ceiling=<PIN>] [cooldown=<days>]
 #
 #   kind         one of github-release, github-tag, gitlab-tag, pypi, npm,
 #                rubygems, goproxy
@@ -46,10 +46,43 @@
 #                breaking configuration change, so reporting 2.x every run would
 #                be reporting a migration as an update until somebody muted the
 #                check.
+#   ceiling=PIN  never move past the version of another pin here: the golden
+#                golangci-lint configuration must not name a linter the pinned
+#                golangci-lint binary does not have.
+#   cooldown=<n> this pin's minimum release age in days, instead of the
+#                default seven. A release younger than its cooldown is held
+#                back -- most hijacked releases are found and pulled within days
+#                -- unless it fixes a known vulnerability in the pinned version.
 #
 # A pin with NO annotation is reported as untracked and fails the check, rather
 # than being skipped quietly -- otherwise coverage shrinks one forgotten
 # annotation at a time while the job stays green.
+#
+# THE `# osv:` ANNOTATION
+#
+# Every release a pin could move to -- and the version it runs today -- is
+# checked against OSV.dev, which aggregates GitHub's reviewed and malware
+# advisories, the OpenSSF malicious-packages feed, the Go vulnerability
+# database, PyPA and RubySec. A release that would introduce an advisory the
+# pin does not already have, or that is a known malicious publication, is never
+# proposed; a pin with an advisory gets its fix proposed at once. A pypi, npm,
+# rubygems or goproxy pin IS a package, so it needs nothing more. A binary
+# names the package it is built from:
+#
+#   # osv: <ecosystem> <package>     e.g. `# osv: Go github.com/gruntwork-io/terragrunt`
+#   # osv: none                      no advisory database covers it -- say why
+#
+# A binary with neither is reported as untracked, for the same reason a pin
+# with no `# upstream:` is: silence would read as "no known vulnerabilities".
+#
+# THE `# vendored:` ANNOTATION
+#
+#   # vendored: <repository path>    a file copied from the release and adjusted
+#
+# The pin's one digest is the UPSTREAM file the copy was taken from. Bumping
+# the pin re-applies this repository's adjustments to the new release with a
+# three-way merge -- `git merge-file` from that verified base to the new
+# release -- and refuses on any conflict, so a person resolves it.
 #
 # THE `# asset:` AND `# checksums:` ANNOTATIONS
 #
@@ -99,6 +132,7 @@
 # --- Security tooling (20-security stage) ------------------------------------
 
 # upstream: github-release gitleaks/gitleaks
+# osv: Go github.com/zricethezav/gitleaks/v8
 # checksums: https://github.com/gitleaks/gitleaks/releases/download/v{version}/gitleaks_{version}_checksums.txt
 GITLEAKS_PINNED_VERSION="8.30.1"
 GITLEAKS_VERSION="${GITLEAKS_VERSION:-${GITLEAKS_PINNED_VERSION}}"
@@ -112,6 +146,7 @@ GITLEAKS_SHA256_ARMV7="8d39f0d94ba0d774b2282187656fb039a2d82893ec1fd6be7d7121aae
 # ShellCheck publishes no checksum manifest, so its digests rest on the asset
 # alone.
 # upstream: github-release koalaman/shellcheck
+# osv: Hackage ShellCheck
 SHELLCHECK_PINNED_VERSION="0.11.0"
 SHELLCHECK_VERSION="${SHELLCHECK_VERSION:-${SHELLCHECK_PINNED_VERSION}}"
 # asset: https://github.com/koalaman/shellcheck/releases/download/v{version}/shellcheck-v{version}.linux.x86_64.tar.xz
@@ -128,6 +163,7 @@ SHELLCHECK_SHA256_ARMV6HF="8afc50b302d5feeac9381ea114d563f0150d061520042b254d6eb
 # v2.14.0 -- a pin nobody chose, reached through a failure nobody saw. Pinning
 # the version fixes the asset name along with it.
 # upstream: github-release hadolint/hadolint
+# osv: Hackage hadolint
 # checksums: https://github.com/hadolint/hadolint/releases/download/v{version}/checksums.sha256
 HADOLINT_PINNED_VERSION="2.15.1"
 HADOLINT_VERSION="${HADOLINT_VERSION:-${HADOLINT_PINNED_VERSION}}"
@@ -141,7 +177,10 @@ HADOLINT_SHA256_ARM64="f6198ef8090f404dbb771abfee086eb8c48ac177f30da7fd3510aca35
 # one a given scan used. The same repository also releases the CodeQL ACTION
 # (`v4.x`), which is why the checker compares tags within one release line --
 # the bundle is only ever moved to another `codeql-bundle-v*` release.
+# The bundle is no package in any advisory database; advisories against the
+# CodeQL ACTION are tracked through its own `uses:` pins.
 # upstream: github-release github/codeql-action
+# osv: none
 # checksums: https://github.com/github/codeql-action/releases/download/{version}/codeql-bundle-linux64.tar.gz.checksum.txt
 CODEQL_BUNDLE_PINNED_VERSION="codeql-bundle-v2.27.2"
 CODEQL_BUNDLE_VERSION="${CODEQL_BUNDLE_VERSION:-${CODEQL_BUNDLE_PINNED_VERSION}}"
@@ -149,6 +188,7 @@ CODEQL_BUNDLE_VERSION="${CODEQL_BUNDLE_VERSION:-${CODEQL_BUNDLE_PINNED_VERSION}}
 CODEQL_BUNDLE_SHA256_LINUX64="f002864be6dd8d5d7bdb123aaf7291ec8e291012bd9f70b6d2362f730db52aeb"
 
 # upstream: github-release google/osv-scanner
+# osv: Go github.com/google/osv-scanner/v2
 # checksums: https://github.com/google/osv-scanner/releases/download/v{version}/osv-scanner_SHA256SUMS
 OSV_SCANNER_PINNED_VERSION="2.6.0"
 OSV_SCANNER_VERSION="${OSV_SCANNER_VERSION:-${OSV_SCANNER_PINNED_VERSION}}"
@@ -160,6 +200,7 @@ OSV_SCANNER_SHA256_ARM64="2c71403eb443d05891c4f268c3ad771cf4f16e5443463fd7851ef8
 # --- Language tooling --------------------------------------------------------
 
 # upstream: github-release golangci/golangci-lint
+# osv: Go github.com/golangci/golangci-lint/v2
 # checksums: https://github.com/golangci/golangci-lint/releases/download/v{version}/golangci-lint-{version}-checksums.txt
 GOLANGCI_LINT_PINNED_VERSION="2.14.0"
 GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-${GOLANGCI_LINT_PINNED_VERSION}}"
@@ -168,9 +209,28 @@ GOLANGCI_LINT_SHA256_AMD64="ab90aeb7b066f92a33415b638a50fe5344bbb75a0d32ad30cc24
 # asset: https://github.com/golangci/golangci-lint/releases/download/v{version}/golangci-lint-{version}-linux-arm64.tar.gz
 GOLANGCI_LINT_SHA256_ARM64="ee7ec5f3453d15ddf106fae5a4d6c71737712348a979d1fe9cd52ec7ea299bae"
 
+# The shared golangci-lint configuration is Marat Reimers' "golden config" with
+# this repository's adjustments on top. It is vendored, not fetched at run time,
+# so a consumer's lint verdict changes only when a reviewed pull request
+# changes it -- and vendoring is how a copy goes stale without anyone noticing,
+# which is what this pin prevents. A bump re-applies the adjustments to the new
+# release with a three-way merge from the upstream file the copy was taken from
+# (its SHA-256 below), refuses on any conflict, and never moves past the
+# golangci-lint binary pinned above: a configuration naming a linter that binary
+# does not have fails every consumer's lint job. A release that switches a
+# linter on or off says so in the pull request, because it changes what every
+# consumer's lint job reports.
+# upstream: github-release maratori/golangci-lint-config ceiling=GOLANGCI_LINT
+# vendored: global/scripts/languages/golang/golangci-lint/.golangci.yml
+# osv: none
+GOLANGCI_LINT_CONFIG_PINNED_VERSION="2.9.0"
+# asset: https://raw.githubusercontent.com/maratori/golangci-lint-config/v{version}/.golangci.yml
+GOLANGCI_LINT_CONFIG_SHA256="9c781547948a489e9c7879f802b76ebbee45b23190181c6ddb8d7b074d0860ee"
+
 # Guardsquare publishes no checksum manifest, so this digest rests on the asset
 # alone.
 # upstream: github-release Guardsquare/proguard
+# osv: Maven com.guardsquare:proguard-base
 PROGUARD_PINNED_VERSION="7.10.0"
 PROGUARD_VERSION="${PROGUARD_VERSION:-${PROGUARD_PINNED_VERSION}}"
 # asset: https://github.com/Guardsquare/proguard/releases/download/v{version}/proguard-{version}.tar.gz
@@ -180,6 +240,7 @@ PROGUARD_SHA256="fbff4dfe037d0724ff767ad555c06ebd14063ccf99a657cf05a69e6f2610da2
 # configuration change, so bumping it is a migration for every consumer, not a
 # version bump. Pinning it here does not decide that migration either way.
 # upstream: github-release goreleaser/goreleaser track=1
+# osv: Go github.com/goreleaser/goreleaser
 # checksums: https://github.com/goreleaser/goreleaser/releases/download/v{version}/checksums.txt
 GORELEASER_PINNED_VERSION="1.26.2"
 GORELEASER_VERSION="${GORELEASER_VERSION:-${GORELEASER_PINNED_VERSION}}"
@@ -189,6 +250,7 @@ GORELEASER_SHA256_AMD64_DEB="2710e9740185be82b6929c78b695b455a09975e231bddbb8e29
 # --- Terraform / Terragrunt tooling ------------------------------------------
 
 # upstream: github-release terraform-linters/tflint
+# osv: Go github.com/terraform-linters/tflint
 # checksums: https://github.com/terraform-linters/tflint/releases/download/v{version}/checksums.txt
 TFLINT_PINNED_VERSION="0.64.0"
 TFLINT_VERSION="${TFLINT_VERSION:-${TFLINT_PINNED_VERSION}}"
@@ -198,6 +260,7 @@ TFLINT_SHA256_AMD64="cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef9
 TFLINT_SHA256_ARM64="560da89aacf59389d4eb029730dd5b109b7288096c32f2726a0d9e783a5ea8eb"
 
 # upstream: github-release gruntwork-io/terragrunt
+# osv: Go github.com/gruntwork-io/terragrunt
 # checksums: https://github.com/gruntwork-io/terragrunt/releases/download/v{version}/SHA256SUMS
 TERRAGRUNT_PINNED_VERSION="1.1.6"
 TERRAGRUNT_VERSION="${TERRAGRUNT_VERSION:-${TERRAGRUNT_PINNED_VERSION}}"
@@ -210,7 +273,10 @@ TERRAGRUNT_SHA256_ARM64="44b43df99bae7a309fdb831180bd9efb84fb145cf38a80c139e4903
 # the templates fetched `install.sh` from the `main` BRANCH and piped it into a
 # shell, so a bad commit on that branch reached every consumer's runner
 # immediately, with no release and no review gate in between.
+# Its tags carry no `v`, so they are not Go module versions and no advisory
+# database can name one of its releases.
 # upstream: github-release rios0rios0/terra
+# osv: none
 # checksums: https://github.com/rios0rios0/terra/releases/download/{version}/checksums.txt
 TERRA_PINNED_VERSION="1.18.14"
 TERRA_VERSION="${TERRA_VERSION:-${TERRA_PINNED_VERSION}}"
@@ -222,6 +288,7 @@ TERRA_SHA256_ARM64="12706b8bcad844eaed1774c036b1641c56dbc0204666490ca99391368a63
 # --- Deployment tooling (50-deployment stage) --------------------------------
 
 # upstream: github-release superfly/flyctl
+# osv: Go github.com/superfly/flyctl
 # checksums: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_checksums.txt
 FLYCTL_PINNED_VERSION="0.4.115"
 FLYCTL_VERSION="${FLYCTL_VERSION:-${FLYCTL_PINNED_VERSION}}"
@@ -249,6 +316,7 @@ FLYCTL_SHA256_ARM64="aa408eb3fd368d5a19dc77c6691ae93a338f2bacee3256a53612a72ca8d
 # algorithm on its own line (`SHA256 (yq_linux_amd64) = ...`), so there is no
 # column to get wrong.
 # upstream: github-release mikefarah/yq
+# osv: Go github.com/mikefarah/yq/v4
 # checksums: https://github.com/mikefarah/yq/releases/download/v{version}/checksums-bsd
 YQ_PINNED_VERSION="4.54.1"
 YQ_VERSION="${YQ_VERSION:-${YQ_PINNED_VERSION}}"
@@ -280,7 +348,9 @@ NETLIFY_CLI_SPEC="${NETLIFY_CLI_SPEC:-netlify-cli@27}"
 # GitLab's own secure-files installer, used by the GitLab Go binary delivery
 # job. It was fetched from the `main` branch and piped into bash inside the job
 # that holds the project's signing material.
+# A shell script with no package identity in any advisory database.
 # upstream: gitlab-tag gitlab-org/incubation-engineering/mobile-devops/download-secure-files
+# osv: none
 SECURE_FILES_INSTALLER_PINNED_VERSION="v0.1.16"
 SECURE_FILES_INSTALLER_VERSION="${SECURE_FILES_INSTALLER_VERSION:-${SECURE_FILES_INSTALLER_PINNED_VERSION}}"
 # asset: https://gitlab.com/gitlab-org/incubation-engineering/mobile-devops/download-secure-files/-/raw/{version}/installer
@@ -290,6 +360,7 @@ SECURE_FILES_INSTALLER_SHA256="735418e1b52e6bc9c211383fb86f91ccc898f87ca4b575832
 # stoml publishes no checksum manifest and no linux/arm64 build; the digest
 # below was computed from the published amd64 artifact.
 # upstream: github-release freshautomations/stoml
+# osv: Go github.com/freshautomations/stoml
 STOML_PINNED_VERSION="0.7.1"
 STOML_VERSION="${STOML_VERSION:-${STOML_PINNED_VERSION}}"
 # asset: https://github.com/freshautomations/stoml/releases/download/v{version}/stoml_linux_amd64

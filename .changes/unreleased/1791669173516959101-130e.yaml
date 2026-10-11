@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added the shared golangci-lint configuration to the scheduled dependency updates: `.golangci.yml` is pinned to the `maratori/golangci-lint-config` release it was taken from, and a newer release is re-merged onto the adjustments made here with a three-way merge -- refused on a conflict, held at or below the pinned `golangci-lint` binary, and refused when it starts declaring a custom linter plugin -- with every linter it switches on or off listed in the pull request'
+time: '2026-10-10T21:52:53.516912559Z'

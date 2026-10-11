@@ -14,7 +14,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-go-tmpdir-modcache` - Test that the Go module cache stays out of `$TMPDIR` specifically
 - `make test-go-integration-scope` - Test which packages the Go runner's integration phase selects specifically
 - `make test-lambda` - Test Lambda template validation specifically
-- `make test-yaml-merge` - Test YAML merge validation specifically
+- `make test-yaml-merge` - Test `golangci-lint/run.sh` (YAML config merge, binary reuse and install, toolchain guard) specifically
 - `make test-sonarqube` - Test SonarQube auto-derivation specifically
 - `make test-release-tag-idempotency` - Test release tag idempotency specifically
 - `make test-tftest-gen` - Test tftest-gen generator specifically
@@ -998,7 +998,11 @@ Test scripts are located in `.github/tests/`.
 
 **Issue: "golangci-lint: command not found"**
 - **Cause:** golangci-lint not installed or not in PATH
-- **Solution:** The script automatically downloads golangci-lint, ensure Docker is available
+- **Solution:** none required -- the script uses a `golangci-lint` on `PATH` or in `./bin` that reports the pinned version, and otherwise downloads, verifies and installs the pinned release into `./bin`
+
+**Issue: every package fails `typecheck` with `could not load export data` (Go projects)**
+- **Cause:** the pinned golangci-lint cannot read the export data the Go toolchain writes; the script names this as a tooling mismatch after the run, and stops before linting when the toolchain is on a newer Go minor line than the binary's build
+- **Solution:** bump `GOLANGCI_LINT_VERSION` in `global/scripts/shared/pinned-versions.sh` to a release that supports the toolchain -- the findings are not in the code
 
 **Issue: Docker build fails with SSL certificate errors**
 - **Cause:** Network restrictions in CI environment

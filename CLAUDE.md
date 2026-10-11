@@ -16,7 +16,7 @@ make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) 
 make test-go-tmpdir-modcache   # Test that the Go module cache stays out of $TMPDIR only
 make test-go-integration-scope  # Test which packages the Go runner's integration phase selects only
 make test-lambda       # Test Lambda template validation only
-make test-yaml-merge   # Test YAML merge validation only
+make test-yaml-merge   # Test golangci-lint/run.sh (config merge, binary reuse and install, toolchain guard) only
 make test-sonarqube    # Test SonarQube auto-derivation only
 make test-release-tag-idempotency  # Test release tag idempotency only
 make test-tftest-gen   # Test tftest-gen generator only

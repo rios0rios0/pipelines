@@ -204,6 +204,21 @@ OSV_SCANNER_SHA256_ARM64="2c71403eb443d05891c4f268c3ad771cf4f16e5443463fd7851ef8
 
 # --- Language tooling --------------------------------------------------------
 
+# Go itself, one pin per release line. No template can source this file for it,
+# so the dependency-update checker keeps every copy on the pin of its line:
+# `go-version:` (GitHub Actions), the `GoTool@0` `version:` (Azure DevOps) and
+# every `golang:<release>` image (GitLab CI, Dockerfiles), which moves to the
+# new release's tag at the digest that tag resolves to. A copy on a line no pin
+# holds fails the check. The Go vulnerability database files the `go` command's
+# advisories apart from the standard library's, so both are asked about.
+# upstream: go-toolchain golang.org/toolchain track=1.27
+# osv: Go stdlib toolchain
+GO_PINNED_VERSION="1.27.2"
+# The line `global/containers/golang.1.26-awscli` is built on, and named after.
+# upstream: go-toolchain golang.org/toolchain track=1.26
+# osv: Go stdlib toolchain
+GO_1_26_PINNED_VERSION="1.26.9"
+
 # upstream: github-release golangci/golangci-lint
 # osv: Go github.com/golangci/golangci-lint/v2
 # checksums: https://github.com/golangci/golangci-lint/releases/download/v{version}/golangci-lint-{version}-checksums.txt

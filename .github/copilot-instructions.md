@@ -472,6 +472,10 @@ most likely to break, in order of how expensive the mistake was:
     falls back to `runs_on`, which looks exactly like the default. A job with its own selector
     writes `fromJSON(inputs.<purpose>_runs_on || inputs.runs_on)`, with `runs_on` last and the
     override optional and empty by default, or the fallback never happens.
+12. **A `code-check >` or `security >` job is never advisory at the job level.** A job-level
+    `continue-on-error` passes the run whatever the check found, so a failed lint blocked nothing
+    for hours. Tolerate a refused report upload at the upload step instead. A deliberate exception
+    goes in Test 16's `ADVISORY` with its reason, and `UNREVIEWED` may only shrink.
 
 ### Platform and Language Support Matrix
 

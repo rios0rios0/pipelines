@@ -39,16 +39,19 @@ set -e
 # flow style would slip past them; none is, and one would fail review long
 # before this.
 #
-# Tests 10 to 15 are the exceptions and do need PyYAML. Test 10 asserts under a
+# Tests 10 to 16 are the exceptions and do need PyYAML. Test 10 asserts under a
 # key YAML 1.1 RESOLVES -- `on:` parses as the boolean `true`, so `runs_on` sits
 # under no key spelled `on` at all and no indentation rule can reach it -- and
 # Test 11 needs the `if:` as ONE expression, which a block scalar spreads over
 # ten physical lines, Test 12 walks the whole trigger block for evaluated
 # expressions, Test 13 compares a block-scalar prompt against the tool rules in
 # another block scalar beside it, Test 14 evaluates a folded-scalar `if:`
-# against input defaults declared under that same resolved `on:` key, and
+# against input defaults declared under that same resolved `on:` key,
 # Test 15 splits every job's `if:` into clauses, which a block scalar may spread
-# over several lines just as Test 11's does. All six
+# over several lines just as Test 11's does, and Test 16 tells a job-level
+# `continue-on-error` from a step-level one, which only nesting distinguishes --
+# and follows the GitLab and Azure DevOps twins through their includes and
+# templates. All seven
 # are written so that a host without PyYAML sees the assertion FAIL BY NAME
 # rather than a traceback -- see the comments there. CI installs `python3-yaml`
 # (`.github/workflows/ci.yaml`), and `make test` already requires it for
@@ -1314,6 +1317,366 @@ for expression, safe in CANARIES:
 PY
 )"
 assert_empty "every status-gated job clause refuses a cancelled run" "$BAD_CANCEL_GATE"
+echo ""
+
+echo "Test 16: a check job fails the run when its check fails"
+
+# A job-level `continue-on-error` concludes the RUN as passed whatever the job did. On a lint or
+# security job that makes the check advisory: the job goes red, nothing downstream waits for it,
+# and the run reports success. That is how a consumer's golangci-lint stayed red on its default
+# branch for about seven hours with every run green, while a golangci-lint built with an older Go
+# than the code's could not load the standard library and no linter ran at all (#725).
+#
+# The rule: a `code-check >` or `security >` job carries no job-level `continue-on-error` -- a
+# literal `true`, or an expression that can become one -- unless it is listed below with the
+# reason it may stay advisory. The one failure a check tolerates is a refused report upload, and
+# that belongs at the upload STEP (`make test-report-uploads` holds that half), so step-level
+# flags are outside this rule.
+#
+# Two lists, because they mean different things:
+#
+#   ADVISORY    advisory ON PURPOSE, each with the reason recorded where its users read it.
+#   UNREVIEWED  advisory since before this rule, with no reason recorded anywhere. Each needs the
+#               check the Go pipeline had before it was made to block -- does any consumer fail
+#               it today? -- because every one that does turns red the moment it blocks. This
+#               list may only SHRINK: a new advisory job goes in ADVISORY with its reason, or is
+#               not advisory at all.
+#
+# An entry whose job no longer carries the flag fails as well, so neither list outlives the code
+# it excuses. The classifier also runs against canaries, so a parser that stops matching fails
+# here instead of passing with nothing flagged.
+BAD_ADVISORY_JOB="$(python3 - "$WORKFLOWS_DIR" <<'PY'
+import glob
+import os
+import sys
+
+try:
+    import yaml
+except ImportError:
+    print('PyYAML is required for this assertion '
+          '(CI installs python3-yaml; locally: pip install pyyaml)')
+    sys.exit(0)
+
+workflows_dir = sys.argv[1]
+
+ESLINT = ('advisory by design: `style:format` beside it is the blocking formatting gate, and a '
+          "linter's findings need judgement (README, \"JavaScript / TypeScript Tools\")")
+KNIP = 'advisory by design: unused-export detection (README, "JavaScript / TypeScript Tools")'
+ADVISORY = {
+    ('npm.yaml', 'code_check-style_eslint'): ESLINT,
+    ('yarn.yaml', 'code_check-style_eslint'): ESLINT,
+    ('npm.yaml', 'code_check-quality_knip'): KNIP,
+    ('yarn.yaml', 'code_check-quality_knip'): KNIP,
+    ('dart.yaml', 'code_check-quality_unused_code'):
+        'reachability analysis has a false-positive tail -- framework entry points, generated '
+        'code, `@visibleForTesting` members (github/dart/stages/10-code-check/unused/action.yaml)',
+}
+
+UNREVIEWED = {
+    'bundler.yaml': ('code_check-style_rubocop', 'code_check-quality_debride',
+                     'security-sast_hadolint', 'security-sca_bundle_audit'),
+    'composer.yaml': ('code_check-style_php_lint', 'code_check-quality_phpmd',
+                      'security-sast_hadolint', 'security-sca_composer_audit'),
+    'dart.yaml': ('security-sast_hadolint', 'security-sca_osv_scanner'),
+    'dotnet.yaml': ('code_check-quality_resharper', 'security-sast_hadolint'),
+    'gradle.yaml': ('code_check-style_checkstyle', 'code_check-quality_proguard',
+                    'security-sast_hadolint', 'security-sca_dependency_check'),
+    'maven.yaml': ('code_check-style_maven_verify', 'code_check-quality_proguard',
+                   'security-sast_hadolint', 'security-sca_dependency_check'),
+    'npm.yaml': ('security-sast_hadolint', 'security-sca_npm_audit'),
+    'pdm.yaml': ('code_check-quality_mypy', 'code_check-quality_vulture',
+                 'security-sast_hadolint', 'security-sca_safety'),
+    'terra.yaml': ('code_check-style_tflint', 'security-sast_hadolint'),
+    'yarn.yaml': ('security-sast_hadolint', 'security-sca_yarn_audit'),
+}
+# The ratchet. Lower it when an entry leaves UNREVIEWED; never raise it.
+UNREVIEWED_LIMIT = 30
+
+CHECK_IDS = ('code_check-', 'security-')
+CHECK_NAMES = ('code-check >', 'security >')
+
+# (workflow text, the jobs the classifier must flag in it)
+CANARIES = [
+    ("jobs:\n  code_check-style_lint:\n    name: 'code-check > style:lint'\n"
+     "    continue-on-error: true\n", ['code_check-style_lint']),
+    ("jobs:\n  scan:\n    name: 'security > sca:scan'\n"
+     "    continue-on-error: ${{ inputs.advisory }}\n", ['scan']),
+    ("jobs:\n  security-sast_scan:\n    continue-on-error: 'true'\n", ['security-sast_scan']),
+    ("jobs:\n  code_check-style_lint:\n    continue-on-error: false\n", []),
+    ("jobs:\n  management-report_sonarqube:\n    name: 'management > report:sonarqube'\n"
+     "    continue-on-error: true\n", []),
+    ("jobs:\n  security-sast_scan:\n    steps:\n      - uses: 'actions/upload-artifact@v7'\n"
+     "        continue-on-error: true\n", []),
+]
+
+
+def is_check(job, body):
+    return job.startswith(CHECK_IDS) or str(body.get('name') or '').startswith(CHECK_NAMES)
+
+
+def advisory(body):
+    """True when a job-level `continue-on-error` can let the job's failure pass the run."""
+    if 'continue-on-error' not in body:
+        return False
+    value = body['continue-on-error']
+    return not (value is False or str(value).strip().lower() == 'false')
+
+
+def advisory_checks(document):
+    return sorted(job for job, body in ((document or {}).get('jobs') or {}).items()
+                  if isinstance(body, dict) and is_check(job, body) and advisory(body))
+
+
+listed = set(ADVISORY) | {(workflow, job) for workflow, jobs in UNREVIEWED.items() for job in jobs}
+found = set()
+examined = 0
+for path in sorted(glob.glob(os.path.join(workflows_dir, '*.yaml'))):
+    name = os.path.basename(path)
+    try:
+        with open(path, encoding='utf-8') as handle:
+            document = yaml.safe_load(handle) or {}
+        examined += sum(1 for job, body in (document.get('jobs') or {}).items()
+                        if isinstance(body, dict) and is_check(job, body))
+        for job in advisory_checks(document):
+            found.add((name, job))
+            if (name, job) not in listed:
+                print(f'{name}: job {job} is advisory -- its job-level `continue-on-error` passes '
+                      f'the run whatever the check finds. Remove it (a refused upload is tolerated '
+                      f'at the upload step), or list the job in ADVISORY with the reason it may '
+                      f'stay advisory')
+    except (OSError, yaml.YAMLError) as error:
+        print(f'{name}: unreadable ({error})')
+    except Exception as error:                      # noqa: BLE001 -- see Test 10's note
+        print(f'{name}: {type(error).__name__}: {error}')
+
+for workflow, job in sorted(listed - found):
+    print(f'{workflow}: job {job} is listed as advisory but is not -- remove the entry')
+
+unreviewed = sum(len(jobs) for jobs in UNREVIEWED.values())
+if unreviewed > UNREVIEWED_LIMIT:
+    print(f'UNREVIEWED holds {unreviewed} jobs, more than its limit of {UNREVIEWED_LIMIT}: it may '
+          f'only shrink, so a new advisory job needs an ADVISORY entry with its reason')
+
+if not examined:
+    print(f'no code-check or security job under {workflows_dir} -- the scan read nothing')
+
+for text, expected in CANARIES:
+    flagged = advisory_checks(yaml.safe_load(text))
+    if flagged != expected:
+        print(f'the classifier flags {flagged} where it should flag {expected} in: {text!r}')
+PY
+)"
+assert_empty "no code-check or security job is advisory unless listed with its reason" "$BAD_ADVISORY_JOB"
+
+# The same rule on the Go pipeline's GitLab CI and Azure DevOps twins, where the flag is spelled
+# `allow_failure` and `continueOnError`. Neither platform has a refused upload to excuse -- they
+# publish through their own artifact stores, which GitHub's storage allowance does not meter -- so
+# a job or a check step carrying the flag fails here unless listed. Azure's `task:` steps (a cache,
+# an artifact publish) decide nothing about the code and stay outside the rule.
+#
+# Read from the two Go stage files of each platform AND every stage template they pull in from this
+# repository, so a check that moves into a shared template stays covered. Those shared templates
+# are why AZURE_ADVISORY is not empty: Azure DevOps runs its four SAST tools advisory by the
+# per-platform decision CLAUDE.md records, for every toolchain at once, and making them block is a
+# decision about every Azure pipeline rather than about the Go one.
+BAD_ADVISORY_TWIN="$(python3 - "$SCRIPTS_DIR" <<'PY'
+import os
+import re
+import sys
+
+try:
+    import yaml
+except ImportError:
+    print('PyYAML is required for this assertion '
+          '(CI installs python3-yaml; locally: pip install pyyaml)')
+    sys.exit(0)
+
+root = sys.argv[1]
+
+GITLAB_STAGES = ('gitlab/golang/stages/10-code-check/go.yaml',
+                 'gitlab/golang/stages/20-security/go.yaml')
+AZURE_STAGES = ('azure-devops/golang/stages/10-code-check/go.yaml',
+                'azure-devops/golang/stages/20-security/go.yaml')
+# The Go-specific checks, by the name each platform gives them. Each must be found, or a
+# restructure that moved one out of reach would pass by leaving nothing to read.
+EXPECTED = {
+    'gitlab': {'style:golangci-lint', 'sca:govulncheck'},
+    'azure': {'style_golangci_lint', 'sca_govulncheck'},
+}
+
+SHARED_SAST = ('shared by every Azure DevOps pipeline, not just Go: the platform runs its SAST '
+               'advisory by the decision CLAUDE.md records, for every toolchain at once')
+GITLAB_ADVISORY = {}
+AZURE_ADVISORY = {
+    ('azure-devops/golang/stages/10-code-check/go.yaml',
+     'Trim the Go build cache when the agent is low on disk'):
+        'housekeeping after the lint, not a check: it only frees disk for the cache save',
+    ('azure-devops/global/stages/20-security/semgrep.yaml',
+     'global/scripts/tools/semgrep/run.sh'): SHARED_SAST,
+    ('azure-devops/global/stages/20-security/gitleaks.yaml',
+     'global/scripts/tools/gitleaks/run.sh'): SHARED_SAST,
+    ('azure-devops/global/stages/20-security/codeql.yaml',
+     'global/scripts/tools/codeql/run.sh'): SHARED_SAST,
+    ('azure-devops/global/stages/20-security/hadolint.yaml',
+     'global/scripts/tools/hadolint/run.sh'):
+        SHARED_SAST + ', and consumers of other toolchains carry Hadolint findings today',
+}
+
+REMOTE = 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/'
+GITLAB_KEYWORDS = {'include', 'variables', 'stages', 'default', 'workflow', 'image', 'services',
+                   'before_script', 'after_script', 'cache'}
+RUNNER = re.compile(r'global/scripts/[\w./-]+/run\.sh')
+
+
+class GitLabLoader(yaml.SafeLoader):
+    """GitLab's `!reference [ .job, key ]` is a custom tag; read it as the list it is."""
+
+
+GitLabLoader.add_constructor('!reference', lambda loader, node: loader.construct_sequence(node))
+
+
+def flagged(value):
+    return value is not None and not (value is False or str(value).strip().lower() == 'false')
+
+
+def gitlab_jobs(document):
+    return {key: body for key, body in (document or {}).items()
+            if isinstance(body, dict) and not str(key).startswith('.')
+            and key not in GITLAB_KEYWORDS}
+
+
+def gitlab_advisory(document):
+    """GitLab jobs that `allow_failure` -- `true`, or a mapping of exit codes."""
+    return sorted(job for job, body in gitlab_jobs(document).items()
+                  if flagged(body.get('allow_failure')))
+
+
+def step_id(step):
+    if step.get('displayName'):
+        return str(step['displayName'])
+    body = str(step.get('script') or step.get('bash') or step.get('pwsh') or '')
+    runner = RUNNER.search(body)
+    return runner.group(0) if runner else body.strip()[:60]
+
+
+def azure_advisory(jobs):
+    """(job, step or None) for every job or check step that `continueOnError`."""
+    found = []
+    for job in jobs:
+        name = str(job.get('job') or job.get('deployment') or '')
+        if flagged(job.get('continueOnError')):
+            found.append((name, None))
+        for step in job.get('steps') or []:
+            if not isinstance(step, dict) or 'task' in step or 'template' in step:
+                continue
+            if flagged(step.get('continueOnError')):
+                found.append((name, step_id(step)))
+    return found
+
+
+def load(relative, loader=yaml.SafeLoader):
+    with open(os.path.join(root, relative), encoding='utf-8') as handle:
+        return yaml.load(handle, Loader=loader) or {}  # SafeLoader or a subclass of it: safe
+
+
+def gitlab_files():
+    """The Go stage files plus every stage template they include from this repository."""
+    files = list(GITLAB_STAGES)
+    for stage in GITLAB_STAGES:
+        includes = load(stage, GitLabLoader).get('include') or []
+        for entry in includes if isinstance(includes, list) else [includes]:
+            remote = entry.get('remote', '') if isinstance(entry, dict) else str(entry)
+            if remote.startswith(REMOTE) and '/stages/' in remote:
+                files.append(remote[len(REMOTE):])
+    return files
+
+
+def azure_jobs(relative, seen):
+    """Every job of a stage file, descending into the job templates it names."""
+    document = load(relative)
+    entries = []
+    for stage in document.get('stages') or []:
+        entries.extend((stage or {}).get('jobs') or [])
+    entries.extend(document.get('jobs') or [])
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        if 'template' in entry:
+            target = os.path.normpath(os.path.join(os.path.dirname(relative), entry['template']))
+            if target not in seen:
+                seen.add(target)
+                yield from azure_jobs(target, seen)
+        else:
+            yield relative, entry
+
+
+problems = []
+present = {'gitlab': set(), 'azure': set()}
+seen_azure = set()
+used = set()
+try:
+    for relative in gitlab_files():
+        document = load(relative, GitLabLoader)
+        present['gitlab'].update(gitlab_jobs(document))
+        for job in gitlab_advisory(document):
+            if (relative, job) in GITLAB_ADVISORY:
+                used.add((relative, job))
+            else:
+                problems.append(f'{relative}: job {job} is `allow_failure` -- a failure passes the '
+                                f'pipeline; remove it, or list it in GITLAB_ADVISORY with its reason')
+    for stage in AZURE_STAGES:
+        seen_azure.add(stage)
+        for relative, job in azure_jobs(stage, seen_azure):
+            present['azure'].add(str(job.get('job') or ''))
+            for name, step in azure_advisory([job]):
+                key = (relative, step if step is not None else name)
+                if key in AZURE_ADVISORY:
+                    used.add(key)
+                else:
+                    where = f'step "{step}" of job {name}' if step else f'job {name}'
+                    problems.append(f'{relative}: {where} is `continueOnError` -- a failure passes '
+                                    f'the stage; remove it, or list it in AZURE_ADVISORY with its '
+                                    f'reason')
+except (OSError, yaml.YAMLError) as error:
+    problems.append(f'unreadable ({error})')
+except Exception as error:                          # noqa: BLE001 -- see Test 10's note
+    problems.append(f'{type(error).__name__}: {error}')
+
+for platform, names in EXPECTED.items():
+    for missing in sorted(names - present[platform]):
+        problems.append(f'{platform}: no job {missing} found in the Go stages or their templates '
+                        f'-- the scan cannot vouch for a check it never read')
+
+for key in sorted((set(GITLAB_ADVISORY) | set(AZURE_ADVISORY)) - used):
+    problems.append(f'{key[0]}: "{key[1]}" is listed as advisory but is not -- remove the entry')
+
+GITLAB_CANARIES = [
+    ('lint:\n  script: [ run ]\n  allow_failure: true\n', ['lint']),
+    ('scan:\n  script: [ run ]\n  allow_failure:\n    exit_codes: [ 4 ]\n', ['scan']),
+    ('lint:\n  script: [ run ]\n  allow_failure: false\n', []),
+    ('.hidden:\n  allow_failure: true\nvariables:\n  A: b\n', []),
+]
+AZURE_CANARIES = [
+    ([{'job': 'scan', 'continueOnError': True, 'steps': []}], [('scan', None)]),
+    ([{'job': 'scan', 'steps': [{'script': 'global/scripts/tools/x/run.sh',
+                                 'continueOnError': 'true'}]}],
+     [('scan', 'global/scripts/tools/x/run.sh')]),
+    ([{'job': 'scan', 'steps': [{'task': 'PublishPipelineArtifact@1',
+                                 'continueOnError': True}]}], []),
+    ([{'job': 'scan', 'continueOnError': False, 'steps': [{'script': 'run'}]}], []),
+]
+for text, expected in GITLAB_CANARIES:
+    if gitlab_advisory(yaml.load(text, Loader=GitLabLoader)) != expected:
+        problems.append(f'the GitLab classifier misreads the canary {text!r}')
+for jobs, expected in AZURE_CANARIES:
+    if azure_advisory(jobs) != expected:
+        problems.append(f'the Azure DevOps classifier misreads the canary {jobs!r}')
+
+print('\n'.join(problems))
+PY
+)"
+assert_empty "the Go pipeline's GitLab and Azure DevOps twins keep no check advisory unless listed" \
+  "$BAD_ADVISORY_TWIN"
 echo ""
 
 echo "================================"

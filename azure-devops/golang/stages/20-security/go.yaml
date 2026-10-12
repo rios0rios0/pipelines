@@ -46,4 +46,6 @@ stages:
               targetPath: 'build/reports/govulncheck'
             condition: always()
             displayName: 'Publish govulncheck report'
-        continueOnError: true
+        # No job-level `continueOnError`: it let every later stage run whatever the scan found, so
+        # a known vulnerability blocked nothing. A failing scan now fails the stage, as on the
+        # other two platforms. See CLAUDE.md, "A Failing Check Fails the Run".

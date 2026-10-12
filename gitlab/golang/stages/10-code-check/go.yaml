@@ -2,10 +2,12 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo-debian.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/golang/abstracts/go.yaml'
 
+# No `allow_failure`: a failed lint fails the pipeline, as it does on GitHub Actions and Azure
+# DevOps. With it, a lint that could not even run passed unnoticed. See CLAUDE.md, "A Failing
+# Check Fails the Run".
 style:golangci-lint:
   extends: '.scripts-repo-debian'
   image: !reference [ .go, image ]
   stage: 'code check (style/quality)'
   script:
     - $SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/run.sh
-  allow_failure: true

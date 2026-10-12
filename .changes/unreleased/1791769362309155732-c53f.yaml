@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added Checkov to the Terraform pipelines on every platform and to `make sast` for `terra.mk` and `terraform.mk`, restoring the IaC misconfiguration scanning lost with Trivy: the pinned wheel is refused unless its committed SHA-256 matches, a skip without a reason and a file Checkov cannot parse count as findings, and findings stay advisory until a project sets `checkov_blocking` / `CHECKOV_BLOCKING`'
+time: '2026-10-12T01:42:42.307773561Z'

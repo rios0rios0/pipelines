@@ -33,6 +33,16 @@ on:
         type: 'string'
         default: ''
         description: 'Space-separated directories searched, at any depth, for root modules whose own `tests/*.tftest.hcl` the `tests > test:all` job runs besides `modules/*/tests/` (e.g. `stacks`). Empty by default, which runs the modules only. A root whose test would apply with its real providers (a `run` block without `command = plan`, in a file with no `mock_provider`) is refused and fails the job.'
+      checkov_blocking:
+        required: false
+        type: 'boolean'
+        default: false
+        description: 'Make the `security > sast:checkov` job fail on findings: a failed check, a check skipped without a reason, or a file Checkov could not parse. Off by default, which reports them as warnings without failing the job, so a project turns it on once it has fixed its findings or recorded each deliberate exception inline as `#checkov:skip=<ID>:<reason>`.'
+      checkov_directories:
+        required: false
+        type: 'string'
+        default: '.'
+        description: 'Space-separated directories the `security > sast:checkov` job scans, recursively. Every Terraform root below the repository root by default.'
 
 jobs:
   # first stage
@@ -248,6 +258,27 @@ jobs:
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
+  # The IaC misconfiguration scanner: a public bucket, an encryption setting left off, an IAM
+  # statement wider than it needs. This tier had none since Trivy was removed, and Semgrep's
+  # Terraform rules do not model provider resources.
+  #
+  # ADVISORY by default, and the advisory-versus-blocking choice lives in the script rather
+  # than in a job-level `continue-on-error`: every consumer meets this scanner on the same day,
+  # so blocking from the start would turn each one with findings red before anyone could triage
+  # them. In advisory mode nothing the scan does fails the job; findings arrive as a warning
+  # annotation, in the log and in the `checkov` artifact. `checkov_blocking: true` makes them
+  # fail it, once a project has fixed them or recorded each exception inline with a reason.
+  security-sast_checkov:
+    name: 'security > sast:checkov'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/checkov@main'
+        with:
+          blocking: ${{ inputs.checkov_blocking }}
+          directories: ${{ inputs.checkov_directories }}
+    needs: [ 'code_check-style_terra_format' ]
+    if: "!startsWith(github.ref, 'refs/tags/')"
+
 
   # third stage
   # Single unified job that orchestrates both tiers of Terraform testing
@@ -401,7 +432,7 @@ jobs:
         # A refused upload (e.g. `Artifact storage quota has been hit`) must not fail the job:
         # the report is evidence, and the step above already decided pass or fail.
         continue-on-error: true
-    needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint' ]
+    needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_checkov' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
   # Fourth tier — the only one that RESOLVES references rather than
@@ -498,7 +529,7 @@ jobs:
         # A refused upload (e.g. `Artifact storage quota has been hit`) must not fail the job:
         # the report is evidence, and the step above already decided pass or fail.
         continue-on-error: true
-    needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint' ]
+    needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_checkov' ]
     if: "inputs.enable_validate && !startsWith(github.ref, 'refs/tags/')"
 
   # Third tier — repo-convention assertions the consumer owns. Runs
@@ -564,7 +595,7 @@ jobs:
         # A refused upload (e.g. `Artifact storage quota has been hit`) must not fail the job:
         # the report is evidence, and the step above already decided pass or fail.
         continue-on-error: true
-    needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint' ]
+    needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_checkov' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 

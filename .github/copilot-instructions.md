@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go helpers, Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, docker-multi-arch, basic-checks, fixture-isolation, gitignore, hadolint-discovery, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, dependency-updates, azure-step-names, azure-secret-env, containers-detect, report-uploads)
+- `make test` - Run all validation tests (Go helpers, Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, docker-multi-arch, basic-checks, fixture-isolation, gitignore, hadolint-discovery, checkov, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, dependency-updates, azure-step-names, azure-secret-env, containers-detect, report-uploads)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-go-module-toolchain` - Test that every `go.mod` toolchain directive is readable by the images/analysers that consume it specifically
 - `make test-go-tool-staleness` - Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves specifically
@@ -32,6 +32,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-gitignore` - Test the shared `.gitignore` block generator specifically
 - `make test-sast-gate` - Test that `make sast` and every individual SAST target propagate tool failures specifically
 - `make test-hadolint-discovery` - Test which files the Hadolint runner lints as Dockerfiles (every name the delivery templates build) specifically
+- `make test-checkov` - Test the Checkov IaC scanner tier (verified install, report verdict, advisory default, wiring on every platform) specifically
 - `make test-codeql-scope` - Test that a local CodeQL scan builds from the files git would ship, on every core, while CI keeps the checkout and one thread, specifically
 - `make test-dependency-check` - Test the OWASP Dependency-Check NVD cache / API-key contract specifically
 - `make test-dependency-track` - Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, cross-platform wiring) specifically
@@ -64,7 +65,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - **GitLab CI:** Include `gitlab/golang/go-docker.yaml`, `gitlab/terraform/terra.yaml` from this repo
 - **Azure DevOps:** Template `azure-devops/golang/go-docker.yaml@pipelines`
 
-**SAST Tools:** Gitleaks, CodeQL, Semgrep, Hadolint, ShellCheck
+**SAST Tools:** Gitleaks, CodeQL, Semgrep, Hadolint, ShellCheck, Checkov (IaC misconfiguration, Terraform pipelines; advisory unless `CHECKOV_BLOCKING` is `true`)
 **SCA Tools:** govulncheck (Go), Safety (Python), OWASP Dependency-Check (Java), yarn npm audit (JavaScript/Yarn), npm audit (JavaScript/npm), Composer Audit (PHP), bundler-audit (Ruby), OSV-Scanner (Dart, and container image rebuilds in the dependency-update checks)
 **Quality Tools:** SonarQube, Dependency Track
 **Performance:** Security scans 2-10min, Container builds 5-30min
@@ -185,6 +186,7 @@ connection refused.
 - **dependency-track/run.sh** - Requires `DEPENDENCY_TRACK_TOKEN` and `DEPENDENCY_TRACK_HOST_URL`
 - **sonarqube/run.sh** - Requires `sonar-scanner` installed and SonarQube environment; derives project key/name and the `githubactions:S7637` ignore rules for first-party workflow references (owners from `SONAR_FIRST_PARTY_OWNERS`, else the owner of `GITHUB_REPOSITORY`) for every key absent from `sonar-project.properties`, plus the test classification (`sonar.sources`, `sonar.tests`, `sonar.test.inclusions`, `sonar.exclusions`) as one unit, only when the file declares none of the four -- they are a partition, and an overlap aborts the scanner with "can't be indexed twice"
 - **semgrep/run.sh** - May run for 10+ minutes, installs Semgrep from PyPI into a virtualenv
+- **checkov/run.sh** - Scans Terraform under `CHECKOV_DIRECTORIES` (default `.`); advisory unless `CHECKOV_BLOCKING=true`; installs the pinned, digest-verified wheel into a virtualenv; skips gracefully when there is no Terraform
 - **golang/test/run.sh** - Requires Go project with cmd/, pkg/, or internal/ directories
 
 ## Available Tools & Scripts
@@ -200,6 +202,7 @@ connection refused.
 | **Semgrep**   | Static analysis               | `global/scripts/tools/semgrep/`     | Auto-configured  |
 | **Hadolint**  | Dockerfile linting            | `global/scripts/tools/hadolint/`    | `.hadolint.yaml` |
 | **ShellCheck** | Shell script linting          | `global/scripts/tools/shellcheck/`  | Auto-configured  |
+| **Checkov**   | IaC misconfiguration (Terraform) | `global/scripts/tools/checkov/`  | `.checkov.yaml`, inline `#checkov:skip=<ID>:<reason>` |
 
 #### SCA Tools
 
@@ -350,6 +353,7 @@ pipelines/
 │   │   │   ├── codeql/        # SAST security scanning (CodeQL)
 │   │   │   ├── gitleaks/      # Secret scanning
 │   │   │   ├── hadolint/      # Dockerfile linting
+│   │   │   ├── checkov/       # IaC misconfiguration scanning (Terraform)
 │   │   │   ├── semgrep/       # Static analysis
 │   │   │   ├── sonarqube/     # Code quality
 │   │   │   └── dependency-track/ # SCA analysis
@@ -861,6 +865,7 @@ make test-fixture-isolation
 make test-gitignore
 make test-sast-gate
 make test-hadolint-discovery
+make test-checkov
 make test-codeql-scope
 make test-dependency-check
 make test-dependency-track

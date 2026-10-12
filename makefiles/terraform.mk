@@ -6,13 +6,18 @@
 #   -include $(SCRIPTS_DIR)/makefiles/terraform.mk
 #
 # Targets provided: lint, test, test-gen
-# Also sets SEMGREP_LANGUAGE=terraform for the common.mk sast target.
+# Also sets SEMGREP_LANGUAGE=terraform for the common.mk sast target, and adds
+# common.mk's `checkov` (IaC misconfiguration scanning) to that suite.
 # Note: CodeQL does not support Terraform; CODEQL_LANGUAGE is left unset.
 #
 # Prerequisites: Terraform CLI >= 1.11 (required for `terraform test
 # -junit-xml` output). `terra-cli install` pins a compatible version.
 
 SEMGREP_LANGUAGE ?= terraform
+
+# Checkov joins `make sast` for infrastructure code. It is advisory until the
+# project sets `CHECKOV_BLOCKING = true`; see the `checkov` target in common.mk.
+SAST_TOOLS_EXTRA += checkov
 
 # Where JUnit output lands. Kept consistent with the other runners so
 # Azure DevOps / GitLab / GitHub pipelines can `PublishTestResults` from

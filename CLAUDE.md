@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go helpers, Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, docker-multi-arch, basic-checks, fixture-isolation, gitignore, sast-gate, hadolint-discovery, codeql-scope, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, azure-step-names, azure-secret-env, dependency-updates, containers-detect, report-uploads)
+make test              # Run all validation tests (Go helpers, Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, docker-multi-arch, basic-checks, fixture-isolation, gitignore, sast-gate, hadolint-discovery, checkov, codeql-scope, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, azure-step-names, azure-secret-env, dependency-updates, containers-detect, report-uploads)
 make test-go-script    # Test Go validation script only
 make test-go-module-toolchain  # Test that every go.mod toolchain directive is readable by the images/analysers/workflows that consume it only
 make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves only
@@ -34,6 +34,7 @@ make test-fixture-isolation  # Test that every suite builds its fixtures in mkte
 make test-gitignore    # Test the shared .gitignore block generator only
 make test-sast-gate    # Test that the SAST targets propagate tool failures only
 make test-hadolint-discovery  # Test which files the Hadolint runner lints as Dockerfiles (every name the delivery templates build) only
+make test-checkov      # Test the Checkov IaC scanner tier (verified install, report verdict, advisory default, wiring on every platform) only
 make test-codeql-scope  # Test that a local CodeQL scan builds from the files git would ship, on every core, only
 make test-dependency-check  # Test the OWASP Dependency-Check NVD cache / API-key contract only
 make test-dependency-track  # Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, cross-platform wiring) only
@@ -71,7 +72,7 @@ Test scripts live in `.github/tests/`. The CI workflow (`.github/workflows/ci.ya
 
 All platforms follow consistent numbered stages:
 1. **10 - Code Check** — Linting, formatting, basic checks (rebase verification, changelog validation). The `terra`/`terraform` templates add an **order-check** job here that enforces the file-ordering standard (dependency/inputs ordering in `root.hcl`, `// SET ON .HCL` / `// SET ON .ENV` grouping in `variables.tf`, heaviest→lightest `providers.tf`, `main*.tf`-ordered `outputs.tf`) and flags dead terragrunt inputs (`inputs = {}` keys not declared as a stack `variable`); see Terraform Ordering Standard below
-2. **20 - Security** — SAST (CodeQL, Semgrep, Gitleaks, Hadolint, ShellCheck) and SCA
+2. **20 - Security** — SAST (CodeQL, Semgrep, Gitleaks, Hadolint, ShellCheck; Checkov for the `terra`/`terraform` templates) and SCA
 3. **30 - Tests** — Unit/integration tests, coverage. For the Azure DevOps `terraform` template, this stage runs three opt-in test tiers as parallel jobs: a plan-time smoke job (`tests/*.tftest.hcl` via `terraform test` with `mock_provider`) and an apply-time e2e job that provisions a disposable [kind](https://kind.sigs.k8s.io/) cluster and runs both `tests/e2e/*.tftest.hcl` (via `terraform test`) and `tests/terratest/*.go` (via the shared `terratest/run.sh`). All tiers are blocking so a red apply-time regression prevents `35-management` and `40-delivery` from running. The earlier `45-e2e` design was merged into `30-test` so smoke and apply-time feedback land in the same stage.
 4. **35 - Management** — SBOM generation, dependency tracking
 5. **40 - Delivery** — Artifact builds, container images. On GitHub, `delivery > release` (`github/global/stages/40-delivery/release/action.yaml`) cuts the version tag from a bump merge on the commit the run verified — pushed from the job's own checkout at `github.sha`, never through the Releases API, which tags the branch's *current* head — then creates the GitHub Release on it and, with `promote_release`, dispatches the tag run. A tag that already exists on that commit is kept; one on another commit fails the job by name. See README "Release Promotion"
@@ -82,7 +83,7 @@ All platforms follow consistent numbered stages:
 - `.github/workflows/` — GitHub Actions reusable workflows (e.g., `go-docker.yaml`, `pdm-docker.yaml`)
 - `gitlab/<language>/` — GitLab CI templates with `stages/`, `scripts/`, `abstracts/` subdirs
 - `azure-devops/<language>/` — Azure DevOps templates, same structure as GitLab. A delivery or deployment stage whose `condition:` replaces the implicit `succeeded()` carries `not(canceled())` beside `not(failed())`: a cancelled run is not a failed one, so `not(failed())` alone lets a cancelled run deliver
-- `global/scripts/tools/` — Platform-agnostic security tools (codeql, gitleaks, semgrep, hadolint, shellcheck, sonarqube, dependency-track, osv-scanner — the last only an installer, for the dependency-update image scans), and `dependency-updates/`, the Go checker described in Keeping the Pins Current
+- `global/scripts/tools/` — Platform-agnostic security tools (codeql, gitleaks, semgrep, hadolint, shellcheck, checkov, sonarqube, dependency-track, osv-scanner — the last only an installer, for the dependency-update image scans), and `dependency-updates/`, the Go checker described in Keeping the Pins Current
 - `global/scripts/languages/` — Language-specific scripts (golang, java, javascript, php, python, ruby, dart, terraform). Most `run.sh` scripts follow shared conventions, but the Terraform helpers below are documented exceptions: they write reports directly under `build/reports/` and do not rely on the common `cleanup.sh` report-directory pattern.
   - `dart/` — Dart and Flutter runners: `setup`, `format`, `analyze`, `test`, `unused`, `sca`, `build`, `publish`, plus a sourced `common.sh` (not executable — it is sourced, never run). All honour `DART_DRY_RUN=true`, which resolves and records commands without installing or executing anything; that is what makes the whole family testable offline. See Dart & Flutter Support below
   - `terraform/terra-test/` — `terraform test` runner over `modules/*/tests/*.tftest.hcl` (emits JUnit + Markdown/JSON/Cobertura coverage under `build/reports/`). `TERRA_TEST_ROOTS` (space-separated, **empty by default**, e.g. `stacks` as for `VALIDATE_ROOTS`) adds every root module under those directories, at any depth, that owns a `tests/*.tftest.hcl`: read from the environment, which each template sets from its own option (GitHub Actions `terra_test_roots` input, since a called workflow's jobs never see the caller's environment; Azure DevOps `TERRA_TEST_ROOTS` parameter, mapped into the step only when non-empty so a pipeline variable of that name is never shadowed by an empty `env:` entry; GitLab CI a variable of that name, deliberately undeclared on the job because a job-level variable outranks the consumer's top-level one), initialised `-backend=false` and deliberately **without** the modules' `-upgrade` so a root's committed lock file decides its providers, one JUnit per root named after its path, kept out of the module breadth figures. The selection lives in the sourced `roots.sh`, which `test-all` asks too, so the two cannot disagree. A root is **refused**, never run, when a test file `terraform test` would read there (`*.tftest.hcl` beside its `.tf` files as well as in `tests/`) holds a `run` block that resolves to apply — no `command`, or `command = apply` — in a file with no `mock_provider`: a root carries its real provider configuration, and under `-backend=false` a cancelled job would orphan whatever the apply created. `roots.sh`'s `terra_test_root_apply_runs` decides it by tokenizing the files in POSIX `awk` (comments, strings, heredocs and brace depth honoured, so only a `command` at the run block's own top level counts), a `*.tftest.json` is refused as unreadable, and the refusal is written as a JUnit failure so every report agrees with the exit code. Module tests are never checked
@@ -652,6 +653,7 @@ All `run.sh` scripts follow this pattern:
 |------------------------------------------------|------------------------------------------------------------------------------------|
 | `codeql`, `gitleaks`, `hadolint`, `shellcheck` | self-contained release binary downloaded from the project's GitHub releases         |
 | `semgrep`                                      | installed from PyPI into an isolated `python3 -m venv` — Semgrep ships no binary    |
+| `checkov`                                      | the pinned release's wheel, refused unless its committed SHA-256 matches, installed binary-only into its own `python3 -m venv` |
 | `sonarqube`                                    | expects `sonar-scanner` to already be on the runner                                 |
 | `dependency-track`                             | no tool binary — uploads the CycloneDX BOM with `curl`                              |
 
@@ -874,6 +876,25 @@ belong in that tool's own suppression file (`.codeql-false-positives`, `.semgrep
 `.semgrepexcluderules`, `.hadolint.yaml`, `.gitleaksignore`). A consumer that genuinely
 wants the old behaviour writes `make sast || true` at its own call site, where review can
 see it. `.github/tests/test-sast-gate.sh` fails if the suppression returns.
+
+### Checkov Starts Advisory, and Each Consumer Opts In to Blocking
+
+`global/scripts/tools/checkov/run.sh` is the IaC misconfiguration tier that `terra.yaml`, both
+`terra` security stages on GitLab and Azure DevOps, and `make sast` through `terra.mk` and
+`terraform.mk` run. It is the one scanner here that does **not** fail on findings by default, and
+the reason is the roll-out, not the noise: the Terraform tier had had no such scanner since Trivy's
+removal, so every consumer meets this one on the same day. Blocking from the start would turn each
+consumer with findings red before anyone could triage them, the way a single Hadolint discovery
+fix once surfaced findings in six repositories at once. Do not "make it consistent" in either
+direction:
+
+| Constraint | Why |
+|------------|-----|
+| **Findings fail only when `CHECKOV_BLOCKING` is `true`** (`checkov_blocking` on GitHub, a CI/CD or pipeline variable elsewhere, a make variable locally) | The choice stays at the call site, as the section above asks, and a consumer turns it on once its findings are fixed or recorded. A value other than `true` or `false` fails rather than reading as advisory |
+| **Advisory lives in the script, not in a job-level `continue-on-error`** | A job flag forgives a crash as readily as a finding and cannot be switched per consumer. In advisory mode the script exits 0 even when the scan cannot complete, and says so in the log and in a warning annotation on GitHub |
+| **The verdict is read from the JSON report, never from Checkov's exit code** | Checkov exits 0 over a file it could not parse and over `#checkov:skip=<ID>` with no reason, and a repository's own `.checkov.yaml` can set `soft-fail`. All three are findings here: an unparsed file was never scanned, and the reason is what records a deliberate exception |
+| **The wheel is downloaded by name and refused unless its committed SHA-256 matches** before pip sees it, then installed binary-only into its own venv and run by path | The lesson of Trivy's compromise. The `# asset:` template lets the scheduled updater re-derive the digest on a bump; the wheel's dependencies resolve within the ranges it declares, binary-only |
+| **Terraform only (`--framework terraform`), offline once installed (`--skip-download`, no update lookup)** | Hadolint and Gitleaks already cover Dockerfiles and secrets, and the pin, not the tool, decides the version |
 
 ### A Local CodeQL Scan Builds From What Git Would Ship
 

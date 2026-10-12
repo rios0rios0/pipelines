@@ -89,6 +89,7 @@ pipelines/
 │   │   │   ├── codeql/        # SAST security scanning (CodeQL)
 │   │   │   ├── gitleaks/      # Secret scanning
 │   │   │   ├── hadolint/      # Dockerfile linting
+│   │   │   ├── checkov/       # IaC misconfiguration scanning (Terraform)
 │   │   │   ├── semgrep/       # Static analysis
 │   │   │   ├── sonarqube/     # Code quality
 │   │   │   └── dependency-track/ # SCA analysis
@@ -914,6 +915,31 @@ include:
 
 The [terra CLI](https://github.com/rios0rios0/terra) wraps Terraform and Terragrunt with a simplified interface, auto-answering prompts, and parallel execution. The terra pipeline provides code check, security, tests, and management stages. Delivery is intentionally excluded because it is project-specific (plan/apply targets, environments, stack ordering). See examples for all providers in the Azure DevOps section below.
 
+#### Terra Security Stage: Checkov
+
+Every Terra and Terraform pipeline (Azure DevOps, GitLab CI, GitHub Actions) and `make sast` through `terra.mk` or `terraform.mk` runs **Checkov**, the infrastructure-as-code misconfiguration scanner: a public bucket, encryption left off, an IAM statement wider than it needs. The tier had no such scanner since Trivy's removal; Semgrep's Terraform rules and TFLint do not model what a provider's resources expose. It scans Terraform only (`--framework terraform`) and every root below the repository root by default, and writes `build/reports/checkov/checkov.sarif` and `checkov.json`.
+
+**It is advisory until a project opts in.** Every consumer meets the scanner on the same day, so blocking from the start would turn each one with findings red before anyone could triage them. In advisory mode findings are printed, kept in the report and, on GitHub, raised as a warning annotation, and the job passes — as it does when the scan cannot complete. Once a project has fixed its findings or recorded its exceptions, it sets the switch, and from then on findings fail the job:
+
+| Platform       | Make findings fail                                                     | Narrow the scan                                   |
+|----------------|------------------------------------------------------------------------|---------------------------------------------------|
+| GitHub Actions | `checkov_blocking: true` (input of `terra.yaml`)                       | `checkov_directories: 'stacks modules'`           |
+| GitLab CI      | `CHECKOV_BLOCKING: 'true'` (CI/CD variable)                            | `CHECKOV_DIRECTORIES: 'stacks modules'`           |
+| Azure DevOps   | `CHECKOV_BLOCKING: 'true'` (pipeline variable); the job keeps the stage's `continueOnError`, so it shows as "succeeded with issues" | `CHECKOV_DIRECTORIES: 'stacks modules'` |
+| Locally        | `CHECKOV_BLOCKING = true` in the project's Makefile                    | `CHECKOV_DIRECTORIES = stacks modules`            |
+
+A value other than `true` or `false` fails the job rather than quietly reading as advisory.
+
+**What counts as a finding** — the verdict is read from the JSON report, not from Checkov's exit code:
+
+- a failed check;
+- a check skipped without a reason. A deliberate exception is recorded beside the resource, with the reason that justifies it — `#checkov:skip=CKV_AWS_18:access logs are collected centrally (ADR-012)` — and `#checkov:skip=CKV_AWS_18` alone, which Checkov itself accepts as "No comment provided", is a finding;
+- a file Checkov could not parse, which it lists and then exits 0 over: an unparsed file was never scanned.
+
+A `.checkov.yaml` at the repository root is passed as Checkov's configuration. Its `skip-check` list is honoured, but Checkov records no reason for those, so prefer the inline skip for anything deliberate.
+
+**The install** follows the lesson of Trivy's compromise: the pinned release's wheel (`CHECKOV_PINNED_VERSION` in `pinned-versions.sh`) is downloaded by name and refused unless its SHA-256 matches the committed digest, then installed binary-only into a virtualenv of its own and run by path. Its dependencies resolve within the ranges the wheel declares, binary-only. The scan runs offline once installed (`--skip-download`, no update lookup). On GitLab the job uses the same pinned Python image as `sast:semgrep`; on GitHub and Azure DevOps the agent needs `python3` with its `venv` module. What Trivy's removal took that this does not restore: SBOM generation stays out of scope.
+
 #### Terra Test Stage
 
 Every Terra pipeline (Azure DevOps, GitLab CI, GitHub Actions) exposes a single unified `test:all` job that delegates to `global/scripts/languages/terraform/test-all/run.sh`. The runner orchestrates two tiers:
@@ -1561,6 +1587,7 @@ last-match-wins, so your own entries below it, including a `!` negation, still w
 | **CodeQL**           | SAST security scanning        | `global/scripts/tools/codeql/`           | Auto-configured       |
 | **Semgrep**          | Static analysis               | `global/scripts/tools/semgrep/`          | Auto-configured       |
 | **Hadolint**         | Dockerfile linting            | `global/scripts/tools/hadolint/`         | `.hadolint.yaml`      |
+| **Checkov**          | IaC misconfiguration (Terraform) — [advisory until opted in](#terra-security-stage-checkov) | `global/scripts/tools/checkov/` | `.checkov.yaml`, inline `#checkov:skip=<ID>:<reason>` |
 
 #### SCA (Software Composition Analysis)
 
@@ -2201,7 +2228,9 @@ way the standard assumes, and `make gitleaks` is safe to put in a hook.
 | Variable           | Default                                      | Purpose                                              |
 |--------------------|----------------------------------------------|------------------------------------------------------|
 | `SAST_TOOLS`       | `codeql semgrep hadolint shellcheck gitleaks` | The suite `sast` runs. Override to narrow it         |
-| `SAST_TOOLS_EXTRA` | *(empty)*                                    | Appended to by language fragments; never set by hand |
+| `SAST_TOOLS_EXTRA` | *(empty)*                                    | Appended to by language fragments; never set by hand. `terra.mk` and `terraform.mk` add `checkov` |
+| `CHECKOV_BLOCKING` | *(advisory)*                                 | `true` makes `make checkov` fail on findings — see [Terra Security Stage](#terra-security-stage-checkov) |
+| `CHECKOV_DIRECTORIES` | `.`                                       | Space-separated directories `make checkov` scans     |
 
 Findings a team has accepted belong in the tool's own suppression file — that is what those files
 are for, and a reviewer can see them. If a pipeline genuinely wants SAST to be advisory, it says so

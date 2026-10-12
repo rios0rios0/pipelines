@@ -6,13 +6,18 @@
 #   -include $(SCRIPTS_DIR)/makefiles/terra.mk
 #
 # Targets provided: format, lint, test, test-terra-test, test-terratest, test-structural, test-validate, coverage, validate
-# Also sets SEMGREP_LANGUAGE=terraform for the common.mk sast target.
+# Also sets SEMGREP_LANGUAGE=terraform for the common.mk sast target, and adds
+# common.mk's `checkov` (IaC misconfiguration scanning) to that suite.
 # Note: CodeQL does not support Terraform; CODEQL_LANGUAGE is left unset.
 #
 # Prerequisites: terra CLI (https://github.com/rios0rios0/terra) must be installed.
 # Install with: curl -fsSL https://raw.githubusercontent.com/rios0rios0/terra/main/install.sh | sh
 
 SEMGREP_LANGUAGE ?= terraform
+
+# Checkov joins `make sast` for infrastructure code. It is advisory until the
+# project sets `CHECKOV_BLOCKING = true`; see the `checkov` target in common.mk.
+SAST_TOOLS_EXTRA += checkov
 REPORT_PATH ?= build/reports
 
 .PHONY: format lint test test-terra-test test-terratest test-structural test-validate coverage validate

@@ -1,0 +1,29 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
+
+# Checkov, the IaC misconfiguration scanner, installs from PyPI (it ships no
+# binary) on the same pinned Python image as `sast:semgrep`.
+#
+# ADVISORY by default, although GitLab blocks on every other SAST job: the
+# choice lives in the script, because every consumer meets this scanner on the
+# same day and blocking from the start would turn each one with findings red
+# before anyone could triage them. Findings are reported and the job passes;
+# set the CI/CD variable `CHECKOV_BLOCKING: 'true'` to make them fail it.
+# `CHECKOV_DIRECTORIES` (space-separated, `.` by default) narrows the scan.
+sast:checkov:
+  extends: '.scripts-repo'
+  image: 'python:3.13-slim@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c'
+  stage: 'security (sca/sast)'
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends git curl
+    - !reference [ .scripts-repo, before_script ]
+  script:
+    - $SCRIPTS_DIR/global/scripts/tools/checkov/run.sh
+  artifacts:
+    when: 'always'
+    paths:
+      # `run.sh` sources `cleanup.sh` with `TOOL_NAME=checkov`, which nests the
+      # SARIF and JSON reports under a per-tool subdirectory.
+      - "$REPORT_PATH/checkov/"
+  dependencies: [] # prevent from fetching artifacts

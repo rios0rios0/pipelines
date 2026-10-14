@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added `build/reports/terra-coverage-generic.xml`, a second Terraform coverage report emitted by the `terra-test` tier which the shared SonarQube runner detects on its own and sets `sonar.coverageReportPaths` to, preserving a value a project declares for itself. It reports which Terraform blocks a test assertion actually references, instead of which modules happen to own a `tests/` directory. The existing `terra-coverage.xml` is unchanged. Detection only reaches the report where the Sonar job can see `build/reports/`, which on Azure DevOps takes the artifact parameters recorded separately -- this release provides the channel, not the publishing step.'
-time: '2026-10-01T14:32:18.417382946Z'

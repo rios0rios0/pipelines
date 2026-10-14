@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'changed `makefiles/dart.mk` to add its OSV-Scanner `sca` target to `make sast` by appending to `SAST_TOOLS_EXTRA` rather than by declaring `sast: sca`. `sast` carries a recipe now, and a prerequisite runs before that recipe -- so the old form would have aborted the entire scan the moment one vulnerable package was found, leaving Semgrep, Hadolint, ShellCheck and Gitleaks unrun. It also makes the suite independent of include order: a project that included `dart.mk` first would otherwise have had `make sast` run OSV-Scanner alone and report success'
-time: '2026-09-18T22:55:03.771293000Z'

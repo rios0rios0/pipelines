@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'rewrote the dependency-update checker and its pull request guard in Go (the module at the repository root, built from the checkout by `global/scripts/shared/go-helper.sh` on every run) and removed the Python scripts `check_updates.py` and `pull_request_guard.py`. Running `run.sh` or `make check-dependency-updates` now needs Go `1.25` or newer instead of Python; the `Dependency Updates` workflow provisions it itself'
-time: '2026-10-10T21:52:53.518777403Z'

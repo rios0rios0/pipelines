@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed `make lint` deleting the `//gitleaks:allow`, `// nosemgrep` and `ggignore` markers that share a comment with a `//nolint` directive nolintlint considers unused, such as `//nolint:gosec //gitleaks:allow` on a test fixture: its autofix removed the whole comment without reporting anything, and the next Gitleaks scan failed on the fixture'
-time: '2026-10-06T16:14:36.280721525Z'

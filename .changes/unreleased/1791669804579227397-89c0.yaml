@@ -1,3 +1,0 @@
-kind: 'Security'
-body: 'moved the Go that builds and tests the Go helpers in CI, and builds the dependency-update checker in its workflows, from `1.27.1` to `1.27.2`: govulncheck found nine standard-library vulnerabilities in `1.27.1` reachable from the checker''s HTTPS client and file handling (among them CVE-2026-56866, CVE-2026-78660 and CVE-2026-78669), all fixed in `1.27.2`, and none under it'
-time: '2026-10-10T22:03:24.578983879Z'

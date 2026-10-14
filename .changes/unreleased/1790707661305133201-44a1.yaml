@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed `make codeql` scanning what `.gitignore` keeps out of the repository on a developer''s machine: a local run now builds from a scratch copy of the files git would ship and uses every core, where thirty stale agent worktrees had made a six-minute scan build 31 Go modules into a 93 GB database on one thread; CI keeps the checkout and one thread, and `CODEQL_SOURCE_SCOPE`/`CODEQL_THREADS` override either default'
-time: '2026-09-29T18:47:41.30494765Z'

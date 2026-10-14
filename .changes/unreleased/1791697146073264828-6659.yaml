@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added a `copies` check to `dependency-updates-verify.yaml`: a moved `golang:` image must name the release its Go pin does, and a pull request that leaves any copy of a pin out of step with it fails -- read from the files alone, so it asks the network nothing'
-time: '2026-10-11T05:39:06.073221197Z'

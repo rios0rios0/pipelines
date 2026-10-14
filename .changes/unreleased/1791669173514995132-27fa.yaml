@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added container image scanning to the dependency-update checks: a same-tag rebuild is exported straight from its registry (no Docker daemon; every layer checked against its digest) and scanned with the pinned, checksum-verified OSV-Scanner (installed only when an image actually needs scanning) against the image it replaces, so a rebuild that introduces a known vulnerability is refused by the scheduled run and fails the pull request verification, while the vulnerabilities a rebuild fixes are listed in the pull request'
-time: '2026-10-10T21:52:53.514949196Z'

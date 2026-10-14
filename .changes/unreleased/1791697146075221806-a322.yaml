@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'changed the `pinned-versions.sh` annotations so `track=` holds a pin to a minor line (`track=1.27`) as well as a major, and `# osv:` may name several packages (`# osv: Go stdlib toolchain`)'
-time: '2026-10-11T05:39:06.075180581Z'

@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added the `codeql_runs_on` input to `go.yaml`, `npm.yaml`, `yarn.yaml` and every workflow composed on them, which sends the CodeQL job alone to its own runners while every other job keeps `runs_on`. CodeQL sizes its RAM and threads from the whole machine, so two analyses on one shared self-hosted host exhaust its memory and the OOM kill surfaces as "The runner has received a shutdown signal"; pointing this at a label one runner per host carries caps CodeQL at one analysis per machine. Empty, the default, keeps today''s behaviour, and `make test-workflow-composition` now checks that the fallback reaches `runs_on` and that every composed workflow forwards the input'
-time: '2026-09-28T01:03:26.066272101Z'

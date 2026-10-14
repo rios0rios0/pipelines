@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'changed the comments of the shared changelog check, in the Azure DevOps, GitHub and GitLab stages, the shared script and its test, to describe why an autoupdate pull request can legitimately add no fragment now that autoupdate names every dependency it moves: it updates a dependency it already named in the pending fragment rather than adding one, and writes a summary only when nothing is pending; the check itself is unchanged'
-time: '2026-10-06T19:29:20.502016929Z'

@@ -1,3 +1,0 @@
-kind: 'Security'
-body: 'moved Go to `1.27.2` and `1.26.9` everywhere this repository builds with it -- the GitLab CI Go and Terra templates, the Azure DevOps Go abstract and Terra test tiers, the Terra workflows, and the `tor-proxy` and `golang:1.26-awscli` images -- fixing the 13 standard-library and 2 `go` command advisories of `1.27.1` and `1.26.6` (GO-2026-6599 to GO-2026-6617); the Azure DevOps Terra tiers now name that exact release instead of the `1.27` line'
-time: '2026-10-11T05:47:28.343583404Z'

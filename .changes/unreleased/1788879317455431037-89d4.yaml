@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added `make test-fixture-isolation` (`.github/tests/test-fixture-isolation.sh`), which asserts the two habits whose absence let a test suite commit into this repository: scratch space comes from `mktemp` rather than a hardcoded `/tmp`, and every `cd` that begins a command is guarded. A literal `/tmp` path is allowed only through an allowlist that names the file, the line and why nothing creates it -- today the DependencyCheck data-directory value handed to a stubbed build tool and the curl-config injection payload a security test proves never reaches curl -- so a new one is a decision somebody makes on purpose rather than an oversight nobody sees'
-time: '2026-09-08T14:55:17.455431037Z'

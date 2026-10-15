@@ -329,7 +329,7 @@ is a large part of why the rule is a test rather than a review habit.
 
 ### Workflow Composition Standard
 
-**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), fifteen
+**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), seventeen
 assertions, every one of them proven to fire against a deliberate violation.** Read this section
 before writing anything under `.github/workflows/`, and before writing a pipeline in a repository
 that consumes this one.
@@ -870,7 +870,8 @@ at the end.
 
 **Do not "make SAST advisory again" here.** Advisory-versus-blocking is already decided at
 the call site, differently per platform — Azure DevOps marks all five `continueOnError:
-true`, `.github/workflows/*.yaml` forgives only `hadolint`, GitLab blocks on all five — and
+true`, `.github/workflows/*.yaml` forgives only `hadolint` (and `go.yaml` not even that, see
+"A Failing Check Fails the Run"), GitLab blocks on all five — and
 a makefile that swallows the code silently overrides all three. Findings a team has triaged
 belong in that tool's own suppression file (`.codeql-false-positives`, `.semgrepignore`,
 `.semgrepexcluderules`, `.hadolint.yaml`, `.gitleaksignore`). A consumer that genuinely
@@ -943,6 +944,57 @@ requires — and two cases keep the upload from weakening a gate:
 
 `.github/tests/test-report-uploads.sh` holds all three rules; a new stage that is mandatory or a
 deliverable must be added to that test's `MANDATORY` or `DELIVERABLES` set.
+
+### A Failing Check Fails the Run
+
+A `code-check >` or `security >` job carries **no job-level `continue-on-error`**. On a job, the
+flag concludes the *run* as passed whatever the job did: the check goes red, nothing waits for it,
+and every later stage runs anyway. That is how the Go pipeline's lint became advisory without
+anyone deciding so. A consumer's golangci-lint sat red on its default branch for about seven hours,
+every run green, while a binary built with an older Go than the code's could not load the standard
+library and no linter ran at all. The one failure a check tolerates is a refused report upload,
+and that belongs on the upload step (previous section).
+
+The Go pipeline blocks on its checks on every platform:
+
+| Check         | GitHub Actions          | GitLab CI                      | Azure DevOps                                 |
+|---------------|-------------------------|--------------------------------|----------------------------------------------|
+| golangci-lint | blocking (was advisory) | blocking (was `allow_failure`) | blocking (already was)                       |
+| govulncheck   | blocking (was advisory) | blocking (was `allow_failure`) | blocking (was a job-level `continueOnError`) |
+| Hadolint      | blocking (was advisory) | blocking (already was)         | advisory: a shared template, see below       |
+
+`make test-workflow-composition` (Test 16) holds the rule with two lists. It fails on a job that is
+advisory without being listed, and on a listed job that no longer is:
+
+- **`ADVISORY`**: advisory on purpose, each entry with the reason its users read. Today that is
+  ESLint beside the blocking `style:format`, Knip, and Dart's unused-code check.
+- **`UNREVIEWED`**: advisory since before the rule, with no reason recorded anywhere. It holds 30
+  jobs, every other toolchain's Hadolint among them. It may only **shrink**, and its limit is
+  pinned in the test. Before a job leaves it, check it the way the Go checks were checked: does
+  any consumer fail it today? Each one that does turns red the moment the check blocks.
+
+The test follows the Go pipeline's GitLab CI and Azure DevOps twins through their includes and
+templates too. It accepts exactly two kinds of `continueOnError` there:
+
+- the step that trims the build cache, which is housekeeping rather than a check;
+- the analysis steps of Azure DevOps' four shared SAST templates. They are advisory for **every**
+  Azure toolchain at once, by the decision recorded under "Do not make SAST advisory again". Making
+  them block is a decision about every Azure pipeline, not about the Go one.
+
+**A blocking lint needs headroom under load.** With about twenty runs sharing one self-hosted host,
+a clean golangci-lint analysis outran its fixed `--timeout 10m` and exited 4. A blocking job turns
+that into a red build. Three things changed in the runner:
+
+- its default timeout is now `30m`;
+- `GOLANGCI_LINT_TIMEOUT` overrides it, and a self-hosted runner's `.env` can set it;
+- an exit code of 4 now prints that no finding caused the failure.
+
+The other two remedies were not needed:
+
+- **A persistent analysis cache:** golangci-lint already keeps its cache in the user's cache
+  directory, which a self-hosted runner preserves.
+- **A cap on concurrent lint jobs per host:** it would need a runner label on every host, and it
+  queues each lint behind the others to absorb a spike that a longer timeout absorbs on its own.
 
 
 ### Shared Ignore Rules

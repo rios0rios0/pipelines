@@ -168,17 +168,32 @@ if [ -z "$GOLANGCI_LINT" ]; then
   GOLANGCI_LINT="./bin/golangci-lint"
 fi
 
+# How long the analysis may run before golangci-lint gives up. It was 10m, and with about twenty
+# runs sharing one self-hosted host a clean analysis outran that and exited 4. That went unseen
+# where the lint job was advisory (GitHub Actions, GitLab); now that a failed lint fails the run
+# there too, it would turn a load spike into a red build. A run that finishes sooner is not
+# slowed. Override it with `GOLANGCI_LINT_TIMEOUT`, e.g. in a self-hosted runner's `.env`. The
+# analysis cache needs nothing here: golangci-lint keeps it in the user's cache directory, which
+# a self-hosted GitHub runner already keeps between jobs.
+GOLANGCI_LINT_TIMEOUT="${GOLANGCI_LINT_TIMEOUT:-30m}"
+
 # Initialised because it is only assigned when the run fails: left unset, `exit $EXIT_CODE`
 # expands to a bare `exit` and returns the status of the preceding `rm` instead.
 EXIT_CODE=0
 "$GOLANGCI_LINT" run \
   --config "merged.yml" \
   --color "always" \
-  --timeout "10m" \
+  --timeout "$GOLANGCI_LINT_TIMEOUT" \
   --verbose \
   --allow-parallel-runners \
   --max-issues-per-linter 0 \
   --max-same-issues 0 $FIX_FLAG ./... || EXIT_CODE=$?
+
+# Exit code 4 is golangci-lint's timeout, not a finding. Say so: the log otherwise ends on a
+# failure that reads as if the code were at fault.
+if [ "$EXIT_CODE" -eq 4 ]; then
+  echo "::error::golangci-lint ran out of time (--timeout $GOLANGCI_LINT_TIMEOUT) before it finished; no finding caused this failure. On a busy runner, raise GOLANGCI_LINT_TIMEOUT."
+fi
 
 rm "$mergedYamlFile"
 exit $EXIT_CODE

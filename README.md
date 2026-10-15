@@ -1782,6 +1782,15 @@ Optional environment variables:
 | **Go Test Runner** | Comprehensive testing | `global/scripts/languages/golang/test/`          |
 | **CycloneDX**      | SBOM generation       | `global/scripts/languages/golang/cyclonedx/`     |
 
+**The Go checks block.**
+
+- A golangci-lint or govulncheck failure fails a Go pipeline on all three platforms.
+- A Hadolint finding fails it on GitHub Actions and GitLab CI. Azure DevOps keeps Hadolint advisory,
+  like the platform's other shared SAST templates, for every toolchain.
+- golangci-lint gives up after `30m` by default. On a busy self-hosted runner, raise it with
+  `GOLANGCI_LINT_TIMEOUT` (for example `45m`).
+- Exit code 4 means the time ran out, not that anything was found.
+
 #### JavaScript / TypeScript Tools
 
 | Tool         | Purpose                                                          | Script Location                                  |

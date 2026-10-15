@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
-# Test script for validating YAML merge functionality in golangci-lint/run.sh
+# Test script for validating YAML merge functionality in golangci-lint/run.sh, and the lint run it
+# hands the merged config to (Test 10).
 #
 # These tests drive the real `run.sh` through its `GOLANGCI_LINT_MERGE_ONLY` hook rather than
 # keeping a second copy of the merge. The copy is what allowed the defect these tests now cover:
@@ -284,6 +285,76 @@ assert_true "no test script invokes a bare yq (it must go through \$YQ)" \
 if [ -n "$bare_yq" ]; then
   echo "$bare_yq" | sed 's/^/    | /'
 fi
+
+# =============================================================================
+# Test 10: The lint run's timeout
+#
+# This suite already drives the real run.sh, so it also holds what the script hands golangci-lint
+# besides the merged config. The timeout was a fixed 10m, and with about twenty runs sharing one
+# self-hosted host a clean analysis outran it and exited 4. Nobody saw that where the lint job was
+# advisory, and it would be a red build once a failed lint fails the run there too (#725).
+# So the default is 30m, `GOLANGCI_LINT_TIMEOUT` overrides it, and exit 4 -- golangci-lint's
+# timeout -- says it is not a finding.
+#
+# A stub stands in for golangci-lint. It reports the pinned version, so run.sh takes it instead of
+# downloading one, records its arguments, and exits with the code it is told to.
+# =============================================================================
+echo "TEST 10: The lint run's timeout"
+mkdir -p "$TEST_DIR/stubbin"
+cat > "$TEST_DIR/stubbin/golangci-lint" << STUB
+#!/usr/bin/env sh
+if [ "\$1" = "version" ]; then
+  echo "golangci-lint has version ${GOLANGCI_LINT_VERSION} built with go1.99.0 from stub"
+  exit 0
+fi
+echo "\$*" > "\$STUB_ARGS"
+exit "\${STUB_EXIT:-0}"
+STUB
+chmod +x "$TEST_DIR/stubbin/golangci-lint"
+STUB_LOG="$TEST_DIR/stub.args"
+LINT_OUT="$TEST_DIR/lint.out"
+
+# Runs run.sh in a fresh project with the stub first on PATH, and also at ./bin, where run.sh
+# installs a binary, so the stub is found however the script resolves one. Writes the combined
+# output to LINT_OUT and returns run.sh's exit code.
+lint_with_stub() {
+  local stub_exit="$1"
+  local timeout="${2:-}"
+  local workdir
+  workdir="$(mktemp -d "$TEST_DIR/lint.XXXXXX")" || exit 1
+  mkdir -p "$workdir/bin"
+  cp "$TEST_DIR/stubbin/golangci-lint" "$workdir/bin/golangci-lint"
+  rm -f "$STUB_LOG"
+  (
+    cd "$workdir" || exit 1
+    export PATH="$TEST_DIR/stubbin:$PATH" STUB_ARGS="$STUB_LOG" STUB_EXIT="$stub_exit"
+    if [[ -n "$timeout" ]]; then
+      export GOLANGCI_LINT_TIMEOUT="$timeout"
+    else
+      unset GOLANGCI_LINT_TIMEOUT
+    fi
+    sh "$RUN_SH"
+  ) > "$LINT_OUT" 2>&1
+}
+
+rc=0
+lint_with_stub 0 || rc=$?
+assert_true "a clean lint exits 0" "[ '$rc' = 0 ]"
+assert_true "the timeout defaults to 30m" "grep -q -- '--timeout 30m' '$STUB_LOG'"
+
+rc=0
+lint_with_stub 0 45m || rc=$?
+assert_true "GOLANGCI_LINT_TIMEOUT overrides the timeout" "grep -q -- '--timeout 45m' '$STUB_LOG'"
+
+rc=0
+lint_with_stub 4 || rc=$?
+assert_true "a timeout keeps golangci-lint's exit code 4" "[ '$rc' = 4 ]"
+assert_true "a timeout says no finding caused it" "grep -q 'ran out of time' '$LINT_OUT'"
+
+rc=0
+lint_with_stub 1 || rc=$?
+assert_true "findings keep exit code 1" "[ '$rc' = 1 ]"
+assert_true "findings are not reported as a timeout" "! grep -q 'ran out of time' '$LINT_OUT'"
 
 # =============================================================================
 # Summary

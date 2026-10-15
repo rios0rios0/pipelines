@@ -13,6 +13,9 @@ include:
 # Delegates to the shared runner instead of inlining `go install` -- see the note
 # on the Azure DevOps twin. It reads the pinned version from
 # global/scripts/shared/pinned-versions.sh, so the version lives in one place.
+#
+# No `allow_failure`: a known vulnerability fails the pipeline, as it does on the
+# other two platforms. See CLAUDE.md, "A Failing Check Fails the Run".
 sca:govulncheck:
   extends: [ '.go', '.scripts-repo' ]
   stage: 'security (sca/sast)'
@@ -24,4 +27,3 @@ sca:govulncheck:
     when: 'always'
     paths:
       - 'build/reports/govulncheck'
-  allow_failure: true

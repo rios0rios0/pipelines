@@ -243,9 +243,9 @@ GOLANGCI_LINT_SHA256_ARM64="ee7ec5f3453d15ddf106fae5a4d6c71737712348a979d1fe9cd5
 # upstream: github-release maratori/golangci-lint-config ceiling=GOLANGCI_LINT
 # vendored: global/scripts/languages/golang/golangci-lint/.golangci.yml
 # osv: none
-GOLANGCI_LINT_CONFIG_PINNED_VERSION="2.9.0"
+GOLANGCI_LINT_CONFIG_PINNED_VERSION="2.14.0"
 # asset: https://raw.githubusercontent.com/maratori/golangci-lint-config/v{version}/.golangci.yml
-GOLANGCI_LINT_CONFIG_SHA256="9c781547948a489e9c7879f802b76ebbee45b23190181c6ddb8d7b074d0860ee"
+GOLANGCI_LINT_CONFIG_SHA256="8a16368d593e301d1391e4261b8bb4b89bf430802d64d9e71c944bb3035754ba"
 
 # Guardsquare publishes no checksum manifest, so this digest rests on the asset
 # alone.
@@ -359,7 +359,7 @@ YQ_SHA256_DARWIN_ARM64="fee511a181bd8b3e6b7da98842b41973bfac8cd3bcd341ed29a58462
 # upstream: npm wrangler
 WRANGLER_CLI_SPEC="${WRANGLER_CLI_SPEC:-wrangler@4}"
 # upstream: npm vercel
-VERCEL_CLI_SPEC="${VERCEL_CLI_SPEC:-vercel@63}"
+VERCEL_CLI_SPEC="${VERCEL_CLI_SPEC:-vercel@64}"
 # upstream: npm netlify-cli
 NETLIFY_CLI_SPEC="${NETLIFY_CLI_SPEC:-netlify-cli@27}"
 

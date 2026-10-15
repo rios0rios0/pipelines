@@ -76,7 +76,7 @@ test-lambda:
 	@./.github/tests/test-lambda-templates.sh
 
 test-yaml-merge:
-	@echo "Running YAML merge validation..."
+	@echo "Running golangci-lint run.sh validation (config merge, binary resolution, toolchain guard)..."
 	@./.github/tests/test-yaml-merge.sh
 
 test-golangci-scanner-markers:

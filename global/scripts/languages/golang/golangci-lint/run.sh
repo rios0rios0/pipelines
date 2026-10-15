@@ -120,6 +120,45 @@ if [ -n "$GOLANGCI_LINT_MERGE_ONLY" ]; then
   exit 0
 fi
 
+# Private scratch space for this run: the downloaded archive, its extraction and the lint log.
+# The install used to work in fixed, shared paths -- `/tmp/golangci-lint.tar.gz`, extracted into
+# `/tmp/golangci-lint-<version>-linux-<arch>` and then removed with `rm -rf` -- so two runs on one
+# host (several runners per machine, or parallel `make lint` in different worktrees) overwrote and
+# deleted each other's files mid-install. `mktemp -d` gives every run its own directory, and it
+# honours TMPDIR.
+GOLANGCI_TMP="$(mktemp -d)" || {
+  echo "ERROR: could not create a private temporary directory for golangci-lint." >&2
+  exit 1
+}
+GOLANGCI_STAGED=""
+trap 'rm -rf "$GOLANGCI_TMP"; [ -z "$GOLANGCI_STAGED" ] || rm -f "$GOLANGCI_STAGED"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# golangci_lint_version <binary>: the release a golangci-lint binary reports, e.g. `2.14.0`.
+golangci_lint_version() {
+  "$1" version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1
+}
+
+# go_minor_is_newer <toolchain> <built-with>: 0 when the first Go version (`1.28.1`) is on a
+# newer major.minor line than the second (`1.27.0`). A version that does not parse as numbers --
+# empty, or a `devel` toolchain -- is never "newer", so an unknown never blocks a run.
+go_minor_is_newer() {
+  _gm_t_major=${1%%.*}
+  _gm_t_minor=${1#*.}
+  _gm_t_minor=${_gm_t_minor%%[!0-9]*}
+  _gm_b_major=${2%%.*}
+  _gm_b_minor=${2#*.}
+  _gm_b_minor=${_gm_b_minor%%[!0-9]*}
+  for _gm_part in "$_gm_t_major" "$_gm_t_minor" "$_gm_b_major" "$_gm_b_minor"; do
+    case "$_gm_part" in
+      '' | *[!0-9]*) return 1 ;;
+    esac
+  done
+  [ "$_gm_t_major" -gt "$_gm_b_major" ] && return 0
+  [ "$_gm_t_major" -eq "$_gm_b_major" ] && [ "$_gm_t_minor" -gt "$_gm_b_minor" ]
+}
+
 # The version was already pinned; the INSTALL was not. `wget -O- | sh` handed
 # the runner -- holding the repository token -- to whatever bytes
 # golangci-lint.run returned at that moment, and nothing verified either the
@@ -127,13 +166,18 @@ fi
 # downloaded and checksum-verified directly instead, which is the same shape
 # gitleaks, hadolint and shellcheck already use and removes the vendor's
 # install script from the trust path entirely.
-
+#
+# A binary that already reports the pinned version is used as-is: first one on PATH, then the
+# `./bin/golangci-lint` this script installs (or a consumer keeps for local runs). Only PATH used
+# to be consulted, so unless `./bin` happened to be on PATH, every run downloaded and verified the
+# archive again to replace a binary that was already the right one.
 GOLANGCI_LINT=""
-if command -v golangci-lint > /dev/null 2>&1; then
-  DETECTED_VERSION=$(golangci-lint version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-  if [ "$DETECTED_VERSION" = "$GOLANGCI_LINT_VERSION" ]; then
-    GOLANGCI_LINT="golangci-lint"
-  fi
+if command -v golangci-lint > /dev/null 2>&1 \
+  && [ "$(golangci_lint_version golangci-lint)" = "$GOLANGCI_LINT_VERSION" ]; then
+  GOLANGCI_LINT="golangci-lint"
+elif [ -x ./bin/golangci-lint ] \
+  && [ "$(golangci_lint_version ./bin/golangci-lint)" = "$GOLANGCI_LINT_VERSION" ]; then
+  GOLANGCI_LINT="./bin/golangci-lint"
 fi
 if [ -z "$GOLANGCI_LINT" ]; then
   case "$(uname -m)" in
@@ -151,21 +195,56 @@ if [ -z "$GOLANGCI_LINT" ]; then
   echo "Installing golangci-lint v$GOLANGCI_LINT_VERSION (linux/$GOLANGCI_ARCH)..."
   if ! download_verified \
     "https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_LINT_VERSION}/${GOLANGCI_DIR}.tar.gz" \
-    /tmp/golangci-lint.tar.gz \
+    "$GOLANGCI_TMP/golangci-lint.tar.gz" \
     "$GOLANGCI_SHA256"; then
     exit 1
   fi
 
-  mkdir -p ./bin
-  if ! tar -xzf /tmp/golangci-lint.tar.gz -C /tmp; then
-    echo "ERROR: failed to extract golangci-lint from /tmp/golangci-lint.tar.gz." >&2
-    rm -f /tmp/golangci-lint.tar.gz
+  if ! tar -xzf "$GOLANGCI_TMP/golangci-lint.tar.gz" -C "$GOLANGCI_TMP"; then
+    echo "ERROR: failed to extract golangci-lint from the downloaded archive." >&2
     exit 1
   fi
-  mv "/tmp/${GOLANGCI_DIR}/golangci-lint" ./bin/golangci-lint
-  chmod +x ./bin/golangci-lint
-  rm -rf /tmp/golangci-lint.tar.gz "/tmp/${GOLANGCI_DIR}"
+
+  # Staged next to its destination under a name no other run holds, then renamed over it. A
+  # rename within one filesystem is atomic, so a run that starts while another one installs
+  # finds the old binary or the new one, never a partly written file.
+  mkdir -p ./bin || exit 1
+  GOLANGCI_STAGED="$(mktemp ./bin/.golangci-lint.XXXXXX)" || exit 1
+  if ! cp "$GOLANGCI_TMP/${GOLANGCI_DIR}/golangci-lint" "$GOLANGCI_STAGED" \
+    || ! chmod 0755 "$GOLANGCI_STAGED" \
+    || ! mv -f "$GOLANGCI_STAGED" ./bin/golangci-lint; then
+    echo "ERROR: failed to install golangci-lint into ./bin." >&2
+    exit 1
+  fi
+  GOLANGCI_STAGED=""
   GOLANGCI_LINT="./bin/golangci-lint"
+fi
+
+# golangci-lint "supports Go versions lower or equal to the Go version used to compile it" (its
+# FAQ), so a toolchain on a newer Go minor line than the binary's build is stopped here, naming
+# both, instead of producing a wall of `typecheck` errors on the standard library that reads like
+# findings in the code.
+#
+# Only the major.minor line is compared. The patch level of the build does not decide it:
+# golangci-lint 2.13.2 and 2.14.0 were BOTH built with go1.27.0, yet 2.13.2 cannot read the export
+# data go1.27.2 writes and 2.14.0 can. A rule that failed every newer patch would block a binary
+# that works, and would not have singled out the one that did not. That case is caught after the
+# run instead, by its error message.
+#
+# Both are kept as reported (`go1.27.0`, `go1.27.2`, or a `devel ...` toolchain) for the
+# messages, and compared without the `go` prefix.
+GOLANGCI_BUILT_WITH="$("$GOLANGCI_LINT" version 2> /dev/null \
+  | sed -n 's/.* built with \(go[0-9][0-9.]*\).*/\1/p' | head -1)"
+GO_TOOLCHAIN="$(go env GOVERSION 2> /dev/null)" || GO_TOOLCHAIN=""
+echo "Using golangci-lint v$GOLANGCI_LINT_VERSION (built with ${GOLANGCI_BUILT_WITH:-an unknown Go})" \
+  "with Go toolchain ${GO_TOOLCHAIN:-unknown}."
+if go_minor_is_newer "${GO_TOOLCHAIN#go}" "${GOLANGCI_BUILT_WITH#go}"; then
+  echo "::error::golangci-lint v$GOLANGCI_LINT_VERSION was built with $GOLANGCI_BUILT_WITH and" \
+    "cannot analyse code for the $GO_TOOLCHAIN toolchain: it supports Go versions up to the one" \
+    "it was built with. Bump GOLANGCI_LINT_VERSION in global/scripts/shared/pinned-versions.sh" \
+    "to a release built with $GO_TOOLCHAIN or newer."
+  rm -f "$mergedYamlFile"
+  exit 1
 fi
 
 # How long the analysis may run before golangci-lint gives up. It was 10m, and with about twenty
@@ -177,17 +256,37 @@ fi
 # a self-hosted GitHub runner already keeps between jobs.
 GOLANGCI_LINT_TIMEOUT="${GOLANGCI_LINT_TIMEOUT:-30m}"
 
-# Initialised because it is only assigned when the run fails: left unset, `exit $EXIT_CODE`
-# expands to a bare `exit` and returns the status of the preceding `rm` instead.
-EXIT_CODE=0
-"$GOLANGCI_LINT" run \
-  --config "merged.yml" \
-  --color "always" \
-  --timeout "$GOLANGCI_LINT_TIMEOUT" \
-  --verbose \
-  --allow-parallel-runners \
-  --max-issues-per-linter 0 \
-  --max-same-issues 0 $FIX_FLAG ./... || EXIT_CODE=$?
+# The output is streamed AND kept, so a failure can be read back below. The status travels
+# through a file because a POSIX pipeline reports the status of `tee`, not of the linter.
+# The status file is read rather than defaulted: a run that was killed before writing it must
+# fail, not pass.
+{
+  "$GOLANGCI_LINT" run \
+    --config "merged.yml" \
+    --color "always" \
+    --timeout "$GOLANGCI_LINT_TIMEOUT" \
+    --verbose \
+    --allow-parallel-runners \
+    --max-issues-per-linter 0 \
+    --max-same-issues 0 $FIX_FLAG ./... 2>&1
+  echo "$?" > "$GOLANGCI_TMP/status"
+} | tee "$GOLANGCI_TMP/lint.log"
+EXIT_CODE="$(cat "$GOLANGCI_TMP/status" 2> /dev/null)"
+case "$EXIT_CODE" in
+  '' | *[!0-9]*) EXIT_CODE=1 ;;
+esac
+
+# A binary whose export-data reader is older than the toolchain fails every package with
+# `could not load export data ... export data version N is greater than maximum supported version
+# M (typecheck)`. That is a tooling mismatch, not a finding, and the build Go of the binary does
+# not reveal it in advance (see above), so it is named once the linter has said it.
+if [ "$EXIT_CODE" -ne 0 ] && grep -q 'could not load export data' "$GOLANGCI_TMP/lint.log"; then
+  echo "::error::golangci-lint v$GOLANGCI_LINT_VERSION (built with ${GOLANGCI_BUILT_WITH:-an unknown Go})" \
+    "could not read the export data of Go toolchain ${GO_TOOLCHAIN:-unknown}, so the" \
+    "\`typecheck\` errors above are a tooling mismatch, not findings in this code. Bump" \
+    "GOLANGCI_LINT_VERSION in global/scripts/shared/pinned-versions.sh to a release that supports" \
+    "${GO_TOOLCHAIN:-this toolchain}."
+fi
 
 # Exit code 4 is golangci-lint's timeout, not a finding. Say so: the log otherwise ends on a
 # failure that reads as if the code were at fault.
@@ -196,4 +295,4 @@ if [ "$EXIT_CODE" -eq 4 ]; then
 fi
 
 rm "$mergedYamlFile"
-exit $EXIT_CODE
+exit "$EXIT_CODE"

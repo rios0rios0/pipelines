@@ -1947,6 +1947,18 @@ carries a scanner's allow marker (`//gitleaks:allow`, `// nosemgrep`, `ggignore`
 as `"..." //nolint:gosec //gitleaks:allow` keeps its marker even though gosec never runs on tests.
 `.github/tests/test-golangci-scanner-markers.sh` holds that in place.
 
+`run.sh` uses a `golangci-lint` that reports the pinned version (`GOLANGCI_LINT_VERSION` in
+`global/scripts/shared/pinned-versions.sh`): the one on `PATH` first, then `./bin/golangci-lint`.
+Otherwise it downloads the pinned release, verifies its checksum and installs it into `./bin`. Each
+run downloads and extracts in its own `mktemp -d` directory, removed when the run ends, and renames
+the binary into place, so concurrent runs on one host never touch each other's files. Before linting
+it logs the Go the binary was built with next to `go env GOVERSION`, and it stops when the toolchain
+is on a newer Go minor line: golangci-lint supports Go versions up to the one it was built with. A
+newer patch release is not stopped, because the build Go does not predict it -- golangci-lint 2.13.2
+and 2.14.0 were both built with go1.27.0, and only 2.13.2 fails on go1.27.2. When a run fails with
+`could not load export data`, the script says so: the `typecheck` errors are a tooling mismatch, and
+the fix is to bump the pin. `.github/tests/test-yaml-merge.sh` holds all of this in place.
+
 ## MVP Hosting & Deployment
 
 The `50-deployment` stage ships ready-made jobs for the five platforms most worth using to host an
@@ -2386,7 +2398,12 @@ Two mechanisms guard against this:
 **Issue: "golangci-lint: command not found"**
 
 - **Cause:** golangci-lint not installed or not in PATH
-- **Solution:** The script automatically downloads golangci-lint, ensure Docker is available
+- **Solution:** none required -- the script uses a `golangci-lint` on `PATH` or in `./bin` that reports the pinned version, and otherwise downloads, verifies and installs the pinned release into `./bin`
+
+**Issue: every package fails `typecheck` with `could not load export data` (Go projects)**
+
+- **Cause:** the pinned golangci-lint cannot read the export data the Go toolchain writes; the script names this as a tooling mismatch after the run, and stops before linting when the toolchain is on a newer Go minor line than the binary's build
+- **Solution:** bump `GOLANGCI_LINT_VERSION` in `global/scripts/shared/pinned-versions.sh` to a release that supports the toolchain -- the findings are not in the code
 
 **Issue: Docker build fails with SSL certificate errors**
 

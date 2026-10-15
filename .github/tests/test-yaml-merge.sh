@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 set -e
 
-# Test script for validating YAML merge functionality in golangci-lint/run.sh, and the lint run it
-# hands the merged config to (Test 10).
+# Test script for golangci-lint/run.sh: the YAML config merge (TESTS 1-9), the timeout of the lint
+# run it hands the merged config to (TEST 10), and how the script obtains the golangci-lint binary
+# and checks it against the Go toolchain (TESTS 11-18).
 #
-# These tests drive the real `run.sh` through its `GOLANGCI_LINT_MERGE_ONLY` hook rather than
+# The merge tests drive the real `run.sh` through its `GOLANGCI_LINT_MERGE_ONLY` hook rather than
 # keeping a second copy of the merge. The copy is what allowed the defect these tests now cover:
 # it merged project settings into the v1 `linters-settings` key while `run.sh` merged into the v2
 # `linters.settings`, so every assertion below passed against a shape production never emitted.
+#
+# The binary tests run the whole script against stubs of `curl`, `go` and `golangci-lint`, so no
+# release is downloaded and no Go toolchain is needed.
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export SCRIPTS_DIR
@@ -355,6 +359,260 @@ rc=0
 lint_with_stub 1 || rc=$?
 assert_true "findings keep exit code 1" "[ '$rc' = 1 ]"
 assert_true "findings are not reported as a timeout" "! grep -q 'ran out of time' '$LINT_OUT'"
+
+# =============================================================================
+# Binary resolution and the toolchain guard (TESTS 11-18)
+#
+# run.sh past the merge: which golangci-lint it runs, how it installs one, and whether that binary
+# can analyse code for the Go toolchain on PATH. Every external program it reaches is a stub:
+#
+#   curl           records the URL and destination it was given, and writes the fixture archive
+#   go             answers `go env GOVERSION` with STUB_GO_VERSION, and fails when that is empty
+#   golangci-lint  answers `version` with a chosen release and build Go, and records each `run`
+#
+# The stubbed release is 9.9.9, which does not exist, so a real golangci-lint on the machine's
+# PATH can never match it and change which binary a test runs.
+# =============================================================================
+STUB_VERSION='9.9.9'
+# Not Test 10's `stubbin`: this directory goes on PATH, and sharing it would put Test 10's
+# golangci-lint stub on PATH in every test below.
+STUB_BIN="$TEST_DIR/binary-stubs"
+LINT_TMP="$TEST_DIR/linttmp"
+mkdir -p "$STUB_BIN" "$LINT_TMP"
+
+cat > "$STUB_BIN/curl" << 'STUB'
+#!/usr/bin/env sh
+url=''
+dest=''
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) dest="$2"; shift 2 ;;
+    https://*) url="$1"; shift ;;
+    *) shift ;;
+  esac
+done
+printf '%s %s\n' "$url" "$dest" >> "$STUB_LOG/curl"
+cp "$STUB_ARCHIVE" "$dest"
+STUB
+cat > "$STUB_BIN/go" << 'STUB'
+#!/usr/bin/env sh
+if [ "$1" = 'env' ] && [ "$2" = 'GOVERSION' ]; then
+  [ -n "$STUB_GO_VERSION" ] || exit 1
+  printf '%s\n' "$STUB_GO_VERSION"
+fi
+STUB
+chmod +x "$STUB_BIN/curl" "$STUB_BIN/go"
+
+# make_golangci_stub <path> <label> <release> <built-with Go> <run mode>
+#
+# The label is what the stub records when it runs, so a test can tell which of several binaries
+# the script chose. Run modes: `ok` (no issues), `findings` (one ordinary issue, exit 1),
+# `export-data` (the real message of a binary that cannot read the toolchain's export data,
+# exit 1) and `exit:<n>`.
+make_golangci_stub() {
+  local path="$1" label="$2" release="$3" built_with="$4" mode="$5"
+  mkdir -p "$(dirname "$path")"
+  cat > "$path" << STUB
+#!/usr/bin/env sh
+if [ "\$1" = 'version' ]; then
+  echo 'golangci-lint has version $release built with go$built_with from 0000000 on 2026-01-01T00:00:00Z'
+  exit 0
+fi
+echo '$label' >> "\$STUB_LOG/ran"
+case '$mode' in
+  ok) echo '0 issues.'; exit 0 ;;
+  findings) echo 'main.go:5:2: Error return value is not checked (errcheck)'; exit 1 ;;
+  export-data)
+    echo 'probe.go:3:8: could not import fmt (-: could not load export data: internal error in importing "internal/goarch" (cannot decode "internal/goarch", export data version 5 is greater than maximum supported version 4); please report an issue) (typecheck)'
+    exit 1 ;;
+  exit:*) exit '${mode#exit:}' ;;
+esac
+STUB
+  chmod +x "$path"
+}
+
+# The release archive the stubbed curl serves: the layout of a real one, holding a stub binary.
+case "$(uname -m)" in
+  x86_64) STUB_ARCH='amd64' ;;
+  aarch64 | arm64) STUB_ARCH='arm64' ;;
+  *) STUB_ARCH='' ;;
+esac
+STUB_ARCHIVE="$TEST_DIR/golangci-lint.tar.gz"
+archive_root="$(mktemp -d "$TEST_DIR/archive.XXXXXX")" || exit 1
+make_golangci_stub "$archive_root/golangci-lint-$STUB_VERSION-linux-$STUB_ARCH/golangci-lint" \
+  downloaded "$STUB_VERSION" 1.27.0 ok
+tar -czf "$STUB_ARCHIVE" -C "$archive_root" "golangci-lint-$STUB_VERSION-linux-$STUB_ARCH"
+if command -v sha256sum > /dev/null 2>&1; then
+  STUB_SHA256="$(sha256sum "$STUB_ARCHIVE" | awk '{print $1}')"
+else
+  STUB_SHA256="$(shasum -a 256 "$STUB_ARCHIVE" | awk '{print $1}')"
+fi
+
+new_workdir() {
+  local dir
+  dir="$(mktemp -d "$TEST_DIR/lint.XXXXXX")" || exit 1
+  mkdir -p "$dir/.stub"
+  printf '%s\n' "$dir"
+}
+
+# run_lint <workdir> <go version> [extra PATH]
+#
+# Runs the whole of run.sh in `workdir` against the stubs, with TMPDIR pointed at LINT_TMP so the
+# private directories it creates can be inspected. Sets LAST_STATUS; the output is kept in
+# `<workdir>/run.log` and echoed when a test needs it.
+run_lint() {
+  local workdir="$1" go_version="$2" extra_path="${3:-}"
+  local path="$STUB_BIN:$PATH"
+  if [[ -n "$extra_path" ]]; then
+    path="$extra_path:$path"
+  fi
+  LAST_STATUS=0
+  (
+    cd "$workdir" || exit 1
+    PATH="$path" TMPDIR="$LINT_TMP" STUB_LOG="$workdir/.stub" STUB_ARCHIVE="$STUB_ARCHIVE" \
+      STUB_GO_VERSION="$go_version" GOLANGCI_LINT_VERSION="$STUB_VERSION" \
+      GOLANGCI_LINT_SHA256_OVERRIDE="$STUB_SHA256" sh "$RUN_SH"
+  ) > "$workdir/run.log" 2>&1 || LAST_STATUS=$?
+}
+
+show_log() {
+  sed 's/^/    | /' "$1/run.log"
+}
+
+# =============================================================================
+# Test 11: A ./bin/golangci-lint that reports the pinned release is used, with no download
+# =============================================================================
+echo "TEST 11: A matching ./bin/golangci-lint is reused"
+work="$(new_workdir)" || exit 1
+make_golangci_stub "$work/bin/golangci-lint" bin "$STUB_VERSION" 1.27.0 ok
+run_lint "$work" go1.27.2
+assert_true "the run succeeds" "[ $LAST_STATUS -eq 0 ]"
+assert_true "the ./bin binary is the one that runs" "[ \"\$(cat '$work/.stub/ran' 2> /dev/null)\" = bin ]"
+assert_true "nothing is downloaded" "[ ! -e '$work/.stub/curl' ]"
+[ "$LAST_STATUS" -eq 0 ] || show_log "$work"
+
+# =============================================================================
+# Test 12: A ./bin/golangci-lint of another release is replaced by the pinned one
+# =============================================================================
+echo "TEST 12: A ./bin/golangci-lint of another release is replaced"
+work="$(new_workdir)" || exit 1
+make_golangci_stub "$work/bin/golangci-lint" stale 1.0.0 1.27.0 ok
+run_lint "$work" go1.27.2
+assert_true "the run succeeds" "[ $LAST_STATUS -eq 0 ]"
+assert_true "the pinned release is downloaded once" "[ \"\$(wc -l < '$work/.stub/curl' 2> /dev/null)\" -eq 1 ]"
+assert_true "the downloaded binary is the one that runs" "[ \"\$(cat '$work/.stub/ran' 2> /dev/null)\" = downloaded ]"
+assert_true "./bin/golangci-lint now reports the pinned release" \
+  "'$work/bin/golangci-lint' version | grep -q 'version $STUB_VERSION '"
+assert_true "the installed binary is executable" "[ -x '$work/bin/golangci-lint' ]"
+[ "$LAST_STATUS" -eq 0 ] || show_log "$work"
+
+# =============================================================================
+# Test 13: Each install works in its own private directory, removed when the run ends
+#
+# Two runs used to share one archive path and one extraction directory, and each run's `rm -rf`
+# could delete the other's files mid-install. Asserted on what the stubbed curl was told: the
+# destination must sit in a directory under TMPDIR that belongs to that run alone and is gone
+# afterwards. No staged copy may be left beside the installed binary either.
+# =============================================================================
+echo "TEST 13: Installs never share a temporary path"
+work_a="$(new_workdir)" || exit 1
+work_b="$(new_workdir)" || exit 1
+run_lint "$work_a" go1.27.2
+status_a=$LAST_STATUS
+run_lint "$work_b" go1.27.2
+status_b=$LAST_STATUS
+dest_a="$(awk '{print $2}' "$work_a/.stub/curl" 2> /dev/null)"
+dest_b="$(awk '{print $2}' "$work_b/.stub/curl" 2> /dev/null)"
+assert_true "both runs succeed" "[ $status_a -eq 0 ] && [ $status_b -eq 0 ]"
+assert_true "the first download lands under TMPDIR" "[[ '$dest_a' == '$LINT_TMP'/?*/* ]]"
+assert_true "the second download lands under TMPDIR" "[[ '$dest_b' == '$LINT_TMP'/?*/* ]]"
+assert_true "the two runs use different directories" \
+  "[ -n '$dest_a' ] && [ \"\$(dirname '$dest_a')\" != \"\$(dirname '$dest_b')\" ]"
+assert_true "each run removes its private directory" "[ -z \"\$(ls -A '$LINT_TMP')\" ]"
+assert_true "no staged copy is left in ./bin" \
+  "[ -z \"\$(find '$work_a/bin' '$work_b/bin' -name '.golangci-lint.*' 2> /dev/null)\" ]"
+[ "$status_a" -eq 0 ] || show_log "$work_a"
+
+# =============================================================================
+# Test 14: A golangci-lint on PATH that reports the pinned release still wins
+# =============================================================================
+echo "TEST 14: A matching golangci-lint on PATH is used"
+work="$(new_workdir)" || exit 1
+make_golangci_stub "$TEST_DIR/pathbin/golangci-lint" path "$STUB_VERSION" 1.27.0 ok
+run_lint "$work" go1.27.2 "$TEST_DIR/pathbin"
+assert_true "the run succeeds" "[ $LAST_STATUS -eq 0 ]"
+assert_true "the PATH binary is the one that runs" "[ \"\$(cat '$work/.stub/ran' 2> /dev/null)\" = path ]"
+assert_true "nothing is downloaded or installed" "[ ! -e '$work/.stub/curl' ] && [ ! -e '$work/bin' ]"
+
+# =============================================================================
+# Test 15: A toolchain on a newer Go minor than the binary's build stops the run before linting
+# =============================================================================
+echo "TEST 15: A newer Go minor than the build stops the run"
+work="$(new_workdir)" || exit 1
+make_golangci_stub "$work/bin/golangci-lint" bin "$STUB_VERSION" 1.27.0 ok
+run_lint "$work" go1.28.1
+assert_true "the run fails" "[ $LAST_STATUS -ne 0 ]"
+assert_true "the linter never runs" "[ ! -e '$work/.stub/ran' ]"
+assert_true "the message names the binary's build Go" "grep -q 'built with go1.27.0' '$work/run.log'"
+assert_true "the message names the toolchain" "grep -q 'go1.28.1 toolchain' '$work/run.log'"
+assert_true "the message says to bump the pin" \
+  "grep -q 'Bump GOLANGCI_LINT_VERSION in global/scripts/shared/pinned-versions.sh' '$work/run.log'"
+assert_true "the merged config is still removed" "[ ! -e '$work/merged.yml' ]"
+
+# =============================================================================
+# Test 16: A newer patch release, or an older toolchain, does not stop the run
+#
+# golangci-lint 2.13.2 and 2.14.0 were both built with go1.27.0, and only 2.13.2 fails on
+# go1.27.2's export data, so a newer patch says nothing about the binary in advance. Blocking it
+# would stop the pinned release on every go1.27.2 consumer while it works.
+# =============================================================================
+echo "TEST 16: A newer patch, or an older toolchain, runs normally"
+work="$(new_workdir)" || exit 1
+make_golangci_stub "$work/bin/golangci-lint" bin "$STUB_VERSION" 1.27.0 ok
+run_lint "$work" go1.27.2
+assert_true "go1.27.2 against a go1.27.0 build runs" "[ $LAST_STATUS -eq 0 ] && [ -e '$work/.stub/ran' ]"
+assert_true "the log names both versions" \
+  "grep -q 'built with go1.27.0) with Go toolchain go1.27.2' '$work/run.log'"
+work="$(new_workdir)" || exit 1
+make_golangci_stub "$work/bin/golangci-lint" bin "$STUB_VERSION" 1.27.0 ok
+run_lint "$work" go1.26.9
+assert_true "go1.26.9 against a go1.27.0 build runs" "[ $LAST_STATUS -eq 0 ] && [ -e '$work/.stub/ran' ]"
+for unknown in '' 'devel go1.28-0123abc Tue Sep 1 00:00:00 2026 +0000'; do
+  work="$(new_workdir)" || exit 1
+  make_golangci_stub "$work/bin/golangci-lint" bin "$STUB_VERSION" 1.27.0 ok
+  run_lint "$work" "$unknown"
+  assert_true "an unknown toolchain ('${unknown:-go env fails}') does not block the run" \
+    "[ $LAST_STATUS -eq 0 ] && [ -e '$work/.stub/ran' ]"
+done
+
+# =============================================================================
+# Test 17: An export-data failure is named as a tooling mismatch
+# =============================================================================
+echo "TEST 17: An export-data failure is named as a tooling mismatch"
+work="$(new_workdir)" || exit 1
+make_golangci_stub "$work/bin/golangci-lint" bin "$STUB_VERSION" 1.27.0 export-data
+run_lint "$work" go1.27.2
+assert_true "the run fails" "[ $LAST_STATUS -eq 1 ]"
+assert_true "the linter's own output is still shown" "grep -q 'could not load export data' '$work/run.log'"
+assert_true "the failure is named a tooling mismatch, not findings" \
+  "grep -q '::error::golangci-lint v$STUB_VERSION (built with go1.27.0) could not read the export data of Go toolchain go1.27.2' '$work/run.log'"
+assert_true "the message says to bump the pin" \
+  "grep -q 'Bump GOLANGCI_LINT_VERSION in global/scripts/shared/pinned-versions.sh' '$work/run.log'"
+
+# =============================================================================
+# Test 18: Findings get no mismatch message, and the exit status is the linter's own
+# =============================================================================
+echo "TEST 18: Ordinary findings and exit statuses pass through"
+work="$(new_workdir)" || exit 1
+make_golangci_stub "$work/bin/golangci-lint" bin "$STUB_VERSION" 1.27.0 findings
+run_lint "$work" go1.27.2
+assert_true "findings fail the run" "[ $LAST_STATUS -eq 1 ]"
+assert_true "findings are not called a tooling mismatch" "! grep -q 'tooling mismatch' '$work/run.log'"
+work="$(new_workdir)" || exit 1
+make_golangci_stub "$work/bin/golangci-lint" bin "$STUB_VERSION" 1.27.0 exit:3
+run_lint "$work" go1.27.2
+assert_true "the linter's exit status is kept (3)" "[ $LAST_STATUS -eq 3 ]"
+assert_true "the merged config is removed after the run" "[ ! -e '$work/merged.yml' ]"
 
 # =============================================================================
 # Summary

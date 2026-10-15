@@ -4,21 +4,24 @@
 #   SCRIPTS_DIR ?= $(HOME)/Development/github.com/rios0rios0/pipelines
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #
-# Targets provided: setup codeql semgrep hadolint shellcheck gitleaks sast
+# Targets provided: setup codeql semgrep hadolint shellcheck gitleaks checkov sast
 #                   gitignore gitignore-check
 # Requires: SCRIPTS_DIR to be set. SEMGREP_LANGUAGE and CODEQL_LANGUAGE should be set by a language
 #           .mk file (e.g. golang.mk) or manually before including this file.
 #
-# EVERY TARGET HERE FAILS WHEN ITS TOOL FAILS. `sast` runs the whole suite even
+# EVERY TARGET HERE FAILS WHEN ITS TOOL FAILS -- `checkov` only once
+# CHECKOV_BLOCKING is `true` (see its target). `sast` runs the whole suite even
 # when one tool reports findings, and then exits non-zero with a `SAST FAILED:`
 # line naming which ones did -- so `make lint && make sast` is a gate that can
 # actually stop a push. See the block above `codeql` for why, and for where the
 # advisory-versus-blocking decision belongs instead.
 #
-# Variables: SAST_TOOLS       the suite `sast` runs (override to narrow it)
-#            SAST_TOOLS_EXTRA appended to by language fragments; never set here
+# Variables: SAST_TOOLS          the suite `sast` runs (override to narrow it)
+#            SAST_TOOLS_EXTRA    appended to by language fragments; never set here
+#            CHECKOV_BLOCKING    `true` makes `checkov` fail on findings (default: advisory)
+#            CHECKOV_DIRECTORIES what `checkov` scans, space-separated (default: `.`)
 
-.PHONY: setup codeql semgrep hadolint shellcheck gitleaks sast gitignore gitignore-check
+.PHONY: setup codeql semgrep hadolint shellcheck gitleaks checkov sast gitignore gitignore-check
 
 # Bootstraps the local checkout of this repository that every other target
 # reads its scripts from.
@@ -126,6 +129,23 @@ shellcheck:
 
 gitleaks:
 	@$(SCRIPTS_DIR)/global/scripts/tools/gitleaks/run.sh
+
+# Checkov, the IaC misconfiguration scanner. Not in the default `SAST_TOOLS`: the
+# fragments for infrastructure code (`terra.mk`, `terraform.mk`) add it to
+# `SAST_TOOLS_EXTRA`, and any project can run `make checkov`.
+#
+# The one target here that does NOT fail on findings by default. Every project
+# that includes those fragments meets this scanner on the same day, so blocking
+# from the start would fail each one's `make sast` before anyone could triage
+# what it finds. It reports instead, until the project sets
+# `CHECKOV_BLOCKING = true` -- once its findings are fixed or recorded inline as
+# `#checkov:skip=<ID>:<reason>` -- and from then on it fails like the rest. The
+# decision is still the caller's, as the block above `codeql` asks; it is only
+# made by a variable rather than by `|| true`, so it can be undone without
+# deleting anything. A scan that cannot complete fails only when blocking too.
+checkov:
+	@CHECKOV_BLOCKING='$(CHECKOV_BLOCKING)' CHECKOV_DIRECTORIES='$(CHECKOV_DIRECTORIES)' \
+	  $(SCRIPTS_DIR)/global/scripts/tools/checkov/run.sh
 
 # The tools `sast` runs, by target name. Overridable, so a project can narrow
 # the suite; a LANGUAGE FRAGMENT adds to `SAST_TOOLS_EXTRA` instead (see

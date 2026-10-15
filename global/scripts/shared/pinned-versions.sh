@@ -202,6 +202,20 @@ OSV_SCANNER_SHA256_AMD64="ca69b3d3cd08f889a49dc0a383122f71cc528b83803671df5fd874
 # asset: https://github.com/google/osv-scanner/releases/download/v{version}/osv-scanner_linux_arm64
 OSV_SCANNER_SHA256_ARM64="2c71403eb443d05891c4f268c3ad771cf4f16e5443463fd7851ef8f454d3c7e4"
 
+# Checkov, the IaC misconfiguration scanner. It ships no binary -- it is a PyPI
+# package -- so it is written as a pinned version with a digest rather than as a
+# `*_SPEC` like Semgrep: `checkov/run.sh` downloads the release's universal wheel
+# by name, refuses it unless its SHA-256 matches the one below, and only then
+# hands that file to pip. The asset is PyPI's by-name download path, which
+# redirects to the file's content-addressed location, so a bump re-derives the
+# digest the way it does for any release binary. The wheel's dependencies are
+# resolved by pip within the ranges the wheel declares, binary-only.
+# upstream: pypi checkov
+CHECKOV_PINNED_VERSION="3.3.22"
+CHECKOV_VERSION="${CHECKOV_VERSION:-${CHECKOV_PINNED_VERSION}}"
+# asset: https://files.pythonhosted.org/packages/py3/c/checkov/checkov-{version}-py3-none-any.whl
+CHECKOV_SHA256="53fa6ce894afcb17bfc448aad0f6100abb32a798fe17bdeed553b5ae6478daf0"
+
 # --- Language tooling --------------------------------------------------------
 
 # Go itself, one pin per release line. No template can source this file for it,

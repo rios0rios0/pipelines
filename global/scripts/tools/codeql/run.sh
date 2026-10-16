@@ -19,6 +19,7 @@ cleanup_codeql() {
   if [ -n "$SCAN_WORK" ]; then
     rm -rf "$SCAN_WORK"
   fi
+  return 0
 }
 
 trap cleanup_codeql EXIT
@@ -225,7 +226,7 @@ if ! codeql database create \
   --source-root="$SOURCE_ROOT" \
   $THREADS_FLAG \
   $CONFIG_FLAG \
-  "$(pwd)/.codeql-db"; then
+  "$CODEQL_DB"; then
   echo "ERROR: 'codeql database create' failed for language '$CODEQL_LANGUAGE'." >&2
   if [ -n "$SCAN_WORK" ]; then
     echo "The build ran on the files git would ship; if it needs one .gitignore keeps out, set CODEQL_SOURCE_SCOPE=tree." >&2

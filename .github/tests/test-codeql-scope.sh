@@ -12,7 +12,7 @@
 #     and untracked ones no ignore rule excludes -- never an ignored directory, an untracked
 #     nested repository or a tracked file deleted from the working tree
 #   * the copy keeps every path relative to the project root, odd names included, and is removed
-#     afterwards, on success and on failure alike
+#     afterwards, on success, failure and interruption alike
 #   * a false-positive fingerprint still suppresses its finding when the scan ran on the copy
 #   * a local run takes every core (`--threads=0`); a CI run keeps one thread and scans the
 #     checkout as it is, on GitHub Actions and GitLab CI (`CI`) and Azure DevOps (`TF_BUILD`)
@@ -93,7 +93,8 @@ trap cleanup EXIT
 # The stub CodeQL. `database create` records the source root, the thread count and every file
 # under the root, and makes the database directory; `database analyze` records its threads and
 # writes one finding whose fingerprint the fixture lists as a false positive. CODEQL_STUB_RECORD
-# names where the records go; CODEQL_STUB_CREATE_EXIT scripts a failing build.
+# names where the records go; CODEQL_STUB_CREATE_EXIT scripts a failing build, and
+# CODEQL_STUB_SIGNAL interrupts the parent scan after the database directory is created.
 STUB_BIN="$TEST_DIR/bin"
 mkdir -p "$STUB_BIN"
 cat > "$STUB_BIN/codeql" << 'STUB'
@@ -113,6 +114,10 @@ case "$command" in
     echo "$root" > "$record/source-root"
     ( cd "$root" || exit 1; find . -type f ) | sed 's|^\./||' | sort > "$record/files"
     mkdir -p "$database"
+    if [ -n "${CODEQL_STUB_SIGNAL:-}" ]; then
+      kill -s "$CODEQL_STUB_SIGNAL" "$PPID"
+      sleep 1
+    fi
     exit "${CODEQL_STUB_CREATE_EXIT:-0}"
     ;;
   'database analyze')
@@ -255,9 +260,20 @@ ROOT="$(record_of "$RECORD" source-root)"
 assert_true "the run fails" "[ '$(record_of "$RECORD" status)' != '0' ]"
 assert_true "the copy is removed" "[ -n '$ROOT' ] && [ ! -e '$ROOT' ]"
 assert_output "the error points at CODEQL_SOURCE_SCOPE=tree" "set CODEQL_SOURCE_SCOPE=tree" "$(record_of "$RECORD" output)"
+assert_true "a failed build removes its database" "[ ! -e '$REPO/.codeql-db' ]"
 
 echo ""
-echo "Test 6: outside a git work tree the directory is scanned as it is"
+echo "Test 6: an interrupted scan removes its database and source copy"
+REPO="$TEST_DIR/interrupted-scan"
+make_repo "$REPO" || exit 1
+RECORD="$(run_scan "$REPO" CODEQL_STUB_SIGNAL=TERM)"
+ROOT="$(record_of "$RECORD" source-root)"
+assert_equals "TERM leaves the conventional interrupted status" "143" "$(record_of "$RECORD" status)"
+assert_true "the database is removed on interruption" "[ ! -e '$REPO/.codeql-db' ]"
+assert_true "the source copy is removed on interruption" "[ -n '$ROOT' ] && [ ! -e '$ROOT' ]"
+
+echo ""
+echo "Test 7: outside a git work tree the directory is scanned as it is"
 PLAIN="$TEST_DIR/plain"
 mkdir -p "$PLAIN/.claude/worktrees/agent" || exit 1
 printf 'package main\n' > "$PLAIN/main.go"
@@ -268,7 +284,7 @@ assert_equals "the run succeeds" "0" "$(record_of "$RECORD" status)"
 assert_equals "the database is built from the directory itself" "$PLAIN" "$(record_of "$RECORD" source-root)"
 
 echo ""
-echo "Test 7: from a subdirectory of a repository, the copy is that subdirectory"
+echo "Test 8: from a subdirectory of a repository, the copy is that subdirectory"
 MONO="$TEST_DIR/mono"
 mkdir -p "$MONO/service" "$MONO/other" || exit 1
 printf 'module example.com/service\n' > "$MONO/service/go.mod"

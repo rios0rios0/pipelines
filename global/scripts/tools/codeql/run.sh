@@ -8,6 +8,22 @@ TOOL_NAME="codeql" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
 
 CODEQL_LANGUAGE="${1:?Usage: run.sh <language> (e.g., go, python, java, javascript, csharp)}"
 fileName="$(pwd)/$REPORT_PATH/codeql.sarif"
+CODEQL_DB="$(pwd)/.codeql-db"
+CODEQL_DB_ACTIVE=false
+SCAN_WORK=""
+
+cleanup_codeql() {
+  if [ "$CODEQL_DB_ACTIVE" = true ]; then
+    rm -rf "$CODEQL_DB"
+  fi
+  if [ -n "$SCAN_WORK" ]; then
+    rm -rf "$SCAN_WORK"
+  fi
+}
+
+trap cleanup_codeql EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 CODEQL_RAM="${CODEQL_RAM:-}"
 
@@ -179,12 +195,8 @@ if ! command -v codeql > /dev/null 2>&1; then
 fi
 
 SOURCE_ROOT="$(pwd)"
-SCAN_WORK=""
 if [ "$CODEQL_SOURCE_SCOPE" = "git" ] && git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
   SCAN_WORK="$(mktemp -d)" || exit 1
-  trap 'rm -rf "$SCAN_WORK"' EXIT
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
   mkdir "$SCAN_WORK/source"
   if ! git ls-files -z --cached --others --exclude-standard > "$SCAN_WORK/listed"; then
     echo "ERROR: could not list the files git would ship; set CODEQL_SOURCE_SCOPE=tree to scan the directory as it is." >&2
@@ -206,6 +218,7 @@ else
 fi
 
 echo "Creating CodeQL database for language: $CODEQL_LANGUAGE"
+CODEQL_DB_ACTIVE=true
 # shellcheck disable=SC2086
 if ! codeql database create \
   --language="$CODEQL_LANGUAGE" \
@@ -217,7 +230,6 @@ if ! codeql database create \
   if [ -n "$SCAN_WORK" ]; then
     echo "The build ran on the files git would ship; if it needs one .gitignore keeps out, set CODEQL_SOURCE_SCOPE=tree." >&2
   fi
-  rm -rf "$(pwd)/.codeql-db"
   exit 1
 fi
 
@@ -228,17 +240,17 @@ if ! codeql database analyze \
   --output="$fileName" \
   $RAM_FLAG \
   $THREADS_FLAG \
-  "$(pwd)/.codeql-db" \
+  "$CODEQL_DB" \
   "$CODEQL_LANGUAGE-security-and-quality.qls"; then
   echo "ERROR: 'codeql database analyze' failed for language '$CODEQL_LANGUAGE'." >&2
-  rm -rf "$(pwd)/.codeql-db"
   exit 1
 fi
 
 echo "CodeQL analysis complete. Results written to: $fileName"
 
 # Clean up database
-rm -rf "$(pwd)/.codeql-db"
+rm -rf "$CODEQL_DB"
+CODEQL_DB_ACTIVE=false
 
 # Refuse to proceed if the SARIF was not produced — without this guard the
 # downstream `jq`/arithmetic pipeline emitted confusing cascading errors

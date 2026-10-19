@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go helpers, Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, docker-multi-arch, basic-checks, fixture-isolation, gitignore, hadolint-discovery, checkov, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, dependency-updates, azure-step-names, azure-secret-env, containers-detect, report-uploads)
+- `make test` - Run all validation tests (Go helpers, Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, terra-install, docker-multi-arch, basic-checks, fixture-isolation, gitignore, hadolint-discovery, checkov, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, dependency-updates, azure-step-names, azure-secret-env, containers-detect, report-uploads)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-go-module-toolchain` - Test that every `go.mod` toolchain directive is readable by the images/analysers that consume it specifically
 - `make test-go-tool-staleness` - Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves specifically
@@ -24,6 +24,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-terraform-validate` - Test the root-module `terraform validate` tier specifically
 - `make test-terraform-provider-mirror` - Test the local Terraform provider mirror specifically
 - `make test-terra-test-roots` - Test the terra-test tier's opt-in root-module run (`TERRA_TEST_ROOTS`) specifically
+- `make test-terra-install` - Test the terra CLI installer (pin check, installs that run together on one HOME, Azure DevOps step stops at a failed install) specifically
 - `make test-docker-multi-arch` - Test 40-delivery/docker multi-arch contract specifically
 - `make test-build-version` - Test the version build argument (shared helper, GitHub image delivery, Fly.io deploy, Go workflow wiring) specifically
 - `make test-containers-detect` - Test the Container Images change detection (deleted/renamed folders, dispatch inputs) specifically
@@ -861,6 +862,7 @@ make test-var-catalog
 make test-terraform-validate
 make test-terraform-provider-mirror
 make test-terra-test-roots
+make test-terra-install
 make test-docker-multi-arch
 make test-build-version
 make test-containers-detect

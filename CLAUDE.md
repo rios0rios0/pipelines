@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go helpers, Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, docker-multi-arch, basic-checks, fixture-isolation, gitignore, sast-gate, hadolint-discovery, checkov, codeql-scope, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, azure-step-names, azure-secret-env, dependency-updates, containers-detect, report-uploads)
+make test              # Run all validation tests (Go helpers, Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, terra-install, docker-multi-arch, basic-checks, fixture-isolation, gitignore, sast-gate, hadolint-discovery, checkov, codeql-scope, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, azure-step-names, azure-secret-env, dependency-updates, containers-detect, report-uploads)
 make test-go-script    # Test Go validation script only
 make test-go-module-toolchain  # Test that every go.mod toolchain directive is readable by the images/analysers/workflows that consume it only
 make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves only
@@ -26,6 +26,7 @@ make test-var-catalog  # Test the shared variable-declaration generator only
 make test-terraform-validate  # Test the root-module `terraform validate` tier only
 make test-terraform-provider-mirror  # Test the local Terraform provider mirror only
 make test-terra-test-roots  # Test the terra-test tier's opt-in root-module run (`TERRA_TEST_ROOTS`) only
+make test-terra-install  # Test the terra CLI installer (pin check, installs that run together on one HOME, Azure DevOps step stops at a failed install) only
 make test-docker-multi-arch  # Test 40-delivery/docker multi-arch contract only
 make test-build-version  # Test the version build argument (shared helper, GitHub image delivery, Fly.io deploy, Go workflow wiring) only
 make test-containers-detect  # Test the Container Images change detection (deleted/renamed folders, dispatch inputs) only

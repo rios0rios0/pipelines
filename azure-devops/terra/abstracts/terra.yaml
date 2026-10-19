@@ -6,7 +6,13 @@ steps:
   # below, which replaces the vendor's `curl ... | sh` one-liner.
   - template: '../../global/abstracts/scripts-repo.yaml'
 
+  # `set -e`, because Azure DevOps runs this as one bash script without it: a
+  # failed install fell through to `terra install` and `terra version`, and the
+  # step took the exit code of the LAST line, so it passed with the install
+  # failed. GitHub (`shell: bash`) and GitLab (one command per line) already stop
+  # at the first failing command.
   - script: |
+      set -e
       $(Scripts.Directory)/global/scripts/languages/terraform/terra/install.sh
       terra install
       terra version

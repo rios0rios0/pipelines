@@ -67,8 +67,12 @@ echo "Running govulncheck SCA vulnerability scan..."
 # Only stdout is the report. govulncheck writes its JSON there and everything
 # else on stderr, so folding stderr in with `2>&1` could leave a report that
 # neither `-mode convert` below nor anyone reading the artifact can parse.
-scanErrors="$(mktemp)"
-"$GOVULNCHECK_BIN" -json ./... > "$fileName" 2> "$scanErrors" || EXIT_CODE=$?
+#
+# Stderr is held in a variable rather than a `mktemp` file. That file would live
+# outside the checkout, so a scan cancelled midway would leave it behind on a
+# persistent runner -- and no trap can remove it once a cancellation ends in
+# SIGKILL. A variable needs no cleanup at all.
+scanErrors="$({ "$GOVULNCHECK_BIN" -json ./... > "$fileName"; } 2>&1)" || EXIT_CODE=$?
 
 echo "govulncheck analysis complete. Results written to: $fileName"
 
@@ -76,11 +80,10 @@ echo "govulncheck analysis complete. Results written to: $fileName"
 # not run at all fails here, with its own reason in the log rather than only in
 # the artifact: "exited with code 1" alone does not say whether anything was
 # found or nothing was analysed.
-if [ -s "$scanErrors" ]; then
-  echo "govulncheck error output:"
-  head -n 40 "$scanErrors"
+if [ -n "$scanErrors" ]; then
+  echo "govulncheck stderr (first 40 lines):"
+  printf '%s\n' "$scanErrors" | head -n 40
 fi
-rm -f "$scanErrors"
 if [ -n "$EXIT_CODE" ]; then
   echo "govulncheck exited with code $EXIT_CODE. First lines of the report:"
   head -n 40 "$fileName"

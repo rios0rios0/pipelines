@@ -5,7 +5,8 @@
 # script ran `govulncheck -json` and passed its exit code on, no Go pipeline ever failed on a
 # vulnerability: with `-json` govulncheck exits 0 whatever it finds. The verdict now comes from
 # replaying the report through `govulncheck -mode convert`, which exits 3 when the code calls a
-# vulnerable symbol. This pins that decision, and that the report stays parseable JSON.
+# vulnerable symbol. This pins that decision, that the report stays parseable JSON, and that a
+# cancelled scan leaves nothing behind outside the checkout.
 #
 # `go` and `govulncheck` are stubbed so the decision can be exercised for every outcome without
 # the network, the vulnerability database or a module that is really vulnerable.
@@ -42,7 +43,7 @@ TEST_DIR="$(mktemp -d)" || exit 1
 cleanup() { rm -rf "$TEST_DIR"; }
 trap cleanup EXIT
 
-mkdir -p "$TEST_DIR/shim" "$TEST_DIR/gobin" "$TEST_DIR/home"
+mkdir -p "$TEST_DIR/shim" "$TEST_DIR/gobin" "$TEST_DIR/home" "$TEST_DIR/tmp"
 
 # The pinned version, read the way the script reads it, so the stubbed binary passes the
 # staleness check and nothing is installed.
@@ -67,13 +68,18 @@ STUB
 chmod +x "$TEST_DIR/shim/go"
 
 # `govulncheck -json` writes a one-line report, says FAKE_SCAN_STDERR on stderr and exits with
-# FAKE_SCAN_EXIT; `-mode convert` checks the report it is handed is JSON and exits with
+# FAKE_SCAN_EXIT -- or, when FAKE_SCAN_RUNNING names a file, creates it and blocks, so a test can
+# kill the scan midway; `-mode convert` checks the report it is handed is JSON and exits with
 # FAKE_CONVERT_EXIT, the way the real one exits 3 for a vulnerability the code calls.
 cat > "$TEST_DIR/gobin/govulncheck" <<'STUB'
 #!/usr/bin/env bash
 if [ "${1:-}" = "-json" ]; then
   printf '%s\n' '{"config":{"scanner_name":"govulncheck"}}'
   [ -n "${FAKE_SCAN_STDERR:-}" ] && printf '%s\n' "$FAKE_SCAN_STDERR" >&2
+  if [ -n "${FAKE_SCAN_RUNNING:-}" ]; then
+    : > "$FAKE_SCAN_RUNNING"
+    sleep 30
+  fi
   exit "${FAKE_SCAN_EXIT:-0}"
 fi
 if [ "${1:-} ${2:-}" = "-mode convert" ]; then
@@ -90,17 +96,28 @@ exit 99
 STUB
 chmod +x "$TEST_DIR/gobin/govulncheck"
 
+# scan <scan-exit> <convert-exit> [scan-stderr]
+# Runs the real script in the current directory. TMPDIR is private to the test, so anything the
+# script leaves behind outside the checkout shows up there.
+scan() {
+  local scan_exit=$1
+  local convert_exit=$2
+  local scan_stderr=${3:-}
+  env -i PATH="$TEST_DIR/shim:$PATH" HOME="$TEST_DIR/home" TMPDIR="$TEST_DIR/tmp" \
+    SCRIPTS_DIR="$REPO_ROOT" FAKE_GOBIN="$TEST_DIR/gobin" FAKE_GOVULNCHECK_VERSION="$PINNED_VERSION" \
+    FAKE_SCAN_EXIT="$scan_exit" FAKE_CONVERT_EXIT="$convert_exit" FAKE_SCAN_STDERR="$scan_stderr" \
+    FAKE_SCAN_RUNNING="${FAKE_SCAN_RUNNING:-}" \
+    sh "$SCAN_SCRIPT"
+}
+
 # run_scan <scan-exit> <convert-exit> [scan-stderr]
-# Runs the real script in a fresh project directory. Sets OUTPUT and STATUS, and REPORT to the
-# report it wrote.
+# Runs `scan` in a fresh project directory. Sets OUTPUT and STATUS, and REPORT to the report it
+# wrote.
 run_scan() {
   local project="$TEST_DIR/project-$RANDOM"
   mkdir -p "$project"
   STATUS=0
-  OUTPUT="$(cd "$project" && env -i PATH="$TEST_DIR/shim:$PATH" HOME="$TEST_DIR/home" \
-    SCRIPTS_DIR="$REPO_ROOT" FAKE_GOBIN="$TEST_DIR/gobin" FAKE_GOVULNCHECK_VERSION="$PINNED_VERSION" \
-    FAKE_SCAN_EXIT="$1" FAKE_CONVERT_EXIT="$2" FAKE_SCAN_STDERR="${3:-}" \
-    sh "$SCAN_SCRIPT" 2>&1)" || STATUS=$?
+  OUTPUT="$(cd "$project" && scan "$@" 2>&1)" || STATUS=$?
   REPORT="$project/build/reports/govulncheck/govulncheck.json"
 }
 
@@ -159,6 +176,42 @@ run_scan 0 1
 [ "$STATUS" -ne 0 ] \
   && print_result 0 "no verdict is not a pass" \
   || print_result 1 "a report convert cannot read should fail the job: $OUTPUT"
+
+# =============================================================================
+# Test 6: nothing is left behind outside the checkout, even by a cancelled scan
+# =============================================================================
+echo "TEST 6: nothing is left behind outside the checkout, even by a cancelled scan"
+leftovers="$(ls -A "$TEST_DIR/tmp")"
+[ -z "$leftovers" ] \
+  && print_result 0 "the scans above left nothing in TMPDIR" \
+  || print_result 1 "the scans above should leave nothing in TMPDIR, found: $leftovers"
+
+# Killed mid-scan with SIGKILL: where a cancellation ends when the step does not exit in time, and
+# the one signal no trap can clean up after. The whole process group goes, as when a runner
+# cancels a job; `set -m` gives the scan a group of its own.
+project="$TEST_DIR/project-cancelled"
+running="$TEST_DIR/scan-running"
+mkdir -p "$project"
+set -m
+(cd "$project" && FAKE_SCAN_RUNNING="$running" scan 0 0) < /dev/null > /dev/null 2>&1 &
+scan_pid=$!
+set +m
+waited=0
+while [ ! -f "$running" ] && [ "$waited" -lt 100 ]; do
+  sleep 0.1
+  waited=$((waited + 1))
+done
+kill -KILL -- "-$scan_pid" 2> /dev/null || true
+scan_status=0
+wait "$scan_pid" 2> /dev/null || scan_status=$?
+if [ -f "$running" ] && [ "$scan_status" -eq 137 ]; then
+  leftovers="$(ls -A "$TEST_DIR/tmp")"
+  [ -z "$leftovers" ] \
+    && print_result 0 "a scan killed midway left nothing in TMPDIR" \
+    || print_result 1 "a scan killed midway should leave nothing in TMPDIR, found: $leftovers"
+else
+  print_result 1 "the stubbed scan should have been killed midway, but started=$([ -f "$running" ] && echo yes || echo no) exit=$scan_status"
+fi
 
 # =============================================================================
 # Summary

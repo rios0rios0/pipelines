@@ -520,7 +520,7 @@ jobs:
       # coverage at all and reports 0% on new code, failing a default quality gate while the
       # job stays green. `sonar.sources` is untouched: the SCAN is still repository-wide.
       - name: 'Run SonarQube'
-        run: '"$SCRIPTS_DIR/global/scripts/tools/sonarqube/run.sh"'
+        run: "$SCRIPTS_DIR/global/scripts/tools/sonarqube/run.sh"
         shell: 'bash'
         env:
           SONAR_HOST_URL: ${{ inputs.sonar_host }}

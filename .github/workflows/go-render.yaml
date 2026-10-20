@@ -149,7 +149,7 @@ jobs:
   go-docker:
     uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'
     with:
-      go_version_file: '${{ inputs.go_version_file }}'
+      go_version_file: "${{ inputs.go_version_file }}"
       sonar_host: ${{ inputs.sonar_host }}
       runs_on: ${{ inputs.runs_on }}
       codeql_runs_on: ${{ inputs.codeql_runs_on }}
@@ -185,7 +185,7 @@ jobs:
       - if: "inputs.deployment_required_checks != ''"
         uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/require-checks@main'
         with:
-          required_checks: '${{ inputs.deployment_required_checks }}'
+          required_checks: "${{ inputs.deployment_required_checks }}"
 
       # Refused here rather than by the deploy script, whose message is about a missing key and not
       # about why it is missing.
@@ -204,15 +204,15 @@ jobs:
           fi
         shell: 'bash'
         env:
-          RENDER_API_KEY: '${{ secrets.render_api_key }}'
-          RENDER_DEPLOY_HOOK_URL: '${{ secrets.render_deploy_hook_url }}'
+          RENDER_API_KEY: "${{ secrets.render_api_key }}"
+          RENDER_DEPLOY_HOOK_URL: "${{ secrets.render_deploy_hook_url }}"
 
       - uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/render@main'
         with:
-          render_api_key: '${{ secrets.render_api_key }}'
-          render_service_name: '${{ inputs.render_service_name }}'
-          render_service_id: '${{ inputs.render_service_id }}'
-          render_deploy_hook_url: '${{ secrets.render_deploy_hook_url }}'
+          render_api_key: "${{ secrets.render_api_key }}"
+          render_service_name: "${{ inputs.render_service_name }}"
+          render_service_id: "${{ inputs.render_service_id }}"
+          render_deploy_hook_url: "${{ secrets.render_deploy_hook_url }}"
           environment: ${{ inputs.deployment_environment != '' && inputs.deployment_environment || (github.ref_type == 'tag' && 'production' || 'staging') }}
     needs: [ 'go-docker' ]
     # `!failure()` rather than `success()` so a skipped upstream job does not take the deploy with

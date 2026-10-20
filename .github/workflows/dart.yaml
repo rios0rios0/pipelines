@@ -282,7 +282,7 @@ jobs:
       # here rather than on the cause.
       - name: 'Coverage Summary'
         if: "always() && hashFiles('build/reports/coverage.md') != ''"
-        run: 'cat build/reports/coverage.md >> "$GITHUB_STEP_SUMMARY"'
+        run: cat build/reports/coverage.md >> "$GITHUB_STEP_SUMMARY"
         shell: 'bash'
 
       # The same table as one sticky comment per pull request, updated in place on every push --

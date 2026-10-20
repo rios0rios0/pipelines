@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed the single-quoted YAML values that interpolate a variable (`${{ }}`, `$VAR`, `$(...)`) to double quotes wherever that needs no escaping, across the GitHub Actions, GitLab CI and Azure DevOps templates and the Semgrep Dart rules: 406 values in 93 files. A value holding its own double quotes or backslashes is written unquoted instead, keeping them (`eval "$PIPELINES_HOOK"`), and so are the seven escaped `run:` lines #747 added. Plain values were left as they were. Every file parses to the same data as before, except the TFLint install step of `terra.yaml`, which now leaves just the double quotes as the SonarQube steps do'
+time: '2026-10-20T20:16:15.019780148Z'

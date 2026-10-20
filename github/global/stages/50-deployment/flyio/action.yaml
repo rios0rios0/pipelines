@@ -75,16 +75,16 @@ runs:
       shell: 'bash'
       run: $SCRIPTS_DIR/global/scripts/deploy/flyio/run.sh
       env:
-        FLY_API_TOKEN: '${{ inputs.fly_api_token }}'
-        FLY_APP_NAME: '${{ inputs.app_name }}'
-        FLY_ORG: '${{ inputs.org }}'
-        FLY_MACHINE_COUNT: '${{ inputs.machine_count }}'
-        FLY_CONFIG: '${{ inputs.config }}'
-        FLY_STRATEGY: '${{ inputs.strategy }}'
-        FLY_VERSION_BUILD_ARG: '${{ inputs.version_build_arg }}'
-        FLY_APP_VERSION: '${{ inputs.version }}'
-        DEPLOY_ENVIRONMENT: '${{ inputs.environment }}'
-        DEPLOY_DRY_RUN: '${{ inputs.dry_run }}'
+        FLY_API_TOKEN: "${{ inputs.fly_api_token }}"
+        FLY_APP_NAME: "${{ inputs.app_name }}"
+        FLY_ORG: "${{ inputs.org }}"
+        FLY_MACHINE_COUNT: "${{ inputs.machine_count }}"
+        FLY_CONFIG: "${{ inputs.config }}"
+        FLY_STRATEGY: "${{ inputs.strategy }}"
+        FLY_VERSION_BUILD_ARG: "${{ inputs.version_build_arg }}"
+        FLY_APP_VERSION: "${{ inputs.version }}"
+        DEPLOY_ENVIRONMENT: "${{ inputs.environment }}"
+        DEPLOY_DRY_RUN: "${{ inputs.dry_run }}"
 
     - name: 'Upload Report'
       uses: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9' # v7.0.2

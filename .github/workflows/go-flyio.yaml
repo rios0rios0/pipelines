@@ -277,7 +277,7 @@ jobs:
   go-docker:
     uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'
     with:
-      go_version_file: '${{ inputs.go_version_file }}'
+      go_version_file: "${{ inputs.go_version_file }}"
       sonar_host: ${{ inputs.sonar_host }}
       runs_on: ${{ inputs.runs_on }}
       codeql_runs_on: ${{ inputs.codeql_runs_on }}
@@ -314,7 +314,7 @@ jobs:
       - if: "inputs.deployment_required_checks != ''"
         uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/require-checks@main'
         with:
-          required_checks: '${{ inputs.deployment_required_checks }}'
+          required_checks: "${{ inputs.deployment_required_checks }}"
 
       # Refused here rather than by the deploy script, whose message is about a missing token and
       # not about why it is missing.
@@ -333,7 +333,7 @@ jobs:
           fi
         shell: 'bash'
         env:
-          FLY_API_TOKEN: '${{ secrets.fly_api_token }}'
+          FLY_API_TOKEN: "${{ secrets.fly_api_token }}"
 
       # Resolved HERE because this is the first job with an environment to resolve against --
       # see `fly_app_name_var` for why a caller cannot pass an environment-scoped value at all.
@@ -363,7 +363,7 @@ jobs:
           exit 1
         shell: 'bash'
         env:
-          APP_NAME_VAR: '${{ inputs.fly_app_name_var }}'
+          APP_NAME_VAR: "${{ inputs.fly_app_name_var }}"
           DEPLOY_ENVIRONMENT: ${{ inputs.deployment_environment != '' && inputs.deployment_environment || (github.ref_type == 'tag' && 'production' || 'staging') }}
 
       # The org half is a WARNING, not a failure -- an org is genuinely optional, and a caller that
@@ -374,24 +374,24 @@ jobs:
       # (so the guard above stays quiet), resolves an empty org, skips creation, and the first
       # production tag dies on an app nobody created -- with nothing anywhere naming the variable.
       - if: "inputs.fly_org == '' && inputs.fly_org_var != '' && !vars[inputs.fly_org_var]"
-        run: 'echo "::warning::fly_org_var names ''$ORG_VAR'', which is not set for this deployment, so app auto-creation is disabled here."'
+        run: echo "::warning::fly_org_var names '$ORG_VAR', which is not set for this deployment, so app auto-creation is disabled here."
         shell: 'bash'
         env:
-          ORG_VAR: '${{ inputs.fly_org_var }}'
+          ORG_VAR: "${{ inputs.fly_org_var }}"
 
       - uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/flyio@main'
         with:
-          fly_api_token: '${{ secrets.fly_api_token }}'
+          fly_api_token: "${{ secrets.fly_api_token }}"
           app_name: "${{ inputs.fly_app_name != '' && inputs.fly_app_name || vars[inputs.fly_app_name_var] }}"
           org: "${{ inputs.fly_org != '' && inputs.fly_org || vars[inputs.fly_org_var] }}"
           machine_count: "${{ inputs.fly_machine_count != '' && inputs.fly_machine_count || vars[inputs.fly_machine_count_var] }}"
-          config: '${{ inputs.fly_config }}'
-          strategy: '${{ inputs.fly_strategy }}'
-          version_build_arg: '${{ inputs.version_build_arg }}'
+          config: "${{ inputs.fly_config }}"
+          strategy: "${{ inputs.fly_strategy }}"
+          version_build_arg: "${{ inputs.version_build_arg }}"
           # The release this run cut, when it cut one. The deploy that follows a bump merge runs
           # on the branch, where the version would otherwise fall back to the commit while the
           # image pushed beside it reports the release.
-          version: '${{ needs.go-docker.outputs.tag_name }}'
+          version: "${{ needs.go-docker.outputs.tag_name }}"
           environment: ${{ inputs.deployment_environment != '' && inputs.deployment_environment || (github.ref_type == 'tag' && 'production' || 'staging') }}
     needs: [ 'go-docker' ]
     # `!failure()` rather than `success()` so a skipped upstream job does not take the deploy with

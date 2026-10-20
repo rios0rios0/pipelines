@@ -11,12 +11,12 @@ inputs:
     description: 'Commit to verify. Defaults to the commit that triggered this run.'
     type: 'string'
     required: false
-    default: '${{ github.sha }}'
+    default: "${{ github.sha }}"
   repository:
     description: 'Repository to query, as `owner/repo`.'
     type: 'string'
     required: false
-    default: '${{ github.repository }}'
+    default: "${{ github.repository }}"
   token:
     description: |
       Token used to read check runs. The default `GITHUB_TOKEN` is enough, but
@@ -24,7 +24,7 @@ inputs:
       the restricted default set.
     type: 'string'
     required: false
-    default: '${{ github.token }}'
+    default: "${{ github.token }}"
   dry_run:
     description: 'Report what would be required without calling the API.'
     type: 'string'
@@ -41,11 +41,11 @@ runs:
       shell: 'bash'
       run: $SCRIPTS_DIR/global/scripts/deploy/require-checks/run.sh
       env:
-        REQUIRE_CHECKS_NAMES: '${{ inputs.required_checks }}'
-        REQUIRE_CHECKS_COMMIT: '${{ inputs.commit }}'
-        REQUIRE_CHECKS_REPOSITORY: '${{ inputs.repository }}'
-        GH_TOKEN: '${{ inputs.token }}'
-        DEPLOY_DRY_RUN: '${{ inputs.dry_run }}'
+        REQUIRE_CHECKS_NAMES: "${{ inputs.required_checks }}"
+        REQUIRE_CHECKS_COMMIT: "${{ inputs.commit }}"
+        REQUIRE_CHECKS_REPOSITORY: "${{ inputs.repository }}"
+        GH_TOKEN: "${{ inputs.token }}"
+        DEPLOY_DRY_RUN: "${{ inputs.dry_run }}"
 
     - name: 'Upload Report'
       uses: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9' # v7.0.2

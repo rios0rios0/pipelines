@@ -116,7 +116,7 @@ stages:
             condition: always()
             inputs:
               testResultsFormat: 'JUnit'
-              testResultsFiles: '$(REPORT_PATH)/junit-terra-all.xml'
+              testResultsFiles: "$(REPORT_PATH)/junit-terra-all.xml"
               testRunTitle: 'terra-all'
               failTaskOnFailedTests: true
 
@@ -130,7 +130,7 @@ stages:
             displayName: 'Publish Terra module coverage'
             condition: always()
             inputs:
-              summaryFileLocation: '$(REPORT_PATH)/terra-coverage.xml'
+              summaryFileLocation: "$(REPORT_PATH)/terra-coverage.xml"
               pathToSources: 'modules'
 
           # Publish the whole reports directory — the coverage Markdown,
@@ -142,7 +142,7 @@ stages:
             displayName: 'Publish Terra coverage report'
             condition: always()
             inputs:
-              targetPath: '$(REPORT_PATH)'
+              targetPath: "$(REPORT_PATH)"
               artifactName: 'terra-coverage'
               publishLocation: 'pipeline'
 
@@ -198,7 +198,7 @@ stages:
                 condition: always()
                 inputs:
                   testResultsFormat: 'JUnit'
-                  testResultsFiles: '$(REPORT_PATH)/junit-validate.xml'
+                  testResultsFiles: "$(REPORT_PATH)/junit-validate.xml"
                   testRunTitle: 'validate'
                   failTaskOnFailedTests: true
                   mergeTestResults: false
@@ -219,7 +219,7 @@ stages:
             condition: always()
             inputs:
               testResultsFormat: 'JUnit'
-              testResultsFiles: '$(REPORT_PATH)/junit-structural.xml'
+              testResultsFiles: "$(REPORT_PATH)/junit-structural.xml"
               testRunTitle: 'structural'
               failTaskOnFailedTests: true
               mergeTestResults: false

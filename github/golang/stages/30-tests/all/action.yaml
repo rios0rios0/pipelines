@@ -54,10 +54,10 @@ runs:
     - name: 'Start the test database'
       if: "inputs.database_image != ''"
       shell: 'bash'
-      run: '$SCRIPTS_DIR/global/scripts/languages/golang/test/database.sh'
+      run: "$SCRIPTS_DIR/global/scripts/languages/golang/test/database.sh"
       env:
-        DATABASE_IMAGE: '${{ inputs.database_image }}'
-        DATABASE_URL_ENV: '${{ inputs.database_url_env }}'
+        DATABASE_IMAGE: "${{ inputs.database_image }}"
+        DATABASE_URL_ENV: "${{ inputs.database_url_env }}"
 
     - name: 'Setup Go'
       id: 'setup-go'
@@ -111,8 +111,8 @@ runs:
     - name: 'Cache Go test tool binaries'
       uses: 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' # v6.1.0
       with:
-        path: '${{ env.GO_BIN_DIR }}'
-        key: '${{ runner.os }}-${{ runner.arch }}-go-${{ steps.setup-go.outputs.go-version }}-test-tools-v1'
+        path: "${{ env.GO_BIN_DIR }}"
+        key: "${{ runner.os }}-${{ runner.arch }}-go-${{ steps.setup-go.outputs.go-version }}-test-tools-v1"
         restore-keys: |
           ${{ runner.os }}-${{ runner.arch }}-go-${{ steps.setup-go.outputs.go-version }}-test-tools-
           ${{ runner.os }}-${{ runner.arch }}-go-test-tools-
@@ -120,7 +120,7 @@ runs:
     - run: $SCRIPTS_DIR/global/scripts/languages/golang/test/run.sh
       shell: 'bash'
       env:
-        GO_TEST_INTEGRATION_PARALLEL: '${{ inputs.integration_parallel }}'
+        GO_TEST_INTEGRATION_PARALLEL: "${{ inputs.integration_parallel }}"
 
     # The test runner prints coverage but never fails on it, so without this the number can
     # drift down one merge at a time and nothing notices.

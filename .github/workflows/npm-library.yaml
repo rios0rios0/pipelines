@@ -51,21 +51,21 @@ jobs:
   npm:
     uses: 'rios0rios0/pipelines/.github/workflows/npm.yaml@main'
     with:
-      working_directory: '${{ inputs.working_directory }}'
+      working_directory: "${{ inputs.working_directory }}"
       install_run_scripts: ${{ inputs.install_run_scripts }}
-      sonar_host: '${{ inputs.sonar_host }}'
+      sonar_host: "${{ inputs.sonar_host }}"
       runs_on: ${{ inputs.runs_on }}
       codeql_runs_on: ${{ inputs.codeql_runs_on }}
       codeql_upload: ${{ inputs.codeql_upload }}
     secrets:
-      sonar_token: '${{ secrets.sonar_token }}'
+      sonar_token: "${{ secrets.sonar_token }}"
 
   # fourth stage
   delivery-release:
     name: 'delivery > release'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     outputs:
-      tag_name: '${{ steps.release.outputs.tag_name }}'
+      tag_name: "${{ steps.release.outputs.tag_name }}"
     strategy:
       matrix:
         prefix: ${{ fromJSON(inputs.tag_prefixes) }}
@@ -73,7 +73,7 @@ jobs:
       - id: 'release'
         uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
         with:
-          tag_prefix: '${{ matrix.prefix }}'
+          tag_prefix: "${{ matrix.prefix }}"
     needs: [ 'npm' ]
     # Cut on a main-branch bump merge, OR on a version-tag push so a bump whose
     # main run failed the quality gate can be recovered by (re-)pushing its tag.

@@ -59,8 +59,8 @@ runs:
     - name: 'Setup Node.js'
       uses: 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1' # v7.1.0
       with:
-        node-version: '${{ inputs.node_version }}'
-        cache: '${{ inputs.package_manager }}'
+        node-version: "${{ inputs.node_version }}"
+        cache: "${{ inputs.package_manager }}"
         # Named explicitly because the action only looks for a lockfile in the WORKSPACE ROOT
         # when this is empty, and fails outright with "Dependencies lock file is not found" for
         # a project one directory down. All three names are listed because this action serves
@@ -89,9 +89,9 @@ runs:
           npm run prepare --if-present
         fi
       shell: 'bash'
-      working-directory: '${{ inputs.working_directory }}'
+      working-directory: "${{ inputs.working_directory }}"
       env:
-        INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
+        INSTALL_RUN_SCRIPTS: "${{ inputs.install_run_scripts }}"
 
     - name: 'Install dependencies (yarn)'
       if: inputs.package_manager == 'yarn'
@@ -101,9 +101,9 @@ runs:
           yarn rebuild
         fi
       shell: 'bash'
-      working-directory: '${{ inputs.working_directory }}'
+      working-directory: "${{ inputs.working_directory }}"
       env:
-        INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
+        INSTALL_RUN_SCRIPTS: "${{ inputs.install_run_scripts }}"
 
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 
@@ -113,6 +113,6 @@ runs:
     - name: 'Run the Prettier check'
       run: $SCRIPTS_DIR/global/scripts/languages/javascript/format/run.sh
       shell: 'bash'
-      working-directory: '${{ inputs.working_directory }}'
+      working-directory: "${{ inputs.working_directory }}"
       env:
-        JS_PACKAGE_MANAGER: '${{ inputs.package_manager }}'
+        JS_PACKAGE_MANAGER: "${{ inputs.package_manager }}"

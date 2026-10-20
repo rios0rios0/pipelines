@@ -19,10 +19,10 @@ report:sonarqube:
           break;
         fi;
       done
-    - 'if [ -z "$file" ]; then echo "Couldn''t find the __init__.py file in a root-level folder"; exit 1; fi'
+    - if [ -z "$file" ]; then echo "Couldn't find the __init__.py file in a root-level folder"; exit 1; fi
     # Read version from the found __init__.py
     - version=$(grep "^__version__\s*=\s*['\"]" "$file" | cut -d'"' -f 2)
-    - 'if [ -z "$version" ]; then echo "Couldn''t find the version string in $file"; exit 1; fi'
+    - if [ -z "$version" ]; then echo "Couldn't find the version string in $file"; exit 1; fi
     # Update sonar-project.properties
     - echo "sonar.projectVersion=$version" >> sonar-project.properties
     - echo "Updated sonar.projectVersion to $version"

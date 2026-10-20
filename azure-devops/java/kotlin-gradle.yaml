@@ -8,8 +8,8 @@ parameters:
   - name: 'GRADLE_PROPERTIES'
     type: object
     default:
-      - 'javaUsername=$(JAVA_USERNAME)'
-      - 'javaPassword=$(JAVA_PASSWORD)'
+      - "javaUsername=$(JAVA_USERNAME)"
+      - "javaPassword=$(JAVA_PASSWORD)"
 
 stages:
   - template: 'stages/10-code-check/kotlin.yaml'

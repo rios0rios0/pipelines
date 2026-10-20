@@ -39,16 +39,16 @@ jobs:
   bundler:
     uses: 'rios0rios0/pipelines/.github/workflows/bundler.yaml@main'
     with:
-      codeql_upload: '${{ inputs.codeql_upload }}'
-      working_directory: '${{ inputs.working_directory }}'
-      ruby_version: '${{ inputs.ruby_version }}'
+      codeql_upload: "${{ inputs.codeql_upload }}"
+      working_directory: "${{ inputs.working_directory }}"
+      ruby_version: "${{ inputs.ruby_version }}"
 
   # fourth stage
   delivery-release:
     name: 'delivery > release'
     runs-on: 'ubuntu-latest'
     outputs:
-      tag_name: '${{ steps.release.outputs.tag_name }}'
+      tag_name: "${{ steps.release.outputs.tag_name }}"
     strategy:
       matrix:
         prefix: ${{ fromJSON(inputs.tag_prefixes) }}
@@ -56,7 +56,7 @@ jobs:
       - id: 'release'
         uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
         with:
-          tag_prefix: '${{ matrix.prefix }}'
+          tag_prefix: "${{ matrix.prefix }}"
     needs: [ 'bundler' ]
     # Cut on a main-branch bump merge, OR on a version-tag push so a bump whose
     # main run failed the quality gate can be recovered by (re-)pushing its tag.

@@ -26,7 +26,7 @@ stages:
       # Kind cluster name scoped per build so concurrent pipeline runs
       # on the same agent pool don't collide. `Build.BuildId` is unique
       # per run across the project.
-      KIND_CLUSTER_NAME: 'tfmod-e2e-$(Build.BuildId)'
+      KIND_CLUSTER_NAME: "tfmod-e2e-$(Build.BuildId)"
     jobs:
       # =========================================================
       # Tier 0 -- plan-time smoke.
@@ -84,7 +84,7 @@ stages:
             condition: and(always(), ne(variables['SKIP_SMOKE'], 'true'))
             inputs:
               testResultsFormat: 'JUnit'
-              testResultsFiles: '$(REPORT_PATH)/junit-terra-tests.xml'
+              testResultsFiles: "$(REPORT_PATH)/junit-terra-tests.xml"
               testRunTitle: 'terraform-test-smoke'
               failTaskOnFailedTests: true
               mergeTestResults: false
@@ -93,7 +93,7 @@ stages:
             displayName: 'Publish smoke test reports'
             condition: and(always(), ne(variables['SKIP_SMOKE'], 'true'))
             inputs:
-              targetPath: '$(REPORT_PATH)'
+              targetPath: "$(REPORT_PATH)"
               artifactName: 'terraform-test-smoke-reports'
               publishLocation: 'pipeline'
 
@@ -340,7 +340,7 @@ stages:
             condition: and(always(), eq(variables['HAS_TFTEST'], 'true'))
             inputs:
               testResultsFormat: 'JUnit'
-              testResultsFiles: '$(REPORT_PATH)/junit-e2e-tftest.xml'
+              testResultsFiles: "$(REPORT_PATH)/junit-e2e-tftest.xml"
               testRunTitle: 'terraform-e2e-tftest'
               failTaskOnFailedTests: true
               mergeTestResults: false
@@ -350,7 +350,7 @@ stages:
             condition: and(always(), eq(variables['HAS_TERRATEST'], 'true'))
             inputs:
               testResultsFormat: 'JUnit'
-              testResultsFiles: '$(REPORT_PATH)/junit-e2e-terratest.xml'
+              testResultsFiles: "$(REPORT_PATH)/junit-e2e-terratest.xml"
               testRunTitle: 'terraform-e2e-terratest'
               failTaskOnFailedTests: true
               mergeTestResults: false
@@ -359,6 +359,6 @@ stages:
             displayName: 'Publish e2e reports'
             condition: and(always(), ne(variables['SKIP_E2E'], 'true'))
             inputs:
-              targetPath: '$(REPORT_PATH)'
+              targetPath: "$(REPORT_PATH)"
               artifactName: 'terraform-test-e2e-reports'
               publishLocation: 'pipeline'

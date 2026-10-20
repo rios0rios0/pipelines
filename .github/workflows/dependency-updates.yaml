@@ -102,7 +102,7 @@ jobs:
     # Two runs regenerating the same branch at once would race each other's
     # force-push. The second waits rather than cancelling the first.
     concurrency:
-      group: 'dependency-updates-${{ github.repository }}'
+      group: "dependency-updates-${{ github.repository }}"
       cancel-in-progress: false
     env:
       BRANCH: "${{ inputs.branch || 'chore/dependency-updates' }}"
@@ -120,8 +120,8 @@ jobs:
         id: 'mode'
         shell: 'bash'
         env:
-          REPORT_ONLY: '${{ inputs.report_only }}'
-          EVENT_NAME: '${{ github.event_name }}'
+          REPORT_ONLY: "${{ inputs.report_only }}"
+          EVENT_NAME: "${{ github.event_name }}"
         run: |
           mode='pull-request'
           if [ "${REPORT_ONLY:-false}" = 'true' ]; then
@@ -141,7 +141,7 @@ jobs:
         if: "steps.mode.outputs.mode == 'pull-request'"
         shell: 'bash'
         env:
-          GH_TOKEN: '${{ github.token }}'
+          GH_TOKEN: "${{ github.token }}"
         run: |
           set -euo pipefail
           base="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.default_branch')"
@@ -186,7 +186,7 @@ jobs:
         env:
           # Through `env:` rather than interpolated into `run:`, which would let
           # a crafted ref inject shell at YAML-parse time.
-          JOB_WORKFLOW_REF: '${{ job.workflow_ref }}'
+          JOB_WORKFLOW_REF: "${{ job.workflow_ref }}"
         run: |
           # `job.workflow_ref` is the ref of the workflow file defining this job
           # -- this repository's -- while `github.*` belongs to the CALLER.
@@ -200,7 +200,7 @@ jobs:
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
         with:
           repository: 'rios0rios0/pipelines'
-          ref: '${{ steps.pipelines-ref.outputs.ref }}'
+          ref: "${{ steps.pipelines-ref.outputs.ref }}"
           path: '.pipelines'
           persist-credentials: false
 
@@ -229,8 +229,8 @@ jobs:
           # requests/hour unauthenticated -- without a token the run would start
           # returning 403 part-way through and fail as "lookup error" rather
           # than reporting anything useful.
-          GITHUB_TOKEN: '${{ github.token }}'
-          MODE: '${{ steps.mode.outputs.mode }}'
+          GITHUB_TOKEN: "${{ github.token }}"
+          MODE: "${{ steps.mode.outputs.mode }}"
         run: |
           set -uo pipefail
           case "$MODE" in
@@ -302,9 +302,9 @@ jobs:
         if: "steps.mode.outputs.mode == 'pull-request' && steps.check.outputs.fingerprint != '' && steps.check.outputs.status != '2'"
         shell: 'bash'
         env:
-          GITHUB_TOKEN: '${{ github.token }}'
-          BASE: '${{ steps.base.outputs.branch }}'
-          FINGERPRINT: '${{ steps.check.outputs.fingerprint }}'
+          GITHUB_TOKEN: "${{ github.token }}"
+          BASE: "${{ steps.base.outputs.branch }}"
+          FINGERPRINT: "${{ steps.check.outputs.fingerprint }}"
         run: |
           set -euo pipefail
           "$GITHUB_WORKSPACE/.pipelines/global/scripts/tools/dependency-updates/run.sh" guard \
@@ -338,13 +338,13 @@ jobs:
         if: "steps.mode.outputs.mode == 'pull-request' && steps.check.outputs.status != '2' && steps.guard.outputs.proceed == 'true'"
         uses: 'peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1' # v8.1.1
         with:
-          token: '${{ secrets.dependency_updates_token || github.token }}'
+          token: "${{ secrets.dependency_updates_token || github.token }}"
           path: 'repository'
-          base: '${{ steps.base.outputs.branch }}'
-          branch: '${{ env.BRANCH }}'
-          title: '${{ steps.check.outputs.title }}'
+          base: "${{ steps.base.outputs.branch }}"
+          branch: "${{ env.BRANCH }}"
+          title: "${{ steps.check.outputs.title }}"
           body-path: 'build/reports/dependency-updates/pull-request.md'
-          commit-message: '${{ steps.check.outputs.commit-message }}'
+          commit-message: "${{ steps.check.outputs.commit-message }}"
           sign-commits: true
           delete-branch: true
 
@@ -364,10 +364,10 @@ jobs:
         if: "steps.pull-request.outcome == 'success' || steps.guard.outputs.proceed == 'false'"
         shell: 'bash'
         env:
-          OPERATION: '${{ steps.pull-request.outputs.pull-request-operation }}'
-          URL: '${{ steps.pull-request.outputs.pull-request-url }}'
-          REASON: '${{ steps.guard.outputs.reason }}'
-          PROCEED: '${{ steps.guard.outputs.proceed }}'
+          OPERATION: "${{ steps.pull-request.outputs.pull-request-operation }}"
+          URL: "${{ steps.pull-request.outputs.pull-request-url }}"
+          REASON: "${{ steps.guard.outputs.reason }}"
+          PROCEED: "${{ steps.guard.outputs.proceed }}"
         run: |
           {
             echo ''
@@ -386,8 +386,8 @@ jobs:
         if: "!cancelled() && steps.check.outcome == 'success' && steps.check.outputs.status != '0'"
         shell: 'bash'
         env:
-          MODE: '${{ steps.mode.outputs.mode }}'
-          STATUS: '${{ steps.check.outputs.status }}'
+          MODE: "${{ steps.mode.outputs.mode }}"
+          STATUS: "${{ steps.check.outputs.status }}"
         run: |
           if [ "$STATUS" = '2' ]; then
             echo "::error::An upstream or the advisory database could not be reached, so this run cannot say what is current or safe. The pull request was left as it was -- see the job summary."

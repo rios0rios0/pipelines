@@ -92,7 +92,7 @@ runs:
       if: "inputs.node_version != ''"
       uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # v7.0.0
       with:
-        node-version: '${{ inputs.node_version }}'
+        node-version: "${{ inputs.node_version }}"
 
     # THE DEFAULT PATH: the same runner, the same mode and the same target semantics as the
     # GitLab and Azure templates. It installs the SDK and resolves dependencies itself.
@@ -101,13 +101,13 @@ runs:
       run: $SCRIPTS_DIR/global/scripts/languages/dart/build/run.sh
       shell: 'bash'
       env:
-        FLUTTER_VERSION: '${{ inputs.flutter_version }}'
-        DART_SDK_VERSION: '${{ inputs.dart_sdk_version }}'
-        DART_TOOLCHAIN: '${{ inputs.toolchain }}'
-        DART_BUILD_TARGETS: '${{ inputs.targets }}'
-        DART_BUILD_MODE: '${{ inputs.build_mode }}'
-        DART_BUILD_ARGS: '${{ inputs.build_args }}'
-        DART_BUILD_NUMBER: '${{ github.run_number }}'
+        FLUTTER_VERSION: "${{ inputs.flutter_version }}"
+        DART_SDK_VERSION: "${{ inputs.dart_sdk_version }}"
+        DART_TOOLCHAIN: "${{ inputs.toolchain }}"
+        DART_BUILD_TARGETS: "${{ inputs.targets }}"
+        DART_BUILD_MODE: "${{ inputs.build_mode }}"
+        DART_BUILD_ARGS: "${{ inputs.build_args }}"
+        DART_BUILD_NUMBER: "${{ github.run_number }}"
 
     # THE ESCAPE HATCH, and the SDK is exported through `$GITHUB_PATH` for it rather than left for
     # the command to arrange. `dart_ensure_sdk` prepends to `PATH` in the shell it runs in, and a
@@ -132,9 +132,9 @@ runs:
         fi
         printf '%s\n' "$HOME/.local/bin" "${PUB_CACHE:-$HOME/.pub-cache}/bin" >> "$GITHUB_PATH"
       env:
-        FLUTTER_VERSION: '${{ inputs.flutter_version }}'
-        DART_SDK_VERSION: '${{ inputs.dart_sdk_version }}'
-        DART_TOOLCHAIN: '${{ inputs.toolchain }}'
+        FLUTTER_VERSION: "${{ inputs.flutter_version }}"
+        DART_SDK_VERSION: "${{ inputs.dart_sdk_version }}"
+        DART_TOOLCHAIN: "${{ inputs.toolchain }}"
 
     # The command is shell by contract, so `env:` does not make it safer: it keeps the value out of
     # the script's text, where CodeQL's `actions/code-injection` reads any expression as attacker
@@ -145,4 +145,4 @@ runs:
       shell: 'bash'
       env:
         PIPELINES_HOOK: "${{ inputs.build_command }}"
-      run: "eval \"$PIPELINES_HOOK\""
+      run: eval "$PIPELINES_HOOK"

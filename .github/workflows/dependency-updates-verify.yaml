@@ -64,7 +64,7 @@ jobs:
       - name: 'Checkout its base'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
         with:
-          ref: '${{ github.event.pull_request.base.sha }}'
+          ref: "${{ github.event.pull_request.base.sha }}"
           path: 'base'
           persist-credentials: false
 
@@ -76,7 +76,7 @@ jobs:
         id: 'pipelines-ref'
         shell: 'bash'
         env:
-          JOB_WORKFLOW_REF: '${{ job.workflow_ref }}'
+          JOB_WORKFLOW_REF: "${{ job.workflow_ref }}"
         run: |
           ref="${JOB_WORKFLOW_REF:-${GITHUB_WORKFLOW_REF}}"
           ref="${ref##*@}"
@@ -86,7 +86,7 @@ jobs:
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
         with:
           repository: 'rios0rios0/pipelines'
-          ref: '${{ steps.pipelines-ref.outputs.ref }}'
+          ref: "${{ steps.pipelines-ref.outputs.ref }}"
           path: '.pipelines'
           persist-credentials: false
 
@@ -108,7 +108,7 @@ jobs:
         shell: 'bash'
         env:
           # The public APIs it reads allow 60 unauthenticated requests an hour.
-          GITHUB_TOKEN: '${{ github.token }}'
+          GITHUB_TOKEN: "${{ github.token }}"
         run: |
           set -uo pipefail
           status=0
@@ -157,7 +157,7 @@ jobs:
         if: "!cancelled() && steps.verify.outcome == 'success' && steps.verify.outputs.status != '0'"
         shell: 'bash'
         env:
-          STATUS: '${{ steps.verify.outputs.status }}'
+          STATUS: "${{ steps.verify.outputs.status }}"
         run: |
           if [ "$STATUS" = '2' ]; then
             echo "::error::A change could not be verified -- an upstream or the advisory database was out of reach -- and an unproven change is not a passing one. Re-run the job."

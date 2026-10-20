@@ -111,7 +111,7 @@ runs:
           exit 1
         fi
       env:
-        RELEASE_TAG: '${{ inputs.tag_prefix }}${{ steps.extract.outputs.tag_name }}'
+        RELEASE_TAG: "${{ inputs.tag_prefix }}${{ steps.extract.outputs.tag_name }}"
       if: "steps.extract.outputs.skip_release != 'true' && startsWith(github.ref, 'refs/heads/')"
 
     - name: 'Create Release'
@@ -134,6 +134,6 @@ runs:
       shell: 'bash'
       run: $SCRIPTS_DIR/global/scripts/shared/promote-release.sh
       env:
-        PROMOTE_TAG: '${{ inputs.tag_prefix }}${{ steps.extract.outputs.tag_name }}'
-        GH_TOKEN: '${{ github.token }}'
+        PROMOTE_TAG: "${{ inputs.tag_prefix }}${{ steps.extract.outputs.tag_name }}"
+        GH_TOKEN: "${{ github.token }}"
       if: "inputs.promote == 'true' && steps.extract.outputs.skip_release != 'true' && startsWith(github.ref, 'refs/heads/')"

@@ -80,13 +80,13 @@ runs:
       run: $SCRIPTS_DIR/global/scripts/languages/dart/build/run.sh
       shell: 'bash'
       env:
-        FLUTTER_VERSION: '${{ inputs.flutter_version }}'
-        DART_SDK_VERSION: '${{ inputs.dart_sdk_version }}'
-        DART_TOOLCHAIN: '${{ inputs.toolchain }}'
-        DART_BUILD_TARGETS: '${{ inputs.targets }}'
-        DART_BUILD_MODE: '${{ inputs.build_mode }}'
-        DART_BUILD_ARGS: '${{ inputs.build_args }}'
-        DART_BUILD_NUMBER: '${{ github.run_number }}'
+        FLUTTER_VERSION: "${{ inputs.flutter_version }}"
+        DART_SDK_VERSION: "${{ inputs.dart_sdk_version }}"
+        DART_TOOLCHAIN: "${{ inputs.toolchain }}"
+        DART_BUILD_TARGETS: "${{ inputs.targets }}"
+        DART_BUILD_MODE: "${{ inputs.build_mode }}"
+        DART_BUILD_ARGS: "${{ inputs.build_args }}"
+        DART_BUILD_NUMBER: "${{ github.run_number }}"
 
     - name: 'Upload Report'
       uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # v7.0.1

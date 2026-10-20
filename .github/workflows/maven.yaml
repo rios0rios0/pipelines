@@ -73,7 +73,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
         with:
           codeql_language: 'java-kotlin'
-          upload: '${{ inputs.codeql_upload }}'
+          upload: "${{ inputs.codeql_upload }}"
     needs: [ 'code_check-style_maven_verify', 'code_check-quality_proguard' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 

@@ -73,11 +73,11 @@ runs:
       run: $SCRIPTS_DIR/global/scripts/languages/dart/analyze/run.sh
       shell: 'bash'
       env:
-        FLUTTER_VERSION: '${{ inputs.flutter_version }}'
-        DART_SDK_VERSION: '${{ inputs.dart_sdk_version }}'
-        DART_TOOLCHAIN: '${{ inputs.toolchain }}'
-        DART_FATAL_WARNINGS: '${{ inputs.fatal_warnings }}'
-        DART_FATAL_INFOS: '${{ inputs.fatal_infos }}'
+        FLUTTER_VERSION: "${{ inputs.flutter_version }}"
+        DART_SDK_VERSION: "${{ inputs.dart_sdk_version }}"
+        DART_TOOLCHAIN: "${{ inputs.toolchain }}"
+        DART_FATAL_WARNINGS: "${{ inputs.fatal_warnings }}"
+        DART_FATAL_INFOS: "${{ inputs.fatal_infos }}"
 
     - name: 'Upload Report'
       uses: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9' # v7.0.2

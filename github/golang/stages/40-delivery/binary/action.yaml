@@ -106,6 +106,6 @@ runs:
         version: '~> v2'
         args: 'release --clean'
       env:
-        GITHUB_TOKEN: '${{ github.token }}'
-        GORELEASER_CURRENT_TAG: '${{ inputs.tag_name }}'
-        GPG_FINGERPRINT: '${{ steps.import_gpg.outputs.fingerprint }}'
+        GITHUB_TOKEN: "${{ github.token }}"
+        GORELEASER_CURRENT_TAG: "${{ inputs.tag_name }}"
+        GPG_FINGERPRINT: "${{ steps.import_gpg.outputs.fingerprint }}"

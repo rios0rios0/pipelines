@@ -108,20 +108,20 @@ runs:
         echo "toolchain=$(dart_detect_toolchain)" >> "$GITHUB_OUTPUT"
       shell: 'bash'
       env:
-        DART_TOOLCHAIN: '${{ inputs.toolchain }}'
+        DART_TOOLCHAIN: "${{ inputs.toolchain }}"
 
     - name: 'Run tests with coverage'
       run: $SCRIPTS_DIR/global/scripts/languages/dart/test/run.sh
       shell: 'bash'
       env:
-        FLUTTER_VERSION: '${{ inputs.flutter_version }}'
-        DART_SDK_VERSION: '${{ inputs.dart_sdk_version }}'
-        DART_TOOLCHAIN: '${{ inputs.toolchain }}'
-        DART_COVERAGE_MINIMUM: '${{ inputs.coverage_minimum }}'
-        DART_COVERAGE_EXCLUDE: '${{ inputs.coverage_exclude }}'
-        DART_COVERAGE_DIFF_BASE: '${{ inputs.coverage_diff_base }}'
-        DART_REQUIRE_TESTS: '${{ inputs.require_tests }}'
-        DART_TEST_ARGS: '${{ inputs.test_args }}'
+        FLUTTER_VERSION: "${{ inputs.flutter_version }}"
+        DART_SDK_VERSION: "${{ inputs.dart_sdk_version }}"
+        DART_TOOLCHAIN: "${{ inputs.toolchain }}"
+        DART_COVERAGE_MINIMUM: "${{ inputs.coverage_minimum }}"
+        DART_COVERAGE_EXCLUDE: "${{ inputs.coverage_exclude }}"
+        DART_COVERAGE_DIFF_BASE: "${{ inputs.coverage_diff_base }}"
+        DART_REQUIRE_TESTS: "${{ inputs.require_tests }}"
+        DART_TEST_ARGS: "${{ inputs.test_args }}"
 
     - name: 'Upload Report'
       uses: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9' # v7.0.2

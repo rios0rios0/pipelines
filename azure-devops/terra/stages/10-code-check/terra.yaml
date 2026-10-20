@@ -53,6 +53,6 @@ stages:
             condition: always()
             inputs:
               testResultsFormat: 'JUnit'
-              testResultsFiles: '$(REPORT_PATH)/junit-order-check.xml'
+              testResultsFiles: "$(REPORT_PATH)/junit-order-check.xml"
               testRunTitle: 'order-check'
               failTaskOnFailedTests: true

@@ -40,7 +40,7 @@ stages:
           - job: 'delivery_android'
             displayName: 'delivery:android'
             variables:
-              DART_BUILD_TARGETS: '${{ parameters.ANDROID_BUILD_TARGETS }}'
+              DART_BUILD_TARGETS: "${{ parameters.ANDROID_BUILD_TARGETS }}"
             steps:
               - template: '../../abstracts/dart.yaml'
 

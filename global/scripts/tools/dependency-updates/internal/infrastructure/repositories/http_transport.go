@@ -31,9 +31,14 @@ const (
 	// MaxDocumentBytes caps a JSON document or checksum manifest: a manifest
 	// is a few kilobytes, and anything near this is not one.
 	MaxDocumentBytes = 8 << 20
-	// MaxPackumentBytes caps an npm package document, the one legitimately
-	// large answer: knip's is 2.5 MB and grows with every release.
+	// MaxPackumentBytes caps an npm package document, a legitimately large
+	// answer: knip's is 2.5 MB and grows with every release.
 	MaxPackumentBytes = 64 << 20
+	// MaxReleaseListBytes caps a page of GitHub releases, the other legitimately
+	// large answer: every release carries its notes and each asset's metadata.
+	// golangci-lint's hundred releases passed 8 MiB in October 2026, with
+	// GoReleaser's and yq's within 1 MB of it.
+	MaxReleaseListBytes = 64 << 20
 	// maxDownloadBytes caps an asset that is downloaded to be hashed: only an
 	// asset GitHub recorded no digest for, and those are small. The cap is what
 	// makes a template pointed at the wrong file fail loudly instead of filling

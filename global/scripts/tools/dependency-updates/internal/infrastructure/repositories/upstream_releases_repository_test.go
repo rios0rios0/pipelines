@@ -2,6 +2,9 @@ package repositories_test
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -95,6 +98,37 @@ func TestUpstreamReleasesRepositoryGitHub(t *testing.T) {
 		require.Len(t, releases, 2)
 		assert.True(t, releases[0].Prerelease)
 		assert.Equal(t, time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), releases[1].Published)
+	})
+
+	t.Run("should read a page of releases larger than a document's cap", func(t *testing.T) {
+		t.Parallel()
+		// given
+		notes := strings.Repeat("x", infrastructure.MaxDocumentBytes/64)
+		page := make([]map[string]any, 0, 100)
+		for minor := range 100 {
+			page = append(page, map[string]any{
+				"tag_name": fmt.Sprintf("v2.%d.0", minor), "published_at": "2026-10-16T11:33:37Z", "body": notes,
+			})
+		}
+		listing, err := json.Marshal(page)
+		require.NoError(t, err)
+		require.Greater(t, len(listing), infrastructure.MaxDocumentBytes)
+		server := tlsServer(t, func(writer http.ResponseWriter, request *http.Request) {
+			if request.URL.RequestURI() != "/repos/golangci/golangci-lint/releases?per_page=100" {
+				http.NotFound(writer, request)
+				return
+			}
+			_, _ = writer.Write(listing)
+		})
+		repository := infrastructure.NewUpstreamReleasesRepository(
+			infrastructure.NewHTTPTransportWithClient(crossHostClient(server, "api.github.com")), nil)
+
+		// when
+		releases, err := repository.List(task(entities.KindGitHubRelease, "golangci/golangci-lint", "2.14.0"))
+
+		// then
+		require.NoError(t, err)
+		assert.Len(t, releases, 100)
 	})
 }
 

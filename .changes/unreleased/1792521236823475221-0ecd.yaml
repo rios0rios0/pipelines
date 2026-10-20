@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the three findings the `security-and-quality` suite reports in this repository''s Python: parenthesised the deliberate two-literal `DOCTYPE` element of `lcov_to_cobertura.py`, whose output is byte-identical, explained the `except ValueError` there that keeps an absolute path `os.path.relpath` cannot express, and removed an unused variable from `check_order.py`'
+time: '2026-10-20T18:33:56.823419225Z'

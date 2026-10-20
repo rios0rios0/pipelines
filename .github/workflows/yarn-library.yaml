@@ -16,8 +16,10 @@ on:
       codeql_upload:
         description: |
           Whether sast:codeql uploads its SARIF results ('always', 'failure-only' or 'never').
-          Set to 'never' on a private repository without GitHub Advanced Security, where code
-          scanning is unavailable and only the upload -- not the analysis -- fails.
+          The upload is best-effort and never fails the job; findings the repository's
+          `.codeql-false-positives` does not list do, whatever this says. Set to 'never' on a
+          private repository without GitHub Advanced Security, where code scanning is
+          unavailable and an upload could only be refused.
         required: false
         type: string
         default: 'always'

@@ -608,7 +608,6 @@ def check_providers_tf(path: Path, repo: Path, cfg: Config, fix: bool) -> FileRe
         entries = find_provider_entries(inner)
         names = [e.name for e in entries]
         unknown = [nm for nm in names if nm not in weight]
-        keys = [weight.get(nm, NO_NUMBER) for nm in names]
         if unknown:
             res.findings.append(Finding("providers", res.path,
                 f"providers not in the ranking (add to .terraform-order.json): {', '.join(sorted(set(unknown)))}",

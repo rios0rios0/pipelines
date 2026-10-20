@@ -27,10 +27,12 @@ inputs:
   upload:
     description: |
       Whether to upload the SARIF results to code scanning ('always', 'failure-only' or 'never').
-      Uploading requires code scanning to be enabled on the repository, which on a private
-      repository means GitHub Advanced Security. Without it the analysis itself still succeeds and
-      only the upload fails, taking the whole job down with it -- set this to 'never' on such a
-      repository to keep the scan running as a build-breaking check without the alerts.
+      The upload is best-effort and never decides the job: it runs after the gate, even when the
+      gate failed, and a refused upload -- code scanning needs GitHub Advanced Security on a
+      private repository -- fails nothing. 'failure-only' uploads only when the job is failing,
+      and 'never' skips the upload, which is the sensible setting where code scanning cannot take
+      it. Whatever this says, the job fails on every finding the repository's
+      `.codeql-false-positives` does not list, exactly as `make codeql` does.
     required: false
     default: 'always'
 
@@ -114,16 +116,63 @@ runs:
         # a lockfile this action never resolves would cost more to warm than it saves.
         cache: false
 
+    # `make codeql` hands a project's `codeql-config.yml` to `database create`, so the analysis here
+    # reads it too: a gate that scanned what the project excludes locally would fail on findings
+    # nobody can reproduce. An empty output is no configuration, which `init` reads as unset.
+    - name: 'Find the Project CodeQL Configuration'
+      id: 'codeql_config'
+      run: |
+        if [ -f 'codeql-config.yml' ]; then
+          echo 'Using project CodeQL config: codeql-config.yml'
+          echo 'file=./codeql-config.yml' >> "$GITHUB_OUTPUT"
+        fi
+      shell: 'bash'
+
     - name: 'Initialize CodeQL'
       uses: 'github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d' # v4.38.3
       with:
         languages: ${{ inputs.codeql_language }}
+        # The suite `run.sh` analyses with (`<language>-security-and-quality.qls`), so this job
+        # fails on what `make codeql`, GitLab CI and Azure DevOps fail on. The action's default
+        # suite keeps only high-precision security queries and would pass findings a local scan
+        # reports -- a medium-precision rule such as `go/log-injection` is never even run.
+        queries: 'security-and-quality'
+        config-file: '${{ steps.codeql_config.outputs.file }}'
 
     - name: 'Autobuild'
       uses: 'github/codeql-action/autobuild@24c54180a607b1449ed407dd24f251e4e9147c8d' # v4.38.3
 
+    # Analysis only. The upload is a step of its own below, so code scanning being unavailable can
+    # never be what fails this one; the database upload is skipped where nothing may be uploaded.
     - name: 'Perform CodeQL Analysis'
+      id: 'analyze'
       uses: 'github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d' # v4.38.3
       with:
         category: '/language:${{ inputs.codeql_language }}'
-        upload: '${{ inputs.upload }}'
+        output: '${{ runner.temp }}/codeql-sarif'
+        upload: 'never'
+        upload-database: "${{ inputs.upload != 'never' }}"
+
+    # The verdict. `analyze` fails only when the analysis itself fails, never on a finding, so
+    # before this step a job whose results went nowhere -- `upload: 'never'`, or an upload code
+    # scanning refused -- passed whatever CodeQL found. The script is the gate `make codeql`, GitLab
+    # CI and Azure DevOps run, reached through this action's own path so it is always the revision
+    # the action was resolved at: the checkout under test for a `./` reference, and for `@<ref>` the
+    # archive the runner unpacked this file from.
+    - name: 'Gate on Findings'
+      env:
+        SARIF_DIRECTORY: '${{ steps.analyze.outputs.sarif-output }}'
+      run: '"$GITHUB_ACTION_PATH/../../../../../global/scripts/tools/codeql/gate.sh" "$SARIF_DIRECTORY"'
+      shell: 'bash'
+
+    # Best effort, and only once the gate has decided: it also runs when the gate failed, so code
+    # scanning shows what failed the job wherever it exists, and `continue-on-error` keeps a refused
+    # upload -- no code scanning on a private repository without GitHub Advanced Security, or a
+    # processing error -- from failing a job whose scan passed.
+    - name: 'Upload Results to Code Scanning'
+      if: "always() && steps.analyze.outcome == 'success' && (inputs.upload == 'always' || (inputs.upload == 'failure-only' && failure()))"
+      continue-on-error: true
+      uses: 'github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d' # v4.38.3
+      with:
+        sarif_file: '${{ steps.analyze.outputs.sarif-output }}'
+        category: '/language:${{ inputs.codeql_language }}'

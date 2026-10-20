@@ -116,6 +116,9 @@ def parse_lcov(path: str) -> list[FileCoverage]:
                     try:
                         source = os.path.relpath(source, os.getcwd())
                     except ValueError:
+                        # relpath has no answer when the path and the working
+                        # directory sit on different drives (Windows); the
+                        # absolute path is kept as LCOV gave it.
                         pass
                 source = source.replace("\\", "/")
                 current = files.setdefault(source, FileCoverage(source))
@@ -201,10 +204,14 @@ def write_cobertura(files: list[FileCoverage], output: str, sources_root: str) -
 
     out = [
         '<?xml version="1.0" ?>\n',
-        "<!DOCTYPE coverage SYSTEM "
-        # See the note in terraform/terra-test/run.sh: the DTD is a dead
-        # identifier under either scheme and is never dereferenced.
-        "'https://cobertura.sourceforge.net/xml/coverage-04.dtd'>\n",
+        # One element, written as two literals: the parentheses say the
+        # concatenation is deliberate, not a missing comma.
+        (
+            "<!DOCTYPE coverage SYSTEM "
+            # See the note in terraform/terra-test/run.sh: the DTD is a dead
+            # identifier under either scheme and is never dereferenced.
+            "'https://cobertura.sourceforge.net/xml/coverage-04.dtd'>\n"
+        ),
         '<coverage line-rate="{lr:.4f}" branch-rate="{br:.4f}" '
         'lines-covered="{lc}" lines-valid="{lv}" '
         'branches-covered="{bc}" branches-valid="{bv}" '

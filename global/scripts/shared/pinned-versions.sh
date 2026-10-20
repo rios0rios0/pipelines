@@ -195,12 +195,12 @@ CODEQL_BUNDLE_SHA256_LINUX64="f002864be6dd8d5d7bdb123aaf7291ec8e291012bd9f70b6d2
 # upstream: github-release google/osv-scanner
 # osv: Go github.com/google/osv-scanner/v2
 # checksums: https://github.com/google/osv-scanner/releases/download/v{version}/osv-scanner_SHA256SUMS
-OSV_SCANNER_PINNED_VERSION="2.6.0"
+OSV_SCANNER_PINNED_VERSION="2.7.0"
 OSV_SCANNER_VERSION="${OSV_SCANNER_VERSION:-${OSV_SCANNER_PINNED_VERSION}}"
 # asset: https://github.com/google/osv-scanner/releases/download/v{version}/osv-scanner_linux_amd64
-OSV_SCANNER_SHA256_AMD64="ca69b3d3cd08f889a49dc0a383122f71cc528b83803671df5fd874d97485b108"
+OSV_SCANNER_SHA256_AMD64="160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b"
 # asset: https://github.com/google/osv-scanner/releases/download/v{version}/osv-scanner_linux_arm64
-OSV_SCANNER_SHA256_ARM64="2c71403eb443d05891c4f268c3ad771cf4f16e5443463fd7851ef8f454d3c7e4"
+OSV_SCANNER_SHA256_ARM64="4061ef4c021ed3c47f203b818f337e351336cc5cd67c0274fc36bd1dfc728dd7"
 
 # Checkov, the IaC misconfiguration scanner. It ships no binary -- it is a PyPI
 # package -- so it is written as a pinned version with a digest rather than as a
@@ -211,10 +211,10 @@ OSV_SCANNER_SHA256_ARM64="2c71403eb443d05891c4f268c3ad771cf4f16e5443463fd7851ef8
 # digest the way it does for any release binary. The wheel's dependencies are
 # resolved by pip within the ranges the wheel declares, binary-only.
 # upstream: pypi checkov
-CHECKOV_PINNED_VERSION="3.3.22"
+CHECKOV_PINNED_VERSION="3.3.29"
 CHECKOV_VERSION="${CHECKOV_VERSION:-${CHECKOV_PINNED_VERSION}}"
 # asset: https://files.pythonhosted.org/packages/py3/c/checkov/checkov-{version}-py3-none-any.whl
-CHECKOV_SHA256="53fa6ce894afcb17bfc448aad0f6100abb32a798fe17bdeed553b5ae6478daf0"
+CHECKOV_SHA256="9a8b3918788faf8e18b181d826d284744b22b9d99c53cf1b67a2e84f0596796f"
 
 # --- Language tooling --------------------------------------------------------
 
@@ -324,12 +324,12 @@ TERRA_SHA256_ARM64="12706b8bcad844eaed1774c036b1641c56dbc0204666490ca99391368a63
 # upstream: github-release superfly/flyctl
 # osv: Go github.com/superfly/flyctl
 # checksums: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_checksums.txt
-FLYCTL_PINNED_VERSION="0.4.115"
+FLYCTL_PINNED_VERSION="0.4.116"
 FLYCTL_VERSION="${FLYCTL_VERSION:-${FLYCTL_PINNED_VERSION}}"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_x86_64.tar.gz
-FLYCTL_SHA256_X86_64="8b99a37a546c6c5b3ecb10c0c1d962c62b1cda328934f17c55180281cbdeb72f"
+FLYCTL_SHA256_X86_64="ab929c80ef0c1f7d623052267885632f47b4c5dd7c0ed8383d16f42472abe7b9"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_arm64.tar.gz
-FLYCTL_SHA256_ARM64="aa408eb3fd368d5a19dc77c6691ae93a338f2bacee3256a53612a72ca8d2d4a2"
+FLYCTL_SHA256_ARM64="8b34a2b7443db9ee0e0ec3f7b3943b5bae873d009770dae4acec74085ae4d20a"
 
 # mikefarah/yq, resolved by global/scripts/shared/resolve-yq.sh for the
 # golangci-lint config merge. Four digests rather than the usual two because
@@ -405,7 +405,7 @@ STOML_SHA256_AMD64="8420ad10d39ca568234186be89a60f8a8ece29bc2a91b4c8ad2e00ef73b6
 # ever proved the bytes matched whatever version it chose -- integrity without
 # identity.
 # upstream: goproxy golang.org/x/vuln
-GOVULNCHECK_PINNED_VERSION="v1.8.0"
+GOVULNCHECK_PINNED_VERSION="v1.9.0"
 GOVULNCHECK_VERSION="${GOVULNCHECK_VERSION:-${GOVULNCHECK_PINNED_VERSION}}"
 # upstream: goproxy gotest.tools/gotestsum
 GOTESTSUM_PINNED_VERSION="v1.13.0"
@@ -448,4 +448,4 @@ BUNDLER_AUDIT_SPEC="${BUNDLER_AUDIT_SPEC:-bundler-audit:0.9.3}"
 # upstream: rubygems debride
 DEBRIDE_SPEC="${DEBRIDE_SPEC:-debride:1.15.2}"
 # upstream: npm knip
-KNIP_SPEC="${KNIP_SPEC:-knip@6.40.0}"
+KNIP_SPEC="${KNIP_SPEC:-knip@6.41.0}"

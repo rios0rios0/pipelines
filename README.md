@@ -1785,6 +1785,9 @@ Optional environment variables:
 **The Go checks block.**
 
 - A golangci-lint or govulncheck failure fails a Go pipeline on all three platforms.
+- govulncheck fails on a vulnerability the code **calls**. A vulnerability only in a package the code imports, or a
+  module it requires, is listed in the log but does not fail the job. The verdict is read from the report, because
+  `govulncheck -json` exits 0 whatever it finds.
 - A Hadolint finding fails it on GitHub Actions and GitLab CI. Azure DevOps keeps Hadolint advisory,
   like the platform's other shared SAST templates, for every toolchain.
 - golangci-lint gives up after `30m` by default. On a busy self-hosted runner, raise it with

@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed `sca:govulncheck` never failing a Go pipeline on a vulnerability: the script ran `govulncheck -json`, which exits 0 whatever it finds, so the job failed only when the scan itself broke. The verdict is now read from the report through `govulncheck -mode convert`, which prints the findings into the log and fails the job when the code calls a vulnerable symbol (a vulnerability only in an imported package or a required module is listed but does not fail it), and the scan''s stderr no longer lands in the JSON report'
+time: '2026-10-20T16:09:54.582810231Z'

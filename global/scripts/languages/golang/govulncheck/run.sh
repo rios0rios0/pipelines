@@ -64,17 +64,46 @@ if [ "$govulncheckNeedsInstall" -eq 1 ]; then
 fi
 
 echo "Running govulncheck SCA vulnerability scan..."
-"$GOVULNCHECK_BIN" -json ./... > "$fileName" 2>&1 || EXIT_CODE=$?
+# Only stdout is the report. govulncheck writes its JSON there and everything
+# else on stderr, so folding stderr in with `2>&1` could leave a report that
+# neither `-mode convert` below nor anyone reading the artifact can parse.
+#
+# Stderr is held in a variable rather than a `mktemp` file. That file would live
+# outside the checkout, so a scan cancelled midway would leave it behind on a
+# persistent runner -- and no trap can remove it once a cancellation ends in
+# SIGKILL. A variable needs no cleanup at all.
+scanErrors="$({ "$GOVULNCHECK_BIN" -json ./... > "$fileName"; } 2>&1)" || EXIT_CODE=$?
 
 echo "govulncheck analysis complete. Results written to: $fileName"
 
-# The scan's own output goes to the report file, so a failure used to reach the
-# log as nothing but "exited with code 1" -- indistinguishable between "found
-# vulnerabilities" and "could not scan at all", and only readable by downloading
-# the artifact. Echo a bounded head of the report so the reason is in the log.
+# Whatever the scan said on stderr reaches the log, bounded. A scan that could
+# not run at all fails here, with its own reason in the log rather than only in
+# the artifact: "exited with code 1" alone does not say whether anything was
+# found or nothing was analysed.
+if [ -n "$scanErrors" ]; then
+  echo "govulncheck stderr (first 40 lines):"
+  printf '%s\n' "$scanErrors" | head -n 40
+fi
 if [ -n "$EXIT_CODE" ]; then
   echo "govulncheck exited with code $EXIT_CODE. First lines of the report:"
   head -n 40 "$fileName"
+  exit "$EXIT_CODE"
 fi
 
-exit ${EXIT_CODE:-0}
+# THE VERDICT comes from the report, never from the exit code of the `-json`
+# run: with `-json` (or `-format`) govulncheck exits 0 whatever it found, so
+# while this script passed that code on, the job passed every vulnerability
+# although the pipelines document it as blocking. `-mode convert` replays the
+# report through govulncheck's own text output without scanning again -- which
+# also prints the findings into the log -- and exits 3 when the code calls a
+# vulnerable symbol. A vulnerability in a package the code imports, or a module
+# it requires, without the vulnerable symbol being reached is listed but does
+# not fail the job: that is govulncheck's own default.
+VERDICT=0
+"$GOVULNCHECK_BIN" -mode convert < "$fileName" || VERDICT=$?
+case "$VERDICT" in
+  0) echo "govulncheck: this code reaches no known vulnerability." ;;
+  3) echo "govulncheck: this code calls a known-vulnerable symbol (listed above); upgrade the module to its fixed version." >&2 ;;
+  *) echo "govulncheck: could not read its own report back (exit $VERDICT), so no verdict was reached." >&2 ;;
+esac
+exit "$VERDICT"

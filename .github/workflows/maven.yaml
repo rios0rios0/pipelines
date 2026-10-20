@@ -191,7 +191,7 @@ jobs:
         uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 
       - name: 'Run SonarQube'
-        run: '${{ env.SCRIPTS_DIR }}/global/scripts/tools/sonarqube/run.sh'
+        run: '"$SCRIPTS_DIR/global/scripts/tools/sonarqube/run.sh"'
         shell: 'bash'
         env:
           SONAR_HOST_URL: ${{ inputs.sonar_host }}

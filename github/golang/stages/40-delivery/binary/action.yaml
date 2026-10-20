@@ -68,9 +68,12 @@ runs:
     - name: 'Prepare GoReleaser config'
       run: |
         "$SCRIPTS_DIR/global/scripts/languages/golang/goreleaser/prepare.sh" \
-          "${{ inputs.binary_name }}" \
-          "${{ inputs.binary_path }}"
+          "$BINARY_NAME" \
+          "$BINARY_PATH"
       shell: 'bash'
+      env:
+        BINARY_NAME: '${{ inputs.binary_name }}'
+        BINARY_PATH: '${{ inputs.binary_path }}'
 
     - name: 'Validate GPG inputs'
       if: "inputs.gpg_sign == 'true'"

@@ -343,6 +343,30 @@ It is GitHub Actions only, as `runs_on` is: the GitLab CI and Azure DevOps CodeQ
 runner selector of their own. `make test-workflow-composition` fails if a composed workflow stops
 forwarding it, or if the CodeQL job's fallback can no longer reach `runs_on`.
 
+#### CodeQL Fails on Findings, Not on Its Upload (`codeql_upload`)
+
+The `sast:codeql` job fails on every finding the repository's `.codeql-false-positives` does not
+list, on GitHub Actions exactly as on GitLab CI, Azure DevOps and `make codeql` -- all four run the
+same gate, `global/scripts/tools/codeql/gate.sh`, over the same `security-and-quality` suite, and
+the GitHub job reads a project's `codeql-config.yml` as `make codeql` does. The log lists each
+remaining finding with the `primaryLocationLineHash` to add to `.codeql-false-positives` once it is
+triaged as a false positive.
+
+Uploading the results to code scanning is a separate, best-effort step that runs after the gate --
+even when the gate failed -- and can never fail the job:
+
+| `codeql_upload`      | Upload                                       | Use it when                                                    |
+|----------------------|----------------------------------------------|----------------------------------------------------------------|
+| `always` *(default)* | every run                                    | code scanning is enabled (public repository, or private with GitHub Advanced Security) |
+| `failure-only`       | only when the job is failing                 | you want code scanning to show what failed a run, and nothing else |
+| `never`              | none                                         | code scanning is unavailable, so an upload could only be refused |
+
+Before, the GitHub job passed whatever CodeQL found: `github/codeql-action/analyze` fails only when
+the analysis does, and GitHub acts on findings through code scanning -- so with `codeql_upload:
+'never'`, or an upload code scanning refused, nothing read the report at all. GitHub consumers
+can now see findings fail a job that used to pass; `make codeql` reports the same ones locally.
+`make test-codeql-gate` holds the contract.
+
 #### Usage Example (Go with Docker)
 
 ```yaml

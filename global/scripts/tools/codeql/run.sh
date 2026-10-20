@@ -261,41 +261,9 @@ if [ ! -f "$fileName" ]; then
   exit 1
 fi
 
-# Use default false positives file if the project doesn't provide one
-fpFileExists=true
-if [ ! -f ".codeql-false-positives" ]; then
-  fpFileExists=false
-  defaultFile="$SCRIPTS_DIR/global/scripts/tools/codeql/.codeql-false-positives"
-  cp "$defaultFile" .
-fi
-
-# Load false positive fingerprints
-FP_FILE="$(pwd)/.codeql-false-positives"
-FP_FILTER=$(grep -v '^\s*#' "$FP_FILE" | grep -v '^\s*$' | jq -R -s 'split("\n") | map(select(length > 0))')
-FP_COUNT=$(echo "$FP_FILTER" | jq 'length')
-if [ "$FP_COUNT" -gt 0 ]; then
-  echo "Loaded $FP_COUNT false positive fingerprint(s) from .codeql-false-positives"
-fi
-
-# Count results excluding false positives matched by SARIF partialFingerprints
-TOTAL_COUNT=$(jq '[.runs[].results[]] | length' "$fileName")
-RESULT_COUNT=$(jq --argjson fp "$FP_FILTER" \
-  '[.runs[].results[] | select(
-    (.partialFingerprints // {} | to_entries | map(.value) | any(. as $h | $fp | any(. == $h))) | not
-  )] | length' "$fileName")
-SUPPRESSED=$((TOTAL_COUNT - RESULT_COUNT))
-
-echo "CodeQL found $TOTAL_COUNT issue(s) total, $SUPPRESSED suppressed as false positive(s), $RESULT_COUNT remaining."
-if [ "$RESULT_COUNT" -gt 0 ]; then
-  jq -r --argjson fp "$FP_FILTER" \
-    '.runs[].results[] | select(
-      (.partialFingerprints // {} | to_entries | map(.value) | any(. as $h | $fp | any(. == $h))) | not
-    ) | "  - \(.ruleId): \(.message.text) (\(.locations[0].physicalLocation.artifactLocation.uri):\(.locations[0].physicalLocation.region.startLine))"' "$fileName"
-  EXIT_CODE=1
-fi
-
-if [ "$fpFileExists" = false ]; then
-  rm -f .codeql-false-positives
-fi
-
-exit ${EXIT_CODE:-0}
+# Whether the scan passes is the shared gate's decision, so every platform fails on the same
+# findings: the GitHub Actions composite runs the same script on the report
+# `github/codeql-action/analyze` writes. It reads `.codeql-false-positives` (or the default beside
+# it), prints what remains, and exits 1 when anything does.
+"$SCRIPTS_DIR/global/scripts/tools/codeql/gate.sh" "$fileName"
+exit $?

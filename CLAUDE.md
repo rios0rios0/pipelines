@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go helpers, Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, terra-install, docker-multi-arch, basic-checks, fixture-isolation, gitignore, sast-gate, hadolint-discovery, checkov, codeql-scope, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, azure-step-names, azure-secret-env, dependency-updates, containers-detect, report-uploads)
+make test              # Run all validation tests (Go helpers, Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, terra-install, docker-multi-arch, basic-checks, fixture-isolation, gitignore, sast-gate, hadolint-discovery, checkov, codeql-scope, codeql-gate, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, azure-step-names, azure-secret-env, dependency-updates, containers-detect, report-uploads)
 make test-go-script    # Test Go validation script only
 make test-go-module-toolchain  # Test that every go.mod toolchain directive is readable by the images/analysers/workflows that consume it only
 make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves only
@@ -38,6 +38,7 @@ make test-sast-gate    # Test that the SAST targets propagate tool failures only
 make test-hadolint-discovery  # Test which files the Hadolint runner lints as Dockerfiles (every name the delivery templates build) only
 make test-checkov      # Test the Checkov IaC scanner tier (verified install, report verdict, advisory default, wiring on every platform) only
 make test-codeql-scope  # Test that a local CodeQL scan builds from the files git would ship, on every core, only
+make test-codeql-gate   # Test that CodeQL fails on findings `.codeql-false-positives` does not list, on every platform, and that the GitHub upload cannot fail the job, only
 make test-dependency-check  # Test the OWASP Dependency-Check NVD cache / API-key contract only
 make test-dependency-track  # Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, cross-platform wiring) only
 make test-python-cyclonedx  # Test static/non-distribution and dynamic Python SBOM versions, including resolution failures
@@ -923,6 +924,32 @@ paths) come out as on CI. It leaves out an untracked nested repository, which `g
 it is. A build that needs a file `.gitignore` keeps out runs with `CODEQL_SOURCE_SCOPE=tree`, and a
 failed `database create` on the copy says so. `.github/tests/test-codeql-scope.sh` asserts all of
 it against a stub `codeql`.
+
+### CodeQL Fails on Findings, Never on Its Upload
+
+`global/scripts/tools/codeql/gate.sh` decides whether a CodeQL scan passes, on every platform: it
+drops each SARIF result one of whose `partialFingerprints` values the project's
+`.codeql-false-positives` lists (or the default beside the script), prints what remains with its
+`primaryLocationLineHash`, and exits 1 when anything does. `run.sh` calls it for `make codeql`,
+GitLab CI and Azure DevOps; the GitHub Actions `20-security/codeql` composite calls it on the
+report `github/codeql-action/analyze` writes.
+
+The GitHub job used to pass whatever CodeQL found. `analyze` fails only when the analysis itself
+fails -- GitHub acts on a finding through code scanning, which needs the upload -- and a private
+repository without GitHub Advanced Security, whose upload is refused, was told to set `upload:
+'never'` to keep "a build-breaking check without the alerts". Nothing read the report after that,
+so the check could not break.
+
+| Constraint | Why |
+|------------|-----|
+| **`analyze` never uploads; the upload is its own `upload-sarif` step, `if: always()` and `continue-on-error: true`, after the gate** | A refused upload is a report-publishing failure (see Report Uploads Never Gate a Job) and must not fail a scan that passed; running it when the gate failed still shows code scanning what failed the job. `codeql_upload` only decides whether the upload is attempted (`failure-only`: when the job is failing) |
+| **The gate step has no `if:` and no `continue-on-error`** | It is the verdict. An `if:` lets something skip it, and `continue-on-error` turns every finding back into a pass |
+| **The analysis runs `security-and-quality` and reads the project's `codeql-config.yml`, as `run.sh` does** | The action's default suite keeps only high-precision security queries, so a medium-precision rule a local scan reports is never even run there, and a gate over a different scan fails on findings nobody can reproduce locally -- or passes ones they can |
+| **The composite reaches the gate through `$GITHUB_ACTION_PATH`, not a `scripts-repo` checkout** | The runner unpacks the whole repository at the ref the action resolved, so the script always matches the action: this repository's own `codeql.yaml` runs the action by `./` path, and a `scripts-repo@main` checkout there would test a pull request's action against `main`'s gate. It needs no network fetch and no `$/` runner floor |
+| **It fails closed** | No argument, a missing report, a directory with no `*.sarif`, a report that is not SARIF, or no `jq` is an error, never "no findings". The inline filter it replaced read an unparsable report as zero findings |
+
+`.github/tests/test-codeql-gate.sh` holds all of it: the gate against synthetic reports, `run.sh`
+end to end against a stub `codeql`, and the composite's step order and flags.
 
 ### Report Uploads Never Gate a Job
 

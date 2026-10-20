@@ -57,8 +57,10 @@ on:
         description: |
           Whether CodeQL uploads its SARIF to code scanning ('always', 'failure-only' or
           'never'). Uploading requires code scanning to be enabled, which on a private
-          repository means GitHub Advanced Security; without it the analysis still succeeds and
-          only the upload fails, taking the whole job down with it.
+          repository means GitHub Advanced Security. The upload is best-effort and never
+          fails the job: the job fails on every finding `.codeql-false-positives` does not
+          list, as `make codeql` does, whether or not anything was uploaded. Set 'never' on
+          a repository without code scanning to skip an upload that could only be refused.
       build_env:
         type: 'string'
         required: false

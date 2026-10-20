@@ -30,15 +30,16 @@ func tlsServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	return server
 }
 
-// crossHostClient reaches `other.test` at `target`'s address, so a redirect can
-// leave the original host without leaving the machine. Certificates are not
-// checked: this is about which headers travel, not about TLS.
-func crossHostClient(target *httptest.Server) *http.Client {
+// crossHostClient reaches `other` at `target`'s address, so a redirect can leave
+// the original host -- or a resolver can ask its real URL -- without leaving the
+// machine. Certificates are not checked: this is about which headers travel and
+// what is read, not about TLS.
+func crossHostClient(target *httptest.Server, other string) *http.Client {
 	address := target.Listener.Addr().String()
 	return &http.Client{Transport: &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		DialContext: func(ctx context.Context, network, host string) (net.Conn, error) {
-			if strings.HasPrefix(host, "other.test:") {
+			if strings.HasPrefix(host, other+":") {
 				host = address
 			}
 			return (&net.Dialer{}).DialContext(ctx, network, host)
@@ -141,7 +142,7 @@ func TestHTTPTransportRedirectHeaders(t *testing.T) {
 			port := landing.Listener.Addr().(*net.TCPAddr).Port
 			http.Redirect(writer, request, "https://other.test:"+strconv.Itoa(port)+"/asset", http.StatusFound)
 		})
-		transport := infrastructure.NewHTTPTransportWithClient(crossHostClient(landing))
+		transport := infrastructure.NewHTTPTransportWithClient(crossHostClient(landing, "other.test"))
 
 		// when
 		_, err := transport.Get(

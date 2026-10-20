@@ -217,7 +217,7 @@ func (r *UpstreamReleasesRepository) listGitHubReleases(task *entities.Task) ([]
 	if err := r.getJSON(
 		gitHubAPI+reposPath+task.Coord+"/releases?per_page=100",
 		GitHubHeaders(),
-		MaxDocumentBytes,
+		MaxReleaseListBytes,
 		&listed,
 	); err != nil {
 		return nil, err

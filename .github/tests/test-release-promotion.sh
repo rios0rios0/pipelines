@@ -246,8 +246,8 @@ assert_true "the script is executable" "[[ -x '$SCRIPT' ]]"
 assert_true "the action declares a 'promote' input" "[[ -s '$WORK/action-input' ]]"
 assert_true "...that defaults to 'false'" "grep -q \"default: 'false'\" '$WORK/action-input'"
 assert_true "the action runs the script from the checked-out scripts tree" "grep -q 'run: \$SCRIPTS_DIR/global/scripts/shared/promote-release.sh' '$ACTION'"
-assert_true "the action hands the script the tag it created, prefix included" "grep -q \"PROMOTE_TAG: '\\\${{ inputs.tag_prefix }}\\\${{ steps.extract.outputs.tag_name }}'\" '$ACTION'"
-assert_true "the action hands the script the job token" "grep -q \"GH_TOKEN: '\\\${{ github.token }}'\" '$ACTION'"
+assert_true "the action hands the script the tag it created, prefix included" "grep -q \"PROMOTE_TAG: \\\"\\\${{ inputs.tag_prefix }}\\\${{ steps.extract.outputs.tag_name }}\\\"\" '$ACTION'"
+assert_true "the action hands the script the job token" "grep -q \"GH_TOKEN: \\\"\\\${{ github.token }}\\\"\" '$ACTION'"
 assert_equals "both promotion steps are guarded on the input, on a release having been cut, and on a branch ref" '2' \
   "$(grep -c "if: \"inputs.promote == 'true' && steps.extract.outputs.skip_release != 'true' && startsWith(github.ref, 'refs/heads/')\"" "$ACTION")"
 assert_true "the promotion runs after the release exists" \
@@ -267,7 +267,7 @@ assert_true "the tag is created before the release" \
 assert_true "the tag step is guarded on a release having been cut and on a branch ref" \
   "grep -q \"if: \\\"steps.extract.outputs.skip_release != 'true' && startsWith(github.ref, 'refs/heads/')\\\"\" '$ACTION'"
 assert_true "the tag step receives the tag it must create, prefix included" \
-  "grep -q \"RELEASE_TAG: '\\\${{ inputs.tag_prefix }}\\\${{ steps.extract.outputs.tag_name }}'\" '$ACTION'"
+  "grep -q \"RELEASE_TAG: \\\"\\\${{ inputs.tag_prefix }}\\\${{ steps.extract.outputs.tag_name }}\\\"\" '$ACTION'"
 assert_true "the release is not pinned through target_commitish (403 with the job token, softprops/action-gh-release#411)" \
   "! grep -q 'target_commitish:' '$ACTION'"
 

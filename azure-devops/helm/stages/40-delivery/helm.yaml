@@ -8,7 +8,7 @@ stages:
         steps:
           - template: '../../../global/stages/40-delivery/helm.yaml'
             parameters:
-              HELM_REGISTRY_SERVER: '$(HELM_REGISTRY_SERVER)'
-              HELM_REGISTRY_SERVICE_CONNECTION: '$(HELM_REGISTRY_SERVICE_CONNECTION)'
+              HELM_REGISTRY_SERVER: "$(HELM_REGISTRY_SERVER)"
+              HELM_REGISTRY_SERVICE_CONNECTION: "$(HELM_REGISTRY_SERVICE_CONNECTION)"
 
       - template: '../../../global/stages/40-delivery/release.yaml'

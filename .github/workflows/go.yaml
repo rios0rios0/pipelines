@@ -154,12 +154,12 @@ jobs:
     steps:
       - uses: 'rios0rios0/pipelines/github/golang/stages/10-code-check/openapi-sync@main'
         with:
-          command: '${{ inputs.openapi_sync_command }}'
-          path: '${{ inputs.openapi_sync_path }}'
+          command: "${{ inputs.openapi_sync_command }}"
+          path: "${{ inputs.openapi_sync_path }}"
     if: "inputs.openapi_sync_path != '' && !startsWith(github.ref, 'refs/tags/')"
 
   code_check-cross_compile:
-    name: 'code-check > quality:cross-compile (${{ matrix.goos }}/${{ matrix.goarch }})'
+    name: "code-check > quality:cross-compile (${{ matrix.goos }}/${{ matrix.goarch }})"
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     strategy:
       fail-fast: false
@@ -195,8 +195,8 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
         with:
           codeql_language: 'go'
-          upload: '${{ inputs.codeql_upload }}'
-          go_version_file: '${{ inputs.go_version_file }}'
+          upload: "${{ inputs.codeql_upload }}"
+          go_version_file: "${{ inputs.go_version_file }}"
     needs: [ 'code_check-style_golangci_lint' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -244,10 +244,10 @@ jobs:
     steps:
       - uses: 'rios0rios0/pipelines/github/golang/stages/30-tests/all@main'
         with:
-          database_image: '${{ inputs.database_image }}'
-          database_url_env: '${{ inputs.database_url_env }}'
-          coverage_threshold: '${{ inputs.coverage_threshold }}'
-          integration_parallel: '${{ inputs.integration_parallel }}'
+          database_image: "${{ inputs.database_image }}"
+          database_url_env: "${{ inputs.database_url_env }}"
+          coverage_threshold: "${{ inputs.coverage_threshold }}"
+          integration_parallel: "${{ inputs.integration_parallel }}"
 
       - name: 'Test Results'
         if: "always() && hashFiles('junit.xml') != ''"

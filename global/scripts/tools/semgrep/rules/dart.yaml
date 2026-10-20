@@ -144,9 +144,9 @@ rules:
     #     includes the surrounding quotes.
     patterns:
       - pattern-either:
-          - pattern: 'Process.run($CMD, ..., runInShell: true, ...)'
-          - pattern: 'Process.runSync($CMD, ..., runInShell: true, ...)'
-          - pattern: 'Process.start($CMD, ..., runInShell: true, ...)'
+          - pattern: "Process.run($CMD, ..., runInShell: true, ...)"
+          - pattern: "Process.runSync($CMD, ..., runInShell: true, ...)"
+          - pattern: "Process.start($CMD, ..., runInShell: true, ...)"
       - metavariable-regex:
           metavariable: $CMD
           regex: .*\$\{?[A-Za-z_]

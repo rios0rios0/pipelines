@@ -265,18 +265,18 @@ jobs:
     env:
       DEPLOY_ENVIRONMENT: ${{ inputs.deployment_environment != '' && inputs.deployment_environment || (github.ref_type == 'tag' && 'production' || 'staging') }}
       PAGES_BRANCH: "${{ github.ref_type == 'tag' && inputs.pages_production_branch || inputs.pages_preview_branch }}"
-      PAGES_PROJECT: '${{ inputs.pages_project }}'
+      PAGES_PROJECT: "${{ inputs.pages_project }}"
       # Hoisted to the job because a STEP-LEVEL `if:` cannot read the `secrets` context at all --
       # `if: secrets.x != ''` is a workflow syntax error, not a condition that evaluates to false.
       # An `env:` entry may reference it, and `env` is readable from an `if:`.
-      BUILD_ENV_SECRETS: '${{ secrets.build_env_secrets }}'
+      BUILD_ENV_SECRETS: "${{ secrets.build_env_secrets }}"
     steps:
       # Skipped entirely when the caller passes nothing, so a branch deploy pays nothing for a gate
       # whose guarantee `needs:` already carries.
       - if: "inputs.deployment_required_checks != ''"
         uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/require-checks@main'
         with:
-          required_checks: '${{ inputs.deployment_required_checks }}'
+          required_checks: "${{ inputs.deployment_required_checks }}"
 
       # The `build_env*` values all write to `$GITHUB_ENV`, which lives outside the workspace
       # -- so they survive the deploy action's own checkout, and `build_command` sees them.
@@ -289,10 +289,10 @@ jobs:
       # environment-scoped origin then comes from `build_env_vars` and overrides it here, where the
       # bundle that ships is built.
       - if: "inputs.build_env != ''"
-        run: 'printf ''%s\n'' "$BUILD_ENV" >> "$GITHUB_ENV"'
+        run: "printf '%s\\n' \"$BUILD_ENV\" >> \"$GITHUB_ENV\""
         shell: 'bash'
         env:
-          BUILD_ENV: '${{ inputs.build_env }}'
+          BUILD_ENV: "${{ inputs.build_env }}"
 
       # EVERY VALUE IS MASKED BEFORE IT IS WRITTEN, because the input's own contract -- "like
       # `build_env` but MASKED" -- is only half kept by passing it as a secret.
@@ -376,7 +376,7 @@ jobs:
         shell: 'bash'
         env:
           ALL_VARS: ${{ toJSON(vars) }}
-          BUILD_ENV_VARS: '${{ inputs.build_env_vars }}'
+          BUILD_ENV_VARS: "${{ inputs.build_env_vars }}"
 
       # Refused here rather than by `wrangler`, which reports a missing token as an authentication
       # failure against an account it could not identify.
@@ -395,8 +395,8 @@ jobs:
           fi
         shell: 'bash'
         env:
-          CLOUDFLARE_API_TOKEN: '${{ secrets.cloudflare_api_token }}'
-          CLOUDFLARE_ACCOUNT_ID: '${{ secrets.cloudflare_account_id }}'
+          CLOUDFLARE_API_TOKEN: "${{ secrets.cloudflare_api_token }}"
+          CLOUDFLARE_ACCOUNT_ID: "${{ secrets.cloudflare_account_id }}"
 
       # Refused here rather than left to the deploy action, which reaches the same conclusion only
       # after checking the repository out, installing the toolchain and running the whole build --
@@ -413,15 +413,15 @@ jobs:
 
       - uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/cloudflare@main'
         with:
-          cloudflare_api_token: '${{ secrets.cloudflare_api_token }}'
-          cloudflare_account_id: '${{ secrets.cloudflare_account_id }}'
-          target: '${{ inputs.target }}'
+          cloudflare_api_token: "${{ secrets.cloudflare_api_token }}"
+          cloudflare_account_id: "${{ secrets.cloudflare_account_id }}"
+          target: "${{ inputs.target }}"
           project_name: "${{ env.PAGES_PROJECT }}"
-          output_directory: '${{ inputs.output_directory }}'
+          output_directory: "${{ inputs.output_directory }}"
           branch: "${{ env.PAGES_BRANCH }}"
-          production_branch: '${{ inputs.pages_production_branch }}'
+          production_branch: "${{ inputs.pages_production_branch }}"
           environment: "${{ env.DEPLOY_ENVIRONMENT }}"
-          node_version: '${{ inputs.node_version }}'
+          node_version: "${{ inputs.node_version }}"
           # Corepack is no longer bundled with Node 25+, and this action supplies its own Node
           # rather than taking one from a `setup-node` step the caller controls -- so corepack can
           # be neither assumed present nor assumed absent. The `command -v` guard covers both: an

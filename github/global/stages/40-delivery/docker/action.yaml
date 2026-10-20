@@ -81,8 +81,8 @@ runs:
         echo "Build version: $VERSION_BUILD_ARG=$VERSION"
         echo "build_args=$VERSION_BUILD_ARG=$VERSION" >> "$GITHUB_OUTPUT"
       env:
-        VERSION_BUILD_ARG: '${{ inputs.version_build_arg }}'
-        TAG_NAME: '${{ inputs.tag_name }}'
+        VERSION_BUILD_ARG: "${{ inputs.version_build_arg }}"
+        TAG_NAME: "${{ inputs.tag_name }}"
         DOCKERFILE: '.ci/stages/40-delivery/app.Dockerfile'
       if: "inputs.version_build_arg != ''"
 
@@ -99,15 +99,15 @@ runs:
           echo 'EOF'
         } >> "$GITHUB_OUTPUT"
       env:
-        TAG_NAME: '${{ inputs.tag_name }}'
-        IMAGE: 'ghcr.io/${{ github.repository }}'
+        TAG_NAME: "${{ inputs.tag_name }}"
+        IMAGE: "ghcr.io/${{ github.repository }}"
       if: "inputs.tags == '' && inputs.tag_name != ''"
 
     - name: 'Extract Docker metadata'
       id: 'meta'
       uses: 'docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302' # v6.2.0
       with:
-        images: 'ghcr.io/${{ github.repository }}'
+        images: "ghcr.io/${{ github.repository }}"
         tags: |
           type=raw,value=latest,enable={{is_default_branch}}
           type=semver,pattern={{version}}
@@ -118,8 +118,8 @@ runs:
       uses: 'docker/login-action@dbcb813823bdd20940b903addbd779551569679f' # v4.6.0
       with:
         registry: 'ghcr.io'
-        username: '${{ github.actor }}'
-        password: '${{ inputs.github_token || github.token }}'
+        username: "${{ github.actor }}"
+        password: "${{ inputs.github_token || github.token }}"
 
     # `setup-qemu-action` registers `binfmt_misc` handlers so the GitHub
     # `ubuntu-latest` runner (amd64) can execute ARM binaries during the
@@ -146,6 +146,6 @@ runs:
         file: '.ci/stages/40-delivery/app.Dockerfile'
         context: '.'
         push: true
-        platforms: '${{ inputs.platforms }}'
-        tags: '${{ inputs.tags || steps.release-tags.outputs.tags || steps.meta.outputs.tags }}'
-        build-args: '${{ steps.version.outputs.build_args }}'
+        platforms: "${{ inputs.platforms }}"
+        tags: "${{ inputs.tags || steps.release-tags.outputs.tags || steps.meta.outputs.tags }}"
+        build-args: "${{ steps.version.outputs.build_args }}"

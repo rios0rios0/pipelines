@@ -105,13 +105,13 @@ runs:
         fi
       shell: 'bash'
       env:
-        GO_VERSION_FILE: '${{ inputs.go_version_file }}'
+        GO_VERSION_FILE: "${{ inputs.go_version_file }}"
 
     - name: 'Set up Go'
       if: "steps.go_toolchain.outputs.present == 'true'"
       uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
       with:
-        go-version-file: '${{ steps.go_toolchain.outputs.file }}'
+        go-version-file: "${{ steps.go_toolchain.outputs.file }}"
         # The analysis compiles the module once and the runner is thrown away; a cache keyed on
         # a lockfile this action never resolves would cost more to warm than it saves.
         cache: false
@@ -137,7 +137,7 @@ runs:
         # suite keeps only high-precision security queries and would pass findings a local scan
         # reports -- a medium-precision rule such as `go/log-injection` is never even run.
         queries: 'security-and-quality'
-        config-file: '${{ steps.codeql_config.outputs.file }}'
+        config-file: "${{ steps.codeql_config.outputs.file }}"
 
     - name: 'Autobuild'
       uses: 'github/codeql-action/autobuild@24c54180a607b1449ed407dd24f251e4e9147c8d' # v4.38.3
@@ -148,8 +148,8 @@ runs:
       id: 'analyze'
       uses: 'github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d' # v4.38.3
       with:
-        category: '/language:${{ inputs.codeql_language }}'
-        output: '${{ runner.temp }}/codeql-sarif'
+        category: "/language:${{ inputs.codeql_language }}"
+        output: "${{ runner.temp }}/codeql-sarif"
         upload: 'never'
         upload-database: "${{ inputs.upload != 'never' }}"
 
@@ -161,8 +161,8 @@ runs:
     # archive the runner unpacked this file from.
     - name: 'Gate on Findings'
       env:
-        SARIF_DIRECTORY: '${{ steps.analyze.outputs.sarif-output }}'
-      run: '"$GITHUB_ACTION_PATH/../../../../../global/scripts/tools/codeql/gate.sh" "$SARIF_DIRECTORY"'
+        SARIF_DIRECTORY: "${{ steps.analyze.outputs.sarif-output }}"
+      run: "\"$GITHUB_ACTION_PATH/../../../../../global/scripts/tools/codeql/gate.sh\" \"$SARIF_DIRECTORY\""
       shell: 'bash'
 
     # Best effort, and only once the gate has decided: it also runs when the gate failed, so code
@@ -174,5 +174,5 @@ runs:
       continue-on-error: true
       uses: 'github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d' # v4.38.3
       with:
-        sarif_file: '${{ steps.analyze.outputs.sarif-output }}'
-        category: '/language:${{ inputs.codeql_language }}'
+        sarif_file: "${{ steps.analyze.outputs.sarif-output }}"
+        category: "/language:${{ inputs.codeql_language }}"

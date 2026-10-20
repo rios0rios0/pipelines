@@ -82,9 +82,9 @@ runs:
       run: $SCRIPTS_DIR/global/scripts/languages/dart/publish/run.sh
       shell: 'bash'
       env:
-        FLUTTER_VERSION: '${{ inputs.flutter_version }}'
-        DART_SDK_VERSION: '${{ inputs.dart_sdk_version }}'
-        DART_TOOLCHAIN: '${{ inputs.toolchain }}'
-        DART_PUBLISH_DRY_RUN: '${{ inputs.dry_run }}'
-        PUB_TOKEN: '${{ inputs.pub_token }}'
-        PUB_HOSTED_URL: '${{ inputs.pub_hosted_url }}'
+        FLUTTER_VERSION: "${{ inputs.flutter_version }}"
+        DART_SDK_VERSION: "${{ inputs.dart_sdk_version }}"
+        DART_TOOLCHAIN: "${{ inputs.toolchain }}"
+        DART_PUBLISH_DRY_RUN: "${{ inputs.dry_run }}"
+        PUB_TOKEN: "${{ inputs.pub_token }}"
+        PUB_HOSTED_URL: "${{ inputs.pub_hosted_url }}"

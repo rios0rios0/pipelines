@@ -50,7 +50,7 @@ jobs:
   go:
     uses: 'rios0rios0/pipelines/.github/workflows/go.yaml@main'
     with:
-      go_version_file: '${{ inputs.go_version_file }}'
+      go_version_file: "${{ inputs.go_version_file }}"
       cross_compile: true
       sonar_host: ${{ inputs.sonar_host }}
       runs_on: ${{ inputs.runs_on }}

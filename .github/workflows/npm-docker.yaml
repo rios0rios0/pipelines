@@ -44,7 +44,7 @@ jobs:
   npm:
     uses: 'rios0rios0/pipelines/.github/workflows/npm.yaml@main'
     with:
-      working_directory: '${{ inputs.working_directory }}'
+      working_directory: "${{ inputs.working_directory }}"
       install_run_scripts: ${{ inputs.install_run_scripts }}
       sonar_host: ${{ inputs.sonar_host }}
       runs_on: ${{ inputs.runs_on }}

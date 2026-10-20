@@ -70,11 +70,11 @@ release:
     # Coarse pre-filter; the script REGEX is the source of truth. Allow both the
     # branch-name form (`chore/bump-X.Y.Z`, covers git-native and GitHub PR-merge
     # subjects) and the conventional-commit form (`chore(bump): ... version to X.Y.Z`).
-    - if: '$CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && ($CI_COMMIT_MESSAGE =~ /chore\/bump-[0-9]+\.[0-9]+\.[0-9]+/ || $CI_COMMIT_MESSAGE =~ /chore\(bump\):.*version to [0-9]+\.[0-9]+\.[0-9]+/)'
+    - if: "$CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && ($CI_COMMIT_MESSAGE =~ /chore\\/bump-[0-9]+\\.[0-9]+\\.[0-9]+/ || $CI_COMMIT_MESSAGE =~ /chore\\(bump\\):.*version to [0-9]+\\.[0-9]+\\.[0-9]+/)"
       when: 'always'
     # Tag-push recovery: a version tag (re-)pushed to recover a bump whose
     # default-branch run failed the gate still cuts the release (the version is
     # taken from the tag ref in the script above).
-    - if: '$CI_COMMIT_TAG =~ /^v?[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?$/'
+    - if: "$CI_COMMIT_TAG =~ /^v?[0-9]+\\.[0-9]+\\.[0-9]+([.-][0-9]+)?$/"
       when: 'always'
     - when: 'never'

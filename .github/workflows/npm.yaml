@@ -124,12 +124,12 @@ on:
 # `working_directory` and nothing else does: the checks that scan the repository read no path
 # from here at all.
 env:
-  COVERAGE_DIR: '${{ inputs.working_directory }}/coverage'
-  COVERAGE_SUMMARY_PATH: '${{ inputs.working_directory }}/coverage/coverage-summary.json'
-  COVERAGE_FINAL_PATH: '${{ inputs.working_directory }}/coverage/coverage-final.json'
-  COVERAGE_INDEX_PATH: '${{ inputs.working_directory }}/coverage/index.html'
-  JUNIT_REPORT_PATH: '${{ inputs.working_directory }}/junit-report.xml'
-  VITE_CONFIG_PATH: '${{ inputs.working_directory }}/vite.config.ts'
+  COVERAGE_DIR: "${{ inputs.working_directory }}/coverage"
+  COVERAGE_SUMMARY_PATH: "${{ inputs.working_directory }}/coverage/coverage-summary.json"
+  COVERAGE_FINAL_PATH: "${{ inputs.working_directory }}/coverage/coverage-final.json"
+  COVERAGE_INDEX_PATH: "${{ inputs.working_directory }}/coverage/index.html"
+  JUNIT_REPORT_PATH: "${{ inputs.working_directory }}/junit-report.xml"
+  VITE_CONFIG_PATH: "${{ inputs.working_directory }}/vite.config.ts"
 
 jobs:
   # first stage
@@ -152,7 +152,7 @@ jobs:
       - name: 'Setup Node.js'
         uses: 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1' # v7.1.0
         with:
-          node-version: '${{ inputs.node_version }}'
+          node-version: "${{ inputs.node_version }}"
           cache: 'npm'
           # Named explicitly because the action only looks for a lockfile in the WORKSPACE
           # ROOT when this is empty, and fails the job outright with "Dependencies lock file
@@ -176,9 +176,9 @@ jobs:
           fi
           npm run lint:ci
         shell: 'bash'
-        working-directory: '${{ inputs.working_directory }}'
+        working-directory: "${{ inputs.working_directory }}"
         env:
-          INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
+          INSTALL_RUN_SCRIPTS: "${{ inputs.install_run_scripts }}"
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -200,9 +200,9 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/javascript/stages/10-code-check/format@main'
         with:
           package_manager: 'npm'
-          working_directory: '${{ inputs.working_directory }}'
-          node_version: '${{ inputs.node_version }}'
-          install_run_scripts: '${{ inputs.install_run_scripts }}'
+          working_directory: "${{ inputs.working_directory }}"
+          node_version: "${{ inputs.node_version }}"
+          install_run_scripts: "${{ inputs.install_run_scripts }}"
     if: "!startsWith(github.ref, 'refs/tags/')"
 
 
@@ -213,9 +213,9 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/javascript/stages/10-code-check/knip@main'
         with:
           package_manager: 'npm'
-          working_directory: '${{ inputs.working_directory }}'
-          node_version: '${{ inputs.node_version }}'
-          install_run_scripts: '${{ inputs.install_run_scripts }}'
+          working_directory: "${{ inputs.working_directory }}"
+          node_version: "${{ inputs.node_version }}"
+          install_run_scripts: "${{ inputs.install_run_scripts }}"
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -230,7 +230,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
         with:
           codeql_language: 'javascript-typescript'
-          upload: '${{ inputs.codeql_upload }}'
+          upload: "${{ inputs.codeql_upload }}"
     needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -271,7 +271,7 @@ jobs:
       - name: 'Setup Node.js'
         uses: 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1' # v7.1.0
         with:
-          node-version: '${{ inputs.node_version }}'
+          node-version: "${{ inputs.node_version }}"
           cache: 'npm'
           # Named explicitly because the action only looks for a lockfile in the WORKSPACE
           # ROOT when this is empty, and fails the job outright with "Dependencies lock file
@@ -295,9 +295,9 @@ jobs:
           fi
           npm audit --audit-level=high
         shell: 'bash'
-        working-directory: '${{ inputs.working_directory }}'
+        working-directory: "${{ inputs.working_directory }}"
         env:
-          INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
+          INSTALL_RUN_SCRIPTS: "${{ inputs.install_run_scripts }}"
     needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
@@ -314,7 +314,7 @@ jobs:
       - name: 'Setup Node.js'
         uses: 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1' # v7.1.0
         with:
-          node-version: '${{ inputs.node_version }}'
+          node-version: "${{ inputs.node_version }}"
           cache: 'npm'
           # Named explicitly because the action only looks for a lockfile in the WORKSPACE
           # ROOT when this is empty, and fails the job outright with "Dependencies lock file
@@ -327,10 +327,10 @@ jobs:
 
       - name: 'Export the build environment'
         if: "inputs.build_env != ''"
-        run: 'printf ''%s\n'' "$BUILD_ENV" >> "$GITHUB_ENV"'
+        run: "printf '%s\\n' \"$BUILD_ENV\" >> \"$GITHUB_ENV\""
         shell: 'bash'
         env:
-          BUILD_ENV: '${{ inputs.build_env }}'
+          BUILD_ENV: "${{ inputs.build_env }}"
 
       - run: |
           # `--ignore-scripts`: `npm ci` otherwise runs `postinstall` from every package in
@@ -345,15 +345,15 @@ jobs:
           fi
           npm run test:ci
         shell: 'bash'
-        working-directory: '${{ inputs.working_directory }}'
+        working-directory: "${{ inputs.working_directory }}"
         env:
-          INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
+          INSTALL_RUN_SCRIPTS: "${{ inputs.install_run_scripts }}"
 
       - name: 'Type check the end-to-end specs'
         if: 'inputs.e2e_typecheck'
         run: 'npm run e2e:typecheck'
         shell: 'bash'
-        working-directory: '${{ inputs.working_directory }}'
+        working-directory: "${{ inputs.working_directory }}"
 
       # Every path here is read through `env`, which resolves it against `working_directory`.
       # A literal `coverage/` would keep the `hashFiles()` guard permanently false for a project
@@ -363,16 +363,16 @@ jobs:
         if: "always() && hashFiles(env.COVERAGE_SUMMARY_PATH) != '' && hashFiles(env.COVERAGE_FINAL_PATH) != ''"
         uses: 'davelosert/vitest-coverage-report-action@c4bbc33a89b7ace0e63d35f1f7d4bcee31155a73' # v2.13.0
         with:
-          json-summary-path: '${{ env.COVERAGE_SUMMARY_PATH }}'
-          json-final-path: '${{ env.COVERAGE_FINAL_PATH }}'
-          vite-config-path: '${{ env.VITE_CONFIG_PATH }}'
+          json-summary-path: "${{ env.COVERAGE_SUMMARY_PATH }}"
+          json-final-path: "${{ env.COVERAGE_FINAL_PATH }}"
+          vite-config-path: "${{ env.VITE_CONFIG_PATH }}"
 
       - name: 'Test Results'
         if: "always() && hashFiles(env.JUNIT_REPORT_PATH) != ''"
         uses: 'dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2' # v3.0.0
         with:
           name: 'Test Results'
-          path: '${{ env.JUNIT_REPORT_PATH }}'
+          path: "${{ env.JUNIT_REPORT_PATH }}"
           reporter: 'java-junit'
 
       - name: 'Upload Coverage Report'
@@ -380,7 +380,7 @@ jobs:
         uses: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9' # v7.0.2
         with:
           name: 'coverage-report'
-          path: '${{ env.COVERAGE_DIR }}/'
+          path: "${{ env.COVERAGE_DIR }}/"
           retention-days: 30
         # A refused upload (e.g. `Artifact storage quota has been hit`) must not fail the job:
         # the report is evidence, and the step above already decided pass or fail.
@@ -398,7 +398,7 @@ jobs:
       - name: 'Setup Node.js'
         uses: 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1' # v7.1.0
         with:
-          node-version: '${{ inputs.node_version }}'
+          node-version: "${{ inputs.node_version }}"
           cache: 'npm'
           # Named explicitly because the action only looks for a lockfile in the WORKSPACE
           # ROOT when this is empty, and fails the job outright with "Dependencies lock file
@@ -411,10 +411,10 @@ jobs:
 
       - name: 'Export the build environment'
         if: "inputs.build_env != ''"
-        run: 'printf ''%s\n'' "$BUILD_ENV" >> "$GITHUB_ENV"'
+        run: "printf '%s\\n' \"$BUILD_ENV\" >> \"$GITHUB_ENV\""
         shell: 'bash'
         env:
-          BUILD_ENV: '${{ inputs.build_env }}'
+          BUILD_ENV: "${{ inputs.build_env }}"
 
       - run: |
           # `--ignore-scripts`: `npm ci` otherwise runs `postinstall` from every package in
@@ -429,9 +429,9 @@ jobs:
           fi
           npm run build
         shell: 'bash'
-        working-directory: '${{ inputs.working_directory }}'
+        working-directory: "${{ inputs.working_directory }}"
         env:
-          INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
+          INSTALL_RUN_SCRIPTS: "${{ inputs.install_run_scripts }}"
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_npm_audit' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -458,7 +458,7 @@ jobs:
         uses: 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333' # v8.0.2
         with:
           name: 'coverage-report'
-          path: '${{ env.COVERAGE_DIR }}/'
+          path: "${{ env.COVERAGE_DIR }}/"
         continue-on-error: true
 
       - name: 'Checkout scripts'
@@ -477,7 +477,7 @@ jobs:
         env:
           SONAR_HOST_URL: ${{ inputs.sonar_host }}
           SONAR_TOKEN: ${{ secrets.sonar_token }}
-          SONAR_PROJECT_DIR: '${{ inputs.working_directory }}'
+          SONAR_PROJECT_DIR: "${{ inputs.working_directory }}"
 
 
 # 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations

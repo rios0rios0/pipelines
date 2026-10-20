@@ -20,7 +20,7 @@ steps:
   # time: Azure substitutes `${{ }}` into the YAML before the agent ever sees it,
   # so a value containing a newline or a quote used to be able to terminate this
   # step and append steps of its own.
-  - bash: 'eval "$PIPELINES_HOOK"'
+  - bash: "eval \"$PIPELINES_HOOK\""
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
     displayName: 'Run Before Prettier'
     env:
@@ -60,11 +60,11 @@ steps:
     env:
       INSTALL_RUN_SCRIPTS: ${{ parameters.INSTALL_RUN_SCRIPTS }}
 
-  - script: '$(Scripts.Directory)/global/scripts/languages/javascript/format/run.sh'
+  - script: "$(Scripts.Directory)/global/scripts/languages/javascript/format/run.sh"
     displayName: 'Run Prettier format check'
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
 
-  - bash: 'eval "$PIPELINES_HOOK"'
+  - bash: "eval \"$PIPELINES_HOOK\""
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
     displayName: 'Run After Prettier'
     env:

@@ -22,8 +22,8 @@ jobs:
   bundler:
     uses: 'rios0rios0/pipelines/.github/workflows/bundler.yaml@main'
     with:
-      working_directory: '${{ inputs.working_directory }}'
-      ruby_version: '${{ inputs.ruby_version }}'
+      working_directory: "${{ inputs.working_directory }}"
+      ruby_version: "${{ inputs.ruby_version }}"
 
   # fourth stage
   delivery-release:

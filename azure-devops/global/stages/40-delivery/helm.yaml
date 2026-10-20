@@ -17,7 +17,7 @@ steps:
   - task: 'Docker@2'
     displayName: 'Login to Azure Container Registry'
     inputs:
-      containerRegistry: '${{ parameters.HELM_REGISTRY_SERVICE_CONNECTION }}'
+      containerRegistry: "${{ parameters.HELM_REGISTRY_SERVICE_CONNECTION }}"
       command: 'login'
 
   - task: HelmInstaller@1

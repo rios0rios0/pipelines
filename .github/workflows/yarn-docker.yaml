@@ -44,7 +44,7 @@ jobs:
   yarn:
     uses: 'rios0rios0/pipelines/.github/workflows/yarn.yaml@main'
     with:
-      working_directory: '${{ inputs.working_directory }}'
+      working_directory: "${{ inputs.working_directory }}"
       runs_on: ${{ inputs.runs_on }}
       codeql_runs_on: ${{ inputs.codeql_runs_on }}
       codeql_upload: ${{ inputs.codeql_upload }}

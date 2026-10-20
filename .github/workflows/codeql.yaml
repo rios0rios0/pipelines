@@ -44,12 +44,12 @@ permissions:
   contents: 'read'
 
 concurrency:
-  group: '${{ github.workflow }}-${{ github.ref }}'
+  group: "${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: "${{ github.event_name == 'pull_request' }}"
 
 jobs:
   analyze:
-    name: 'Analyze (${{ matrix.language }})'
+    name: "Analyze (${{ matrix.language }})"
     runs-on: 'ubuntu-latest'
     permissions:
       contents: 'read'
@@ -69,7 +69,7 @@ jobs:
 
       - uses: './github/global/stages/20-security/codeql'
         with:
-          codeql_language: '${{ matrix.language }}'
+          codeql_language: "${{ matrix.language }}"
           # The only Go module here is the tor-proxy health probe, and its directive is what
           # decides the toolchain. A repository with its module at the root takes the default.
           go_version_file: 'global/containers/tor-proxy.latest/health/go.mod'

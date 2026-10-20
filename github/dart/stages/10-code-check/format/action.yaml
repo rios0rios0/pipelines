@@ -68,6 +68,6 @@ runs:
       run: $SCRIPTS_DIR/global/scripts/languages/dart/format/run.sh
       shell: 'bash'
       env:
-        FLUTTER_VERSION: '${{ inputs.flutter_version }}'
-        DART_SDK_VERSION: '${{ inputs.dart_sdk_version }}'
-        DART_TOOLCHAIN: '${{ inputs.toolchain }}'
+        FLUTTER_VERSION: "${{ inputs.flutter_version }}"
+        DART_SDK_VERSION: "${{ inputs.dart_sdk_version }}"
+        DART_TOOLCHAIN: "${{ inputs.toolchain }}"

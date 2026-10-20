@@ -65,12 +65,12 @@ runs:
       shell: 'bash'
       run: $SCRIPTS_DIR/global/scripts/deploy/netlify/run.sh
       env:
-        NETLIFY_AUTH_TOKEN: '${{ inputs.netlify_auth_token }}'
-        NETLIFY_SITE_ID: '${{ inputs.netlify_site_id }}'
-        NETLIFY_OUTPUT_DIRECTORY: '${{ inputs.output_directory }}'
-        NETLIFY_DEPLOY_MESSAGE: '${{ inputs.deploy_message }}'
-        DEPLOY_ENVIRONMENT: '${{ inputs.environment }}'
-        DEPLOY_DRY_RUN: '${{ inputs.dry_run }}'
+        NETLIFY_AUTH_TOKEN: "${{ inputs.netlify_auth_token }}"
+        NETLIFY_SITE_ID: "${{ inputs.netlify_site_id }}"
+        NETLIFY_OUTPUT_DIRECTORY: "${{ inputs.output_directory }}"
+        NETLIFY_DEPLOY_MESSAGE: "${{ inputs.deploy_message }}"
+        DEPLOY_ENVIRONMENT: "${{ inputs.environment }}"
+        DEPLOY_DRY_RUN: "${{ inputs.dry_run }}"
 
     - name: 'Upload Report'
       uses: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9' # v7.0.2

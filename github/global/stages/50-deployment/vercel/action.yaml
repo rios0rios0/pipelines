@@ -76,14 +76,14 @@ runs:
       shell: 'bash'
       run: $SCRIPTS_DIR/global/scripts/deploy/vercel/run.sh
       env:
-        VERCEL_TOKEN: '${{ inputs.vercel_token }}'
-        VERCEL_ORG_ID: '${{ inputs.vercel_org_id }}'
-        VERCEL_PROJECT_ID: '${{ inputs.vercel_project_id }}'
-        VERCEL_WORKING_DIRECTORY: '${{ inputs.working_directory }}'
-        VERCEL_COMMERCIAL: '${{ inputs.commercial }}'
-        VERCEL_PLAN: '${{ inputs.plan }}'
-        DEPLOY_ENVIRONMENT: '${{ inputs.environment }}'
-        DEPLOY_DRY_RUN: '${{ inputs.dry_run }}'
+        VERCEL_TOKEN: "${{ inputs.vercel_token }}"
+        VERCEL_ORG_ID: "${{ inputs.vercel_org_id }}"
+        VERCEL_PROJECT_ID: "${{ inputs.vercel_project_id }}"
+        VERCEL_WORKING_DIRECTORY: "${{ inputs.working_directory }}"
+        VERCEL_COMMERCIAL: "${{ inputs.commercial }}"
+        VERCEL_PLAN: "${{ inputs.plan }}"
+        DEPLOY_ENVIRONMENT: "${{ inputs.environment }}"
+        DEPLOY_DRY_RUN: "${{ inputs.dry_run }}"
 
     # `if-no-files-found: warn` rather than `error`: when the run script exits
     # early on a missing credential it writes no report, and failing the upload

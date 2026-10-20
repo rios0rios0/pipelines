@@ -109,7 +109,7 @@ jobs:
   go:
     uses: 'rios0rios0/pipelines/.github/workflows/go.yaml@main'
     with:
-      go_version_file: '${{ inputs.go_version_file }}'
+      go_version_file: "${{ inputs.go_version_file }}"
       sonar_host: ${{ inputs.sonar_host }}
       runs_on: ${{ inputs.runs_on }}
       codeql_runs_on: ${{ inputs.codeql_runs_on }}

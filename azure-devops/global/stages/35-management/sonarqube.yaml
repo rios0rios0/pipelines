@@ -37,7 +37,7 @@ jobs:
       - ${{ if eq(parameters.DOWNLOAD_COVERAGE_ARTIFACT, true) }}:
           - task: 'DownloadPipelineArtifact@2'
             inputs:
-              artifactName: '${{ parameters.COVERAGE_ARTIFACT_NAME }}'
+              artifactName: "${{ parameters.COVERAGE_ARTIFACT_NAME }}"
               targetPath: "${{ parameters.COVERAGE_ARTIFACT_TARGET_PATH }}"
             displayName: 'Download Coverage File'
             continueOnError: true

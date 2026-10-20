@@ -70,8 +70,8 @@ runs:
     - name: 'Setup Node.js'
       uses: 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1' # v7.1.0
       with:
-        node-version: '${{ inputs.node_version }}'
-        cache: '${{ inputs.package_manager }}'
+        node-version: "${{ inputs.node_version }}"
+        cache: "${{ inputs.package_manager }}"
         # Named explicitly because the action only looks for a lockfile in the WORKSPACE ROOT
         # when this is empty, and fails outright with "Dependencies lock file is not found" for
         # a project one directory down. All three names are listed because this action serves
@@ -95,9 +95,9 @@ runs:
           npm run prepare --if-present
         fi
       shell: 'bash'
-      working-directory: '${{ inputs.working_directory }}'
+      working-directory: "${{ inputs.working_directory }}"
       env:
-        INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
+        INSTALL_RUN_SCRIPTS: "${{ inputs.install_run_scripts }}"
 
     - name: 'Install dependencies (yarn)'
       if: inputs.package_manager == 'yarn'
@@ -107,9 +107,9 @@ runs:
           yarn rebuild
         fi
       shell: 'bash'
-      working-directory: '${{ inputs.working_directory }}'
+      working-directory: "${{ inputs.working_directory }}"
       env:
-        INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
+        INSTALL_RUN_SCRIPTS: "${{ inputs.install_run_scripts }}"
 
     - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 
@@ -117,14 +117,14 @@ runs:
     # to `$(pwd)/build/reports/knip`, which is why the upload path below follows the same input.
     - run: $SCRIPTS_DIR/global/scripts/languages/javascript/knip/run.sh
       shell: 'bash'
-      working-directory: '${{ inputs.working_directory }}'
+      working-directory: "${{ inputs.working_directory }}"
 
     # The upload below is `continue-on-error`, so it cannot be what fails a scan that exited 0
     # without writing its report. This step keeps that failure.
     - name: 'Verify Report'
       shell: 'bash'
       env:
-        REPORT_DIR: '${{ inputs.working_directory }}/build/reports/knip'
+        REPORT_DIR: "${{ inputs.working_directory }}/build/reports/knip"
       run: |
         if [ -z "$(find "$REPORT_DIR" -type f -print -quit 2> /dev/null)" ]; then
           echo "::error::The scan exited 0 without writing a report to $REPORT_DIR/"
@@ -135,7 +135,7 @@ runs:
       uses: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9' # v7.0.2
       with:
         name: 'knip'
-        path: '${{ inputs.working_directory }}/build/reports/knip/'
+        path: "${{ inputs.working_directory }}/build/reports/knip/"
         if-no-files-found: 'warn'
         overwrite: 'true'
         retention-days: 10

@@ -29,7 +29,7 @@ jobs:
     uses: 'rios0rios0/pipelines/.github/workflows/gradle.yaml@main'
     with:
       sonar_host: ${{ inputs.sonar_host }}
-      codeql_upload: '${{ inputs.codeql_upload }}'
+      codeql_upload: "${{ inputs.codeql_upload }}"
     secrets:
       sonar_token: ${{ secrets.sonar_token }}
       NVD_API_KEY: ${{ secrets.NVD_API_KEY }}

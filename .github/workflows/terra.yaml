@@ -158,7 +158,7 @@ jobs:
           persist-credentials: false
 
       - name: 'Install TFLint (pinned, checksum-verified)'
-        run: '"$GITHUB_WORKSPACE/.pipelines/global/scripts/languages/terraform/tflint/install.sh"'
+        run: "\"$GITHUB_WORKSPACE/.pipelines/global/scripts/languages/terraform/tflint/install.sh\""
         shell: 'bash'
 
       - name: 'Run TFLint'

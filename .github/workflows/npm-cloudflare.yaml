@@ -277,7 +277,7 @@ jobs:
       # environment-scoped origin then comes from `build_env_vars` and overrides it here, where the
       # bundle that ships is built.
       - if: "inputs.build_env != ''"
-        run: "printf '%s\\n' \"$BUILD_ENV\" >> \"$GITHUB_ENV\""
+        run: printf '%s\n' "$BUILD_ENV" >> "$GITHUB_ENV"
         shell: 'bash'
         env:
           BUILD_ENV: "${{ inputs.build_env }}"

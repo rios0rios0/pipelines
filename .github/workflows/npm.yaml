@@ -327,7 +327,7 @@ jobs:
 
       - name: 'Export the build environment'
         if: "inputs.build_env != ''"
-        run: "printf '%s\\n' \"$BUILD_ENV\" >> \"$GITHUB_ENV\""
+        run: printf '%s\n' "$BUILD_ENV" >> "$GITHUB_ENV"
         shell: 'bash'
         env:
           BUILD_ENV: "${{ inputs.build_env }}"
@@ -411,7 +411,7 @@ jobs:
 
       - name: 'Export the build environment'
         if: "inputs.build_env != ''"
-        run: "printf '%s\\n' \"$BUILD_ENV\" >> \"$GITHUB_ENV\""
+        run: printf '%s\n' "$BUILD_ENV" >> "$GITHUB_ENV"
         shell: 'bash'
         env:
           BUILD_ENV: "${{ inputs.build_env }}"

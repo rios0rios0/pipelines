@@ -162,7 +162,7 @@ runs:
     - name: 'Gate on Findings'
       env:
         SARIF_DIRECTORY: "${{ steps.analyze.outputs.sarif-output }}"
-      run: "\"$GITHUB_ACTION_PATH/../../../../../global/scripts/tools/codeql/gate.sh\" \"$SARIF_DIRECTORY\""
+      run: '"$GITHUB_ACTION_PATH/../../../../../global/scripts/tools/codeql/gate.sh" "$SARIF_DIRECTORY"'
       shell: 'bash'
 
     # Best effort, and only once the gate has decided: it also runs when the gate failed, so code

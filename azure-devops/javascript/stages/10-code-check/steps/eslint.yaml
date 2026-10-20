@@ -17,7 +17,7 @@ steps:
   # step and append steps of its own. Through `env:` the shell only expands it at
   # run time, which is the same fix already applied to `pipelines_ref` in
   # .github/workflows/terra.yaml.
-  - bash: "eval \"$PIPELINES_HOOK\""
+  - bash: eval "$PIPELINES_HOOK"
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
     displayName: 'Run Before'
     env:
@@ -50,7 +50,7 @@ steps:
   # step and append steps of its own. Through `env:` the shell only expands it at
   # run time, which is the same fix already applied to `pipelines_ref` in
   # .github/workflows/terra.yaml.
-  - bash: "eval \"$PIPELINES_HOOK\""
+  - bash: eval "$PIPELINES_HOOK"
     workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
     displayName: 'Run After'
     env:

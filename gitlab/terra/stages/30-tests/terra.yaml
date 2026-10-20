@@ -63,7 +63,7 @@ test:validate:
   extends: '.terra'
   stage: 'tests'
   rules:
-    - if: "$ENABLE_VALIDATE == \"true\""
+    - if: $ENABLE_VALIDATE == "true"
   variables:
     REPORT_PATH: 'build/reports'
   before_script:

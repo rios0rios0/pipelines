@@ -374,7 +374,7 @@ jobs:
       # (so the guard above stays quiet), resolves an empty org, skips creation, and the first
       # production tag dies on an app nobody created -- with nothing anywhere naming the variable.
       - if: "inputs.fly_org == '' && inputs.fly_org_var != '' && !vars[inputs.fly_org_var]"
-        run: "echo \"::warning::fly_org_var names '$ORG_VAR', which is not set for this deployment, so app auto-creation is disabled here.\""
+        run: echo "::warning::fly_org_var names '$ORG_VAR', which is not set for this deployment, so app auto-creation is disabled here."
         shell: 'bash'
         env:
           ORG_VAR: "${{ inputs.fly_org_var }}"

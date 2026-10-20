@@ -62,7 +62,7 @@ runs:
       shell: 'bash'
       env:
         OPENAPI_SYNC_COMMAND: "${{ inputs.command }}"
-      run: "eval \"$OPENAPI_SYNC_COMMAND\""
+      run: eval "$OPENAPI_SYNC_COMMAND"
 
     - name: 'Fail when the committed document is stale'
       shell: 'bash'

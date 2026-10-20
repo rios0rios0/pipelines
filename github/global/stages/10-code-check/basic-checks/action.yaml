@@ -18,8 +18,11 @@ runs:
 
     - name: 'Check rebase status'
       shell: 'bash'
+      # Through env, as in the changelog step below: a branch name is data to
+      # the shell, never a fragment of its script.
+      env:
+        TARGET_BRANCH: "${{ inputs.target_branch }}"
       run: |
-        TARGET_BRANCH="${{ inputs.target_branch }}"
         echo "Checking if branch is rebased on top of '$TARGET_BRANCH'..."
 
         git fetch origin "$TARGET_BRANCH" --no-tags
@@ -53,10 +56,11 @@ runs:
       # Pass context values through env to avoid script injection: an actor
       # controls their PR branch name, so interpolating github.head_ref straight
       # into the run block would let a crafted name execute shell commands.
+      # The target branch is a caller's input and crosses the same way.
       env:
         SOURCE_BRANCH: ${{ github.head_ref }}
+        TARGET_BRANCH: "${{ inputs.target_branch }}"
       run: |
-        TARGET_BRANCH="${{ inputs.target_branch }}"
         echo "Checking changelog modifications against '$TARGET_BRANCH'..."
 
         git fetch origin "$TARGET_BRANCH" --no-tags

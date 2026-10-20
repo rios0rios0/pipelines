@@ -136,11 +136,13 @@ runs:
           exit 1
         fi
 
-        echo "total coverage: ${total}% (minimum ${{ inputs.coverage_threshold }}%)"
-        if awk -v t="$total" -v m='${{ inputs.coverage_threshold }}' 'BEGIN { exit !(t < m) }'; then
-          echo "::error::coverage ${total}% is below the ${{ inputs.coverage_threshold }}% minimum"
+        echo "total coverage: ${total}% (minimum ${COVERAGE_THRESHOLD}%)"
+        if awk -v t="$total" -v m="$COVERAGE_THRESHOLD" 'BEGIN { exit !(t < m) }'; then
+          echo "::error::coverage ${total}% is below the ${COVERAGE_THRESHOLD}% minimum"
           exit 1
         fi
+      env:
+        COVERAGE_THRESHOLD: "${{ inputs.coverage_threshold }}"
 
     # Always torn down, including when the tests failed, so a self-hosted runner is not left
     # holding a container and port 5432 for the next job.

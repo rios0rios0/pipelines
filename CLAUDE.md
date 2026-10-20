@@ -961,6 +961,17 @@ the root of the repository being scanned, so neither reaches a consumer; the def
 `global/scripts/tools/codeql/.codeql-false-positives` is every consumer's and lists nothing -- never
 add this repository's suppressions to it.
 
+**A pull request's verdict covers only what it changes.** `github/codeql-action` analyses a pull
+request diff-informed: a dataflow query such as `actions/code-injection` keeps only the findings in
+lines the pull request touched, so one in untouched code passes that check and first fails the push
+to `main`. That is how #746 passed on 8 findings while its merge push found 29. The other 21 were
+`actions/code-injection/medium`, which reads every `${{ }}` inside a `run:` script of a composite
+action or a `workflow_call` workflow as attacker controlled, because CodeQL cannot see who calls
+them. So every value reaches a script through `env:` and is read as a shell variable, and an input
+that is shell by contract (`build_command`, `pre_script`, the `command` of openapi-sync and
+pdm-lint) runs as `eval "$VAR"` on an `env:` value: in the step's own `bash -e -o pipefail`, which a
+child `sh -c` would drop, so it behaves exactly as the expression did.
+
 ### Report Uploads Never Gate a Job
 
 On GitHub Actions every `actions/upload-artifact` step that publishes a report is

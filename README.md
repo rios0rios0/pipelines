@@ -367,6 +367,12 @@ the analysis does, and GitHub acts on findings through code scanning -- so with 
 can now see findings fail a job that used to pass; `make codeql` reports the same ones locally.
 `make test-codeql-gate` holds the contract.
 
+On a pull request the job judges only the change. `github/codeql-action` analyses a pull request
+diff-informed, so a dataflow query such as `actions/code-injection` reports only the findings in
+lines the pull request changed. A finding in code it never touched passes the pull request and fails
+the next push to the default branch: this repository's own scan passed #746 on 8 findings and failed
+its merge push on 29.
+
 #### Usage Example (Go with Docker)
 
 ```yaml

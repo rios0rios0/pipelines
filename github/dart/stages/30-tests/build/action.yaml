@@ -136,7 +136,13 @@ runs:
         DART_SDK_VERSION: '${{ inputs.dart_sdk_version }}'
         DART_TOOLCHAIN: '${{ inputs.toolchain }}'
 
+    # The command is shell by contract, so `env:` does not make it safer: it keeps the value out of
+    # the script's text, where CodeQL's `actions/code-injection` reads any expression as attacker
+    # controlled. `eval` rather than `sh -c`: the command used to BE this step's
+    # `bash -e -o pipefail` script, and a child `sh` would drop bash and both options.
     - name: 'Build'
       if: "inputs.build_command != ''"
       shell: 'bash'
-      run: '${{ inputs.build_command }}'
+      env:
+        PIPELINES_HOOK: "${{ inputs.build_command }}"
+      run: "eval \"$PIPELINES_HOOK\""

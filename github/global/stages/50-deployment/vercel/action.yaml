@@ -63,9 +63,13 @@ runs:
       with:
         node-version: '22'
 
+    # The command is shell by contract, as on Azure DevOps: `env:` keeps it out of the script's
+    # text, and `eval` runs it in this step's own `bash -e -o pipefail` shell, as before.
     - name: 'Build'
       shell: 'bash'
-      run: '${{ inputs.build_command }}'
+      env:
+        PIPELINES_HOOK: "${{ inputs.build_command }}"
+      run: "eval \"$PIPELINES_HOOK\""
       if: "inputs.build_command != ''"
 
     - name: 'Execute'

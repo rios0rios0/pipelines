@@ -13,6 +13,7 @@ make test              # Run all validation tests (Go helpers, Go, go-module-too
 make test-go-script    # Test Go validation script only
 make test-go-module-toolchain  # Test that every go.mod toolchain directive is readable by the images/analysers/workflows that consume it only
 make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves only
+make test-govulncheck-verdict  # Test that govulncheck fails on a vulnerability the code calls, read from its report rather than the `-json` exit code only
 make test-go-tmpdir-modcache   # Test that the Go module cache stays out of $TMPDIR only
 make test-go-integration-scope  # Test which packages the Go runner's integration phase selects only
 make test-lambda       # Test Lambda template validation only
@@ -963,6 +964,8 @@ The Go pipeline blocks on its checks on every platform:
 | golangci-lint | blocking (was advisory) | blocking (was `allow_failure`) | blocking (already was)                       |
 | govulncheck   | blocking (was advisory) | blocking (was `allow_failure`) | blocking (was a job-level `continueOnError`) |
 | Hadolint      | blocking (was advisory) | blocking (already was)         | advisory: a shared template, see below       |
+
+For govulncheck, removing the advisory flags was not enough. The script runs `govulncheck -json` so the report is machine-readable, and with `-json` govulncheck exits 0 whatever it finds: the job could only fail when the scan itself broke, so no Go pipeline ever failed on a vulnerability. The verdict now comes from the report. `global/scripts/languages/golang/govulncheck/run.sh` replays it through `govulncheck -mode convert`, which prints the findings into the log and exits 3 when the code calls a vulnerable symbol. A vulnerability only in a package the code imports, or a module it requires, is listed but does not fail the job, which is govulncheck's own default. The scan's stderr goes to the log, never into the report, so the report stays JSON `convert` can read. `make test-govulncheck-verdict` pins all of it, with `go` and `govulncheck` stubbed. When the fix was written, none of the 17 GitHub repositories that use the Go pipeline called a vulnerable symbol on its default branch, so the change turned none of them red.
 
 `make test-workflow-composition` (Test 16) holds the rule with two lists. It fails on a job that is
 advisory without being listed, and on a listed job that no longer is:

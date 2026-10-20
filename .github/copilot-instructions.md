@@ -11,6 +11,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-go-script` - Test Go script changes specifically
 - `make test-go-module-toolchain` - Test that every `go.mod` toolchain directive is readable by the images/analysers that consume it specifically
 - `make test-go-tool-staleness` - Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves specifically
+- `make test-govulncheck-verdict` - Test that govulncheck fails on a vulnerability the code calls, read from its report rather than the `-json` exit code, specifically
 - `make test-go-tmpdir-modcache` - Test that the Go module cache stays out of `$TMPDIR` specifically
 - `make test-go-integration-scope` - Test which packages the Go runner's integration phase selects specifically
 - `make test-lambda` - Test Lambda template validation specifically
@@ -849,6 +850,7 @@ make test
 make test-go-script
 make test-go-module-toolchain
 make test-go-tool-staleness
+make test-govulncheck-verdict
 make test-go-tmpdir-modcache
 make test-go-integration-scope
 make test-lambda

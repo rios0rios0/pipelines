@@ -152,4 +152,4 @@ jobs:
           # Sets the model without touching `claude_args`: parse-sdk-options.ts resolves
           # `model: options.model || modelFromClaudeArgs`, where `options.model` is this
           # variable -- so it wins over `--model` and leaves the tool wiring alone.
-          ANTHROPIC_MODEL: 'claude-opus-5'
+          ANTHROPIC_MODEL: 'claude-opus-5-5'

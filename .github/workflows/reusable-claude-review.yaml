@@ -278,4 +278,4 @@ jobs:
           # Pins the model without touching `claude_args`: parse-sdk-options.ts resolves
           # `model: options.model || modelFromClaudeArgs`, so this wins and the allowlist
           # stays purely about tools. Without it the CLI default resolves to Sonnet in CI.
-          ANTHROPIC_MODEL: 'claude-opus-5'
+          ANTHROPIC_MODEL: 'claude-opus-5-5'

@@ -1,0 +1,59 @@
+# CodeQL false positives for THIS repository's own analysis (`.github/workflows/codeql.yaml`).
+#
+# The gate (`global/scripts/tools/codeql/gate.sh`) reads `.codeql-false-positives` from the root of
+# the repository being scanned, so this file applies here and nowhere else. A consumer without a file
+# of its own gets the default beside the gate script, which lists nothing.
+#
+# Format: each `primaryLocationLineHash` alone on its line, exactly as the gate prints it -- a line is
+# compared whole, so a trailing comment silences nothing. The hash covers the flagged line and about
+# the next hundred non-blank characters, so editing that code changes it and brings the finding back
+# for a fresh look: an entry vouches for the code as it was read, not for whatever replaces it.
+#
+# ---------------------------------------------------------------------------------------------------
+# 2026-10-20 -- actions/untrusted-checkout/medium against `.github/workflows/terra.yaml`, the six
+# "Checkout pipelines repo for shared scripts" steps: one per job and identical, hence one hash with
+# six occurrences.
+#
+# Each checks out THIS repository, `rios0rios0/pipelines`, to run its scripts: at
+# `inputs.pipelines_ref`, or at the ref the caller pinned this reusable workflow at
+# (`job.workflow_ref`). It is never the head of the calling repository's pull request -- that is the
+# `Checkout code` step, which the query does not report. The workflow has `workflow_call` alone, so
+# the caller decides the events and the token. Whoever can choose `pipelines_ref` edits the caller's
+# workflow, and can already run any step there; the choice is still limited to refs of this
+# repository. None of these checkouts persists the token any more (`persist-credentials: false`
+# beside each), so no later step -- the caller's own Terraform included -- can read it from
+# `.pipelines/.git/config`.
+14ea847f8e347fa8:1
+14ea847f8e347fa8:2
+14ea847f8e347fa8:3
+14ea847f8e347fa8:4
+14ea847f8e347fa8:5
+14ea847f8e347fa8:6
+#
+# ---------------------------------------------------------------------------------------------------
+# 2026-10-20 -- actions/untrusted-checkout/medium against
+# `.github/workflows/dependency-updates-verify.yaml`, "Checkout pipelines repo for the verifier".
+#
+# The workflow runs on `pull_request` and `workflow_call` only: no `pull_request_target`,
+# `workflow_run` or `issue_comment`. The step checks out THIS repository at the ref the workflow
+# itself runs from -- for a caller, the pipelines ref the caller pinned, never the caller's pull
+# request; for a pull request to this repository, that pull request's own verifier, which is the code
+# it changes. The job holds no secret. Its token has `contents: read` and `pull-requests: write`, the
+# latter for the verification comment: a pull request from a fork of this public repository always
+# receives a read-only token, and a branch of this repository is pushed by somebody who already holds
+# write access, so the code run here gains nothing its author did not have. Every checkout in the job
+# sets `persist-credentials: false`.
+2ebf436467cca9db:1
+#
+# ---------------------------------------------------------------------------------------------------
+# 2026-10-20 -- actions/untrusted-checkout/medium against
+# `github/global/stages/10-code-check/basic-checks/action.yaml`, "Checkout PR branch".
+#
+# It checks out `github.event.pull_request.head.sha` on purpose -- the rebase check must read the
+# real branch, not the synthetic merge commit -- in a job that every workflow here gates on
+# `github.event_name == 'pull_request'`. Nothing from that checkout is executed: the action's two
+# other steps run only its own git commands over it (`fetch`, `merge-base`, `rev-list`, `diff`,
+# `show`, `ls-tree`) and test whether files exist. The token stays persisted because `git fetch
+# origin` needs it on a private repository, and no code from the pull request runs in the job to
+# read it.
+38b5638ac75b0a0:1

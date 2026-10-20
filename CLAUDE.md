@@ -951,6 +951,16 @@ so the check could not break.
 `.github/tests/test-codeql-gate.sh` holds all of it: the gate against synthetic reports, `run.sh`
 end to end against a stub `codeql`, and the composite's step order and flags.
 
+This repository's own scan (`.github/workflows/codeql.yaml`) is a consumer of the same rules, from
+its own root. `codeql-config.yml` excludes `actions/unpinned-tag`, which reports every
+`rios0rios0/pipelines/...@main` self-reference -- moving by design, see Test 7 of
+`make test-workflow-composition` -- while `make test-supply-chain` already holds every other `uses:`
+to a commit SHA, more strictly than the query, which exempts trusted owners. `.codeql-false-positives`
+lists the findings triaged as false positives, each with a dated rationale. Both files are read from
+the root of the repository being scanned, so neither reaches a consumer; the default
+`global/scripts/tools/codeql/.codeql-false-positives` is every consumer's and lists nothing -- never
+add this repository's suppressions to it.
+
 ### Report Uploads Never Gate a Job
 
 On GitHub Actions every `actions/upload-artifact` step that publishes a report is

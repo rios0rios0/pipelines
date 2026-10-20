@@ -1,0 +1,15 @@
+# CodeQL configuration for THIS repository's own analysis (`.github/workflows/codeql.yaml`).
+#
+# It is read only where it sits. The `20-security/codeql` composite and `run.sh` both look for
+# `codeql-config.yml` in the root of the repository being scanned -- the consumer's own checkout --
+# so a consumer's scan reads the consumer's file, or none, and never this one.
+query-filters:
+  # `actions/unpinned-tag` reports every `uses:` not pinned to a commit SHA. Here every such
+  # reference is a SELF-reference, `rios0rios0/pipelines/...@main` -- the deliberately moving
+  # first-party policy that `make test-workflow-composition` (Test 7) governs -- so left on, the
+  # query reports about two hundred of them and buries anything real. Pinning third parties is
+  # not lost: `make test-supply-chain` (Test 1) already fails on any other `uses:` that is not a
+  # 40-character commit SHA with its version in a trailing comment, which is stricter than this
+  # query, since it also refuses a tag the query would accept on a trusted owner.
+  - exclude:
+      id: 'actions/unpinned-tag'

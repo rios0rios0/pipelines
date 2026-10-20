@@ -13,8 +13,9 @@ name: 'CodeQL'
 # knob. Nothing about the analysis was weakened by the move: the same three languages, the same
 # weekly cadence. It has since grown stricter with the action every consumer runs: the
 # `security-and-quality` suite `make codeql` uses, and a gate that fails the job on any finding
-# `.codeql-false-positives` does not list (this repository keeps none at its root, so the default
-# beside the gate script applies and every finding fails).
+# `.codeql-false-positives` does not list. This repository's own root `codeql-config.yml` (which
+# drops `actions/unpinned-tag`, see it for why) and root `.codeql-false-positives` (each entry dated
+# and explained) are read by this analysis alone: a consumer's scan reads the consumer's root.
 #
 # **The action is referenced by LOCAL PATH, not `rios0rios0/pipelines/...@main`.** Two reasons,
 # both of which cost a CI cycle to learn: `@main` resolves to the action as published on the

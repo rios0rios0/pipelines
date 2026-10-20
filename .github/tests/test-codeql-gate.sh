@@ -26,6 +26,10 @@
 #   * a gate step runs this script on the analysis output, unconditionally fatal
 #   * the SARIF upload is its own step, after the gate, `if: always()` and `continue-on-error`
 #   * GitLab CI and Azure DevOps still reach the same script through `run.sh`
+# and, for this repository's own scan:
+#   * its root `codeql-config.yml` drops `actions/unpinned-tag` and nothing else, its root
+#     `.codeql-false-positives` holds only bare fingerprints under dated rationales, and the
+#     consumers' default beside the gate script lists nothing
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)" || exit 1
 GATE="$SCRIPTS_DIR/global/scripts/tools/codeql/gate.sh"
@@ -379,6 +383,48 @@ assert_true "the GitLab CI CodeQL stage runs run.sh" \
   "grep -q 'global/scripts/tools/codeql/run.sh' '$SCRIPTS_DIR/gitlab/global/stages/20-security/codeql.yaml'"
 assert_true "the Azure DevOps CodeQL stage runs run.sh" \
   "grep -q 'global/scripts/tools/codeql/run.sh' '$SCRIPTS_DIR/azure-devops/global/stages/20-security/codeql.yaml'"
+echo ""
+
+echo "Test 10: this repository's own scan narrows nothing it has not explained"
+# The root `codeql-config.yml` and `.codeql-false-positives` are read by this repository's own
+# analysis alone. They are the two places a finding here can be made to disappear, so both stay
+# exactly as narrow as their comments justify, and the consumers' default stays empty.
+FINDINGS="$(/usr/bin/env python3 - "$SCRIPTS_DIR" << 'PY'
+import os, re, sys
+try:
+    import yaml
+except ImportError:
+    print('PyYAML is required to read the configuration')
+    sys.exit(0)
+
+root = sys.argv[1]
+with open(os.path.join(root, 'codeql-config.yml'), encoding='utf-8') as handle:
+    config = yaml.safe_load(handle) or {}
+if sorted(config) != ['query-filters']:
+    print('codeql-config.yml sets more than query-filters: %s' % sorted(config))
+if (config.get('query-filters') or []) != [{'exclude': {'id': 'actions/unpinned-tag'}}]:
+    print('codeql-config.yml filters more than actions/unpinned-tag: %r' % config.get('query-filters'))
+
+dated = False
+with open(os.path.join(root, '.codeql-false-positives'), encoding='utf-8') as handle:
+    for number, line in enumerate(handle, 1):
+        line = line.rstrip('\n')
+        if re.match(r'^# \d{4}-\d{2}-\d{2} -- ', line):
+            dated = True
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        if not re.fullmatch(r'[0-9a-f]+:[0-9]+', line):
+            print('.codeql-false-positives:%d is not a bare fingerprint, so it silences nothing: %r' % (number, line))
+        elif not dated:
+            print('.codeql-false-positives:%d has no dated rationale above it' % number)
+
+with open(os.path.join(root, 'global/scripts/tools/codeql/.codeql-false-positives'), encoding='utf-8') as handle:
+    for number, line in enumerate(handle, 1):
+        if line.strip() and not line.lstrip().startswith('#'):
+            print("the consumers' default .codeql-false-positives lists line %d: %r" % (number, line.strip()))
+PY
+)"
+assert_empty "the config drops actions/unpinned-tag alone, every suppression is a dated bare fingerprint, the default lists nothing" "$FINDINGS"
 echo ""
 
 echo "Passed: $TESTS_PASSED, Failed: $TESTS_FAILED"

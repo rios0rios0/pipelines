@@ -28,7 +28,7 @@ runs:
     # the shell did when it was spliced into this script, while `env:` keeps it out of the text.
     # Not `PDM_*`: PDM reads those variables as its own configuration.
     - name: 'Run lint command'
-      run: eval "pdm run $LINT_COMMAND"
+      run: "eval \"pdm run $LINT_COMMAND\""
       shell: 'bash'
       env:
-        LINT_COMMAND: '${{ inputs.command }}'
+        LINT_COMMAND: "${{ inputs.command }}"

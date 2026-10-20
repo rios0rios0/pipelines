@@ -72,8 +72,8 @@ runs:
           "$BINARY_PATH"
       shell: 'bash'
       env:
-        BINARY_NAME: '${{ inputs.binary_name }}'
-        BINARY_PATH: '${{ inputs.binary_path }}'
+        BINARY_NAME: "${{ inputs.binary_name }}"
+        BINARY_PATH: "${{ inputs.binary_path }}"
 
     - name: 'Validate GPG inputs'
       if: "inputs.gpg_sign == 'true'"

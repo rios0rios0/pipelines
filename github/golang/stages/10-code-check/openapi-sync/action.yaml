@@ -61,14 +61,14 @@ runs:
     - name: 'Regenerate the document'
       shell: 'bash'
       env:
-        OPENAPI_SYNC_COMMAND: '${{ inputs.command }}'
-      run: eval "$OPENAPI_SYNC_COMMAND"
+        OPENAPI_SYNC_COMMAND: "${{ inputs.command }}"
+      run: "eval \"$OPENAPI_SYNC_COMMAND\""
 
     - name: 'Fail when the committed document is stale'
       shell: 'bash'
       env:
-        OPENAPI_SYNC_PATH: '${{ inputs.path }}'
-        OPENAPI_SYNC_COMMAND: '${{ inputs.command }}'
+        OPENAPI_SYNC_PATH: "${{ inputs.path }}"
+        OPENAPI_SYNC_COMMAND: "${{ inputs.command }}"
       run: |
         if ! git diff --exit-code -- "$OPENAPI_SYNC_PATH"; then
           printf '::error::the committed document does not match the annotations; run `%s` and commit the result\n' "$OPENAPI_SYNC_COMMAND"

@@ -142,7 +142,7 @@ runs:
           exit 1
         fi
       env:
-        COVERAGE_THRESHOLD: '${{ inputs.coverage_threshold }}'
+        COVERAGE_THRESHOLD: "${{ inputs.coverage_threshold }}"
 
     # Always torn down, including when the tests failed, so a self-hosted runner is not left
     # holding a container and port 5432 for the next job.

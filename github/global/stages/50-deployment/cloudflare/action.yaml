@@ -89,8 +89,8 @@ runs:
     - name: 'Build'
       shell: 'bash'
       env:
-        PIPELINES_HOOK: '${{ inputs.build_command }}'
-      run: eval "$PIPELINES_HOOK"
+        PIPELINES_HOOK: "${{ inputs.build_command }}"
+      run: "eval \"$PIPELINES_HOOK\""
       if: "inputs.build_command != ''"
 
     - name: 'Execute'

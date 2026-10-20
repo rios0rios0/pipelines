@@ -28,8 +28,8 @@ runs:
     - name: 'Execute'
       shell: 'bash'
       env:
-        SEMGREP_LANGUAGE: '${{ inputs.semgrep_lang }}'
-      run: $SCRIPTS_DIR/global/scripts/tools/semgrep/run.sh "$SEMGREP_LANGUAGE"
+        SEMGREP_LANGUAGE: "${{ inputs.semgrep_lang }}"
+      run: "$SCRIPTS_DIR/global/scripts/tools/semgrep/run.sh \"$SEMGREP_LANGUAGE\""
 
     # The upload below is `continue-on-error`, so it cannot be what fails a scan that exited 0
     # without writing its report. This step keeps that failure.

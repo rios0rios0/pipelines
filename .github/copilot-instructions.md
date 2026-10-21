@@ -290,7 +290,7 @@ The Terra CLI pipeline test stage exposes parallel jobs on every platform (Azure
 
 | Image                       | Purpose                         | Registry                       |
 |-----------------------------|---------------------------------|--------------------------------|
-| `golang.1.26-awscli`        | Go 1.26 + AWS CLI               | `ghcr.io/rios0rios0/pipelines` |
+| `golang.1.27-awscli`        | Go 1.27 + AWS CLI               | `ghcr.io/rios0rios0/pipelines` |
 | `python.3.10-pdm-bookworm`  | Python 3.10 + PDM               | `ghcr.io/rios0rios0/pipelines` |
 | `python.3.13-pdm-bookworm`  | Python 3.13 + PDM               | `ghcr.io/rios0rios0/pipelines` |
 | `awscli.latest`             | AWS CLI tools                   | `ghcr.io/rios0rios0/pipelines` |

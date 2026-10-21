@@ -31,7 +31,7 @@ stages:
     jobs:
       - job: 'delivery'
         displayName: 'delivery'
-        container: 'ghcr.io/rios0rios0/pipelines/golang:1.26-awscli'
+        container: 'ghcr.io/rios0rios0/pipelines/golang:1.27-awscli'
         variables:
           DEPLOY_STRATEGY: ${{ parameters.DEPLOY_STRATEGY }}
           GOPATH: "$(Pipeline.Workspace)/.go"

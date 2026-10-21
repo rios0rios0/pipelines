@@ -225,13 +225,12 @@ CHECKOV_SHA256="9a8b3918788faf8e18b181d826d284744b22b9d99c53cf1b67a2e84f0596796f
 # new release's tag at the digest that tag resolves to. A copy on a line no pin
 # holds fails the check. The Go vulnerability database files the `go` command's
 # advisories apart from the standard library's, so both are asked about.
+# One line is held, the one everything here builds on. That includes
+# `global/containers/golang.1.27-awscli`, whose folder and published tag are
+# named after it, so moving to a new line renames that image too.
 # upstream: go-toolchain golang.org/toolchain track=1.27
 # osv: Go stdlib toolchain
-GO_PINNED_VERSION="1.27.2"
-# The line `global/containers/golang.1.26-awscli` is built on, and named after.
-# upstream: go-toolchain golang.org/toolchain track=1.26
-# osv: Go stdlib toolchain
-GO_1_26_PINNED_VERSION="1.26.9"
+GO_PINNED_VERSION="1.27.3"
 
 # upstream: github-release golangci/golangci-lint
 # osv: Go github.com/golangci/golangci-lint/v2

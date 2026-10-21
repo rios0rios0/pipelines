@@ -9,7 +9,7 @@ import (
 	"github.com/rios0rios0/pipelines/global/scripts/tools/dependency-updates/internal/domain/entities"
 )
 
-// goManifest pins Go on two release lines, as this repository does.
+// goManifest pins Go on two release lines, so a copy has to find the pin of its own line.
 func goManifest(current, previous string) []entities.ManifestEntry {
 	return entities.ParseManifest("# upstream: go-toolchain golang.org/toolchain track=1.27\n" +
 		"# osv: Go stdlib toolchain\n" +
@@ -47,7 +47,7 @@ func TestParseGoImage(t *testing.T) {
 			"golang:1.27-bookworm",
 			"golang:latest",
 			"golang:bookworm",
-			"ghcr.io/rios0rios0/pipelines/golang:1.26-awscli",
+			"ghcr.io/rios0rios0/pipelines/golang:1.27-awscli",
 			"mirror.example/golang:1.27.1",
 			"python:3.13-slim",
 		}

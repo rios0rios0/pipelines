@@ -1,3 +1,0 @@
-kind: 'Security'
-body: 'stopped the six `rios0rios0/pipelines` checkouts of `terra.yaml` from persisting the job token: nothing after them uses it, yet it sat in `.pipelines/.git/config`, where every later step, the caller''s own Terraform included, could read it'
-time: '2026-10-20T18:34:04.276548Z'

@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'bumped the pinned dependencies the scheduled `Dependency Updates` workflow found outdated: 2 GitHub Actions (`goreleaser/goreleaser-action` `v7.3.0`, `ruby/setup-ruby` `v1.329.0`), 8 container image digests (`alpine/git:2.54.0`, `amazon/aws-cli:latest`, `bitnami/kubectl:latest`, `eclipse-temurin:8-jre`, `ghcr.io/rios0rios0/pipelines/awscli:latest`, `ghcr.io/rios0rios0/pipelines/golang:1.26-awscli`, `python:3.13-slim`, `ubuntu:24.04`) and 5 tool pins (`CHECKOV` `3.3.29`, `FLYCTL` `0.4.116`, `GOVULNCHECK` `v1.9.0`, `KNIP` `6.41.0`, `OSV_SCANNER` `2.7.0`), each binary''s new SHA-256 taken from its release asset; kept 2 inline copies in step with `pinned-versions.sh`'
-time: '2026-10-20T17:16:22.000000000Z'

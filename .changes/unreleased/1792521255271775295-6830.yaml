@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'gave this repository''s own CodeQL scan a root `codeql-config.yml` excluding `actions/unpinned-tag`, which reports every `rios0rios0/pipelines/...@main` self-reference while `make test-supply-chain` already pins every third-party action more strictly, and a root `.codeql-false-positives` recording, each with a dated rationale, the eight `actions/untrusted-checkout/medium` findings triaged as false positives. Neither file reaches a consumer, and `make test-codeql-gate` keeps both as narrow as their comments justify'
-time: '2026-10-20T18:34:15.271717564Z'

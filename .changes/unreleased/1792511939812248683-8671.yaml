@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'changed the code-review skill''s list of suppression files to the ones the current SAST tools read, dropping `.trivyignore` now that Trivy is gone'
-time: '2026-10-20T15:58:59.812248683Z'

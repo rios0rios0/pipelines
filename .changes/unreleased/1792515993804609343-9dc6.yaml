@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the dependency-update workflow failing without opening its pull request whenever `golangci-lint` had a newer release: GitHub''s page of a project''s last hundred releases carries every asset''s metadata, and the one for `golangci-lint` outgrew the 8 MiB cap on a single document, so a release listing now has its own 64 MiB cap'
-time: '2026-10-20T17:06:33.804189602Z'

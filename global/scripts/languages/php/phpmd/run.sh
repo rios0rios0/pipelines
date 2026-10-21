@@ -29,7 +29,20 @@ else
 fi
 
 echo "Running PHPMD unused code analysis..."
-phpmd . json unusedcode > "$fileName" 2>&1 || EXIT_CODE=$?
+# PHPMD 3 replaced the positional `<paths> <format> <ruleset>` command line with an `analyze`
+# command that takes the format and the rule set as options. Handed the PHPMD 2 form, it reads `.`
+# as a command name and exits 1 with `Command "." is not defined.` before analysing a file, which
+# is how every PHP pipeline failed once setup-php began installing 3.0.0. A persistent agent can
+# still hold PHPMD 2, which has no `analyze` command, so the installed major picks the form.
+#
+# Only the report goes into the report file. stderr -- the reason a run stopped, and PHPMD 3's
+# progress bar if `--no-progress` is ever dropped -- goes to the log: redirected into the report,
+# the error above was invisible in the job log and left a "JSON" report that was not JSON.
+if phpmd --version 2> /dev/null | grep -q '^PHPMD [12]\.'; then
+  phpmd . json unusedcode > "$fileName" || EXIT_CODE=$?
+else
+  phpmd analyze --format json --ruleset unusedcode --no-progress . > "$fileName" || EXIT_CODE=$?
+fi
 
 echo "PHPMD analysis complete. Results written to: $fileName"
 exit ${EXIT_CODE:-0}

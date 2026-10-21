@@ -9,7 +9,7 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go helpers, Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, terra-install, docker-multi-arch, basic-checks, fixture-isolation, gitignore, sast-gate, hadolint-discovery, checkov, codeql-scope, codeql-gate, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, azure-step-names, azure-secret-env, dependency-updates, containers-detect, report-uploads)
+make test              # Run all validation tests (Go helpers, Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, terra-install, docker-multi-arch, basic-checks, fixture-isolation, gitignore, sast-gate, hadolint-discovery, checkov, codeql-scope, codeql-gate, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, phpmd, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, azure-step-names, azure-secret-env, dependency-updates, containers-detect, report-uploads)
 make test-go-script    # Test Go validation script only
 make test-go-module-toolchain  # Test that every go.mod toolchain directive is readable by the images/analysers/workflows that consume it only
 make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves only
@@ -51,6 +51,7 @@ make test-memory-detection  # Test the cgroup-aware memory ceiling detection onl
 make test-dart-pipeline # Test the Dart/Flutter pipeline (scripts, Semgrep rules, cross-platform wiring) only
 make test-terra-pipeline # Test the Terraform/terra pipeline's CodeQL tool gap (GitHub, GitLab, Azure, terra.mk, terraform.mk) only
 make test-javascript-pipeline  # Test the JavaScript formatting gate (Prettier runner + cross-platform wiring) only
+make test-phpmd        # Test the PHPMD runner (the command line each major takes, the verdict, a report that stays JSON) only
 make test-workflow-composition  # Test the GitHub Actions workflow composition standard only
 make test-working-directory  # Test the `working_directory` threading contract (bundler/npm/yarn and their variants) only
 make test-supply-chain # Test the supply-chain pinning contract (actions, images, binaries, packages) only

@@ -1,7 +1,7 @@
 inputs:
   python_version:
     required: false
-    default: '3.13'
+    default: '3.14'
     description: 'Python version to use'
 
 runs:

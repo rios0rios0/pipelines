@@ -1,0 +1,4 @@
+kind: 'Changed'
+body: 'moved the GitHub Actions Python steps -- the `pdm-lint`, `vulture`, `safety` and `30-tests/all` actions that `pdm.yaml` runs -- from Python `3.13` to `3.14`, the release the Azure DevOps and GitLab CI templates already run. The reusable workflows pass no Python version to these actions, so a project whose code or locked dependencies cannot run on 3.14 fails those jobs until it updates them. One example is a lock holding a `pydantic-core` or `lxml` release older than their first Python 3.14 wheels'
+breaking: true
+time: '2026-10-21T17:17:02.391981547Z'

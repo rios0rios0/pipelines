@@ -1,0 +1,3 @@
+kind: 'Security'
+body: 'moved Go from `1.27.2` to `1.27.3` everywhere this repository builds with it -- the pin in `pinned-versions.sh`, every `go-version:` in the workflows, the Azure DevOps `GoTool@0` inputs, the GitLab CI Go and Terra images and the `tor-proxy` builder, each image re-pinned to the digest its new tag resolves to -- fixing GO-2026-6809 (CVE-2026-111943): `crypto/x509` now refuses, in `Certificate.Verify`, the intermediate certificates that are no longer trusted, for hosts whose system trust store was never updated'
+time: '2026-10-21T15:32:50.403989734Z'

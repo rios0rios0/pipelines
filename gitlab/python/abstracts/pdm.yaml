@@ -1,5 +1,5 @@
 .pdm:
-  image: 'ghcr.io/rios0rios0/pipelines/python:3.10-pdm-bookworm@sha256:189f1536168fa9203d0d06c267baeab45cc22a5fe4fdfe671363335cfe59481e'
+  image: 'ghcr.io/rios0rios0/pipelines/python:3.14-pdm-trixie@sha256:e3f16e83909deee7b53491c6e1e5f77e35fdecacbabbc6b74bc8ddebdd1df185'
   cache: # relative to the project directory ($CI_PROJECT_DIR)
     key: "$CI_JOB_NAME"
     paths:

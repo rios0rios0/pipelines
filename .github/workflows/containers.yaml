@@ -10,7 +10,7 @@ on:
     inputs:
       container_folder:
         description: >-
-          Container folder name to build (e.g. "golang.1.26-awscli").
+          Container folder name to build (e.g. "golang.1.27-awscli").
           Leave empty to build ALL containers.
         required: false
         default: ''

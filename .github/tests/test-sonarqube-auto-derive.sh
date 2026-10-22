@@ -172,31 +172,38 @@ run_log() {
 
 # Print the exit code of the run that produced a properties file.
 run_exit_code() {
-  cat "$(dirname "$1")/exit-code"
+  local props=$1
+  cat "$(dirname "$props")/exit-code"
 }
 
 # Print how many times that run called sonar-scanner.
 scanner_calls() {
-  cat "$(dirname "$1")/.scanner-calls" 2>/dev/null || echo 0
+  local props=$1
+  cat "$(dirname "$props")/.scanner-calls" 2>/dev/null || echo 0
 }
 
 # Print the waits that run asked `sleep` for, space separated, oldest first.
 scanner_sleeps() {
+  local props=$1
   local sleeps
-  sleeps="$(dirname "$1")/.scanner-sleeps"
-  [ -f "$sleeps" ] || return 0
+  sleeps="$(dirname "$props")/.scanner-sleeps"
+  [[ -f "$sleeps" ]] || return 0
   tr '\n' ' ' < "$sleeps" | sed 's/ $//'
 }
 
-# Queue what the stub scanner does on its Nth call of a run: print $4, then exit
-# with $3. A call with nothing queued succeeds silently, which is all the
-# derivation tests need. The plan lives in a fixture directory, which
+# Queue what the stub scanner does on the given call of a run: print the output,
+# then exit with the code. A call with nothing queued succeeds silently, which
+# is all the derivation tests need. The plan lives in a fixture directory, which
 # run_with_fixtures copies into the work directory.
-# Usage: plan_scanner_call fixture-dir N exit-code output
+# Usage: plan_scanner_call fixture-dir call-number exit-code output
 plan_scanner_call() {
-  mkdir -p "$1/.scanner-plan"
-  printf '%s\n' "$4" > "$1/.scanner-plan/$2.out"
-  printf '%s\n' "$3" > "$1/.scanner-plan/$2.rc"
+  local fixtures=$1
+  local call=$2
+  local exit_code=$3
+  local output=$4
+  mkdir -p "$fixtures/.scanner-plan"
+  printf '%s\n' "$output" > "$fixtures/.scanner-plan/$call.out"
+  printf '%s\n' "$exit_code" > "$fixtures/.scanner-plan/$call.rc"
 }
 
 # Create an empty fixture tree with a `.github/workflows` directory and print its path.

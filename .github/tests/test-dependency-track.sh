@@ -65,33 +65,33 @@ trap cleanup EXIT
 # does when no response came back at all. A stub `sleep` records each wait in
 # SLEEPS instead of waiting, so the retry tests run the real delays in no time.
 run_against_stub() {
-  local bomContent="$1"
+  local bom_content="$1"
   shift
 
-  local projectDir="$WORK_DIR/project"
-  rm -rf "$projectDir"
-  mkdir -p "$projectDir/bin" "$projectDir/build/reports"
+  local project_dir="$WORK_DIR/project"
+  rm -rf "$project_dir"
+  mkdir -p "$project_dir/bin" "$project_dir/build/reports"
 
-  if [[ "$bomContent" != 'NO_BOM' ]]; then
-    printf '%s' "$bomContent" > "$projectDir/build/reports/bom.json"
+  if [[ "$bom_content" != 'NO_BOM' ]]; then
+    printf '%s' "$bom_content" > "$project_dir/build/reports/bom.json"
   fi
 
-  local argvFile="$projectDir/argv.txt"
-  local stdinFile="$projectDir/curl-stdin.txt"
-  local statusFile="$projectDir/statuses.txt"
-  local callsFile="$projectDir/calls.txt"
-  local sleepsFile="$projectDir/sleeps.txt"
-  cat > "$projectDir/bin/curl" <<EOF
+  local argv_file="$project_dir/argv.txt"
+  local stdin_file="$project_dir/curl-stdin.txt"
+  local status_file="$project_dir/statuses.txt"
+  local calls_file="$project_dir/calls.txt"
+  local sleeps_file="$project_dir/sleeps.txt"
+  cat > "$project_dir/bin/curl" <<EOF
 #!/usr/bin/env sh
-printf '%s\n' "\$@" > '$argvFile'
-cat > '$stdinFile'
-echo call >> '$callsFile'
+printf '%s\n' "\$@" > '$argv_file'
+cat > '$stdin_file'
+echo call >> '$calls_file'
 # run.sh reads this as the HTTP status from --write-out.
 status=200
-if [ -s '$statusFile' ]; then
-  status=\$(head -n 1 '$statusFile')
-  tail -n +2 '$statusFile' > '$statusFile.next'
-  mv '$statusFile.next' '$statusFile'
+if [ -s '$status_file' ]; then
+  status=\$(head -n 1 '$status_file')
+  tail -n +2 '$status_file' > '$status_file.next'
+  mv '$status_file.next' '$status_file'
 fi
 # Any answer but a 2xx carries a body, as Cloudflare's \`error code: 521\` does,
 # written where run.sh told curl to put the response.
@@ -109,28 +109,28 @@ printf '%s' "\$status"
 [ "\$status" = '000' ] && exit 7
 exit 0
 EOF
-  chmod +x "$projectDir/bin/curl"
-  cat > "$projectDir/bin/sleep" <<EOF
+  chmod +x "$project_dir/bin/curl"
+  cat > "$project_dir/bin/sleep" <<EOF
 #!/usr/bin/env sh
-printf '%s\n' "\$1" >> '$sleepsFile'
+printf '%s\n' "\$1" >> '$sleeps_file'
 EOF
-  chmod +x "$projectDir/bin/sleep"
+  chmod +x "$project_dir/bin/sleep"
 
-  : > "$argvFile"
-  : > "$stdinFile"
-  : > "$callsFile"
-  : > "$sleepsFile"
+  : > "$argv_file"
+  : > "$stdin_file"
+  : > "$calls_file"
+  : > "$sleeps_file"
   if [[ -n "${STUB_STATUSES:-}" ]]; then
     # One status per word, so the expansion is unquoted on purpose.
     # shellcheck disable=SC2086
-    printf '%s\n' $STUB_STATUSES > "$statusFile"
+    printf '%s\n' $STUB_STATUSES > "$status_file"
   else
-    : > "$statusFile"
+    : > "$status_file"
   fi
 
   set +e
   (
-    cd "$projectDir" || exit 1
+    cd "$project_dir" || exit 1
     # Clear every variable under test so each case starts from a known state;
     # a leaked CI variable from the host would make these results meaningless.
     unset CI_COMMIT_TAG CI_COMMIT_BRANCH CI_DEFAULT_BRANCH CI_MERGE_REQUEST_IID
@@ -140,21 +140,21 @@ EOF
     unset DEPENDENCY_TRACK_PROJECT_NAME DEPENDENCY_TRACK_PROJECT_VERSION
     unset DEPENDENCY_TRACK_UPLOAD_ON_PULL_REQUEST
     unset DEPENDENCY_TRACK_ATTEMPTS DEPENDENCY_TRACK_RETRY_DELAY
-    export PATH="$projectDir/bin:$PATH"
+    export PATH="$project_dir/bin:$PATH"
     export SCRIPTS_DIR
     export REPORT_PATH='build/reports'
     export DEPENDENCY_TRACK_HOST_URL='https://dt.example.com'
     export DEPENDENCY_TRACK_TOKEN='fixture-token-placeholder'
-    env "$@" "$RUN_SH" > "$projectDir/stdout.txt" 2>&1
+    env "$@" "$RUN_SH" > "$project_dir/stdout.txt" 2>&1
   )
   RC=$?
   set -e
 
-  ARGV="$(cat "$argvFile")"
-  CURL_STDIN="$(cat "$stdinFile")"
-  STDOUT="$(cat "$projectDir/stdout.txt")"
-  CALLS="$(wc -l < "$callsFile" | tr -d ' ')"
-  SLEEPS="$(tr '\n' ' ' < "$sleepsFile")"
+  ARGV="$(cat "$argv_file")"
+  CURL_STDIN="$(cat "$stdin_file")"
+  STDOUT="$(cat "$project_dir/stdout.txt")"
+  CALLS="$(wc -l < "$calls_file" | tr -d ' ')"
+  SLEEPS="$(tr '\n' ' ' < "$sleeps_file")"
   SLEEPS="${SLEEPS% }"
 }
 

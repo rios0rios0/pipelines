@@ -498,10 +498,11 @@ SONARQUBE_TRANSIENT_FAILURE='connection reset|connection refused|failed to conne
 # (`-q`), so the first never dies of SIGPIPE: under `pipefail` that would read
 # as "not transient".
 sonar_scanner_failure_is_transient() {
-  if grep -q 'QUALITY GATE STATUS' "$1"; then
+  _ss_scanner_log="$1"
+  if grep -q 'QUALITY GATE STATUS' "$_ss_scanner_log"; then
     return 1
   fi
-  grep -E 'ERROR|Caused by' "$1" | grep -Ei "$SONARQUBE_TRANSIENT_FAILURE" > /dev/null
+  grep -E 'ERROR|Caused by' "$_ss_scanner_log" | grep -Ei "$SONARQUBE_TRANSIENT_FAILURE" > /dev/null
 }
 
 run_sonar_scanner() {

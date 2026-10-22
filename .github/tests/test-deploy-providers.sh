@@ -851,6 +851,8 @@ echo "11. Functional: require-checks"
 # depends on.
 REQUIRE_SH="$SCRIPTS_DIR/global/scripts/deploy/require-checks/run.sh"
 RC_DIR="$WORK_DIR/require-checks"
+# The one required name most cases here pass on their own.
+RC_REQUIRED='tests > test:all'
 mkdir -p "$RC_DIR/stub"
 cat > "$RC_DIR/stub/gh" <<'STUB'
 #!/bin/sh
@@ -932,7 +934,7 @@ assert_true "require-checks: a failed required check is refused" "[[ $RC_STATUS 
 RC_STATUS=0
 (
   cd "$RC_DIR" || exit 1
-  REQUIRE_CHECKS_NAMES='tests > test:all' REQUIRE_CHECKS_COMMIT=abc \
+  REQUIRE_CHECKS_NAMES="$RC_REQUIRED" REQUIRE_CHECKS_COMMIT=abc \
   REQUIRE_CHECKS_REPOSITORY=o/r DEPLOY_DRY_RUN=true \
   SCRIPTS_DIR="$SCRIPTS_DIR" sh "$REQUIRE_SH"
 ) > "$RC_DIR/out.txt" 2>&1 || RC_STATUS=$?
@@ -959,7 +961,7 @@ RC_STATUS=0
 (
   cd "$RC_DIR" || exit 1
   env -i PATH="$RC_BIN" HOME="$RC_DIR" \
-    REQUIRE_CHECKS_NAMES='tests > test:all' REQUIRE_CHECKS_COMMIT=abc \
+    REQUIRE_CHECKS_NAMES="$RC_REQUIRED" REQUIRE_CHECKS_COMMIT=abc \
     REQUIRE_CHECKS_REPOSITORY=o/r DEPLOY_DRY_RUN=true SCRIPTS_DIR="$SCRIPTS_DIR" \
     "$RC_BIN/sh" "$REQUIRE_SH"
 ) > "$RC_DIR/out.txt" 2>&1 || RC_STATUS=$?
@@ -972,7 +974,7 @@ RC_STATUS=0
 (
   cd "$RC_DIR" || exit 1
   env -i PATH="$RC_BIN" HOME="$RC_DIR" \
-    REQUIRE_CHECKS_NAMES='tests > test:all' REQUIRE_CHECKS_COMMIT=abc \
+    REQUIRE_CHECKS_NAMES="$RC_REQUIRED" REQUIRE_CHECKS_COMMIT=abc \
     REQUIRE_CHECKS_REPOSITORY=o/r SCRIPTS_DIR="$SCRIPTS_DIR" \
     "$RC_BIN/sh" "$REQUIRE_SH"
 ) > "$RC_DIR/out.txt" 2>&1 || RC_STATUS=$?
@@ -994,7 +996,7 @@ RC_STATUS=0
 (
   cd "$RC_DIR" || exit 1
   env -i PATH="$RC_NOTRANSPORT_BIN" HOME="$RC_DIR" \
-    REQUIRE_CHECKS_NAMES='tests > test:all' REQUIRE_CHECKS_COMMIT=abc \
+    REQUIRE_CHECKS_NAMES="$RC_REQUIRED" REQUIRE_CHECKS_COMMIT=abc \
     REQUIRE_CHECKS_REPOSITORY=o/r SCRIPTS_DIR="$SCRIPTS_DIR" \
     "$RC_NOTRANSPORT_BIN/sh" "$REQUIRE_SH"
 ) > "$RC_DIR/out.txt" 2>&1 || RC_STATUS=$?
@@ -1065,7 +1067,7 @@ RC_STATUS=0
   cd "$RC_DIR" || exit 1
   env -i PATH="$RC_CURL_BIN" HOME="$RC_DIR" \
     CURL_STUB_FIXTURE="$RC_DIR/rest-green.json" \
-    REQUIRE_CHECKS_NAMES='tests > test:all' \
+    REQUIRE_CHECKS_NAMES="$RC_REQUIRED" \
     REQUIRE_CHECKS_COMMIT=abc REQUIRE_CHECKS_REPOSITORY=o/r SCRIPTS_DIR="$SCRIPTS_DIR" \
     "$RC_CURL_BIN/sh" "$REQUIRE_SH"
 ) > "$RC_DIR/out.txt" 2>&1 || RC_STATUS=$?
@@ -1197,7 +1199,7 @@ run_require_checks_job() {
   (
     cd "$RC_DIR" || exit 1
     env -i PATH="$bin" HOME="$RC_DIR" GH_STUB_FIXTURE="$RC_DIR/$fixture" \
-      REQUIRE_CHECKS_NAMES='tests > test:all' REQUIRE_CHECKS_COMMIT=abc \
+      REQUIRE_CHECKS_NAMES="$RC_REQUIRED" REQUIRE_CHECKS_COMMIT=abc \
       REQUIRE_CHECKS_REPOSITORY=o/r REQUIRE_CHECKS_NEEDS="$needs" \
       GITHUB_REF_TYPE="$ref_type" GITHUB_SHA="$run_sha" GITHUB_REPOSITORY=o/r \
       SCRIPTS_DIR="$SCRIPTS_DIR" "$bin/sh" "$REQUIRE_SH"
@@ -1278,7 +1280,7 @@ RC_STATUS=0
 (
   cd "$RC_DIR" || exit 1
   env -i PATH="$RC_BIN" HOME="$RC_DIR" DEPLOY_DRY_RUN=true \
-    REQUIRE_CHECKS_NAMES='tests > test:all' REQUIRE_CHECKS_COMMIT=abc \
+    REQUIRE_CHECKS_NAMES="$RC_REQUIRED" REQUIRE_CHECKS_COMMIT=abc \
     REQUIRE_CHECKS_REPOSITORY=o/r REQUIRE_CHECKS_NEEDS="$NEEDS_GREEN" \
     GITHUB_REF_TYPE=branch GITHUB_SHA=abc GITHUB_REPOSITORY=o/r \
     SCRIPTS_DIR="$SCRIPTS_DIR" "$RC_BIN/sh" "$REQUIRE_SH"

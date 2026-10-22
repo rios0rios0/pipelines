@@ -1717,6 +1717,17 @@ The ignore rules are written as `sonar.issue.ignore.multicriteria.fp<N>` entries
 `sonar-project.properties` rather than in the SonarQube UI: a list in the file overrides the one on the
 server.
 
+**A server that is briefly away.** A SonarQube server that is restarting fails whichever call the scanner
+makes next, and the scanner exits with the same code a broken analysis gets. The runner therefore reads the
+scanner's output and runs it again only when an `ERROR` or `Caused by` line names a refused or reset
+connection, a timeout or a 5xx answer (Cloudflare's `521` included), and never once the quality gate has
+given its verdict. Any other failure fails at once, with the scanner's exit code.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SONARQUBE_ATTEMPTS` | `5` | Scanner runs while the server is briefly away |
+| `SONARQUBE_RETRY_DELAY` | `30` | Seconds before the first retry, multiplied by the attempt number: five minutes in all |
+
 #### Dependency-Track configuration
 
 The Python CycloneDX generator keeps the static `[project].version` read from
@@ -1738,6 +1749,8 @@ The uploader is driven entirely by environment variables. Only the first two are
 | `DEPENDENCY_TRACK_IS_LATEST` | auto-detected | Force the `isLatest` flag on or off |
 | `DEPENDENCY_TRACK_UPLOAD_ON_PULL_REQUEST` | `false` | Upload from merge/pull-request builds too |
 | `DEPENDENCY_TRACK_INSECURE` | unset | Skip TLS verification (prefer trusting the CA on the agent) |
+| `DEPENDENCY_TRACK_ATTEMPTS` | `5` | Upload attempts while the server is briefly away: no response, `408`, `429` or `5xx` (Cloudflare's `521` included). Any other answer fails at once |
+| `DEPENDENCY_TRACK_RETRY_DELAY` | `30` | Seconds before the first retry, multiplied by the attempt number: 30s, 60s, 90s and 120s, five minutes in all |
 
 Three behaviours are worth knowing before adopting it, because each one is silent:
 

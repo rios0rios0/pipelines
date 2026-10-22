@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# ARGV, CURL_STDIN, STDOUT, RC and GITLAB_ABSTRACT are read only from inside the
-# single-quoted condition strings that `assert_true` evaluates, which ShellCheck
-# cannot follow — so every one of them reads as unused. The alternative is
-# passing five values into each assertion, which would bury what each test is
-# actually claiming.
+# ARGV, CURL_STDIN, STDOUT, RC, CALLS, SLEEPS and GITLAB_ABSTRACT are read only
+# from inside the single-quoted condition strings that `assert_true` evaluates,
+# which ShellCheck cannot follow — so every one of them reads as unused. The
+# alternative is passing seven values into each assertion, which would bury what
+# each test is actually claiming.
 # shellcheck disable=SC2034
 
 set -e
@@ -57,7 +57,13 @@ trap cleanup EXIT
 
 # Stands up a throwaway project holding $BOM as build/reports/bom.json, puts a
 # stub `curl` on PATH that records its argv AND its stdin, runs the script, and
-# leaves the results in $ARGV / $CURL_STDIN / $STDOUT / $RC.
+# leaves the results in $ARGV / $CURL_STDIN / $STDOUT / $RC. ARGV and CURL_STDIN
+# are the LAST call's; CALLS counts the calls.
+#
+# The stub answers 200 unless STUB_STATUSES queues other answers, one per call
+# (`STUB_STATUSES='521 200' run_against_stub ...`), and `000` exits the way curl
+# does when no response came back at all. A stub `sleep` records each wait in
+# SLEEPS instead of waiting, so the retry tests run the real delays in no time.
 run_against_stub() {
   local bomContent="$1"
   shift
@@ -72,17 +78,55 @@ run_against_stub() {
 
   local argvFile="$projectDir/argv.txt"
   local stdinFile="$projectDir/curl-stdin.txt"
+  local statusFile="$projectDir/statuses.txt"
+  local callsFile="$projectDir/calls.txt"
+  local sleepsFile="$projectDir/sleeps.txt"
   cat > "$projectDir/bin/curl" <<EOF
 #!/usr/bin/env sh
 printf '%s\n' "\$@" > '$argvFile'
 cat > '$stdinFile'
+echo call >> '$callsFile'
 # run.sh reads this as the HTTP status from --write-out.
-printf '200'
+status=200
+if [ -s '$statusFile' ]; then
+  status=\$(head -n 1 '$statusFile')
+  tail -n +2 '$statusFile' > '$statusFile.next'
+  mv '$statusFile.next' '$statusFile'
+fi
+# Any answer but a 2xx carries a body, as Cloudflare's \`error code: 521\` does,
+# written where run.sh told curl to put the response.
+output=''
+previous=''
+for arg in "\$@"; do
+  [ "\$previous" = '--output' ] && output="\$arg"
+  previous="\$arg"
+done
+case "\$status" in
+  2??) ;;
+  *) [ -n "\$output" ] && printf 'error code: %s\n' "\$status" > "\$output" ;;
+esac
+printf '%s' "\$status"
+[ "\$status" = '000' ] && exit 7
+exit 0
 EOF
   chmod +x "$projectDir/bin/curl"
+  cat > "$projectDir/bin/sleep" <<EOF
+#!/usr/bin/env sh
+printf '%s\n' "\$1" >> '$sleepsFile'
+EOF
+  chmod +x "$projectDir/bin/sleep"
 
   : > "$argvFile"
   : > "$stdinFile"
+  : > "$callsFile"
+  : > "$sleepsFile"
+  if [[ -n "${STUB_STATUSES:-}" ]]; then
+    # One status per word, so the expansion is unquoted on purpose.
+    # shellcheck disable=SC2086
+    printf '%s\n' $STUB_STATUSES > "$statusFile"
+  else
+    : > "$statusFile"
+  fi
 
   set +e
   (
@@ -95,6 +139,7 @@ EOF
     unset DEPENDENCY_TRACK_PARENT_NAME DEPENDENCY_TRACK_PARENT_VERSION
     unset DEPENDENCY_TRACK_PROJECT_NAME DEPENDENCY_TRACK_PROJECT_VERSION
     unset DEPENDENCY_TRACK_UPLOAD_ON_PULL_REQUEST
+    unset DEPENDENCY_TRACK_ATTEMPTS DEPENDENCY_TRACK_RETRY_DELAY
     export PATH="$projectDir/bin:$PATH"
     export SCRIPTS_DIR
     export REPORT_PATH='build/reports'
@@ -108,6 +153,9 @@ EOF
   ARGV="$(cat "$argvFile")"
   CURL_STDIN="$(cat "$stdinFile")"
   STDOUT="$(cat "$projectDir/stdout.txt")"
+  CALLS="$(wc -l < "$callsFile" | tr -d ' ')"
+  SLEEPS="$(tr '\n' ' ' < "$sleepsFile")"
+  SLEEPS="${SLEEPS% }"
 }
 
 # A BOM shaped the way cyclonedx-gomod / cyclonedx-npm actually emit one.
@@ -344,6 +392,54 @@ for f in "$SCRIPTS_DIR"/gitlab/*/stages/35-management/*.yaml; do
       'grep -q "curl jq git" "$f"'
   fi
 done
+
+echo '============================================================'
+echo 'Test 11: a server that is briefly away is retried, nothing else is'
+echo '============================================================'
+# A restarting instance answers for a few minutes with no response at all, its
+# proxy's 502/503/504, or Cloudflare's 521 ("origin down"). On 2026-10-21 one
+# consuming instance went away for about two minutes, and the upload that
+# reached it then was answered 521 while the same job passed on its next run. The
+# upload is an upsert, so sending it again is safe; an answer that would be the
+# same on every attempt is not retried.
+STUB_STATUSES='521 521 200' run_against_stub "$BOM_OK" CI_COMMIT_BRANCH=main CI_DEFAULT_BRANCH=main
+assert_true 'a 521 is retried until the upload lands' '[[ $CALLS -eq 3 && $RC -eq 0 ]]'
+assert_true 'the wait grows with each attempt (30s, then 60s)' '[[ "$SLEEPS" == "30 60" ]]'
+assert_true 'each retry names the answer and the attempt' '[[ "$STDOUT" == *"HTTP 521"*"attempt 1 of 5"* ]]'
+assert_true 'the upload that lands is reported' '[[ "$STDOUT" == *"Uploaded BOM to Dependency-Track"* ]]'
+assert_true 'the retried call still sends the key on stdin' '[[ "$CURL_STDIN" == *"X-Api-Key: fixture-token-placeholder"* ]]'
+assert_true 'and never on argv' '[[ "$ARGV" != *"fixture-token-placeholder"* ]]'
+
+STUB_STATUSES='000 502 503 504' run_against_stub "$BOM_OK" CI_COMMIT_BRANCH=main CI_DEFAULT_BRANCH=main
+assert_true 'no response, 502, 503 and 504 are retried too' '[[ $CALLS -eq 5 && $RC -eq 0 ]]'
+
+STUB_STATUSES='408 429' run_against_stub "$BOM_OK" CI_COMMIT_BRANCH=main CI_DEFAULT_BRANCH=main
+assert_true '408 and 429 ask for a retry and get one' '[[ $CALLS -eq 3 && $RC -eq 0 ]]'
+
+for status in 400 401 403 404 413; do
+  STUB_STATUSES="$status" run_against_stub "$BOM_OK" CI_COMMIT_BRANCH=main CI_DEFAULT_BRANCH=main
+  assert_true "HTTP $status fails at once, without a retry" \
+    '[[ $CALLS -eq 1 && $RC -ne 0 && -z "$SLEEPS" ]]'
+done
+assert_true 'and the refusal shows the answer and its body' \
+  '[[ "$STDOUT" == *"rejected the BOM upload (HTTP 413)"* && "$STDOUT" == *"| error code: 413"* ]]'
+
+STUB_STATUSES='521 521 521 521 521 521' run_against_stub "$BOM_OK" CI_COMMIT_BRANCH=main CI_DEFAULT_BRANCH=main
+assert_true 'a server still away after five attempts fails the job' '[[ $CALLS -eq 5 && $RC -ne 0 ]]'
+assert_true 'after waiting five minutes in all (30+60+90+120s)' '[[ "$SLEEPS" == "30 60 90 120" ]]'
+assert_true 'naming the attempts and the last answer' '[[ "$STDOUT" == *"HTTP 521 on all 5 attempts"* ]]'
+assert_true 'with the last response body' '[[ "$STDOUT" == *"| error code: 521"* ]]'
+
+STUB_STATUSES='503 503 503' run_against_stub "$BOM_OK" CI_COMMIT_BRANCH=main CI_DEFAULT_BRANCH=main \
+  DEPENDENCY_TRACK_ATTEMPTS=2 DEPENDENCY_TRACK_RETRY_DELAY=7
+assert_true 'DEPENDENCY_TRACK_ATTEMPTS bounds the calls' '[[ $CALLS -eq 2 && $RC -ne 0 ]]'
+assert_true 'DEPENDENCY_TRACK_RETRY_DELAY sets the wait' '[[ "$SLEEPS" == "7" ]]'
+
+STUB_STATUSES='503 200' run_against_stub "$BOM_OK" CI_COMMIT_BRANCH=main CI_DEFAULT_BRANCH=main \
+  DEPENDENCY_TRACK_ATTEMPTS=many DEPENDENCY_TRACK_RETRY_DELAY=soon
+assert_true 'a non-integer knob warns' \
+  '[[ "$STDOUT" == *"DEPENDENCY_TRACK_ATTEMPTS="*"using 5"* && "$STDOUT" == *"DEPENDENCY_TRACK_RETRY_DELAY="*"using 30"* ]]'
+assert_true 'and falls back to the default instead of giving up' '[[ $CALLS -eq 2 && $RC -eq 0 && "$SLEEPS" == "30" ]]'
 
 echo
 echo '============================================================'

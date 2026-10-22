@@ -14,8 +14,14 @@
 # The deployment itself is the same `50-deployment/flyio` action GitLab and Azure DevOps reach
 # through their own templates, so the behaviour is one shared script (`global/scripts/deploy/flyio/
 # run.sh`) on all three platforms. This file is the GitHub convenience layer over it, not a second
-# implementation of it. The build stays `--remote-only` on Fly's builder, so no Docker daemon is
-# required in the deployment job.
+# implementation of it.
+#
+# **The deploy ships the image `delivery > docker` pushed, not a second build of it.** The deploy
+# copies that image's linux/amd64 build from GHCR into `registry.fly.io` with `crane`, registry to
+# registry, and deploys it by digest, so the artifact CI produced is the one that runs and Fly's
+# builder is not involved at all. Rebuilding the Dockerfile there took about two of the two and a half
+# minutes a deploy spent, and produced an image with a different digest. `fly_build_from_source`
+# restores that build (`--remote-only`). Neither path needs a Docker daemon in the deployment job.
 #
 # Consumers pin this workflow to a FULL 40-character commit SHA (an abbreviated one is rejected
 # before any job starts, with an error that reads like the commit is missing rather than like the
@@ -203,17 +209,38 @@ on:
         description: |
           Deployment strategy (`rolling`, `immediate`, `canary`, `bluegreen`). Left unset, Fly
           picks its own default for the app's layout.
+      fly_build_from_source:
+        type: 'boolean'
+        required: false
+        default: false
+        description: |
+          Build the Dockerfile from source on Fly's builder (`flyctl deploy --remote-only`) instead
+          of deploying the image `delivery > docker` pushed in this run. Off by default.
+
+          By default the deploy copies that image's linux/amd64 build from GHCR into
+          `registry.fly.io` and deploys it by digest: the artifact this run built and pushed is the
+          one that runs, and Fly builds nothing. Until this default, every deploy rebuilt the
+          Dockerfile on Fly's builder, which took most of the deploy's time and produced an image
+          with another digest than the one CI had pushed.
+
+          That changes WHAT is deployed wherever `fly.toml` describes a different build. The
+          delivery job builds `.ci/stages/40-delivery/app.Dockerfile` with the repository root as
+          context. A `fly.toml` whose `[build]` names that same file deploys the same image either
+          way -- the one consumer known when the default changed builds it in both places -- but a
+          `fly.toml` naming another Dockerfile, a build target or build arguments of its own now
+          deploys the delivery job's image instead. Set this to keep deploying what `fly.toml`
+          builds.
       version_build_arg:
         type: 'string'
         required: false
         default: ''
         description: |
-          Name of the Dockerfile `ARG` that receives the app's version (e.g. `VERSION`). Passed to
-          BOTH builds of the commit: the image `go-docker.yaml` pushes to the registry, and the one
-          Fly's builder makes from source for the deploy, which never sees the registry's. Each
-          gets the same value -- the release this run cuts, the tag on a tag build, the commit's
-          first 7 characters otherwise -- so an error tracker files a deploy under one release
-          wherever it runs. Empty passes nothing, which is the default.
+          Name of the Dockerfile `ARG` that receives the app's version (e.g. `VERSION`). Handed to
+          the image `go-docker.yaml` pushes to the registry, which is what the deploy ships, so the
+          app reports the release this run cuts, the tag on a tag build, or the commit's first 7
+          characters otherwise. With `fly_build_from_source`, Fly's builder makes its own image
+          from source and is handed the same value, so an error tracker files a deploy under one
+          release wherever it was built. Empty passes nothing, which is the default.
       deployment_environment:
         type: 'string'
         required: false
@@ -309,9 +336,15 @@ jobs:
     # grants, so requesting anything spare turns a working consumer into a permissions error --
     # `deployments: write` is the one to resist here, since nothing in the Fly path touches that
     # API. `checks: read` IS required and is not in the restricted default set.
+    #
+    # `packages: read` is what lets this job's token pull the image `delivery > docker` pushed to
+    # GHCR, which is private unless somebody made it public. It asks no caller for anything new:
+    # that job pushes with `github.token`, which takes `packages: write`, and this job `needs:` it,
+    # so a caller granting no `packages` at all could never have delivered the image this deploys.
     permissions:
       contents: 'read'
       checks: 'read'
+      packages: 'read'
     steps:
       # Skipped entirely when the caller passes nothing. Handed `needs`, a branch run is decided by
       # the jobs this one needs -- the same run's checks, as the scheduler reported them -- and reads
@@ -386,6 +419,17 @@ jobs:
         env:
           ORG_VAR: "${{ inputs.fly_org_var }}"
 
+      # The default ships the image `delivery > docker` pushed in this run, and a run that reached
+      # this job without one has nothing to ship. Refused rather than built on Fly's builder
+      # instead: that would deploy an image this run never pushed -- the state the default exists
+      # to end -- and nothing would say so. `delivery-docker` runs on every event this job does,
+      # so this only fires when the two have drifted apart.
+      - if: "!inputs.fly_build_from_source && needs.go-docker.outputs.image == ''"
+        run: |
+          echo "::error::delivery > docker reported no image for this run, so there is nothing to deploy. Set fly_build_from_source: true to build the Dockerfile on Fly's builder instead."
+          exit 1
+        shell: 'bash'
+
       - uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/flyio@main'
         with:
           fly_api_token: "${{ secrets.fly_api_token }}"
@@ -394,6 +438,10 @@ jobs:
           machine_count: "${{ inputs.fly_machine_count != '' && inputs.fly_machine_count || vars[inputs.fly_machine_count_var] }}"
           config: "${{ inputs.fly_config }}"
           strategy: "${{ inputs.fly_strategy }}"
+          # The image `delivery > docker` pushed in this run, by digest. Empty when the caller opts
+          # out, which makes the deploy build from source on Fly's builder.
+          image: "${{ !inputs.fly_build_from_source && needs.go-docker.outputs.image || '' }}"
+          # Read only by that build from source: the image above was built with its version in it.
           version_build_arg: "${{ inputs.version_build_arg }}"
           # The release this run cut, when it cut one. The deploy that follows a bump merge runs
           # on the branch, where the version would otherwise fall back to the commit while the

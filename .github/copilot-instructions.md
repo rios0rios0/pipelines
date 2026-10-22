@@ -27,7 +27,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-terra-test-roots` - Test the terra-test tier's opt-in root-module run (`TERRA_TEST_ROOTS`) specifically
 - `make test-terra-install` - Test the terra CLI installer (pin check, installs that run together on one HOME, Azure DevOps step stops at a failed install) specifically
 - `make test-docker-multi-arch` - Test 40-delivery/docker multi-arch contract specifically
-- `make test-build-version` - Test the version build argument (shared helper, GitHub image delivery, Fly.io deploy, Go workflow wiring) specifically
+- `make test-build-version` - Test the version build argument (shared helper, GitHub image delivery, Fly.io deploy, Go workflow wiring) and the delivered image's way to the Fly.io deploy specifically
 - `make test-containers-detect` - Test the Container Images change detection (deleted/renamed folders, dispatch inputs) specifically
 - `make test-basic-checks` - Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) specifically
 - `make test-fixture-isolation` - Test that every suite builds its fixtures in mktemp space and guards every `cd` specifically
@@ -373,7 +373,7 @@ pipelines/
 │   │   │   ├── vercel/        # Vercel (vercel CLI)
 │   │   │   ├── render/        # Render (REST API, polled to a terminal state)
 │   │   │   ├── netlify/       # Netlify (netlify-cli)
-│   │   │   └── flyio/         # Fly.io (flyctl, remote build)
+│   │   │   └── flyio/         # Fly.io (flyctl; a delivered image copied with crane, or a remote build)
 │   │   └── shared/            # Common utilities
 │   ├── containers/            # Custom Docker images
 │   │   ├── golang.*/          # Go development images
@@ -419,7 +419,7 @@ Each is wired identically on all three CI platforms and delegates to one shared 
 | **Vercel**     | 100 GB transfer, 1M edge requests — **non-commercial use only**             | `vercel` CLI                         |
 | **Render**     | 512 MB web service, sleeps after 15 min; free Postgres **expires at 30 days** | REST API (polled to terminal state) |
 | **Netlify**    | 300 credits/month (~20 deploys)                                             | `netlify-cli`                        |
-| **Fly.io**     | **None** — withdrawn 2024; ~$2/mo always-on                                 | `flyctl` (remote build)              |
+| **Fly.io**     | **None** — withdrawn 2024; ~$2/mo always-on                                 | `flyctl` (delivered image or remote build) |
 
 Two rules govern this family and must not be relaxed:
 

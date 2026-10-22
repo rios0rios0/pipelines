@@ -39,7 +39,7 @@ set -e
 # flow style would slip past them; none is, and one would fail review long
 # before this.
 #
-# Tests 10 to 16 are the exceptions and do need PyYAML. Test 10 asserts under a
+# Tests 10 to 17 are the exceptions and do need PyYAML. Test 10 asserts under a
 # key YAML 1.1 RESOLVES -- `on:` parses as the boolean `true`, so `runs_on` sits
 # under no key spelled `on` at all and no indentation rule can reach it -- and
 # Test 11 needs the `if:` as ONE expression, which a block scalar spreads over
@@ -51,7 +51,8 @@ set -e
 # over several lines just as Test 11's does, and Test 16 tells a job-level
 # `continue-on-error` from a step-level one, which only nesting distinguishes --
 # and follows the GitLab and Azure DevOps twins through their includes and
-# templates. All seven
+# templates -- and Test 17 reads a job's `permissions:` beside the `with:` of its
+# steps. All eight
 # are written so that a host without PyYAML sees the assertion FAIL BY NAME
 # rather than a traceback -- see the comments there. CI installs `python3-yaml`
 # (`.github/workflows/ci.yaml`), and `make test` already requires it for
@@ -1677,6 +1678,103 @@ PY
 )"
 assert_empty "the Go pipeline's GitLab and Azure DevOps twins keep no check advisory unless listed" \
   "$BAD_ADVISORY_TWIN"
+echo ""
+
+echo "Test 17: a deployment handed a delivered image may pull it"
+
+# `go-flyio.yaml` deploys the image `delivery > docker` pushed to GHCR instead of building one, and
+# its deployment job pulls that image with its own `GITHUB_TOKEN`. A job that declares
+# `permissions:` gets `none` for every scope it leaves out, so without `packages: read` the pull of
+# a private image is refused -- at deploy time, after every check has passed, and as an
+# authentication error that reads like a bad token rather than a missing grant.
+#
+# Asserted over every workflow, not over `go-flyio.yaml` alone, so the next deployment composed on a
+# delivered image is held too: a job whose step is handed a `needs.<job>.outputs.image` and that
+# declares `permissions:` must grant `packages` (`read` or `write`, or the `read-all` / `write-all`
+# shorthand). A job declaring none inherits its caller's grant and is not asked. The scan must find
+# at least one such job, so renaming the output cannot make it pass by reading nothing, and the
+# classifier is run against canaries first.
+BAD_PACKAGES_GRANT="$(python3 - "$WORKFLOWS_DIR" <<'PY'
+import glob
+import os
+import re
+import sys
+
+try:
+    import yaml
+except ImportError:
+    print('PyYAML is required for this assertion '
+          '(CI installs python3-yaml; locally: pip install pyyaml)')
+    sys.exit(0)
+
+workflows_dir = sys.argv[1]
+DELIVERED = re.compile(r'needs\.[A-Za-z0-9_-]+\.outputs\.image\b')
+
+
+def handed_an_image(job):
+    for step in job.get('steps') or []:
+        for value in (step.get('with') or {}).values():
+            if DELIVERED.search(str(value)):
+                return True
+    return False
+
+
+def may_pull(job):
+    """None when the job declares no `permissions:` (it inherits), else whether they grant packages."""
+    if 'permissions' not in job:
+        return None
+    grant = job['permissions']
+    if isinstance(grant, str):
+        return grant in ('read-all', 'write-all')
+    if isinstance(grant, dict):
+        return str(grant.get('packages', 'none')) in ('read', 'write')
+    return False
+
+
+IMAGE = "${{ !inputs.opt_out && needs.go-docker.outputs.image || '' }}"
+CANARIES = [
+    ({'permissions': {'contents': 'read'}, 'steps': [{'with': {'image': IMAGE}}]}, False),
+    ({'permissions': {'contents': 'read', 'packages': 'read'}, 'steps': [{'with': {'image': IMAGE}}]}, True),
+    ({'permissions': {'packages': 'write'}, 'steps': [{'with': {'image': IMAGE}}]}, True),
+    ({'permissions': 'read-all', 'steps': [{'with': {'image': IMAGE}}]}, True),
+    ({'permissions': {}, 'steps': [{'with': {'image': IMAGE}}]}, False),
+    ({'steps': [{'with': {'image': IMAGE}}]}, None),
+]
+
+problems = []
+for job, expected in CANARIES:
+    if not handed_an_image(job) or may_pull(job) != expected:
+        problems.append(f'the classifier misreads the canary {job!r}')
+if handed_an_image({'steps': [{'with': {'version': '${{ needs.go-docker.outputs.tag_name }}'}}]}):
+    problems.append('the classifier reads a `tag_name` output as an image')
+
+examined = 0
+for path in sorted(glob.glob(os.path.join(workflows_dir, '*.yaml'))):
+    name = os.path.basename(path)
+    try:
+        with open(path, encoding='utf-8') as handle:
+            document = yaml.safe_load(handle) or {}
+        for job_name, job in (document.get('jobs') or {}).items():
+            job = job or {}
+            if not handed_an_image(job):
+                continue
+            examined += 1
+            if may_pull(job) is False:
+                problems.append(f'{name}: job {job_name} is handed a delivered image, but its '
+                                f'`permissions:` grant no `packages` -- add `packages: read`, or its '
+                                f'token cannot pull a private image')
+    except (OSError, yaml.YAMLError) as error:
+        problems.append(f'{name}: unreadable ({error})')
+    except Exception as error:                      # noqa: BLE001 -- see Test 10's note
+        problems.append(f'{name}: {type(error).__name__}: {error}')
+
+if not examined:
+    problems.append(f'no job under {workflows_dir} is handed a delivered image -- the scan read nothing')
+
+print('\n'.join(problems))
+PY
+)"
+assert_empty "every deployment handed a delivered image may pull it" "$BAD_PACKAGES_GRANT"
 echo ""
 
 echo "================================"

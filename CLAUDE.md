@@ -29,7 +29,7 @@ make test-terraform-provider-mirror  # Test the local Terraform provider mirror 
 make test-terra-test-roots  # Test the terra-test tier's opt-in root-module run (`TERRA_TEST_ROOTS`) only
 make test-terra-install  # Test the terra CLI installer (pin check, installs that run together on one HOME, Azure DevOps step stops at a failed install) only
 make test-docker-multi-arch  # Test 40-delivery/docker multi-arch contract only
-make test-build-version  # Test the version build argument (shared helper, GitHub image delivery, Fly.io deploy, Go workflow wiring) only
+make test-build-version  # Test the version build argument (shared helper, GitHub image delivery, Fly.io deploy, Go workflow wiring) and the delivered image's way to the Fly.io deploy only
 make test-containers-detect  # Test the Container Images change detection (deleted/renamed folders, dispatch inputs) only
 make test-basic-checks # Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) only
 make test-fixture-isolation  # Test that every suite builds its fixtures in mktemp space and guards every cd only
@@ -145,21 +145,24 @@ explicitly; `secrets: inherit` fails Semgrep's
 
 ### Supply-Chain Pinning
 
-**Enforced by `.github/tests/test-supply-chain.sh` (`make test-supply-chain`), 27 assertions, every one of
+**Enforced by `.github/tests/test-supply-chain.sh` (`make test-supply-chain`), 28 assertions, every one of
 them proven to fire against a deliberate violation.** Read this before adding an action, an image, or
 anything that downloads a binary.
 
 | What | Pinned to | Enforced by |
 |------|-----------|-------------|
-| Third-party GitHub Actions | 40-character commit SHA + trailing `# vX.Y.Z` comment | assertions 1-2 |
-| Container images (`image:`, `FROM`) | `tag@sha256:<digest>` | assertions 3-4 |
-| Downloaded binaries | exact version **and** a committed SHA-256 | assertions 6-12 |
-| `go install` / `pip` / `gem` / `npx` | exact version | assertions 15-18 |
+| Third-party GitHub Actions | 40-character commit SHA + trailing `# vX.Y.Z` comment | assertions 1-4 |
+| Container images (`image:`, `FROM`) | `tag@sha256:<digest>` | assertions 5-6 |
+| Downloaded binaries | exact version **and** a committed SHA-256 | assertions 8-15 |
+| `go install` / `pip` / `gem` / `npx` | exact version | assertions 16-19 |
 
 `global/scripts/shared/pinned-versions.sh` holds every version and digest; `verify-download.sh` is the
 only sanctioned way to fetch a binary, and it DELETES an artifact whose checksum does not match rather
 than merely reporting it — a later step that only tests for existence would otherwise install the thing
-just rejected.
+just rejected. Every `download_verified` call is handed a digest its own script resolved through
+`pinned_digest` (assertion 15): `SKIP` or a digest typed into an installer would pass through the
+verifier and verify nothing this repository decided. The Dart and Flutter SDKs are the one named
+exception, because their version is the consumer's to choose.
 
 Five constraints shape this family; do not "simplify" any of them away:
 
@@ -333,7 +336,7 @@ is a large part of why the rule is a test rather than a review habit.
 
 ### Workflow Composition Standard
 
-**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), seventeen
+**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), eighteen
 assertions, every one of them proven to fire against a deliberate violation.** Read this section
 before writing anything under `.github/workflows/`, and before writing a pipeline in a repository
 that consumes this one.
@@ -392,6 +395,14 @@ Every deployment job therefore declares, and the test asserts, all four of:
 - **`if:`** — without one, a pull request deploys.
 - a preceding **`# fifth stage`** comment, matching the `# fourth stage` comments the delivery jobs
   already carry.
+
+**A deployment handed a delivered image may pull it.** `go-flyio.yaml` deploys the image `delivery >
+docker` pushed to GHCR, pulled with the deployment job's own `GITHUB_TOKEN`, and a job that declares
+`permissions:` holds `none` for every scope it leaves out -- so without `packages: read` a private
+image is refused at deploy time, after every check passed, as what reads like a bad token. Test 17
+holds it over every workflow: a job handed a `needs.<job>.outputs.image` that declares
+`permissions:` must grant `packages`. It asks a caller for nothing new: the delivery job pushes with
+`github.token`, which takes `packages: write`, and the deployment `needs:` that job.
 
 **A gate that calls a status function must also refuse a cancelled run.** Delivery and deployment
 jobs gate on `!failure()` instead of the implicit `success()` so that an upstream job skipped by
@@ -848,9 +859,9 @@ The `50-deployment` stage ships jobs for the five platforms most worth using to 
 | **Vercel** | 100 GB transfer, 1M edge requests, 6k build min — **non-commercial only**, revenue requires Pro | `vercel deploy` |
 | **Render** | 512 MB web service, **sleeps after 15 min idle** (30-60s cold start); free Postgres **expires at 30 days** | REST API — Render publishes no CLI |
 | **Netlify** | 300 credits/month; deploys cost 15 each, bandwidth 20/GB — roughly **20 deploys/month** | `netlify deploy --no-build` |
-| **Fly.io** | **None.** Withdrawn 2024 (2-hour trial); ~**$2/mo** always-on, ~35 regions | `flyctl deploy --remote-only` |
+| **Fly.io** | **None.** Withdrawn 2024 (2-hour trial); ~**$2/mo** always-on, ~35 regions | `flyctl deploy --image` (an image already delivered, copied with `crane`), else `flyctl deploy --remote-only` |
 
-Eight constraints shape this family; do not "simplify" any of them away:
+Nine constraints shape this family; do not "simplify" any of them away:
 
 | Constraint | Why |
 |------------|-----|
@@ -860,10 +871,11 @@ Eight constraints shape this family; do not "simplify" any of them away:
 | **A Fly app that is not safe to run twice needs a CEILING, and `fly.toml` has none** | `min_machines_running` is a floor. Fly's deploy adds a spare machine the first time it fills a process group, and an app with an in-process event bus, an in-memory rate limiter or unelected background workers is then silently WRONG rather than broken -- duplicated workers, split state, halved rate budgets, and nothing to report it. `FLY_MACHINE_COUNT` enforces the ceiling with `flyctl scale count` after a successful deploy, and `1` also passes `--ha=false` so the spare is never created. The value is VALIDATED before anything is deployed, because the two enforcement points fail asymmetrically: `1 ` (trailing space) is not equal to `1`, so `--ha=false` is skipped and Fly creates the spare, and then the deploy SUCCEEDS and `scale count` is rejected once the release is already live -- leaving the app on the two machines the ceiling exists to refuse |
 | **Fly app names are GLOBALLY unique, so a create failure is classified** | The name space is shared by every Fly customer, not scoped to an organisation, so `Name has already been taken` after the lookup already proved the app absent from your org means the name is held and no permission change can obtain it. flyctl cannot tell WHOSE, so the message names both: a stranger, or the operator's own account under an organisation `FLY_ORG` does not name (`apps list` only shows what the token can reach) — the second is fixed by pointing `FLY_ORG` at that org, and asserting the first would tell that operator to rename a running application. Reported as its own cause, because the obvious guess -- an app-scoped token, which genuinely cannot create apps -- sends the operator to mint a wider credential that still fails. Every role-shaped name (`api-staging`, `web`, `api`) is long gone; consumers prefix with their org or product |
 | **Fly.io app auto-creation is opt-in, via `FLY_ORG`** | `flyctl deploy` does not create an app, so a brand-new environment's first pipeline is always red and the fix lives in someone's shell history. Setting `FLY_ORG` makes the script create the app when `apps list` does not show it. It is opt-in rather than automatic because an APP-SCOPED deploy token cannot create apps: auto-creation forces an ORG-SCOPED token that manages every app in the organisation, which is a real widening of blast radius and the consumer's trade to make, not this library's. Existence is checked before creating rather than "create and ignore the error", because Fly app names are globally unique and the duplicate-name error is identical whether the app is ours or an unrelated organisation's. Two shapes of "opted in and got nothing" are closed by design: the app name is resolved from `fly.toml` as well as `FLY_APP_NAME` (gating on the variable alone made `FLY_ORG` a silent no-op for the configuration `go-flyio.yaml` documents as making it optional), and an unresolvable name warns rather than skipping. `flyctl`'s exit status is read separately from `grep`'s, so a FAILED lookup is never read as "the app is absent" — that would announce a creation of an app that exists, fail on the name being taken, and advise widening a token that was never the problem |
-| **The Fly.io version build argument is opt-in, by naming the `ARG`** | `--remote-only` builds from source on Fly's builder, so a Dockerfile that compiles its version in (`ARG VERSION=dev`, then `-ldflags -X`) reported its default on every deploy: nothing passed the argument. `FLY_VERSION_BUILD_ARG` names the `ARG`; the value is `FLY_APP_VERSION`, else the tag, else the commit's first 7 characters, resolved by `global/scripts/shared/build-version.sh` -- the helper the GitHub image delivery uses too, so one commit built in both places reports one version (asserted by running both, in `make test-build-version`). Opt-in because a name this library chose would override a project's unrelated `ARG VERSION`. The name and the value are VALIDATED before anything is deployed, because nothing downstream refuses either: a build argument no `ARG` declares is ignored, and a newline in the value would add a second argument to the newline-separated `build-args` list. A valid name the Dockerfile never declares warns rather than fails -- the check reads the file line by line, and a false alarm must not cost a deploy |
+| **The Fly.io version build argument is opt-in, by naming the `ARG`** | `--remote-only` builds from source on Fly's builder, so a Dockerfile that compiles its version in (`ARG VERSION=dev`, then `-ldflags -X`) reported its default on every deploy: nothing passed the argument. `FLY_VERSION_BUILD_ARG` names the `ARG`; the value is `FLY_APP_VERSION`, else the tag, else the commit's first 7 characters, resolved by `global/scripts/shared/build-version.sh` -- the helper the GitHub image delivery uses too, so one commit built in both places reports one version (asserted by running both, in `make test-build-version`). Opt-in because a name this library chose would override a project's unrelated `ARG VERSION`. The name and the value are VALIDATED before anything is deployed, because nothing downstream refuses either: a build argument no `ARG` declares is ignored, and a newline in the value would add a second argument to the newline-separated `build-args` list. A valid name the Dockerfile never declares warns rather than fails -- the check reads the file line by line, and a false alarm must not cost a deploy. With `FLY_IMAGE` there is no build to pass it to: the image was built with its version in it, so the name is neither passed nor validated |
+| **A Fly.io deploy ships the image the pipeline delivered, by digest** | `FLY_IMAGE` names an image already pushed -- `go-flyio.yaml` passes the one `delivery > docker` pushed to GHCR, which is its default. Rebuilding the Dockerfile on Fly's builder took about two of the two and a half minutes a deploy spent, shipped an image with another digest than the one CI pushed, and put a deploy at the mercy of the remote builder: one stalled for 51 minutes and failed the deploy. The image's linux/amd64 build (the platform Fly machines run) is resolved to a digest FIRST, copied with `crane` -- registry to registry, no Docker daemon -- into `registry.fly.io/<app>` under a tag named after that digest, and deployed as `registry.fly.io/<app>@sha256:...`. Fly's registry, not GHCR, because machines pull again on every restart and migration and the GHCR credential is a job token that expires with the job. By digest, because a tag is mutable -- a re-run of a commit is a new build with a new digest -- and flyctl 0.4.118 hands a digest-pinned reference to Fly's API unchanged, then configures the machines with what the API resolves, where a tag would reach them as the tag. `crane` is pinned and checksum-verified like `flyctl`, nothing is installed or copied on a dry run, the credentials go into a throwaway `DOCKER_CONFIG` (never `$HOME/.docker`, which a persistent runner keeps) and reach `crane` on stdin -- the Fly token as flyctl hands it to its registry, `Tokens.Docker()`: no `FlyV1 ` scheme, macaroons only -- and both the credentials and the source registry's password are gone before flyctl runs, removed as soon as the copy is done and on any exit before it. A missing app name fails before anything is installed, since the copy names the app. `fly_build_from_source` restores the build on Fly's builder. GitLab CI and Azure DevOps take `FLY_IMAGE` too but keep building from source by default: their deploy templates are included on their own rather than composed after a delivery job, and their delivery templates push tags without recording a digest, so they have no image to hand over |
 | **`flyctl` comes from the GitHub release archive, never `curl \| sh`** | Piping a remote script into a shell hands the runner's credentials to whatever that URL returns at that moment — the supply-chain shape this repository's own SAST stage exists to flag. Matches the gitleaks/hadolint/shellcheck install pattern |
 
-Covered by `.github/tests/test-deploy-providers.sh` (195 assertions): the cross-platform wiring contract (a provider added to one platform and forgotten on the other two leaves three files that are each valid YAML on their own, so nothing else in CI would catch it), the argv each provider builds under dry run, and a sentinel-credential leak check over the whole report directory.
+Covered by `.github/tests/test-deploy-providers.sh` (345 assertions): the cross-platform wiring contract (a provider added to one platform and forgotten on the other two leaves three files that are each valid YAML on their own, so nothing else in CI would catch it), the argv each provider builds under dry run, and a sentinel-credential leak check over the whole report directory. The Fly.io image copy is also run for real, against stand-ins for `crane` and `flyctl` on an isolated PATH, so the order of the copy and the deploy, the digest each names, what reaches stdin rather than argv, and where the credentials are written are observed rather than read off the script.
 
 ### Makefile Include Pattern
 

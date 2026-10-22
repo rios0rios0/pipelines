@@ -35,10 +35,36 @@ inputs:
     type: 'string'
     required: false
     default: ''
+  image:
+    description: |
+      An image the pipeline already built and pushed, to deploy instead of building one --
+      `go-flyio.yaml` passes the one `delivery > docker` pushed, by digest. Its linux/amd64
+      image is copied to `registry.fly.io/<app>` with `crane` and deployed by digest, so Fly
+      builds nothing. Leave empty to build the Dockerfile from source on Fly's builder
+      (`--remote-only`), which is what happens without it.
+    type: 'string'
+    required: false
+    default: ''
+  image_registry_username:
+    description: |
+      User for the registry holding `image`. The default, the workflow's actor, is the user
+      `ghcr.io` expects with the job token.
+    type: 'string'
+    required: false
+    default: '${{ github.actor }}'
+  image_registry_password:
+    description: |
+      Password for the registry holding `image`. The default is the job token, which reads this
+      repository's `ghcr.io` packages when the job grants `packages: read`. Pass a secret for any
+      other registry. Reaches the script only when `image` is set, and only on stdin from there.
+    type: 'string'
+    required: false
+    default: '${{ github.token }}'
   version_build_arg:
     description: |
       Name of the Dockerfile `ARG` that receives the app's version (e.g. `VERSION`), passed
       to Fly's build with `--build-arg`. Leave empty to pass nothing, which is the default.
+      Not passed with `image`, which was built with its version already in it.
     type: 'string'
     required: false
     default: ''
@@ -69,8 +95,13 @@ runs:
     - name: 'Get Scripts'
       uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
 
-    # No Docker setup step: the run script passes `--remote-only`, so the image
-    # is built on Fly's builder rather than needing a daemon on the runner.
+    # No Docker setup step, on either path. With `image`, the script copies it
+    # registry to registry with `crane`; without it, it passes `--remote-only`
+    # and Fly's builder builds. Neither needs a daemon on the runner.
+    #
+    # Every input reaches the script through `env:`, never spliced into `run:`.
+    # The registry password is mapped only when there is an image to read, so the
+    # job token does not sit in the environment of a deploy that never uses it.
     - name: 'Execute'
       shell: 'bash'
       run: $SCRIPTS_DIR/global/scripts/deploy/flyio/run.sh
@@ -81,6 +112,9 @@ runs:
         FLY_MACHINE_COUNT: "${{ inputs.machine_count }}"
         FLY_CONFIG: "${{ inputs.config }}"
         FLY_STRATEGY: "${{ inputs.strategy }}"
+        FLY_IMAGE: "${{ inputs.image }}"
+        FLY_IMAGE_REGISTRY_USERNAME: "${{ inputs.image_registry_username }}"
+        FLY_IMAGE_REGISTRY_PASSWORD: "${{ inputs.image != '' && inputs.image_registry_password || '' }}"
         FLY_VERSION_BUILD_ARG: "${{ inputs.version_build_arg }}"
         FLY_APP_VERSION: "${{ inputs.version }}"
         DEPLOY_ENVIRONMENT: "${{ inputs.environment }}"

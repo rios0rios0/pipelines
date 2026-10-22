@@ -29,6 +29,13 @@ set -e
 # its logic living here would keep passing after the action's own copy changed.
 # The Fly.io cases that only concern Fly.io live with the other providers, in
 # test-deploy-providers.sh.
+#
+# Since `go-flyio.yaml` deploys the image the delivery job pushed, a commit is
+# built ONCE on that path, and the version reaches the deploy inside the image.
+# So this suite also holds that image's way from the build to the deploy: the
+# digest the build reports, the name it is pushed under, and each output that
+# carries it on, down to the deploy step -- which, handed an image, passes no
+# version of its own.
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export SCRIPTS_DIR
@@ -286,6 +293,30 @@ assert_equals "the version is resolved before the registry login" "True" \
 # An input interpolated into a `run:` body is pasted in before bash parses it.
 assert_equals "no input is interpolated into the version step's script" "False" \
   "$(yaml_query "$DOCKER_ACTION" "'\${{' in step(doc['runs']['steps'], 'version')['run']")"
+
+# The image the action pushed, named by the digest the build itself reported --
+# the reference the Fly.io deploy ships, version and all.
+assert_equals "the action outputs the image its own step names" '${{ steps.image.outputs.image }}' \
+  "$(yaml_query "$DOCKER_ACTION" "doc['outputs']['image']['value']")"
+assert_equals "the build step is the one with the 'build' id" "build" \
+  "$(yaml_query "$DOCKER_ACTION" "step(doc['runs']['steps'], 'docker/build-push-action@')['id']")"
+assert_equals "the image is named by the digest that build reports" '${{ steps.build.outputs.digest }}' \
+  "$(yaml_query "$DOCKER_ACTION" "step(doc['runs']['steps'], 'image')['env']['DIGEST']")"
+assert_equals "the image is named after the push" "True" \
+  "$(yaml_query "$DOCKER_ACTION" "[s.get('id') for s in doc['runs']['steps']].index('image') > [s.get('id') for s in doc['runs']['steps']].index('build')")"
+# Spelled as both tagging steps spell the name the build pushes, or the output
+# names an image nobody pushed. A caller's own `tags` choose another name, which
+# this action does not know, so it names nothing then.
+assert_equals "the image name is the one the release tags are pushed under" \
+  "$(yaml_query "$DOCKER_ACTION" "step(doc['runs']['steps'], 'release-tags')['env']['IMAGE']")" \
+  "$(yaml_query "$DOCKER_ACTION" "step(doc['runs']['steps'], 'image')['env']['IMAGE']")"
+assert_equals "...and the one docker/metadata-action tags" \
+  "$(yaml_query "$DOCKER_ACTION" "step(doc['runs']['steps'], 'meta')['with']['images']")" \
+  "$(yaml_query "$DOCKER_ACTION" "step(doc['runs']['steps'], 'image')['env']['IMAGE']")"
+assert_equals "the image is named only when the action chose the tags" "inputs.tags == ''" \
+  "$(yaml_query "$DOCKER_ACTION" "step(doc['runs']['steps'], 'image')['if']")"
+assert_equals "no input is interpolated into the image step's script" "False" \
+  "$(yaml_query "$DOCKER_ACTION" "'\${{' in step(doc['runs']['steps'], 'image')['run']")"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -354,6 +385,33 @@ assert_true "a Dockerfile without the ARG warns" \
   "grep -q \"::warning::$STEP_DOCKERFILE declares no 'ARG VERSION'\" <<< \"\$STEP_OUT\""
 assert_equals "...and still hands the build the argument, as a warning must" \
   "build_args=VERSION=0123456" "$STEP_OUTPUT"
+
+# The step that names the pushed image, executed the same way. The name comes out
+# lower-case, because `docker/metadata-action` lower-cases it before tagging and a
+# registry refuses an upper-case repository, and the digest is the build's.
+yaml_query "$DOCKER_ACTION" "step(doc['runs']['steps'], 'image')['run']" > "$WORK_DIR/image-step.sh"
+FIXTURE_DIGEST="sha256:$(printf 'd%.0s' $(seq 64))"
+
+# run_image_step [VAR=value...] -- leaves IMAGE_STEP_RC, IMAGE_STEP_OUT and the
+# GITHUB_OUTPUT it wrote in IMAGE_STEP_OUTPUT, emptied first like run_version_step's.
+run_image_step() {
+  : > "$WORK_DIR/github_output"
+  IMAGE_STEP_RC=0
+  # shellcheck disable=SC2034  # read by assert_true's eval'd conditions, which ShellCheck cannot see
+  IMAGE_STEP_OUT="$(
+    cd "$DOCKER_PROJECT" || exit 1
+    env -i PATH="$PATH" HOME="$HOME" GITHUB_OUTPUT="$WORK_DIR/github_output" "$@" \
+      bash --noprofile --norc -eo pipefail "$WORK_DIR/image-step.sh" 2>&1
+  )" || IMAGE_STEP_RC=$?
+  IMAGE_STEP_OUTPUT="$(cat "$WORK_DIR/github_output")"
+}
+
+run_image_step IMAGE=ghcr.io/Fixture-Owner/Fixture-Repo DIGEST="$FIXTURE_DIGEST"
+assert_equals "the pushed image is named lower-case, by the build's digest" \
+  "image=ghcr.io/fixture-owner/fixture-repo@$FIXTURE_DIGEST" "$IMAGE_STEP_OUTPUT"
+run_image_step IMAGE=ghcr.io/Fixture-Owner/Fixture-Repo DIGEST=
+assert_true "a build that reported no digest names no image, and says so" \
+  "[[ $IMAGE_STEP_RC -eq 0 && -z \"\$IMAGE_STEP_OUTPUT\" ]] && grep -q '::warning::' <<< \"\$IMAGE_STEP_OUT\""
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -396,6 +454,21 @@ delivered="${STEP_OUTPUT#build_args=VERSION=}"
 deployed="$(fly_version FLY_APP_VERSION=1.3.0 GITHUB_REF_TYPE=branch GITHUB_SHA="$SHA")"
 assert_true "image delivery and Fly pass one version for a release cut in the run" \
   "[[ -n '$delivered' && '$delivered' == '$deployed' ]]"
+
+# On `go-flyio.yaml`'s default path there is only ONE build: the deploy ships the
+# image delivered above, whose version is already in it, and builds nothing -- so it
+# passes no version of its own, even with the build argument named.
+# shellcheck disable=SC2034  # read by assert_true's eval'd conditions
+FLY_IMAGE_CMD="$(
+  cd "$FLY_PROJECT" || exit 1
+  env -i PATH="$PATH" HOME="$FLY_PROJECT" GIT_CEILING_DIRECTORIES="$WORK_DIR" \
+    SCRIPTS_DIR="$SCRIPTS_DIR" DEPLOY_DRY_RUN=true FLY_API_TOKEN=fixture-token-placeholder \
+    FLY_APP_NAME=fixture-app FLY_VERSION_BUILD_ARG=VERSION GITHUB_SHA="$SHA" \
+    FLY_IMAGE="ghcr.io/fixture-owner/fixture-repo@$FIXTURE_DIGEST" sh "$FLYIO_SH" > /dev/null 2>&1
+  cat build/reports/deploy-flyio/command.txt 2>/dev/null
+)"
+assert_true "a deploy of the delivered image passes no version of its own" \
+  "grep -q -- '--image ' <<< \"\$FLY_IMAGE_CMD\" && ! grep -q -- '--build-arg' <<< \"\$FLY_IMAGE_CMD\""
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -414,9 +487,23 @@ assert_equals "go-flyio.yaml declares version_build_arg, naming nothing by defau
 assert_equals "go-flyio.yaml hands it to go-docker.yaml, for the registry image" \
   '${{ inputs.version_build_arg }}' \
   "$(yaml_query "$GO_FLYIO" "doc['jobs']['go-docker']['with']['version_build_arg']")"
-assert_equals "go-flyio.yaml hands it to the deploy, for Fly's own build" \
+assert_equals "go-flyio.yaml hands it to the deploy, for Fly's own build when opted into" \
   '${{ inputs.version_build_arg }}' \
   "$(yaml_query "$GO_FLYIO" "step(doc['jobs']['deployment-flyio']['steps'], '50-deployment/flyio@')['with']['version_build_arg']")"
+
+# The registry image's way to the deploy, one hop at a time: the delivery step's
+# output, the delivery job's, the workflow's, and the deploy's input. A hop that is
+# dropped or misspelled hands the deploy an empty image, which it refuses.
+assert_equals "go-docker.yaml's delivery step carries the 'docker' id" "docker" \
+  "$(yaml_query "$GO_DOCKER" "step(doc['jobs']['delivery-docker']['steps'], '40-delivery/docker@')['id']")"
+assert_equals "go-docker.yaml's delivery job outputs that step's image" '${{ steps.docker.outputs.image }}' \
+  "$(yaml_query "$GO_DOCKER" "doc['jobs']['delivery-docker']['outputs']['image']")"
+assert_equals "go-docker.yaml outputs the image its delivery job pushed" \
+  '${{ jobs.delivery-docker.outputs.image }}' \
+  "$(yaml_query "$GO_DOCKER" "trigger['workflow_call']['outputs']['image']['value']")"
+assert_equals "go-flyio.yaml hands the deploy that image, unless the caller builds from source" \
+  "\${{ !inputs.fly_build_from_source && needs.go-docker.outputs.image || '' }}" \
+  "$(yaml_query "$GO_FLYIO" "step(doc['jobs']['deployment-flyio']['steps'], '50-deployment/flyio@')['with']['image']")"
 # The deploy after a bump merge runs on the branch, so without this it would carry
 # the commit while the image pushed in the same run carries the release.
 assert_equals "go-flyio.yaml hands the deploy the release go-docker.yaml cut" \

@@ -350,6 +350,54 @@ UNVERIFIED_DOWNLOADS="$(
   done
 )"
 assert_empty "every release-artifact download routes through download_verified" "$UNVERIFIED_DOWNLOADS"
+
+# ...and every one of them checks the digest COMMITTED for it. The per-URL check
+# above proves a download passes through the verifier; it cannot see what the
+# verifier is handed. `SKIP`, a digest typed into the installer, or a variable
+# filled from anywhere but `pinned_digest` all pass through `download_verified`
+# and verify nothing this repository decided -- and `pinned_digest` is also what
+# refuses to reuse a committed digest for an overridden version. So the digest
+# argument must be a variable the same script assigns from `pinned_digest`.
+#
+# Calls are read as LOGICAL lines, joined across a trailing backslash, because
+# every installer here spreads the call over four. The one exception is named,
+# with its reason: the Dart and Flutter SDK versions are the consumer's to choose,
+# so no digest can be committed for them, and `dart/common.sh` checks the
+# publisher's own manifest instead.
+UNPINNED_VERIFICATIONS="$(
+  for f in $(grep -rlE 'download_verified[[:space:]]' --include='*.sh' global/scripts 2>/dev/null \
+      | grep -v 'shared/verify-download.sh' \
+      | grep -v 'languages/dart/common.sh'); do
+    awk -v file="$f" '
+      {
+        line = $0
+        if (pending != "") { line = pending " " line; pending = "" }
+        if (line ~ /\\[[:space:]]*$/) { sub(/\\[[:space:]]*$/, "", line); pending = line; next }
+        logical[++count] = line
+        number[count] = NR
+      }
+      END {
+        for (i = 1; i <= count; i++) {
+          if (match(logical[i], /[A-Za-z_][A-Za-z0-9_]*="?\$\(pinned_digest[[:space:]]/)) {
+            name = substr(logical[i], RSTART, RLENGTH)
+            sub(/=.*/, "", name)
+            pinned[name] = 1
+          }
+        }
+        for (i = 1; i <= count; i++) {
+          text = logical[i]
+          if (text ~ /^[[:space:]]*#/ || text !~ /download_verified[[:space:]]/ || text ~ /download_verified\(\)/) continue
+          sub(/.*download_verified[[:space:]]+/, "", text)
+          split(text, words, /[[:space:]]+/)
+          digest = words[3]
+          gsub(/["{};]/, "", digest)
+          if (digest !~ /^\$[A-Za-z_][A-Za-z0-9_]*$/ || !(substr(digest, 2) in pinned))
+            printf "%s:%d: download_verified checks %s, which no pinned_digest resolved\n", file, number[i], words[3]
+        }
+      }' "$f"
+  done
+)"
+assert_empty "every download_verified call checks a digest pinned_digest resolved" "$UNPINNED_VERIFICATIONS"
 echo ""
 
 # ---------------------------------------------------------------------------

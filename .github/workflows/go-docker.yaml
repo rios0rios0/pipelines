@@ -104,6 +104,13 @@ on:
           Exposed so a composed workflow can hand a deploy the same version this run's image
           carries.
         value: ${{ jobs.delivery-release.outputs.tag_name }}
+      image:
+        description: |
+          The image `delivery > docker` pushed in this run, by digest:
+          `ghcr.io/<owner>/<repository>@sha256:<digest>`, the digest being the multi-platform
+          index's. Empty when the job pushed nothing. Exposed so a composed workflow deploys the
+          artifact this run built instead of building it a second time.
+        value: ${{ jobs.delivery-docker.outputs.image }}
 
 jobs:
   go:
@@ -140,8 +147,11 @@ jobs:
   delivery-docker:
     name: 'delivery > docker'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
+    outputs:
+      image: ${{ steps.docker.outputs.image }}
     steps:
-      - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/docker@main'
+      - id: 'docker'
+        uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/docker@main'
         with:
           tag_name: "${{ needs.delivery-release.outputs.tag_name }}"
           version_build_arg: "${{ inputs.version_build_arg }}"

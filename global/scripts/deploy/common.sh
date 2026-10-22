@@ -185,16 +185,27 @@ deploy_note_command() {
   return 0
 }
 
-# deploy_record <provider> <target>
+# deploy_record <provider> <target> [image] [source-image]
 #
 # Write a small JSON receipt describing what was deployed. Every platform in
 # this repository publishes `build/reports/` as a job artifact, so this gives
 # all three the same machine-readable answer to "what did this job actually
 # ship, and was it a real deploy or a dry run?" without each one inventing its
 # own log-scraping convention.
+#
+# A provider that ships an image someone else built names it, and the image it
+# was copied from: that pair is what proves the pipeline's own artifact went
+# out. Without them the receipt is exactly what it always was.
 deploy_record() {
   _dr_provider="$1"
   _dr_target="$2"
+  _dr_images=""
+  if [ -n "${3:-}" ]; then
+    _dr_images="$(printf ',\n  "image": "%s"' "$3")"
+  fi
+  if [ -n "${4:-}" ]; then
+    _dr_images="$_dr_images$(printf ',\n  "source_image": "%s"' "$4")"
+  fi
 
   # Normalised through `deploy_is_dry_run` rather than interpolated raw. The
   # raw value is whatever the platform handed over, and JSON accepts exactly
@@ -213,7 +224,7 @@ deploy_record() {
   "provider": "$_dr_provider",
   "target": "$_dr_target",
   "dry_run": $_dr_dry,
-  "environment": "${DEPLOY_ENVIRONMENT:-production}"
+  "environment": "${DEPLOY_ENVIRONMENT:-production}"$_dr_images
 }
 EOF
   echo "Deployment record written to: $REPORT_PATH/deployment.json"

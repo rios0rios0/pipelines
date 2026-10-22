@@ -29,6 +29,25 @@ parameters:
   - name: 'APP_VERSION'
     type: 'string'
     default: ''
+  # An image already built and pushed, to deploy instead of building one: its
+  # linux/amd64 build is copied to registry.fly.io/<app> with crane and deployed
+  # by digest. Name it by digest. The credentials are for the registry holding
+  # it; pass the password as a secret variable, `$(NAME)`. Its default is empty
+  # rather than a macro because it is optional -- a public image needs none --
+  # and an undefined macro would arrive as its own literal text, a password that
+  # is wrong instead of absent. Empty IMAGE, the default, builds from source on
+  # Fly's builder: unlike `go-flyio.yaml` on GitHub Actions, this template is not
+  # composed after a delivery stage, and the Azure DevOps delivery template
+  # pushes tags without recording a digest, so it has no image to hand over.
+  - name: 'IMAGE'
+    type: 'string'
+    default: ''
+  - name: 'IMAGE_REGISTRY_USERNAME'
+    type: 'string'
+    default: ''
+  - name: 'FLY_IMAGE_REGISTRY_PASSWORD'
+    type: 'string'
+    default: ''
   - name: 'ENVIRONMENT'
     type: 'string'
     default: 'production'
@@ -43,9 +62,10 @@ jobs:
     steps:
       - template: '../../abstracts/scripts-repo.yaml'
 
-      # No Docker task: the script passes `--remote-only`, so the image is built
-      # on Fly's builder. That keeps this job runnable on a self-hosted agent
-      # with no Docker daemon, which is the common case on Azure DevOps.
+      # No Docker task: with IMAGE the script copies it registry to registry with
+      # crane, and without it the script passes `--remote-only`, so the image is
+      # built on Fly's builder. That keeps this job runnable on a self-hosted
+      # agent with no Docker daemon, which is the common case on Azure DevOps.
       - script: $(Scripts.Directory)/global/scripts/deploy/flyio/run.sh
         displayName: 'Deploy to Fly.io'
         env:
@@ -55,6 +75,9 @@ jobs:
           FLY_MACHINE_COUNT: ${{ parameters.MACHINE_COUNT }}
           FLY_CONFIG: ${{ parameters.CONFIG }}
           FLY_STRATEGY: ${{ parameters.STRATEGY }}
+          FLY_IMAGE: ${{ parameters.IMAGE }}
+          FLY_IMAGE_REGISTRY_USERNAME: ${{ parameters.IMAGE_REGISTRY_USERNAME }}
+          FLY_IMAGE_REGISTRY_PASSWORD: ${{ parameters.FLY_IMAGE_REGISTRY_PASSWORD }}
           FLY_VERSION_BUILD_ARG: ${{ parameters.VERSION_BUILD_ARG }}
           FLY_APP_VERSION: ${{ parameters.APP_VERSION }}
           DEPLOY_ENVIRONMENT: ${{ parameters.ENVIRONMENT }}

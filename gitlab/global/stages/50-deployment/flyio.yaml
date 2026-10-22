@@ -21,10 +21,24 @@ include:
 #   version (e.g. `VERSION`), passed to Fly's build with `--build-arg`. Unset
 #   passes nothing. FLY_APP_VERSION sets the value; unset derives it: the tag on
 #   a tag pipeline, the commit's first 7 characters otherwise.
+#   FLY_IMAGE -- an image already built and pushed, to deploy instead of building
+#   one. Its linux/amd64 build is copied to registry.fly.io/<app> with crane and
+#   deployed by digest, so Fly builds nothing; name it by digest
+#   (`<image>@sha256:<digest>`). FLY_IMAGE_REGISTRY_USERNAME and
+#   FLY_IMAGE_REGISTRY_PASSWORD (masked) log in to the registry holding it, which
+#   a public image does not need. FLY_VERSION_BUILD_ARG is not passed with it.
 #
-# No Docker-in-Docker service: the script passes `--remote-only`, so the image
-# is built on Fly's builder. That is the whole reason this job can run on an
-# ordinary shared runner without privileged mode.
+# Unset, FLY_IMAGE leaves this job building from source, unlike `go-flyio.yaml`
+# on GitHub Actions, which deploys the image its delivery job pushed. There is
+# no such image to hand over here: this job is included on its own rather than
+# composed after a delivery job, and the GitLab delivery templates push tags
+# (`docker push -a`) without recording a digest. A pipeline that does know its
+# image's digest sets FLY_IMAGE itself, and the deploy behaves as on GitHub.
+#
+# No Docker-in-Docker service: with FLY_IMAGE the script copies the image
+# registry to registry, and without it the script passes `--remote-only`, so the
+# image is built on Fly's builder. That is the whole reason this job can run on
+# an ordinary shared runner without privileged mode.
 deployment:flyio:
   extends: '.scripts-repo'
   image: 'alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b'

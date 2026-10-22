@@ -330,6 +330,22 @@ FLYCTL_SHA256_X86_64="0f2fabbb29904a7bac8bd96009314d26751084c33e098fcc393e2dac6c
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_arm64.tar.gz
 FLYCTL_SHA256_ARM64="8b9ae409107d5e268895214e773881904a81d56b9593c14c6b41639f05e25faa"
 
+# crane, from google/go-containerregistry. The Fly.io deploy copies the image
+# the pipeline already delivered into registry.fly.io with it -- registry to
+# registry, with no Docker daemon, which the deploy job deliberately does not
+# have. The archive also carries `gcrane` and `krane`; only `crane` is
+# extracted. Both digests were read from the release's `checksums.txt` and
+# matched against the downloaded archives.
+# upstream: github-release google/go-containerregistry
+# osv: Go github.com/google/go-containerregistry
+# checksums: https://github.com/google/go-containerregistry/releases/download/v{version}/checksums.txt
+CRANE_PINNED_VERSION="0.22.1"
+CRANE_VERSION="${CRANE_VERSION:-${CRANE_PINNED_VERSION}}"
+# asset: https://github.com/google/go-containerregistry/releases/download/v{version}/go-containerregistry_Linux_x86_64.tar.gz
+CRANE_SHA256_X86_64="0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0"
+# asset: https://github.com/google/go-containerregistry/releases/download/v{version}/go-containerregistry_Linux_arm64.tar.gz
+CRANE_SHA256_ARM64="898c0cff975f898a33e8c4580bdafb0e7c02c7faa33374e946762f97c4ab7110"
+
 # mikefarah/yq, resolved by global/scripts/shared/resolve-yq.sh for the
 # golangci-lint config merge. Four digests rather than the usual two because
 # this is the one tool here resolved on macOS as well: `resolve_yq` runs from a

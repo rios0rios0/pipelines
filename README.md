@@ -410,10 +410,11 @@ jobs:
 ```
 
 The version is the release `delivery > release` cuts in the run, the tag on a tag build, and the
-commit's first 7 characters otherwise. `go-flyio.yaml` takes the same input and hands it to both
-builds of the commit — the image pushed to the registry and the one Fly.io builds from source — and
-both resolve it through `global/scripts/shared/build-version.sh`, so a deploy reports one release
-wherever it runs. Empty, the default, passes nothing, because the name is the project's to choose: a
+commit's first 7 characters otherwise. `go-flyio.yaml` takes the same input and hands it to the image
+pushed to the registry, which is the image it deploys, so the deployed app reports that version.
+With `fly_build_from_source`, Fly.io builds its own image from source and is handed the same value;
+both builds resolve it through `global/scripts/shared/build-version.sh`, so a deploy reports one
+release wherever it was built. Empty, the default, passes nothing, because the name is the project's to choose: a
 project may already use `ARG VERSION` for something else. A malformed name fails the job before
 anything is built, and a Dockerfile that declares no such `ARG` gets a warning.
 `make test-build-version` covers it.
@@ -1936,7 +1937,7 @@ See [MVP Hosting & Deployment](#mvp-hosting--deployment) for the ranked comparis
 | **Vercel**     | `vercel` CLI                            | `global/scripts/deploy/vercel/`        |
 | **Render**     | REST API (polled to a terminal state)   | `global/scripts/deploy/render/`        |
 | **Netlify**    | `netlify-cli`                           | `global/scripts/deploy/netlify/`       |
-| **Fly.io**     | `flyctl` (remote build, no local Docker)| `global/scripts/deploy/flyio/`         |
+| **Fly.io**     | `flyctl` (delivered image or remote build, no local Docker) | `global/scripts/deploy/flyio/` |
 
 ##### File-Ordering Standard (`order-check`)
 
@@ -2126,7 +2127,31 @@ stdin instead.
 | Vercel | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `VERCEL_WORKING_DIRECTORY`, `VERCEL_COMMERCIAL`, `VERCEL_PLAN` |
 | Render | `RENDER_API_KEY` + `RENDER_SERVICE_ID`, **or** `RENDER_DEPLOY_HOOK_URL` | `RENDER_POLL_TIMEOUT`, `RENDER_POLL_INTERVAL` |
 | Netlify | `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID` | `NETLIFY_OUTPUT_DIRECTORY`, `NETLIFY_DEPLOY_MESSAGE` |
-| Fly.io | `FLY_API_TOKEN` | `FLY_APP_NAME`, `FLY_ORG`, `FLY_MACHINE_COUNT`, `FLY_CONFIG`, `FLY_STRATEGY`, `FLY_VERSION_BUILD_ARG`, `FLY_APP_VERSION` |
+| Fly.io | `FLY_API_TOKEN` | `FLY_APP_NAME`, `FLY_ORG`, `FLY_MACHINE_COUNT`, `FLY_CONFIG`, `FLY_STRATEGY`, `FLY_VERSION_BUILD_ARG`, `FLY_APP_VERSION`, `FLY_IMAGE`, `FLY_IMAGE_REGISTRY_USERNAME`, `FLY_IMAGE_REGISTRY_PASSWORD` |
+
+**On GitHub Actions, `go-flyio.yaml` deploys the image `delivery > docker` pushed, not a second
+build of it.** The deploy copies that image's linux/amd64 build from GHCR into `registry.fly.io/<app>`
+with [`crane`](https://github.com/google/go-containerregistry) — registry to registry, no Docker
+daemon — under a tag named after its digest, and deploys it by that digest:
+`flyctl deploy --image registry.fly.io/<app>@sha256:…`. The artifact CI produced is the one that
+runs, and Fly's remote builder is out of the deploy path: rebuilding the Dockerfile there took about
+two of the two and a half minutes a deploy spent, and gave production an image with another digest.
+Machines pull from Fly's registry rather than GHCR because they pull again on every restart, long
+after the job token that reads GHCR has expired. The deployment job is granted `packages: read` to
+pull the image, which asks a caller for nothing new: the delivery job already pushes with
+`packages: write`. `deployment.json` names the image deployed and the delivered image it came from.
+
+This changes what is deployed wherever `fly.toml` builds something other than the delivery job's
+`.ci/stages/40-delivery/app.Dockerfile` — another Dockerfile, a build target, build arguments of its
+own. Set `fly_build_from_source: true` to keep deploying what `fly.toml` builds
+(`flyctl deploy --remote-only`).
+
+Any platform does the same when `FLY_IMAGE` names an image already pushed, by digest, with
+`FLY_IMAGE_REGISTRY_USERNAME` / `FLY_IMAGE_REGISTRY_PASSWORD` for the registry holding it (a public
+image needs neither). GitLab CI and Azure DevOps build from source unless it is set: their deploy
+templates are included on their own, after delivery templates that record no digest, so there is no
+image to hand over automatically. The credentials go into a throwaway Docker configuration removed
+when the job ends, and reach `crane` on stdin, never on its command line.
 
 Set `FLY_MACHINE_COUNT` to pin how many machines the app runs. Fly adds a spare machine the first
 time it fills a process group, which is right for a stateless app and wrong for a process that is
@@ -2156,8 +2181,9 @@ that variable is unset — the same two sources the deploy itself uses, so the c
 yields a name the step is skipped with a warning rather than in silence.
 
 Set `FLY_VERSION_BUILD_ARG` to the name of a Dockerfile `ARG` (e.g. `VERSION`) to hand the app its
-version with `--build-arg`. The deploy builds from source on Fly's builder, so a Dockerfile that
-compiles its version in otherwise reports its default on every deploy. The version is
+version with `--build-arg` when the deploy builds from source on Fly's builder, where a Dockerfile
+that compiles its version in otherwise reports its default on every deploy. With `FLY_IMAGE` nothing
+is passed: that image was built before the deploy, with its version already in it. The version is
 `FLY_APP_VERSION` when set; otherwise it is the tag on a tag build, or the commit's first 7
 characters on any other, read from whichever of the three platforms is running. It is opt-in because the name
 is the project's to choose. A malformed name, or a version that is not one word, fails the job

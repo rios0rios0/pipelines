@@ -19,6 +19,13 @@
 # stage of this repository exists to flag; the release tarball is a fixed,
 # checksum-able artifact and matches how gitleaks, hadolint and shellcheck are
 # installed here.
+#
+# What is deployed comes from one of two places. With FLY_IMAGE -- an image the
+# pipeline already built and pushed, which `go-flyio.yaml` passes by default --
+# that image is copied into registry.fly.io and deployed by digest, and Fly
+# builds nothing. Without it, `flyctl deploy --remote-only` builds the
+# Dockerfile from source on Fly's builder. Neither needs a Docker daemon on the
+# runner.
 
 if [ -z "$SCRIPTS_DIR" ]; then
   SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
@@ -27,6 +34,57 @@ fi
 TOOL_NAME="deploy-flyio" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
 . "$SCRIPTS_DIR/global/scripts/deploy/common.sh"
 . "$SCRIPTS_DIR/global/scripts/shared/build-version.sh"
+
+# fly_image_registry <reference>
+#
+# The registry host an image reference names, by the rule Docker applies: the
+# first path component is a host when it carries a `.` or a `:` or is
+# `localhost`, and a reference without one is on Docker Hub.
+fly_image_registry() {
+  case "$1" in
+    */*) _fir_first="${1%%/*}" ;;
+    *) _fir_first="" ;;
+  esac
+  case "$_fir_first" in
+    *.* | *:* | localhost) printf '%s\n' "$_fir_first" ;;
+    *) printf '%s\n' "index.docker.io" ;;
+  esac
+}
+
+# fly_registry_token
+#
+# Print FLY_API_TOKEN the way flyctl itself hands it to registry.fly.io, which
+# is fly-go's `Tokens.Docker()`: without its `FlyV1 ` (or `Bearer `) scheme, and
+# only its macaroons when it carries any. A deploy token prints as
+# `FlyV1 fm2_...,fm2_...`, and the registry is given what follows the scheme.
+#
+# The token goes into awk on stdin and out on stdout, so it is never on an argv:
+# `printf` is a shell builtin, and awk is handed only the program text.
+fly_registry_token() {
+  printf '%s' "$FLY_API_TOKEN" | awk '
+    { token = token $0 }
+    END {
+      sub(/^[ \t]+/, "", token)
+      while (match(tolower(token), /^(flyv1|bearer)[ \t]+/)) {
+        token = substr(token, RLENGTH + 1)
+      }
+      count = split(token, parts, ",")
+      for (i = 1; i <= count; i++) {
+        part = parts[i]
+        sub(/^[ \t]+/, "", part)
+        sub(/[ \t]+$/, "", part)
+        if (part == "") {
+          continue
+        }
+        if (part ~ /^(fm1r|fm1a|fm2)_/) {
+          macaroons = macaroons (macaroons == "" ? "" : ",") part
+        } else {
+          others = others (others == "" ? "" : ",") part
+        }
+      }
+      printf "%s", (macaroons != "" ? macaroons : others)
+    }'
+}
 
 deploy_require_env "FLY_API_TOKEN" \
   "Generate one with 'flyctl tokens create deploy' and expose it to the job as a secret."
@@ -63,6 +121,36 @@ if [ -n "${FLY_MACHINE_COUNT:-}" ]; then
   esac
 fi
 
+# The image to deploy instead of building one: FLY_IMAGE, a reference to an image
+# the pipeline ALREADY built and pushed. `go-flyio.yaml` passes the one its
+# `delivery > docker` job pushed to GHCR, by digest. Rebuilding the Dockerfile
+# on Fly's builder took about two of the two and a half minutes a deploy spent,
+# and it produced a second image with a different digest: production ran that
+# second build, not the artifact CI made. Deploying the delivered image also
+# takes Fly's builder out of the deploy path, so a stalled remote build cannot
+# fail a deploy either.
+#
+# Validated HERE, for the reason FLY_MACHINE_COUNT is: a reference holds only
+# letters, digits and `._/:@-`, so anything else -- whitespace, a quote -- is
+# refused before a CLI is downloaded, instead of failing halfway through the
+# copy or reaching the JSON receipt verbatim.
+FLY_IMAGE="${FLY_IMAGE:-}"
+case "$FLY_IMAGE" in
+  *[!A-Za-z0-9._/:@-]*)
+    echo "ERROR: FLY_IMAGE must be an image reference (letters, digits and '._/:@-'), got '$FLY_IMAGE'." >&2
+    echo "Nothing has been deployed. Check the value for stray whitespace or quotes." >&2
+    exit 1
+    ;;
+esac
+
+# An image built before this job already carries its version: the delivery job
+# that built it was handed the same build argument. There is no build here to
+# pass it to, so the name is neither passed nor validated -- refusing a value
+# nothing reads would cost a deploy for nothing.
+if [ -n "${FLY_VERSION_BUILD_ARG:-}" ] && [ -n "$FLY_IMAGE" ]; then
+  echo "FLY_VERSION_BUILD_ARG is not passed: FLY_IMAGE was built before this job, with its version already in it."
+fi
+
 # The version handed to the image, when the consumer opts in by NAMING the
 # Dockerfile `ARG` that receives it: FLY_VERSION_BUILD_ARG. A Dockerfile that
 # compiles its version in otherwise reports its default -- `dev`, on every
@@ -81,7 +169,7 @@ fi
 # for the reason FLY_MACHINE_COUNT is: nothing downstream rejects a malformed
 # name. A build argument no `ARG` declares is ignored rather than refused, so the
 # deploy would succeed with an image still reporting its default.
-if [ -n "${FLY_VERSION_BUILD_ARG:-}" ]; then
+if [ -n "${FLY_VERSION_BUILD_ARG:-}" ] && [ -z "$FLY_IMAGE" ]; then
   if ! build_arg_name_is_valid "$FLY_VERSION_BUILD_ARG"; then
     echo "ERROR: FLY_VERSION_BUILD_ARG must name a Dockerfile ARG (letters, digits and underscores, not starting with a digit), got '$FLY_VERSION_BUILD_ARG'." >&2
     echo "Nothing has been deployed. Check the value for stray whitespace or quotes." >&2
@@ -118,6 +206,34 @@ if [ -n "${FLY_VERSION_BUILD_ARG:-}" ]; then
   fi
 
   echo "Build version: $FLY_VERSION_BUILD_ARG=$FLY_RESOLVED_VERSION"
+fi
+
+# The app name is resolved BEFORE anything is installed, because it has two
+# documented sources: FLY_APP_NAME, and `app = "..."` in the committed fly.toml
+# -- the configuration `go-flyio.yaml` describes as making `fly_app_name`
+# optional, and the one `flyctl launch` produces. Two things below need it: the
+# app auto-creation, and the copy of FLY_IMAGE. Gating the creation on
+# FLY_APP_NAME alone made FLY_ORG a SILENT no-op for exactly that setup: the
+# consumer minted the wider org-scoped token to opt in, the creation was skipped
+# without a word, and the first deploy still failed with `Could not find App`.
+#
+# The parse stops at the first table header: `app` is a top-level TOML key, so a
+# same-named key inside a later `[section]` is not it.
+FLY_RESOLVED_APP="${FLY_APP_NAME:-}"
+if [ -z "$FLY_RESOLVED_APP" ] && [ -f "$FLY_CONFIG" ]; then
+  FLY_RESOLVED_APP=$(sed -n -e '/^[[:space:]]*\[/q' \
+    -e "s/^[[:space:]]*app[[:space:]]*=[[:space:]]*[\"']\\([^\"']*\\)[\"'].*/\\1/p" \
+    "$FLY_CONFIG" | head -n 1)
+fi
+
+# The copy of FLY_IMAGE names the app: the image lands in registry.fly.io/<app>,
+# the repository that app's machines pull from. With no name there is nowhere to
+# copy it, so this fails before anything is installed or copied -- on a dry run
+# too, which needs no network to find it out.
+if [ -n "$FLY_IMAGE" ] && [ -z "$FLY_RESOLVED_APP" ]; then
+  echo "ERROR: FLY_IMAGE is set, but no app name could be resolved, and the image is copied to registry.fly.io/<app>." >&2
+  echo "Set FLY_APP_NAME, or declare 'app = \"<name>\"' in '$FLY_CONFIG'. Nothing has been deployed." >&2
+  exit 1
 fi
 
 # A dry run only resolves and records the command line, so downloading the CLI
@@ -172,6 +288,56 @@ if ! command -v flyctl > /dev/null 2>&1 && ! deploy_is_dry_run; then
   exit 1
 fi
 
+# crane copies FLY_IMAGE into registry.fly.io, registry to registry, with no
+# Docker daemon. Installed the way flyctl is above: a pinned version whose
+# release archive must match the digest committed in `pinned-versions.sh`
+# before anything is unpacked, and nothing at all on a dry run. Only `crane` is
+# taken from the archive, which also carries `gcrane` and `krane`. The archive
+# lands in a private directory rather than at a fixed name under /tmp, so two
+# deploys on one self-hosted host cannot swap each other's download.
+if [ -n "$FLY_IMAGE" ]; then
+  if ! command -v crane > /dev/null 2>&1 && deploy_is_dry_run; then
+    echo "DRY RUN: skipping installation of crane."
+  elif ! command -v crane > /dev/null 2>&1; then
+    echo "Downloading crane..."
+
+    ARCH=$(uname -m)
+    case "$ARCH" in
+      x86_64)        CRANE_ARCH="x86_64"; CRANE_DIGEST_ARCH="X86_64" ;;
+      aarch64|arm64) CRANE_ARCH="arm64";  CRANE_DIGEST_ARCH="ARM64" ;;
+      *)
+        echo "Unsupported architecture: $ARCH" >&2
+        exit 1
+        ;;
+    esac
+
+    CRANE_SHA256=$(pinned_digest CRANE "$CRANE_DIGEST_ARCH") || exit 1
+
+    CRANE_DOWNLOAD_DIR=$(mktemp -d) || exit 1
+    echo "Installing crane v$CRANE_VERSION (Linux/$CRANE_ARCH)..."
+    if ! download_verified \
+      "https://github.com/google/go-containerregistry/releases/download/v${CRANE_VERSION}/go-containerregistry_Linux_${CRANE_ARCH}.tar.gz" \
+      "$CRANE_DOWNLOAD_DIR/crane.tar.gz" \
+      "$CRANE_SHA256"; then
+      rm -rf "$CRANE_DOWNLOAD_DIR"
+      exit 1
+    fi
+    if ! tar -xzf "$CRANE_DOWNLOAD_DIR/crane.tar.gz" -C "$CRANE_DOWNLOAD_DIR" crane; then
+      echo "ERROR: failed to extract crane from its release archive (corrupt download or no space left)." >&2
+      rm -rf "$CRANE_DOWNLOAD_DIR"
+      exit 1
+    fi
+    chmod +x "$CRANE_DOWNLOAD_DIR/crane"
+    mv "$CRANE_DOWNLOAD_DIR/crane" "$HOME/.local/bin/crane"
+    rm -rf "$CRANE_DOWNLOAD_DIR"
+  fi
+
+  if ! command -v crane > /dev/null 2>&1 && ! deploy_is_dry_run; then
+    echo "ERROR: crane installation did not produce a runnable 'crane' binary." >&2
+    exit 1
+  fi
+fi
+
 # Create the app on its first deploy, so standing up a new environment does not
 # depend on somebody remembering to run `flyctl apps create` by hand. `flyctl
 # deploy` does NOT create an app -- it fails with `Could not find App "<name>"`
@@ -199,23 +365,9 @@ fi
 # against an app this account does not own. `apps list` only ever shows apps the
 # token can actually reach, so a miss means "create it", never "someone else has
 # it and we quietly gave up".
-
-# The app name is resolved BEFORE the guard, because it has two documented
-# sources: FLY_APP_NAME, and `app = "..."` in the committed fly.toml -- the
-# configuration `go-flyio.yaml` describes as making `fly_app_name` optional, and
-# the one `flyctl launch` produces. Gating the creation on FLY_APP_NAME alone
-# made FLY_ORG a SILENT no-op for exactly that setup: the consumer minted the
-# wider org-scoped token to opt in, this block was skipped without a word, and
-# the first deploy still failed with `Could not find App`.
 #
-# The parse stops at the first table header: `app` is a top-level TOML key, so a
-# same-named key inside a later `[section]` is not it.
-FLY_RESOLVED_APP="${FLY_APP_NAME:-}"
-if [ -z "$FLY_RESOLVED_APP" ] && [ -f "$FLY_CONFIG" ]; then
-  FLY_RESOLVED_APP=$(sed -n -e '/^[[:space:]]*\[/q' \
-    -e "s/^[[:space:]]*app[[:space:]]*=[[:space:]]*[\"']\\([^\"']*\\)[\"'].*/\\1/p" \
-    "$FLY_CONFIG" | head -n 1)
-fi
+# It runs BEFORE the copy of FLY_IMAGE below: an image can only be pushed into
+# the repository of an app that exists.
 
 # Never silent: opting in and getting nothing is the failure this whole block
 # exists to remove, so an unresolvable name says so rather than skipping. Not
@@ -286,12 +438,123 @@ if [ -n "$FLY_RESOLVED_APP" ] && [ -n "${FLY_ORG:-}" ] && ! deploy_is_dry_run; t
   fi
 fi
 
-# `--remote-only` builds the image on Fly's builder rather than on the CI
-# runner. That is the right default here because it removes the need for a
-# Docker daemon in the job -- GitLab and Azure DevOps agents frequently have
-# none, and requiring privileged Docker-in-Docker just to deploy would be a
-# steeper prerequisite than the deploy itself.
-set -- deploy --remote-only
+# Copy FLY_IMAGE to where Fly machines pull from. They pull from registry.fly.io,
+# never from the registry the pipeline pushed to: on GitHub Actions the
+# credential that reads GHCR is the job's own token, which expires with the job,
+# and a machine that restarts or migrates later pulls its image again. So the
+# image is copied into the app's own repository first, registry to registry.
+#
+# Only linux/amd64 is copied, the platform Fly machines run. The multi-arch
+# index the delivery job pushes is resolved to that one image FIRST, and
+# everything after names its digest: the copy reads it, the destination tag is
+# derived from it, and the deploy ships it. A tag is mutable -- a re-run of the
+# same commit is a new build with a new digest -- so a deploy by tag ships
+# whichever build pushed it last, while a deploy by digest can only ship these
+# bytes. flyctl hands a digest-pinned reference to Fly's API unchanged, and the
+# machines are configured with what the API resolves. The tag exists so the
+# registry keeps the image, and it is named after the digest, so it can never
+# be moved onto other bytes.
+#
+# Credentials go into a throwaway DOCKER_CONFIG, removed on exit, never into
+# $HOME/.docker, where a persistent self-hosted runner would keep them for the
+# next job. Every secret reaches crane on stdin, never on argv: `crane auth
+# login` only stores what it is given, so a credential that is wrong surfaces at
+# the digest or the copy below, which say so.
+if [ -n "$FLY_IMAGE" ]; then
+  FLY_REGISTRY_REPOSITORY="registry.fly.io/$FLY_RESOLVED_APP"
+  if deploy_is_dry_run; then
+    # A dry run touches no network, and the digest is the one value only the
+    # registry can answer, so the deploy it records names it symbolically.
+    FLY_SOURCE_IMAGE="$FLY_IMAGE"
+    FLY_IMAGE_DIGEST="<linux/amd64-digest>"
+    if [ -n "${FLY_IMAGE_REGISTRY_PASSWORD:-}" ]; then
+      echo "DRY RUN (no login performed): crane auth login $(fly_image_registry "$FLY_IMAGE") --username ${FLY_IMAGE_REGISTRY_USERNAME:-} --password-stdin"
+    fi
+    echo "DRY RUN (no login performed): crane auth login registry.fly.io --username x --password-stdin"
+    echo "DRY RUN (no copy performed): crane copy --platform linux/amd64 $FLY_IMAGE $FLY_REGISTRY_REPOSITORY:deployment-<linux/amd64-digest>"
+  else
+    if ! FLY_DOCKER_CONFIG=$(mktemp -d); then
+      echo "ERROR: could not create a temporary directory for the registry credentials." >&2
+      exit 1
+    fi
+    trap 'rm -rf "$FLY_DOCKER_CONFIG"' EXIT
+    trap 'exit 129' HUP
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    DOCKER_CONFIG="$FLY_DOCKER_CONFIG"
+    export DOCKER_CONFIG
+
+    # The registry holding FLY_IMAGE, when it needs a login. A public image needs
+    # none, so no password means no login.
+    if [ -n "${FLY_IMAGE_REGISTRY_PASSWORD:-}" ]; then
+      FLY_IMAGE_REGISTRY=$(fly_image_registry "$FLY_IMAGE")
+      if [ -z "${FLY_IMAGE_REGISTRY_USERNAME:-}" ]; then
+        echo "ERROR: FLY_IMAGE_REGISTRY_PASSWORD is set, but FLY_IMAGE_REGISTRY_USERNAME is not." >&2
+        echo "Set the user '$FLY_IMAGE_REGISTRY' expects with that password. Nothing has been deployed." >&2
+        exit 1
+      fi
+      if ! printf '%s' "$FLY_IMAGE_REGISTRY_PASSWORD" \
+        | crane auth login "$FLY_IMAGE_REGISTRY" --username "$FLY_IMAGE_REGISTRY_USERNAME" --password-stdin; then
+        echo "ERROR: could not store the credentials for '$FLY_IMAGE_REGISTRY'. Nothing has been deployed." >&2
+        exit 1
+      fi
+    fi
+    # Nothing after this reads it, and flyctl, which runs next, has no business
+    # inheriting it.
+    unset FLY_IMAGE_REGISTRY_PASSWORD
+
+    # registry.fly.io takes the user `x` and the API token, as `flyctl auth
+    # docker` logs in.
+    if ! fly_registry_token | crane auth login registry.fly.io --username x --password-stdin; then
+      echo "ERROR: could not store the credentials for registry.fly.io. Nothing has been deployed." >&2
+      exit 1
+    fi
+
+    echo "Resolving the linux/amd64 image of $FLY_IMAGE..."
+    if ! FLY_SOURCE_IMAGE=$(crane digest --platform linux/amd64 --full-ref "$FLY_IMAGE"); then
+      echo "ERROR: could not resolve the linux/amd64 image of '$FLY_IMAGE'." >&2
+      echo "Check that it was pushed, that it was built for linux/amd64 (the platform Fly machines run), and that the job can read it -- on GitHub Actions, that the deploy job is granted 'packages: read'. Nothing has been deployed." >&2
+      exit 1
+    fi
+
+    # `<repository>@sha256:<64 hex>`, or nothing is copied: a destination named
+    # after anything else could not promise to hold these bytes.
+    FLY_IMAGE_DIGEST="${FLY_SOURCE_IMAGE##*@}"
+    case "$FLY_IMAGE_DIGEST" in
+      sha256:*) FLY_IMAGE_HEX="${FLY_IMAGE_DIGEST#sha256:}" ;;
+      *) FLY_IMAGE_HEX="" ;;
+    esac
+    case "$FLY_IMAGE_HEX" in
+      *[!0-9a-f]*) FLY_IMAGE_HEX="" ;;
+    esac
+    if [ "${#FLY_IMAGE_HEX}" -ne 64 ]; then
+      echo "ERROR: '$FLY_IMAGE' resolved to '$FLY_SOURCE_IMAGE', which names no sha256 digest. Nothing has been deployed." >&2
+      exit 1
+    fi
+
+    FLY_REGISTRY_TAG="$FLY_REGISTRY_REPOSITORY:deployment-$FLY_IMAGE_HEX"
+    echo "Copying $FLY_SOURCE_IMAGE to $FLY_REGISTRY_TAG..."
+    if ! crane copy --platform linux/amd64 "$FLY_SOURCE_IMAGE" "$FLY_REGISTRY_TAG"; then
+      echo "ERROR: could not copy '$FLY_SOURCE_IMAGE' to '$FLY_REGISTRY_TAG'." >&2
+      echo "Check that the app '$FLY_RESOLVED_APP' exists and that FLY_API_TOKEN can deploy it. Nothing has been deployed." >&2
+      exit 1
+    fi
+  fi
+  FLY_DEPLOY_IMAGE="$FLY_REGISTRY_REPOSITORY@$FLY_IMAGE_DIGEST"
+fi
+
+if [ -n "$FLY_IMAGE" ]; then
+  # The copied image, by digest. Nothing is built, so no `--remote-only`, and
+  # there is no build to hand a `--build-arg` to.
+  set -- deploy --image "$FLY_DEPLOY_IMAGE"
+else
+  # `--remote-only` builds the image on Fly's builder rather than on the CI
+  # runner. That is the right default here because it removes the need for a
+  # Docker daemon in the job -- GitLab and Azure DevOps agents frequently have
+  # none, and requiring privileged Docker-in-Docker just to deploy would be a
+  # steeper prerequisite than the deploy itself.
+  set -- deploy --remote-only
+fi
 
 if [ -n "${FLY_APP_NAME:-}" ]; then
   set -- "$@" --app "$FLY_APP_NAME"
@@ -302,7 +565,7 @@ fi
 if [ -n "${FLY_STRATEGY:-}" ]; then
   set -- "$@" --strategy "$FLY_STRATEGY"
 fi
-if [ -n "${FLY_VERSION_BUILD_ARG:-}" ]; then
+if [ -n "${FLY_VERSION_BUILD_ARG:-}" ] && [ -z "$FLY_IMAGE" ]; then
   set -- "$@" --build-arg "$FLY_VERSION_BUILD_ARG=$FLY_RESOLVED_VERSION"
 fi
 
@@ -337,6 +600,12 @@ if [ -n "${FLY_MACHINE_COUNT:-}" ] && [ -z "${EXIT_CODE:-}" ] && ! deploy_is_dry
   fi
 fi
 
-deploy_record "flyio" "${FLY_APP_NAME:-$FLY_CONFIG}"
+# The receipt names the image a FLY_IMAGE deploy shipped, and the one it was
+# copied from -- the artifact the pipeline delivered.
+if [ -n "$FLY_IMAGE" ]; then
+  deploy_record "flyio" "${FLY_APP_NAME:-$FLY_CONFIG}" "$FLY_DEPLOY_IMAGE" "$FLY_SOURCE_IMAGE"
+else
+  deploy_record "flyio" "${FLY_APP_NAME:-$FLY_CONFIG}"
+fi
 
 exit "${EXIT_CODE:-0}"

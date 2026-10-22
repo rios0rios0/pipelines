@@ -116,6 +116,7 @@ run_provider() {
       RENDER_API_KEY RENDER_SERVICE_ID RENDER_SERVICE_NAME RENDER_DEPLOY_HOOK_URL \
       FLY_API_TOKEN FLY_APP_NAME FLY_ORG FLY_MACHINE_COUNT FLY_CONFIG FLY_STRATEGY \
       FLY_VERSION_BUILD_ARG FLY_APP_VERSION \
+      FLY_IMAGE FLY_IMAGE_REGISTRY_USERNAME FLY_IMAGE_REGISTRY_PASSWORD \
       DEPLOY_ENVIRONMENT
     # The CI platform's own description of the build, which the Fly version is
     # derived from. Cleared for the same reason: this suite runs INSIDE GitHub
@@ -718,7 +719,8 @@ assert_true "flyio: with no [build] dockerfile, the config directory's Dockerfil
   "grep -q \"fly-version/Dockerfile' declares no 'ARG VERSION'\" <<< \"\$OUT\""
 
 # The wiring contract again: the knob on all three platforms, and through `go-flyio.yaml`
-# to BOTH builds of the commit -- the registry image and Fly's own.
+# to every build of the commit -- the registry image, and Fly's own for a caller that
+# builds from source.
 assert_true "flyio: GitHub action forwards FLY_VERSION_BUILD_ARG and FLY_APP_VERSION" \
   "grep -q 'FLY_VERSION_BUILD_ARG' '$SCRIPTS_DIR/github/global/stages/50-deployment/flyio/action.yaml' && grep -q 'FLY_APP_VERSION' '$SCRIPTS_DIR/github/global/stages/50-deployment/flyio/action.yaml'"
 assert_true "flyio: Azure template forwards FLY_VERSION_BUILD_ARG and FLY_APP_VERSION" \
@@ -728,7 +730,322 @@ assert_true "flyio: GitLab template documents FLY_VERSION_BUILD_ARG and FLY_APP_
 echo ""
 
 # ---------------------------------------------------------------------------
-echo "7. Deployment record"
+echo "7. Functional: Fly.io deploying a delivered image"
+# ---------------------------------------------------------------------------
+# `go-flyio.yaml` hands the deploy the image `delivery > docker` already pushed,
+# and the script copies its linux/amd64 build into registry.fly.io and deploys it
+# by digest. Rebuilding the Dockerfile on Fly's builder took most of every deploy
+# and shipped an image with another digest than the one CI had pushed -- so every
+# assertion here is about one of two things: nothing is built, and nothing but
+# that digest can be deployed.
+INDEX_DIGEST="sha256:$(printf 'a%.0s' $(seq 64))"
+CHILD_HEX="$(printf 'c%.0s' $(seq 64))"
+CHILD_DIGEST="sha256:$CHILD_HEX"
+DELIVERED="ghcr.io/fixture-owner/fixture-repo@$INDEX_DIGEST"
+# What a dry run records where only the registry could answer: the digest.
+DRY_IMAGE='registry.fly.io/my-mvp@<linux/amd64-digest>'
+
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_IMAGE="$DELIVERED"
+assert_equals "flyio: a delivered image is deployed by digest from the app's own registry" \
+  "flyctl deploy --image $DRY_IMAGE --app my-mvp" "$CMD"
+assert_true "flyio: a delivered image is not rebuilt on Fly's builder (no --remote-only)" \
+  "[[ -n \"\$CMD\" ]] && ! grep -q -- '--remote-only' <<< \"\$CMD\""
+assert_true "flyio: a dry run names the copy it would make, linux/amd64 only" \
+  "grep -qF 'DRY RUN (no copy performed): crane copy --platform linux/amd64 $DELIVERED registry.fly.io/my-mvp:deployment-' <<< \"\$OUT\""
+assert_no_leak "flyio: the API token is never recorded when deploying a delivered image"
+
+# The image was built with its version in it: the delivery job got the same build
+# argument. So it is neither passed -- there is no build to pass it to -- nor
+# validated, since refusing a value nothing reads would cost a deploy for nothing.
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_IMAGE="$DELIVERED" \
+  FLY_VERSION_BUILD_ARG=VERSION GITHUB_SHA="$SHA"
+assert_equals "flyio: a delivered image gets no --build-arg, its version is already in it" \
+  "flyctl deploy --image $DRY_IMAGE --app my-mvp" "$CMD"
+assert_true "flyio: the log says why the version build argument is not passed" \
+  "grep -q 'FLY_VERSION_BUILD_ARG is not passed' <<< \"\$OUT\""
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_IMAGE="$DELIVERED" \
+  'FLY_VERSION_BUILD_ARG=VERSION ' GITHUB_SHA="$SHA"
+assert_true "flyio: a build argument name nothing reads is not refused" "[[ $STATUS -eq 0 ]]"
+
+# Every other flag means what it meant before.
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_IMAGE="$DELIVERED" \
+  FLY_STRATEGY=bluegreen FLY_MACHINE_COUNT=1
+assert_equals "flyio: a delivered image keeps the strategy and the single-machine guard" \
+  "flyctl deploy --image $DRY_IMAGE --app my-mvp --strategy bluegreen --ha=false" "$CMD"
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_CONFIG="$WORK_DIR/fly-from-toml.toml" \
+  FLY_IMAGE="$DELIVERED"
+assert_equals "flyio: an app named only in fly.toml receives the image, with no --app added" \
+  "flyctl deploy --image registry.fly.io/app-from-toml@<linux/amd64-digest> --config $WORK_DIR/fly-from-toml.toml" "$CMD"
+
+# The copy needs the app's name, so a deploy that cannot resolve one stops before
+# anything is installed or copied -- on a dry run as well, which needs no network
+# to find it out.
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_IMAGE="$DELIVERED"
+assert_true "flyio: a delivered image with no app name fails the job" "[[ $STATUS -eq 1 ]]"
+assert_true "flyio: the failure says the copy needs the app name" \
+  "grep -q 'no app name could be resolved, and the image is copied to registry.fly.io/<app>' <<< \"\$OUT\""
+assert_true "flyio: an image with no app name deploys nothing" "[[ -z \"\$CMD\" ]]"
+
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp "FLY_IMAGE=$DELIVERED "
+assert_true "flyio: an image reference holding whitespace fails the job" "[[ $STATUS -eq 1 ]]"
+assert_true "flyio: the rejection says what a reference may contain" \
+  "grep -q 'FLY_IMAGE must be an image reference' <<< \"\$OUT\""
+assert_true "flyio: a malformed reference deploys nothing" "[[ -z \"\$CMD\" ]]"
+
+# No image is today's deploy, byte for byte.
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_IMAGE=
+assert_equals "flyio: an empty image keeps the build from source" \
+  "flyctl deploy --remote-only --app my-mvp" "$CMD"
+
+# The receipt names what shipped and what it was copied from: that pair is the
+# evidence the pipeline's own artifact went out.
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_IMAGE="$DELIVERED"
+assert_equals "flyio: the receipt records the image the deploy ships" "$DRY_IMAGE" \
+  "$(python3 -c "import json; print(json.load(open('$REPORT_DIR/deployment.json')).get('image'))" 2>&1)"
+assert_equals "flyio: the receipt records the delivered image it came from" "$DELIVERED" \
+  "$(python3 -c "import json; print(json.load(open('$REPORT_DIR/deployment.json')).get('source_image'))" 2>&1)"
+run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp
+assert_true "flyio: a build from source writes the receipt it always wrote, with no image" \
+  "! grep -q 'image' '$REPORT_DIR/deployment.json'"
+
+# A dry run installs nothing and copies nothing. Proven with a PATH holding only
+# the tools the script needs and RECORDING stand-ins for every way to reach the
+# network, so "installed nothing" is observed rather than inferred from a log line
+# -- and with a scratch HOME, since `$HOME/.local/bin` is where an install lands.
+FLY_MINIMAL_BIN="$WORK_DIR/fly-minimal-bin"
+FLY_NET_BIN="$WORK_DIR/fly-network-bin"
+FLY_STUB_BIN="$WORK_DIR/fly-stub-bin"
+FLY_STUB_DIR="$WORK_DIR/fly-stub-records"
+mkdir -p "$FLY_MINIMAL_BIN" "$FLY_NET_BIN" "$FLY_STUB_BIN" "$FLY_STUB_DIR"
+for tool in sh env rm mkdir cat tr sed head dirname realpath uname mktemp awk grep; do
+  toolPath="$(type -P "$tool" || true)"
+  if [[ -n "$toolPath" ]]; then ln -sf "$toolPath" "$FLY_MINIMAL_BIN/$tool"; fi
+done
+for tool in curl wget; do
+  cat > "$FLY_NET_BIN/$tool" <<STUB
+#!/bin/sh
+echo "$tool \$*" >> "\$FLY_STUB_DIR/network"
+exit 1
+STUB
+  chmod +x "$FLY_NET_BIN/$tool"
+done
+
+# crane and flyctl stand-ins. Each records its argv, which is what the "no secret
+# on argv" assertions read; crane also records the DOCKER_CONFIG it was handed and
+# what a login receives on stdin, and flyctl records whether the source registry's
+# password reached its environment. A login writes a `config.json` where the real
+# `crane auth login` does -- DOCKER_CONFIG, else `$HOME/.docker` -- so where the
+# credentials land is observed, not assumed. `crane digest` answers the
+# linux/amd64 manifest's digest under the reference's repository, as the real one
+# does with `--full-ref`, and FLY_STUB_FAIL names a subcommand that fails.
+cat > "$FLY_STUB_BIN/crane" <<'STUB'
+#!/bin/sh
+printf 'crane' >> "$FLY_STUB_DIR/argv"
+for argument in "$@"; do printf ' %s' "$argument" >> "$FLY_STUB_DIR/argv"; done
+printf '\n' >> "$FLY_STUB_DIR/argv"
+printf '%s\n' "${DOCKER_CONFIG:-<unset>}" >> "$FLY_STUB_DIR/docker-config"
+if [ "$1" = "${FLY_STUB_FAIL:-}" ]; then exit 1; fi
+case "$1 $2" in
+  'auth login')
+    cat > "$FLY_STUB_DIR/stdin-$3"
+    mkdir -p "${DOCKER_CONFIG:-$HOME/.docker}"
+    printf '{"auths":{"%s":{}}}\n' "$3" > "${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+    ;;
+  'digest --platform') printf '%s@%s\n' "${5%@*}" "$FLY_STUB_CHILD_DIGEST" ;;
+esac
+exit 0
+STUB
+cat > "$FLY_STUB_BIN/flyctl" <<'STUB'
+#!/bin/sh
+printf 'flyctl' >> "$FLY_STUB_DIR/argv"
+for argument in "$@"; do printf ' %s' "$argument" >> "$FLY_STUB_DIR/argv"; done
+printf '\n' >> "$FLY_STUB_DIR/argv"
+printf '%s\n' "${FLY_IMAGE_REGISTRY_PASSWORD-<unset>}" >> "$FLY_STUB_DIR/flyctl-env"
+if [ "$1" = "${FLY_STUB_FAIL:-}" ]; then exit 1; fi
+exit 0
+STUB
+chmod +x "$FLY_STUB_BIN/crane" "$FLY_STUB_BIN/flyctl"
+
+# run_flyio_isolated <path> [VAR=value...]
+#
+# Runs the Fly.io script under `env -i` with exactly <path> on PATH and a scratch
+# HOME, leaving the same $STATUS/$OUT/$CMD/$REPORT_DIR as `run_provider` plus the
+# stand-ins' records. NOT a dry run unless a case asks for one: these cases drive
+# the real copy and deploy against the stand-ins above.
+run_flyio_isolated() {
+  local path="$1"
+  shift
+  local projectDir="$WORK_DIR/isolated-project"
+  local homeDir="$WORK_DIR/isolated-home"
+  rm -rf "$projectDir" "$homeDir" "$FLY_STUB_DIR"
+  mkdir -p "$projectDir" "$homeDir" "$FLY_STUB_DIR"
+  : > "$FLY_STUB_DIR/argv"
+  : > "$FLY_STUB_DIR/network"
+  : > "$FLY_STUB_DIR/docker-config"
+  : > "$FLY_STUB_DIR/flyctl-env"
+
+  STATUS=0
+  (
+    cd "$projectDir" || exit 1
+    env -i PATH="$path" HOME="$homeDir" SCRIPTS_DIR="$SCRIPTS_DIR" \
+      FLY_STUB_DIR="$FLY_STUB_DIR" FLY_STUB_CHILD_DIGEST="$CHILD_DIGEST" "$@" \
+      "$FLY_MINIMAL_BIN/sh" "$FLYIO_SH"
+  ) > "$projectDir/out.txt" 2>&1 || STATUS=$?
+
+  REPORT_DIR="$projectDir/build/reports/deploy-flyio"
+  # shellcheck disable=SC2034  # read by assert_true's eval'd conditions, which ShellCheck cannot see
+  OUT="$(cat "$projectDir/out.txt")"
+  CMD=""
+  if [[ -f "$REPORT_DIR/command.txt" ]]; then CMD="$(cat "$REPORT_DIR/command.txt")"; fi
+  # shellcheck disable=SC2034  # read by assert_true's eval'd conditions
+  STUB_ARGV="$(cat "$FLY_STUB_DIR/argv")"
+  # shellcheck disable=SC2034  # read by assert_true's eval'd conditions
+  STUB_NETWORK="$(cat "$FLY_STUB_DIR/network")"
+  # shellcheck disable=SC2034  # read by assert_true's eval'd conditions
+  ISOLATED_HOME="$homeDir"
+}
+
+run_flyio_isolated "$FLY_NET_BIN:$FLY_MINIMAL_BIN" DEPLOY_DRY_RUN=true \
+  FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_IMAGE="$DELIVERED"
+assert_true "flyio: a dry run of a delivered image exits cleanly with no CLI on PATH" "[[ $STATUS -eq 0 ]]"
+assert_true "flyio: a dry run skips installing crane, and says so" \
+  "grep -q 'DRY RUN: skipping installation of crane.' <<< \"\$OUT\""
+assert_true "flyio: a dry run downloads nothing" "[[ -z \"\$STUB_NETWORK\" ]]"
+assert_true "flyio: a dry run leaves no crane behind in HOME" "[[ ! -e '$WORK_DIR/isolated-home/.local/bin/crane' ]]"
+
+run_flyio_isolated "$FLY_STUB_BIN:$FLY_NET_BIN:$FLY_MINIMAL_BIN" DEPLOY_DRY_RUN=true \
+  FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_IMAGE="$DELIVERED" \
+  FLY_IMAGE_REGISTRY_USERNAME=fixture-actor FLY_IMAGE_REGISTRY_PASSWORD="$SENTINEL"
+assert_true "flyio: a dry run with crane available still runs neither crane nor flyctl" \
+  "[[ $STATUS -eq 0 && -z \"\$STUB_ARGV\" ]]"
+assert_no_leak "flyio: a dry run never records the source registry's password"
+
+# The REAL path, against the stand-ins. Guarded first: these cases run the script
+# without DEPLOY_DRY_RUN, so they must provably reach the stand-ins and nothing
+# else -- the workstation running this suite may hold a logged-in flyctl.
+STUB_RESOLVES="$(env -i PATH="$FLY_STUB_BIN:$FLY_NET_BIN:$FLY_MINIMAL_BIN" \
+  "$FLY_MINIMAL_BIN/sh" -c 'command -v flyctl; command -v crane' 2>&1 || true)"
+if [[ "$STUB_RESOLVES" == "$FLY_STUB_BIN/flyctl"$'\n'"$FLY_STUB_BIN/crane" ]]; then
+  STUB_PATH="$FLY_STUB_BIN:$FLY_NET_BIN:$FLY_MINIMAL_BIN"
+  FLY_TOKEN_FIXTURE="FlyV1 fm2_$SENTINEL,fm2_fixture-second"
+
+  run_flyio_isolated "$STUB_PATH" FLY_API_TOKEN="$FLY_TOKEN_FIXTURE" FLY_APP_NAME=my-mvp \
+    FLY_IMAGE="$DELIVERED" FLY_IMAGE_REGISTRY_USERNAME=fixture-actor \
+    FLY_IMAGE_REGISTRY_PASSWORD="$SENTINEL-registry" FLY_VERSION_BUILD_ARG=VERSION GITHUB_SHA="$SHA"
+  assert_true "flyio: a delivered image deploys" "[[ $STATUS -eq 0 ]]"
+  # One assertion over the whole sequence, so it holds the order as well as each
+  # line: both logins before any read, the copy reading the digest it resolved
+  # into a tag named after that digest, and the deploy shipping that digest --
+  # with neither --remote-only nor --build-arg, although a build argument is named.
+  assert_equals "flyio: the image is resolved, copied and deployed by one digest, in that order" \
+    "$(printf '%s\n' \
+      'crane auth login ghcr.io --username fixture-actor --password-stdin' \
+      'crane auth login registry.fly.io --username x --password-stdin' \
+      "crane digest --platform linux/amd64 --full-ref $DELIVERED" \
+      "crane copy --platform linux/amd64 ghcr.io/fixture-owner/fixture-repo@$CHILD_DIGEST registry.fly.io/my-mvp:deployment-$CHILD_HEX" \
+      "flyctl deploy --image registry.fly.io/my-mvp@$CHILD_DIGEST --app my-mvp")" \
+    "$STUB_ARGV"
+  assert_equals "flyio: command.txt holds the deploy of that digest" \
+    "flyctl deploy --image registry.fly.io/my-mvp@$CHILD_DIGEST --app my-mvp" "$CMD"
+  assert_equals "flyio: the receipt names the digest deployed" "registry.fly.io/my-mvp@$CHILD_DIGEST" \
+    "$(python3 -c "import json; print(json.load(open('$REPORT_DIR/deployment.json')).get('image'))" 2>&1)"
+  assert_equals "flyio: the receipt names the delivered build it was copied from" \
+    "ghcr.io/fixture-owner/fixture-repo@$CHILD_DIGEST" \
+    "$(python3 -c "import json; print(json.load(open('$REPORT_DIR/deployment.json')).get('source_image'))" 2>&1)"
+
+  # Both credentials reach crane on stdin -- never on argv -- and the Fly token as
+  # flyctl hands it to the registry itself: without its `FlyV1 ` scheme.
+  assert_true "flyio: no credential is on any argv the copy or the deploy ran with" \
+    "! grep -q '$SENTINEL' <<< \"\$STUB_ARGV\""
+  assert_equals "flyio: the source registry's password arrives on stdin" "$SENTINEL-registry" \
+    "$(cat "$FLY_STUB_DIR/stdin-ghcr.io" 2>&1)"
+  assert_equals "flyio: registry.fly.io gets the token without its FlyV1 scheme, on stdin" \
+    "fm2_$SENTINEL,fm2_fixture-second" "$(cat "$FLY_STUB_DIR/stdin-registry.fly.io" 2>&1)"
+  assert_no_leak "flyio: no credential reaches the report of a real image deploy"
+  assert_true "flyio: flyctl does not inherit the source registry's password" \
+    "[[ -s '$FLY_STUB_DIR/flyctl-env' ]] && ! grep -qv '^<unset>\$' '$FLY_STUB_DIR/flyctl-env'"
+
+  # The credentials live in a throwaway DOCKER_CONFIG, never in $HOME/.docker,
+  # which a persistent self-hosted runner keeps for the next job -- and it is gone
+  # once the job is.
+  # shellcheck disable=SC2034  # read by assert_true's eval'd conditions
+  STUB_DOCKER_CONFIG="$(sort -u "$FLY_STUB_DIR/docker-config")"
+  assert_true "flyio: every crane call shares one DOCKER_CONFIG" \
+    "[[ \$(grep -c . <<< \"\$STUB_DOCKER_CONFIG\") -eq 1 && \"\$STUB_DOCKER_CONFIG\" != '<unset>' ]]"
+  assert_true "flyio: that DOCKER_CONFIG is not under HOME" \
+    "[[ \"\$STUB_DOCKER_CONFIG\" != \"\$ISOLATED_HOME\"* ]]"
+  assert_true "flyio: that DOCKER_CONFIG is removed when the job ends" "[[ ! -e \"\$STUB_DOCKER_CONFIG\" ]]"
+  assert_true "flyio: nothing was written to HOME/.docker" "[[ ! -e \"\$ISOLATED_HOME/.docker\" ]]"
+  assert_true "flyio: a real image deploy downloads nothing when both CLIs are present" \
+    "[[ -z \"\$STUB_NETWORK\" ]]"
+
+  # Nothing is deployed when the image cannot be read or copied, and the
+  # credentials are cleaned up on that path too.
+  for failing in digest copy; do
+    run_flyio_isolated "$STUB_PATH" FLY_API_TOKEN="$FLY_TOKEN_FIXTURE" FLY_APP_NAME=my-mvp \
+      FLY_IMAGE="$DELIVERED" FLY_IMAGE_REGISTRY_USERNAME=fixture-actor \
+      FLY_IMAGE_REGISTRY_PASSWORD="$SENTINEL-registry" FLY_STUB_FAIL="$failing"
+    assert_true "flyio: a failed crane $failing fails the job" "[[ $STATUS -eq 1 ]]"
+    assert_true "flyio: a failed crane $failing deploys nothing" \
+      "! grep -q '^flyctl deploy' <<< \"\$STUB_ARGV\" && [[ -z \"\$CMD\" ]]"
+    assert_true "flyio: a failed crane $failing says nothing was deployed" \
+      "grep -q 'Nothing has been deployed' <<< \"\$OUT\""
+    # shellcheck disable=SC2034  # read by assert_true's eval'd conditions
+    STUB_DOCKER_CONFIG="$(sort -u "$FLY_STUB_DIR/docker-config")"
+    assert_true "flyio: a failed crane $failing still removes the credentials" \
+      "[[ -n \"\$STUB_DOCKER_CONFIG\" && ! -e \"\$STUB_DOCKER_CONFIG\" ]]"
+  done
+
+  # A public image needs no login of its own; registry.fly.io always does.
+  run_flyio_isolated "$STUB_PATH" FLY_API_TOKEN="$FLY_TOKEN_FIXTURE" FLY_APP_NAME=my-mvp \
+    FLY_IMAGE="$DELIVERED"
+  assert_true "flyio: an image with no registry password is read without logging in" \
+    "[[ $STATUS -eq 0 ]] && ! grep -q 'auth login ghcr.io' <<< \"\$STUB_ARGV\" && grep -q 'auth login registry.fly.io' <<< \"\$STUB_ARGV\""
+
+  run_flyio_isolated "$STUB_PATH" FLY_API_TOKEN="$FLY_TOKEN_FIXTURE" FLY_APP_NAME=my-mvp \
+    FLY_IMAGE="$DELIVERED" FLY_IMAGE_REGISTRY_PASSWORD="$SENTINEL-registry"
+  assert_true "flyio: a registry password without a user fails before anything is read" \
+    "[[ $STATUS -eq 1 ]] && ! grep -q 'crane digest' <<< \"\$STUB_ARGV\""
+
+  # With no image, the build from source is what runs, and crane is never touched.
+  run_flyio_isolated "$STUB_PATH" FLY_API_TOKEN="$FLY_TOKEN_FIXTURE" FLY_APP_NAME=my-mvp \
+    FLY_IMAGE_REGISTRY_USERNAME=fixture-actor FLY_IMAGE_REGISTRY_PASSWORD="$SENTINEL-registry"
+  assert_equals "flyio: with no image the real deploy builds from source and runs no crane" \
+    "flyctl deploy --remote-only --app my-mvp" "$STUB_ARGV"
+else
+  echo -e "${RED}  FAIL: the stand-in flyctl and crane are not what PATH resolves, so the real-path cases did not run${NC}"
+  echo -e "${RED}        resolved: $STUB_RESOLVES${NC}"
+  TESTS_FAILED=$((TESTS_FAILED + 1))
+fi
+
+# The wiring contract for the new knobs: on all three platforms, and through
+# `go-flyio.yaml` from the delivery job's output.
+FLYIO_ACTION="$SCRIPTS_DIR/github/global/stages/50-deployment/flyio/action.yaml"
+assert_true "flyio: GitHub action forwards FLY_IMAGE and its registry credentials" \
+  "grep -q 'FLY_IMAGE: \"\${{ inputs.image }}\"' '$FLYIO_ACTION' && grep -q 'FLY_IMAGE_REGISTRY_USERNAME: \"\${{ inputs.image_registry_username }}\"' '$FLYIO_ACTION'"
+# The job token reaches the script only when there is an image to read with it.
+assert_true "flyio: GitHub action maps the registry password only when an image is set" \
+  "grep -qF \"FLY_IMAGE_REGISTRY_PASSWORD: \\\"\\\${{ inputs.image != '' && inputs.image_registry_password || '' }}\\\"\" '$FLYIO_ACTION'"
+assert_true "flyio: GitHub action defaults the registry credentials to the actor and the job token" \
+  "grep -qF \"default: '\\\${{ github.actor }}'\" '$FLYIO_ACTION' && grep -qF \"default: '\\\${{ github.token }}'\" '$FLYIO_ACTION'"
+assert_true "flyio: Azure template forwards FLY_IMAGE and its registry credentials" \
+  "grep -q 'FLY_IMAGE: \${{ parameters.IMAGE }}' '$SCRIPTS_DIR/azure-devops/global/stages/50-deployment/flyio.yaml' && grep -q 'FLY_IMAGE_REGISTRY_USERNAME:' '$SCRIPTS_DIR/azure-devops/global/stages/50-deployment/flyio.yaml' && grep -q 'FLY_IMAGE_REGISTRY_PASSWORD:' '$SCRIPTS_DIR/azure-devops/global/stages/50-deployment/flyio.yaml'"
+assert_true "flyio: GitLab template documents FLY_IMAGE and its registry credentials" \
+  "grep -q 'FLY_IMAGE --' '$SCRIPTS_DIR/gitlab/global/stages/50-deployment/flyio.yaml' && grep -q 'FLY_IMAGE_REGISTRY_USERNAME' '$SCRIPTS_DIR/gitlab/global/stages/50-deployment/flyio.yaml' && grep -q 'FLY_IMAGE_REGISTRY_PASSWORD' '$SCRIPTS_DIR/gitlab/global/stages/50-deployment/flyio.yaml'"
+
+# `go-flyio.yaml` deploys the delivered image unless the caller opts out (the
+# image's path from the delivery job to this deploy is held by
+# `make test-build-version`), and a run with no image to deploy fails rather than
+# quietly building one: falling back to Fly's builder would ship an image this run
+# never pushed.
+assert_true "flyio: the reusable workflow declares the fly_build_from_source opt-out, off by default" \
+  "python3 -c \"import sys, yaml; d = yaml.safe_load(open('$GO_FLYIO')); i = d.get('on', d.get(True))['workflow_call']['inputs']['fly_build_from_source']; sys.exit(0 if (i['type'], i['default']) == ('boolean', False) else 1)\""
+assert_true "flyio: the reusable workflow refuses a run with no delivered image to deploy" \
+  "grep -qF \"if: \\\"!inputs.fly_build_from_source && needs.go-docker.outputs.image == ''\\\"\" '$GO_FLYIO'"
+echo ""
+
+# ---------------------------------------------------------------------------
+echo "8. Deployment record"
 # ---------------------------------------------------------------------------
 run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp
 assert_true "record: a deployment.json receipt is written" "[[ -f '$REPORT_DIR/deployment.json' ]]"
@@ -743,7 +1060,7 @@ fi
 echo ""
 
 # ---------------------------------------------------------------------------
-echo "8. Hermetic dry run"
+echo "9. Hermetic dry run"
 # ---------------------------------------------------------------------------
 # A dry run must not install a CLI: the suite has to work offline, on an agent
 # with no Node.js toolchain, without downloading ~100 MB per provider.
@@ -754,7 +1071,7 @@ assert_true "dry run: the log states that nothing was deployed" \
 echo ""
 
 # ---------------------------------------------------------------------------
-echo "9. Transport pinning"
+echo "10. Transport pinning"
 # ---------------------------------------------------------------------------
 # `curl -L` follows a redirect from HTTPS into plain HTTP by default. That
 # matters most in the one place it is unavoidable: flyctl's version is resolved
@@ -783,7 +1100,7 @@ assert_true "render: at least one curl config block exists to pin" "[[ $RENDER_U
 echo ""
 
 # ---------------------------------------------------------------------------
-echo "10. Azure DevOps boolean stringification"
+echo "11. Azure DevOps boolean stringification"
 # ---------------------------------------------------------------------------
 # Azure DevOps renders a `boolean` template parameter as `True` / `False`
 # (PascalCase). A strict `= "true"` test therefore turned a REQUESTED DRY RUN
@@ -843,7 +1160,7 @@ assert_true "vercel: the Azure template lowercases VERCEL_COMMERCIAL" \
 echo ""
 
 # ---------------------------------------------------------------------------
-echo "11. Functional: require-checks"
+echo "12. Functional: require-checks"
 # ---------------------------------------------------------------------------
 # The gate reads the GitHub API, so `gh` is stubbed with a fixture rather than
 # the script being trusted to describe itself. What is asserted is the verdict

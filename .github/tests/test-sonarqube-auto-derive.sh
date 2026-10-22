@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Validation script for SonarQube auto-derivation of projectKey and projectName
 # Tests the normalize_sonar_key function and auto-derivation logic in
-# global/scripts/tools/sonarqube/run.sh, plus the test-classification defaults
-# and the first-party acceptance of `githubactions:S7637` findings.
+# global/scripts/tools/sonarqube/run.sh, plus the test-classification defaults,
+# the first-party acceptance of `githubactions:S7637` findings, and the retry of
+# a scanner run that failed because the server was briefly away.
 
 set -euo pipefail
 
@@ -47,7 +48,7 @@ eval "$(sed -n '/^normalize_sonar_key()/,/^}/p' "$SONAR_SCRIPT")"
 # CI platform variables that must be scrubbed between tests to prevent the
 # runner's own environment (e.g. GITHUB_REPOSITORY on GitHub Actions) from
 # leaking into the derivation logic.
-CI_VARS="GITHUB_REPOSITORY SYSTEM_TEAMPROJECT BUILD_REPOSITORY_NAME CI_PROJECT_PATH CI_PROJECT_NAME SONAR_PROJECT_KEY SONAR_PROJECT_NAME SONAR_FIRST_PARTY_OWNERS"
+CI_VARS="GITHUB_REPOSITORY SYSTEM_TEAMPROJECT BUILD_REPOSITORY_NAME CI_PROJECT_PATH CI_PROJECT_NAME SONAR_PROJECT_KEY SONAR_PROJECT_NAME SONAR_FIRST_PARTY_OWNERS SONARQUBE_ATTEMPTS SONARQUBE_RETRY_DELAY"
 
 # Optional directory whose contents are copied into the work directory before
 # the script runs: the `.github/workflows` fixtures of the S7637 tests. Set it
@@ -57,9 +58,11 @@ FIXTURES_DIR=""
 # Run the auto-derivation logic in an isolated subshell with a clean environment.
 # Usage: props=$(run_derivation [starter-properties-file] [-- VAR1=val1 VAR2=val2 ...])
 # All CI_VARS are unset, then only the explicitly passed VAR=val pairs are exported.
-# The script's output lands in run.log next to the returned properties file.
+# The script's output lands in run.log next to the returned properties file, and
+# its exit code in exit-code.
 run_derivation() {
   local workdir
+  local rc=0
   workdir="$(mktemp -d "$TEST_DIR/workdir-XXXXXX")" || exit 1
 
   # Parse arguments: optional properties file, then optional -- VAR=val pairs
@@ -121,11 +124,24 @@ run_derivation() {
     # shellcheck disable=SC1091
     . "$workdir/.test-env"
 
-    # Override sonar-scanner to no-op
+    # Override sonar-scanner with a stub that replays what plan_scanner_call
+    # queued for each call and succeeds silently otherwise, and `sleep` with one
+    # that records the wait instead of waiting.
     export PATH="$workdir/bin:$PATH"
     mkdir -p "$workdir/bin"
-    printf '#!/usr/bin/env sh\nexit 0\n' > "$workdir/bin/sonar-scanner"
-    chmod +x "$workdir/bin/sonar-scanner"
+    cat > "$workdir/bin/sonar-scanner" <<'EOF'
+#!/usr/bin/env sh
+calls=$(($(cat .scanner-calls 2>/dev/null || echo 0) + 1))
+echo "$calls" > .scanner-calls
+if [ -f ".scanner-plan/$calls.out" ]; then cat ".scanner-plan/$calls.out"; fi
+if [ -f ".scanner-plan/$calls.rc" ]; then exit "$(cat ".scanner-plan/$calls.rc")"; fi
+exit 0
+EOF
+    cat > "$workdir/bin/sleep" <<'EOF'
+#!/usr/bin/env sh
+printf '%s\n' "$1" >> .scanner-sleeps
+EOF
+    chmod +x "$workdir/bin/sonar-scanner" "$workdir/bin/sleep"
 
     # `SONAR_SCRIPT` is built from `SCRIPT_DIR` at the top of this file, so the target IS
     # knowable -- it is just not a literal. `source-path=SCRIPTDIR` makes the directive
@@ -134,7 +150,8 @@ run_derivation() {
     # shellcheck source-path=SCRIPTDIR
     # shellcheck source=../../global/scripts/tools/sonarqube/run.sh
     . "$SONAR_SCRIPT"
-  ) > "$workdir/run.log" 2>&1
+  ) > "$workdir/run.log" 2>&1 || rc=$?
+  echo "$rc" > "$workdir/exit-code"
 
   echo "$workdir/sonar-project.properties"
 }
@@ -151,6 +168,42 @@ run_with_fixtures() {
 # Print the path of the log written by the run that produced a properties file.
 run_log() {
   echo "$(dirname "$1")/run.log"
+}
+
+# Print the exit code of the run that produced a properties file.
+run_exit_code() {
+  local props=$1
+  cat "$(dirname "$props")/exit-code"
+}
+
+# Print how many times that run called sonar-scanner.
+scanner_calls() {
+  local props=$1
+  cat "$(dirname "$props")/.scanner-calls" 2>/dev/null || echo 0
+}
+
+# Print the waits that run asked `sleep` for, space separated, oldest first.
+scanner_sleeps() {
+  local props=$1
+  local sleeps
+  sleeps="$(dirname "$props")/.scanner-sleeps"
+  [[ -f "$sleeps" ]] || return 0
+  tr '\n' ' ' < "$sleeps" | sed 's/ $//'
+}
+
+# Queue what the stub scanner does on the given call of a run: print the output,
+# then exit with the code. A call with nothing queued succeeds silently, which
+# is all the derivation tests need. The plan lives in a fixture directory, which
+# run_with_fixtures copies into the work directory.
+# Usage: plan_scanner_call fixture-dir call-number exit-code output
+plan_scanner_call() {
+  local fixtures=$1
+  local call=$2
+  local exit_code=$3
+  local output=$4
+  mkdir -p "$fixtures/.scanner-plan"
+  printf '%s\n' "$output" > "$fixtures/.scanner-plan/$call.out"
+  printf '%s\n' "$exit_code" > "$fixtures/.scanner-plan/$call.rc"
 }
 
 # Create an empty fixture tree with a `.github/workflows` directory and print its path.
@@ -793,6 +846,162 @@ if ! grep -Eq '^sonar\.coverage\.exclusions=' "$go_props"; then
   print_result 0 "no coverage scope is invented for a tree with no modules/*.tf"
 else
   print_result 1 "a non-Terraform repository got Terraform exclusions (contents: $(grep -E '^sonar\.coverage\.exclusions=' "$go_props"))"
+fi
+
+# =============================================================================
+# A server that is briefly away is retried
+# =============================================================================
+# The first three failures are the ones a consuming organisation's analyses hit
+# on 2026-10-21 while its SonarQube was away for about two minutes, verbatim
+# apart from the host and a trimmed stack trace. The next run of each one
+# reached the server without trouble.
+JRE_RESET='17:35:26.684 ERROR Failed to query JRE metadata: Call to URL [https://sonarqube.example.com/api/v2/analysis/jres?os=linux&arch=x86_64] failed: Connection reset
+17:35:26.684 INFO  EXECUTION FAILURE'
+VERSION_500='17:36:16.332 ERROR Failed to query server version: GET https://sonarqube.example.com/api/v2/analysis/version failed with HTTP 500 Internal Server Error
+17:36:16.333 INFO  EXECUTION FAILURE'
+METRICS_521='17:35:05.571 ERROR Error during SonarScanner Engine execution
+java.lang.IllegalStateException: Unable to load component class org.sonar.scanner.sensor.ModuleSensorsExecutor
+	at org.sonar.scanner.spring.SpringComponentContainer.getComponentByType(SpringComponentContainer.java:143)
+Caused by: java.lang.IllegalStateException: Unable to load metrics
+Caused by: org.sonarqube.ws.client.HttpException: Error 521 on https://sonarqube.example.com/api/metrics/search?ps=500&p=1 : {"title":"Error 521: Web server is down","status":521}
+17:35:05.892 INFO  EXECUTION FAILURE'
+# A gate verdict, reached after an earlier call logged a timeout: the verdict
+# is what decides, because the analysis itself completed.
+GATE_FAILED='17:59:41.120 ERROR Failed to send telemetry: Read timed out
+18:00:17.345 ERROR QUALITY GATE STATUS: FAILED - View details on https://sonarqube.example.com/dashboard?id=owner_repo
+18:00:17.682 INFO  EXECUTION FAILURE'
+INDEXED_TWICE="17:52:09.900 ERROR File src/app.go can't be indexed twice. Please check that inclusion/exclusion patterns produce disjoint sets for main and test files
+17:52:09.901 INFO  EXECUTION FAILURE"
+
+echo "TEST 37: a scanner run the server broke is retried until it passes"
+retry_fx=$(make_fixtures)
+plan_scanner_call "$retry_fx" 1 1 "$JRE_RESET"
+plan_scanner_call "$retry_fx" 2 1 "$VERSION_500"
+plan_scanner_call "$retry_fx" 3 1 "$METRICS_521"
+retry_props=$(run_with_fixtures "$retry_fx" -- GITHUB_REPOSITORY=owner/repo)
+retry_log=$(run_log "$retry_props")
+if [[ "$(run_exit_code "$retry_props")" -eq 0 ]] \
+  && [[ "$(scanner_calls "$retry_props")" -eq 4 ]] \
+  && [[ "$(scanner_sleeps "$retry_props")" == '30 60 90' ]] \
+  && grep -q 'attempt 3 of 5' "$retry_log"; then
+  print_result 0 "a reset connection, an HTTP 500 and a Cloudflare 521 are each retried, after 30s, 60s and 90s"
+else
+  print_result 1 "the transient failures were not retried to a pass (exit $(run_exit_code "$retry_props"), calls $(scanner_calls "$retry_props"), waits '$(scanner_sleeps "$retry_props")')"
+fi
+
+echo "TEST 38: every attempt's output still reaches the job log"
+if grep -q 'Failed to query JRE metadata' "$retry_log" \
+  && grep -q 'failed with HTTP 500' "$retry_log" \
+  && grep -q 'Error 521 on' "$retry_log"; then
+  print_result 0 "the scanner output streams to the log; tee only keeps a copy to read"
+else
+  print_result 1 "the scanner output did not reach the log (log: $(head -c 400 "$retry_log"))"
+fi
+
+echo "TEST 39: a failed quality gate is not retried"
+gate_fx=$(make_fixtures)
+plan_scanner_call "$gate_fx" 1 1 "$GATE_FAILED"
+gate_props=$(run_with_fixtures "$gate_fx" -- GITHUB_REPOSITORY=owner/repo)
+if [[ "$(run_exit_code "$gate_props")" -eq 1 ]] \
+  && [[ "$(scanner_calls "$gate_props")" -eq 1 ]] \
+  && [[ -z "$(scanner_sleeps "$gate_props")" ]]; then
+  print_result 0 "a gate verdict fails the job at once, even after an earlier call timed out"
+else
+  print_result 1 "a failed gate was retried (exit $(run_exit_code "$gate_props"), calls $(scanner_calls "$gate_props"))"
+fi
+
+echo "TEST 40: an analysis that fails on its own terms is not retried"
+own_fail_fx=$(make_fixtures)
+plan_scanner_call "$own_fail_fx" 1 2 "$INDEXED_TWICE"
+own_fail_props=$(run_with_fixtures "$own_fail_fx" -- GITHUB_REPOSITORY=owner/repo)
+if [[ "$(run_exit_code "$own_fail_props")" -eq 2 ]] \
+  && [[ "$(scanner_calls "$own_fail_props")" -eq 1 ]] \
+  && [[ -z "$(scanner_sleeps "$own_fail_props")" ]]; then
+  print_result 0 "a deterministic failure fails at once, with the scanner's own exit code"
+else
+  print_result 1 "a deterministic failure was retried or lost its exit code (exit $(run_exit_code "$own_fail_props"), calls $(scanner_calls "$own_fail_props"))"
+fi
+
+echo "TEST 41: a server still away after the last attempt fails the job"
+away_fx=$(make_fixtures)
+for n in 1 2 3; do
+  plan_scanner_call "$away_fx" "$n" 3 "$METRICS_521"
+done
+away_props=$(run_with_fixtures "$away_fx" -- GITHUB_REPOSITORY=owner/repo SONARQUBE_ATTEMPTS=3 SONARQUBE_RETRY_DELAY=7)
+if [[ "$(run_exit_code "$away_props")" -eq 3 ]] \
+  && [[ "$(scanner_calls "$away_props")" -eq 3 ]] \
+  && [[ "$(scanner_sleeps "$away_props")" == '7 14' ]] \
+  && grep -q 'on all 3 attempts' "$(run_log "$away_props")"; then
+  print_result 0 "SONARQUBE_ATTEMPTS bounds the runs, SONARQUBE_RETRY_DELAY sets the wait, and the last exit code is kept"
+else
+  print_result 1 "the retry budget was not honoured (exit $(run_exit_code "$away_props"), calls $(scanner_calls "$away_props"), waits '$(scanner_sleeps "$away_props")')"
+fi
+
+echo "TEST 42: a non-integer retry knob falls back to its default"
+knob_fx=$(make_fixtures)
+plan_scanner_call "$knob_fx" 1 1 "$JRE_RESET"
+knob_props=$(run_with_fixtures "$knob_fx" -- GITHUB_REPOSITORY=owner/repo SONARQUBE_ATTEMPTS=many SONARQUBE_RETRY_DELAY=soon)
+knob_log=$(run_log "$knob_props")
+if [[ "$(run_exit_code "$knob_props")" -eq 0 ]] \
+  && [[ "$(scanner_calls "$knob_props")" -eq 2 ]] \
+  && [[ "$(scanner_sleeps "$knob_props")" == '30' ]] \
+  && grep -q "SONARQUBE_ATTEMPTS='many' is not an integer" "$knob_log" \
+  && grep -q "SONARQUBE_RETRY_DELAY='soon' is not an integer" "$knob_log"; then
+  print_result 0 "a typo warns and keeps the default instead of ending the retry or hanging it"
+else
+  print_result 1 "a bad knob was not handled (exit $(run_exit_code "$knob_props"), calls $(scanner_calls "$knob_props"), waits '$(scanner_sleeps "$knob_props")')"
+fi
+
+echo "TEST 43: a scanner run that passes is run once"
+once_props=$(run_derivation -- GITHUB_REPOSITORY=owner/repo)
+if [[ "$(run_exit_code "$once_props")" -eq 0 ]] \
+  && [[ "$(scanner_calls "$once_props")" -eq 1 ]] \
+  && [[ -z "$(scanner_sleeps "$once_props")" ]]; then
+  print_result 0 "a passing analysis is neither repeated nor delayed"
+else
+  print_result 1 "a passing analysis was repeated or delayed (calls $(scanner_calls "$once_props"), waits '$(scanner_sleeps "$once_props")')"
+fi
+
+echo "TEST 44: a server with nothing listening is retried too"
+# What scanner 8.0.1 prints when the connection is refused before the engine
+# starts (the JDK's ConnectException has no message, hence `null`), and the
+# message OkHttp, which the engine's calls go through, gives the same failure.
+REFUSED_BOOTSTRAP='11:33:04.599 ERROR Failed to query server version: Call to URL [http://127.0.0.1:9/api/v2/analysis/version] failed: null
+11:33:04.599 INFO  EXECUTION FAILURE'
+REFUSED_ENGINE='17:35:05.571 ERROR Error during SonarScanner Engine execution
+Caused by: java.lang.IllegalStateException: Fail to request url: https://sonarqube.example.com/api/rules/list
+Caused by: java.net.ConnectException: Failed to connect to sonarqube.example.com/203.0.113.10:443
+17:35:05.892 INFO  EXECUTION FAILURE'
+refused_fx=$(make_fixtures)
+plan_scanner_call "$refused_fx" 1 1 "$REFUSED_BOOTSTRAP"
+plan_scanner_call "$refused_fx" 2 1 "$REFUSED_ENGINE"
+refused_props=$(run_with_fixtures "$refused_fx" -- GITHUB_REPOSITORY=owner/repo)
+if [[ "$(run_exit_code "$refused_props")" -eq 0 ]] && [[ "$(scanner_calls "$refused_props")" -eq 3 ]]; then
+  print_result 0 "a refused connection is retried, before the engine starts and after"
+else
+  print_result 1 "a refused connection was not retried (exit $(run_exit_code "$refused_props"), calls $(scanner_calls "$refused_props"))"
+fi
+
+echo "TEST 45: a rejected token or a wrong URL is not retried"
+# Verbatim from scanner 8.0.1 against a server answering 401 and 404: the
+# answer would be the same on every attempt.
+REJECTED_TOKEN='11:33:21.328 ERROR Failed to query server version: GET http://127.0.0.1:18401/api/server/version failed with HTTP 401 Unauthorized. Please check the property sonar.token or the environment variable SONAR_TOKEN.
+11:33:21.328 INFO  EXECUTION FAILURE'
+WRONG_URL='11:33:24.612 ERROR Failed to query server version: GET http://127.0.0.1:18404/api/server/version failed with HTTP 404 Not Found
+11:33:24.613 INFO  EXECUTION FAILURE'
+not_retried=0
+for answer in "$REJECTED_TOKEN" "$WRONG_URL"; do
+  answer_fx=$(make_fixtures)
+  plan_scanner_call "$answer_fx" 1 1 "$answer"
+  answer_props=$(run_with_fixtures "$answer_fx" -- GITHUB_REPOSITORY=owner/repo)
+  if [[ "$(run_exit_code "$answer_props")" -eq 1 ]] && [[ "$(scanner_calls "$answer_props")" -eq 1 ]]; then
+    not_retried=$((not_retried + 1))
+  fi
+done
+if [[ "$not_retried" -eq 2 ]]; then
+  print_result 0 "a 401 and a 404 fail the job at once"
+else
+  print_result 1 "a 4xx answer was retried ($not_retried of 2 failed at once)"
 fi
 
 # =============================================================================

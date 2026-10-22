@@ -16,7 +16,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-go-integration-scope` - Test which packages the Go runner's integration phase selects specifically
 - `make test-lambda` - Test Lambda template validation specifically
 - `make test-yaml-merge` - Test `golangci-lint/run.sh` (YAML config merge, binary reuse and install, toolchain guard) specifically
-- `make test-sonarqube` - Test SonarQube auto-derivation specifically
+- `make test-sonarqube` - Test SonarQube auto-derivation and the retry of a scanner run the server broke specifically
 - `make test-release-tag-idempotency` - Test release tag idempotency specifically
 - `make test-tftest-gen` - Test tftest-gen generator specifically
 - `make test-terra-coverage` - Test the Terraform generic coverage report generator specifically
@@ -37,7 +37,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-checkov` - Test the Checkov IaC scanner tier (verified install, report verdict, advisory default, wiring on every platform) specifically
 - `make test-codeql-scope` - Test that a local CodeQL scan builds from the files git would ship, on every core, while CI keeps the checkout and one thread, specifically
 - `make test-dependency-check` - Test the OWASP Dependency-Check NVD cache / API-key contract specifically
-- `make test-dependency-track` - Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, cross-platform wiring) specifically
+- `make test-dependency-track` - Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, retry of a briefly unreachable server, cross-platform wiring) specifically
 - `make test-goreleaser-prepare` - Test the GoReleaser main package detection specifically
 - `make test-release-version-extraction` - Test release version extraction (tag ref + bump commit) specifically
 - `make test-release-reconcile` - Test release reconciliation gap detection specifically
@@ -186,8 +186,8 @@ connection refused.
 ### Scripts That Require Environment Variables
 - **codeql/run.sh** - Requires language argument (e.g., go, python, java, javascript, csharp)
 - **hadolint/run.sh** - Auto-discovers Dockerfiles (`Dockerfile`, `Dockerfile.*`, `*.Dockerfile`, `*.dockerfile`), skips gracefully if none found
-- **dependency-track/run.sh** - Requires `DEPENDENCY_TRACK_TOKEN` and `DEPENDENCY_TRACK_HOST_URL`
-- **sonarqube/run.sh** - Requires `sonar-scanner` installed and SonarQube environment; derives project key/name and the `githubactions:S7637` ignore rules for first-party workflow references (owners from `SONAR_FIRST_PARTY_OWNERS`, else the owner of `GITHUB_REPOSITORY`) for every key absent from `sonar-project.properties`, plus the test classification (`sonar.sources`, `sonar.tests`, `sonar.test.inclusions`, `sonar.exclusions`) as one unit, only when the file declares none of the four -- they are a partition, and an overlap aborts the scanner with "can't be indexed twice"
+- **dependency-track/run.sh** - Requires `DEPENDENCY_TRACK_TOKEN` and `DEPENDENCY_TRACK_HOST_URL`; retries an upload the server answered with no response, `408`, `429` or `5xx`, waiting longer each time (`DEPENDENCY_TRACK_ATTEMPTS`, default 5; `DEPENDENCY_TRACK_RETRY_DELAY`, default 30 seconds), and fails at once on any other answer
+- **sonarqube/run.sh** - Requires `sonar-scanner` installed and SonarQube environment; derives project key/name and the `githubactions:S7637` ignore rules for first-party workflow references (owners from `SONAR_FIRST_PARTY_OWNERS`, else the owner of `GITHUB_REPOSITORY`) for every key absent from `sonar-project.properties`, plus the test classification (`sonar.sources`, `sonar.tests`, `sonar.test.inclusions`, `sonar.exclusions`) as one unit, only when the file declares none of the four -- they are a partition, and an overlap aborts the scanner with "can't be indexed twice"; runs `sonar-scanner` again when its output shows the server was unreachable or answered 5xx, never after a quality gate verdict (`SONARQUBE_ATTEMPTS`, default 5; `SONARQUBE_RETRY_DELAY`, default 30 seconds, growing per attempt)
 - **semgrep/run.sh** - May run for 10+ minutes, installs Semgrep from PyPI into a virtualenv
 - **checkov/run.sh** - Scans Terraform under `CHECKOV_DIRECTORIES` (default `.`); advisory unless `CHECKOV_BLOCKING=true`; installs the pinned, digest-verified wheel into a virtualenv; skips gracefully when there is no Terraform
 - **golang/test/run.sh** - Requires Go project with cmd/, pkg/, or internal/ directories

@@ -262,18 +262,77 @@ if [ "$rawTokenLen" != "$cleanTokenLen" ]; then
 fi
 
 escapedToken=$(printf '%s' "${DEPENDENCY_TRACK_TOKEN:-}" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
-httpStatus=$(printf 'header = "X-Api-Key: %s"\n' "$escapedToken" | curl --config - "$@" --silent --show-error \
-  --output "$responseFile" --write-out '%{http_code}' \
-  --request POST "$bomUploadUrl")
 
-# `--write-out` always prints a status; `000` means curl never received an
-# HTTP response (DNS/TLS/connection failure).
-if [ "${httpStatus:-000}" -ge 200 ] && [ "${httpStatus:-000}" -lt 300 ]; then
-  echo "Uploaded BOM to Dependency-Track (projectName=$projectName projectVersion=$projectVersion isLatest=$isLatest, HTTP $httpStatus)."
-  rm -f "$responseFile"
-else
-  echo "ERROR: Dependency-Track rejected the BOM upload (HTTP $httpStatus). Response body:" >&2
-  [ -s "$responseFile" ] && sed 's/^/  | /' "$responseFile" >&2
-  rm -f "$responseFile"
-  exit 1
-fi
+# --- A server that is briefly away is retried --------------------------------
+#
+# A Dependency-Track instance that is restarting answers for a few minutes with
+# nothing a client can act on: no HTTP response at all (`000`, a refused or
+# reset connection), `502`/`503`/`504` from the proxy in front of it, or `521`
+# from Cloudflare ("origin down"). On 2026-10-21 a consuming organisation's
+# instance and the SonarQube server beside it, both behind Cloudflare, went away
+# together for about two minutes: the upload that reached Dependency-Track then
+# was answered `521`, the analyses that reached SonarQube failed too, and the
+# next run of each one reached its server without trouble. The upload is an
+# upsert keyed by `(projectName, projectVersion)`, so sending it again is safe.
+#
+# Only those answers are retried, plus `408` and `429`, which ask for exactly
+# that. Anything else -- `400` for a BOM the server will not take, `401`/`403`
+# for the key, `404` for a missing collection parent -- would be the same on
+# every attempt, so it fails at once. The wait grows with each attempt (one
+# delay, then two, then three...): the defaults keep trying for five minutes,
+# long enough to ride out a restart, and a server that is still away after that
+# fails the job as before. A value that is not an integer falls back to the
+# default with a warning, as the Semgrep probe's knobs do: the loop exists for
+# resilience, so a typo must not be able to end it early or hang it.
+uploadAttempts="${DEPENDENCY_TRACK_ATTEMPTS:-5}"
+case "$uploadAttempts" in
+  '' | *[!0-9]* | 0)
+    echo "WARNING: DEPENDENCY_TRACK_ATTEMPTS='$uploadAttempts' is not an integer >= 1; using 5." >&2
+    uploadAttempts=5
+    ;;
+  *) ;;
+esac
+uploadRetryDelay="${DEPENDENCY_TRACK_RETRY_DELAY:-30}"
+case "$uploadRetryDelay" in
+  '' | *[!0-9]*)
+    echo "WARNING: DEPENDENCY_TRACK_RETRY_DELAY='$uploadRetryDelay' is not an integer >= 0; using 30." >&2
+    uploadRetryDelay=30
+    ;;
+  *) ;;
+esac
+
+uploadAttempt=1
+while :; do
+  httpStatus=$(printf 'header = "X-Api-Key: %s"\n' "$escapedToken" | curl --config - "$@" --silent --show-error \
+    --output "$responseFile" --write-out '%{http_code}' \
+    --request POST "$bomUploadUrl")
+  # `--write-out` always prints a status; `000` means curl never received an
+  # HTTP response (DNS/TLS/connection failure).
+  httpStatus="${httpStatus:-000}"
+
+  if [ "$httpStatus" -ge 200 ] && [ "$httpStatus" -lt 300 ]; then
+    echo "Uploaded BOM to Dependency-Track (projectName=$projectName projectVersion=$projectVersion isLatest=$isLatest, HTTP $httpStatus)."
+    rm -f "$responseFile"
+    exit 0
+  fi
+
+  case "$httpStatus" in
+    000 | 408 | 429 | 5??) retryable='true' ;;
+    *) retryable='false' ;;
+  esac
+  if [ "$retryable" = 'false' ] || [ "$uploadAttempt" -ge "$uploadAttempts" ]; then
+    if [ "$retryable" = 'true' ]; then
+      echo "ERROR: Dependency-Track answered HTTP $httpStatus on all $uploadAttempts attempts of the BOM upload. Response body:" >&2
+    else
+      echo "ERROR: Dependency-Track rejected the BOM upload (HTTP $httpStatus). Response body:" >&2
+    fi
+    [ -s "$responseFile" ] && sed 's/^/  | /' "$responseFile" >&2
+    rm -f "$responseFile"
+    exit 1
+  fi
+
+  uploadWait=$((uploadAttempt * uploadRetryDelay))
+  echo "Dependency-Track answered HTTP $httpStatus to the BOM upload (attempt $uploadAttempt of $uploadAttempts), an answer a restarting or unreachable server gives; retrying in ${uploadWait}s." >&2
+  sleep "$uploadWait"
+  uploadAttempt=$((uploadAttempt + 1))
+done

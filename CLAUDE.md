@@ -18,7 +18,7 @@ make test-go-tmpdir-modcache   # Test that the Go module cache stays out of $TMP
 make test-go-integration-scope  # Test which packages the Go runner's integration phase selects only
 make test-lambda       # Test Lambda template validation only
 make test-yaml-merge   # Test golangci-lint/run.sh (config merge, binary reuse and install, toolchain guard) only
-make test-sonarqube    # Test SonarQube auto-derivation only
+make test-sonarqube    # Test SonarQube auto-derivation and the retry of a scanner run the server broke only
 make test-release-tag-idempotency  # Test release tag idempotency only
 make test-tftest-gen   # Test tftest-gen generator only
 make test-terra-coverage  # Test the Terraform generic coverage report generator only
@@ -40,7 +40,7 @@ make test-checkov      # Test the Checkov IaC scanner tier (verified install, re
 make test-codeql-scope  # Test that a local CodeQL scan builds from the files git would ship, on every core, only
 make test-codeql-gate   # Test that CodeQL fails on findings `.codeql-false-positives` does not list, on every platform, and that the GitHub upload cannot fail the job, only
 make test-dependency-check  # Test the OWASP Dependency-Check NVD cache / API-key contract only
-make test-dependency-track  # Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, cross-platform wiring) only
+make test-dependency-track  # Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, retry of a briefly unreachable server, cross-platform wiring) only
 make test-python-cyclonedx  # Test static/non-distribution and dynamic Python SBOM versions, including resolution failures
 make test-goreleaser-prepare  # Test the GoReleaser main package detection only
 make test-release-version-extraction  # Test release version extraction (tag ref + bump commit) only
@@ -696,7 +696,7 @@ that READS a project back: `ACTIVE` became `INACTIVE_SINCE` (nullable timestamp)
 derived accessor. The v5 tree also moved to `apiserver/src/main/java/...`, which is why those files look
 absent at the 4.x path.
 
-Seven constraints shape this; `make test-dependency-track` asserts all of them:
+Eight constraints shape this; `make test-dependency-track` asserts all of them:
 
 | Constraint | Why |
 |------------|-----|
@@ -707,10 +707,26 @@ Seven constraints shape this; `make test-dependency-track` asserts all of them:
 | **`jq -r` prints the STRING `null` for a missing key** | And `null` is a valid project name, so a BOM without `metadata.component` created a project literally called `null` and kept updating it. Extraction uses `// empty`; a missing name fails the job, a missing *version* uploads versionless (one stable identity, better than one pinned to `null`) |
 | **The API key is never on argv** | argv is world-readable through `ps` and `/proc/<pid>/cmdline`, which on a shared or self-hosted runner means every other job on that host. The header goes in through `curl --config -` on stdin — same posture as `global/scripts/deploy/render/run.sh`, same reasoning as `-DnvdApiKeyEnvironmentVariable` |
 | **There is exactly ONE implementation** | The GitLab abstract used to inline its own `curl` that skipped the `sed 's\|/\|-\|g'` name normalisation and sent no `isLatest`, so a scoped npm package became TWO projects depending on which platform built it. Separately, the GitLab **Go** job defined its own `script:` — and GitLab's `extends` REPLACES `script:` rather than appending — so it generated a BOM and threw it away, green, forever |
+| **A server that is briefly away is retried; nothing else is** | A restarting instance answers for a few minutes with no response (`000`), its proxy's `502`/`503`/`504`, or Cloudflare's `521`. On 2026-10-21 a consumer's instance went away behind Cloudflare for about two minutes, and the upload that reached it then was answered `521` while the same job passed on its next run. The upload is an upsert, so `000`, `408`, `429` and `5xx` are retried with a growing wait: `DEPENDENCY_TRACK_ATTEMPTS` (default `5`) and `DEPENDENCY_TRACK_RETRY_DELAY` (default `30`, multiplied by the attempt number), five minutes in all. Any other answer would repeat identically and fails at once |
 
 **GitHub Actions has no `35-management` stage at all** (`github/global/stages/` goes 20 → 40), so it has no
 Dependency-Track job to wire. That is a pre-existing gap, not something this uploader can paper over; adding
 the stage is its own piece of work.
+
+### SonarQube and a Server That Is Briefly Away
+
+`global/scripts/tools/sonarqube/run.sh` runs `sonar-scanner` again when a run failed because the server was
+unreachable or answered 5xx, and only then. The scanner exits `1` both for a server that is restarting and
+for a broken analysis, so the runner reads its output: an `ERROR` or `Caused by` line naming a refused or
+reset connection, a timeout or a 5xx answer makes the run retryable, and a `QUALITY GATE STATUS` line rules
+it out, because a failed gate is the analysis working. The shapes it keys on are the ones scanner `8.0.1`
+prints: `Call to URL [...] failed: Connection reset`, `... failed: null` for a refused connection (the JDK's
+`ConnectException` has no message), `GET ... failed with HTTP 500`, and the engine's
+`HttpException: Error 521 on ...`. A scanner upgrade that rewords them turns a retry back into a plain
+failure without any error, which is why `make test-sonarqube` pins each one. The budget matches the
+Dependency-Track upload: `SONARQUBE_ATTEMPTS` (default `5`) and `SONARQUBE_RETRY_DELAY` (default `30`,
+multiplied by the attempt number). The knobs are not named `SONAR_SCANNER_*` on purpose: that prefix belongs
+to the scanner's own environment.
 
 ### Dart & Flutter Support
 

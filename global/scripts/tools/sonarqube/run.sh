@@ -464,4 +464,90 @@ EOF
 
 accept_first_party_workflow_references
 
-sonar-scanner
+# --- A server that is briefly away is retried --------------------------------
+# sonar-scanner talks to the server from its first call to its last -- the JRE
+# metadata, the server version, plugins, rules, metrics, the report upload, the
+# quality gate -- and a server that is restarting fails whichever call comes
+# next, with the same exit code a broken analysis gets. On 2026-10-21 a
+# consuming organisation's SonarQube, behind Cloudflare, was away for about two
+# minutes, and every analysis that ran then failed, each at a different call:
+#
+#   ERROR Failed to query JRE metadata: Call to URL [<host>/api/v2/analysis/jres?...] failed: Connection reset
+#   ERROR Failed to query server version: GET <host>/api/v2/analysis/version failed with HTTP 500 Internal Server Error
+#   Caused by: org.sonarqube.ws.client.HttpException: Error 521 on <host>/api/metrics/search?ps=500&p=1 : {...}
+#
+# The next run of each one reached the server without trouble. A server with
+# nothing listening at all, rather than a proxy answering for it, shows up as
+# `Call to URL [...] failed: null` from scanner 8.0.1 (the JDK's
+# `ConnectException` carries no message) and as `Failed to connect to <host>`
+# once the engine is running.
+#
+# The exit code cannot tell any of these apart from a real failure, so the
+# scanner's output is read: a run is retried only when one of its `ERROR` or
+# `Caused by` lines names a transport failure or a 5xx answer, and never once
+# the quality gate has given its verdict -- a failed gate is the analysis
+# working. Anything else fails at once, with the scanner's own exit code. The
+# output still streams to the job log as it is written; `tee` only keeps a copy
+# to read. The wait grows with each attempt, and the defaults keep trying for
+# five minutes, the same budget as the Dependency-Track upload.
+SONARQUBE_TRANSIENT_FAILURE='connection reset|connection refused|failed to connect to|failed: null|timed out|sockettimeoutexception|unexpected end of stream|http 5[0-9][0-9]|error 5[0-9][0-9] on '
+
+# Succeed when the scanner log $1 shows a server that was unreachable or
+# answering 5xx, rather than an analysis that failed on its own terms. The
+# second `grep` reads its whole input instead of stopping at the first match
+# (`-q`), so the first never dies of SIGPIPE: under `pipefail` that would read
+# as "not transient".
+sonar_scanner_failure_is_transient() {
+  _ss_scanner_log="$1"
+  if grep -q 'QUALITY GATE STATUS' "$_ss_scanner_log"; then
+    return 1
+  fi
+  grep -E 'ERROR|Caused by' "$_ss_scanner_log" | grep -Ei "$SONARQUBE_TRANSIENT_FAILURE" > /dev/null
+}
+
+run_sonar_scanner() {
+  # A value that is not an integer falls back to the default with a warning,
+  # as the Dependency-Track and Semgrep knobs do.
+  _ss_attempts="${SONARQUBE_ATTEMPTS:-5}"
+  case "$_ss_attempts" in
+    '' | *[!0-9]* | 0)
+      echo "WARNING: SONARQUBE_ATTEMPTS='$_ss_attempts' is not an integer >= 1; using 5." >&2
+      _ss_attempts=5
+      ;;
+    *) ;;
+  esac
+  _ss_delay="${SONARQUBE_RETRY_DELAY:-30}"
+  case "$_ss_delay" in
+    '' | *[!0-9]*)
+      echo "WARNING: SONARQUBE_RETRY_DELAY='$_ss_delay' is not an integer >= 0; using 30." >&2
+      _ss_delay=30
+      ;;
+    *) ;;
+  esac
+
+  _ss_log="${TMPDIR:-/tmp}/sonar-scanner-output.$$"
+  _ss_status="${TMPDIR:-/tmp}/sonar-scanner-status.$$"
+  _ss_attempt=1
+  while :; do
+    # The exit code travels through a file: a pipeline's own status is `tee`'s,
+    # and POSIX sh has no `pipefail`. `|| _ss_rc=$?` keeps `set -e` from ending
+    # the group before the code is written.
+    { _ss_rc=0; sonar-scanner || _ss_rc=$?; echo "$_ss_rc" > "$_ss_status"; } 2>&1 | tee "$_ss_log"
+    _ss_rc=$(cat "$_ss_status" 2>/dev/null) || _ss_rc=1
+    if [ "${_ss_rc:-1}" -eq 0 ] || ! sonar_scanner_failure_is_transient "$_ss_log"; then
+      break
+    fi
+    if [ "$_ss_attempt" -ge "$_ss_attempts" ]; then
+      echo "ERROR: sonar-scanner could not reach the SonarQube server on all $_ss_attempts attempts." >&2
+      break
+    fi
+    _ss_wait=$((_ss_attempt * _ss_delay))
+    echo "sonar-scanner failed because the SonarQube server was unreachable or answered 5xx (attempt $_ss_attempt of $_ss_attempts); retrying in ${_ss_wait}s." >&2
+    sleep "$_ss_wait"
+    _ss_attempt=$((_ss_attempt + 1))
+  done
+  rm -f "$_ss_log" "$_ss_status"
+  return "${_ss_rc:-1}"
+}
+
+run_sonar_scanner

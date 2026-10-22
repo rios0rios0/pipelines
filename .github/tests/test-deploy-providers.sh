@@ -91,6 +91,12 @@ FLYIO_SH="$SCRIPTS_DIR/global/scripts/deploy/flyio/run.sh"
 # directory is unambiguously a leak of the credential it was fed as.
 SENTINEL='s3nt1nel-must-never-be-recorded'
 
+# Two values the Fly.io cases repeat: the deploy a build from source records for
+# the fixture app, and the condition every "deploys nothing" case asserts. Kept
+# as constants so a change to either is made once.
+FLY_SOURCE_BUILD='flyctl deploy --remote-only --app my-mvp'
+NOTHING_DEPLOYED='[[ -z "$CMD" ]]'
+
 # Runs one provider in dry-run mode inside a throwaway project directory, then
 # leaves the recorded command line in $CMD, stdout+stderr in $OUT, the exit
 # status in $STATUS, and the report directory path in $REPORT_DIR.
@@ -414,7 +420,7 @@ echo "6. Functional: Fly.io"
 # ---------------------------------------------------------------------------
 run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp
 assert_equals "flyio: the app is deployed with a remote build" \
-  "flyctl deploy --remote-only --app my-mvp" "$CMD"
+  "$FLY_SOURCE_BUILD" "$CMD"
 assert_no_leak "flyio: the API token is never recorded"
 
 # `--remote-only` is what lets this job run without a Docker daemon, which most
@@ -447,7 +453,7 @@ assert_true "flyio: the CLI is not installed by piping a remote script to a shel
 # would be the one step in this family that tried to use them.
 run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_ORG=my-org
 assert_equals "flyio: FLY_ORG does not change the deploy that is performed" \
-  "flyctl deploy --remote-only --app my-mvp" "$CMD"
+  "$FLY_SOURCE_BUILD" "$CMD"
 assert_true "flyio: a dry run never attempts to create the app" \
   "! grep -q 'creating it in org' <<< \"\$OUT\""
 assert_no_leak "flyio: the API token is never recorded with FLY_ORG set"
@@ -567,11 +573,11 @@ assert_equals "flyio: a single-machine app refuses Fly's spare" \
 # --ha=false there would fight the caller.
 run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_MACHINE_COUNT=3
 assert_equals "flyio: a multi-machine app keeps Fly's own HA behaviour" \
-  "flyctl deploy --remote-only --app my-mvp" "$CMD"
+  "$FLY_SOURCE_BUILD" "$CMD"
 
 run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp
 assert_equals "flyio: an unset count changes the deploy not at all" \
-  "flyctl deploy --remote-only --app my-mvp" "$CMD"
+  "$FLY_SOURCE_BUILD" "$CMD"
 
 # A malformed count is refused UP FRONT rather than at either enforcement point, because
 # those two fail asymmetrically: `1 ` (trailing space, invisible in a settings UI) is not
@@ -584,7 +590,7 @@ assert_true "flyio: the rejection names the offending value" \
   "grep -q 'must be a whole number' <<< \"\$OUT\""
 # Nothing may be recorded, because nothing may be attempted -- a count rejected after the
 # deploy is the failure this check exists to move earlier.
-assert_true "flyio: a rejected count deploys nothing at all" "[[ -z \"\$CMD\" ]]"
+assert_true "flyio: a rejected count deploys nothing at all" "$NOTHING_DEPLOYED"
 
 run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_MACHINE_COUNT=one
 assert_true "flyio: a non-numeric count fails the job" "[[ $STATUS -eq 1 ]]"
@@ -622,7 +628,7 @@ SHA='0123456789abcdef0123456789abcdef01234567'
 run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp \
   GITHUB_REF_TYPE=tag GITHUB_REF_NAME=1.2.3 GITHUB_SHA="$SHA"
 assert_equals "flyio: no build argument is passed unless one is named" \
-  "flyctl deploy --remote-only --app my-mvp" "$CMD"
+  "$FLY_SOURCE_BUILD" "$CMD"
 
 run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_VERSION_BUILD_ARG=VERSION \
   GITHUB_REF_TYPE=branch GITHUB_REF_NAME=main GITHUB_SHA="$SHA"
@@ -668,7 +674,7 @@ for name in 'VERSION ' '9VERSION' 'APP-VERSION'; do
   run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp "FLY_VERSION_BUILD_ARG=$name" \
     GITHUB_SHA="$SHA"
   assert_true "flyio: the build argument name '$name' fails the job" "[[ $STATUS -eq 1 ]]"
-  assert_true "flyio: the name '$name' is refused before anything is deployed" "[[ -z \"\$CMD\" ]]"
+  assert_true "flyio: the name '$name' is refused before anything is deployed" "$NOTHING_DEPLOYED"
 done
 assert_true "flyio: the rejection names what a build argument name may contain" \
   "grep -q 'must name a Dockerfile ARG' <<< \"\$OUT\""
@@ -678,7 +684,7 @@ assert_true "flyio: the rejection names what a build argument name may contain" 
 run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_VERSION_BUILD_ARG=VERSION \
   "FLY_APP_VERSION=$(printf '1.0\nOTHER=1')"
 assert_true "flyio: a version that is not one word fails the job" "[[ $STATUS -eq 1 ]]"
-assert_true "flyio: a version that is not one word deploys nothing" "[[ -z \"\$CMD\" ]]"
+assert_true "flyio: a version that is not one word deploys nothing" "$NOTHING_DEPLOYED"
 
 # Opted in and nothing to resolve: no platform variable and no git checkout. Fails rather
 # than deploying the default, since "opted in and got nothing" must never be silent.
@@ -687,7 +693,7 @@ assert_true "flyio: a version that is not one word deploys nothing" "[[ -z \"\$C
 run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_VERSION_BUILD_ARG=VERSION \
   GIT_CEILING_DIRECTORIES="$WORK_DIR"
 assert_true "flyio: a version that cannot be resolved fails the job" "[[ $STATUS -eq 1 ]]"
-assert_true "flyio: an unresolvable version deploys nothing" "[[ -z \"\$CMD\" ]]"
+assert_true "flyio: an unresolvable version deploys nothing" "$NOTHING_DEPLOYED"
 assert_true "flyio: the failure says no version could be resolved" \
   "grep -q 'no version could be resolved' <<< \"\$OUT\""
 
@@ -784,18 +790,18 @@ run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_IMAGE="$DELIVERED"
 assert_true "flyio: a delivered image with no app name fails the job" "[[ $STATUS -eq 1 ]]"
 assert_true "flyio: the failure says the copy needs the app name" \
   "grep -q 'no app name could be resolved, and the image is copied to registry.fly.io/<app>' <<< \"\$OUT\""
-assert_true "flyio: an image with no app name deploys nothing" "[[ -z \"\$CMD\" ]]"
+assert_true "flyio: an image with no app name deploys nothing" "$NOTHING_DEPLOYED"
 
 run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp "FLY_IMAGE=$DELIVERED "
 assert_true "flyio: an image reference holding whitespace fails the job" "[[ $STATUS -eq 1 ]]"
 assert_true "flyio: the rejection says what a reference may contain" \
   "grep -q 'FLY_IMAGE must be an image reference' <<< \"\$OUT\""
-assert_true "flyio: a malformed reference deploys nothing" "[[ -z \"\$CMD\" ]]"
+assert_true "flyio: a malformed reference deploys nothing" "$NOTHING_DEPLOYED"
 
 # No image is today's deploy, byte for byte.
 run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_IMAGE=
 assert_equals "flyio: an empty image keeps the build from source" \
-  "flyctl deploy --remote-only --app my-mvp" "$CMD"
+  "$FLY_SOURCE_BUILD" "$CMD"
 
 # The receipt names what shipped and what it was copied from: that pair is the
 # evidence the pipeline's own artifact went out.
@@ -861,6 +867,14 @@ printf 'flyctl' >> "$FLY_STUB_DIR/argv"
 for argument in "$@"; do printf ' %s' "$argument" >> "$FLY_STUB_DIR/argv"; done
 printf '\n' >> "$FLY_STUB_DIR/argv"
 printf '%s\n' "${FLY_IMAGE_REGISTRY_PASSWORD-<unset>}" >> "$FLY_STUB_DIR/flyctl-env"
+# Whether the registry credentials crane was handed are still in reach: named in
+# this process's environment, or still on disk where crane found them.
+credentials="$(head -n 1 "$FLY_STUB_DIR/docker-config")"
+if [ -n "${DOCKER_CONFIG:-}" ] || { [ -n "$credentials" ] && [ -e "$credentials" ]; }; then
+  echo 'in reach' >> "$FLY_STUB_DIR/flyctl-credentials"
+else
+  echo 'gone' >> "$FLY_STUB_DIR/flyctl-credentials"
+fi
 if [ "$1" = "${FLY_STUB_FAIL:-}" ]; then exit 1; fi
 exit 0
 STUB
@@ -875,26 +889,27 @@ chmod +x "$FLY_STUB_BIN/crane" "$FLY_STUB_BIN/flyctl"
 run_flyio_isolated() {
   local path="$1"
   shift
-  local projectDir="$WORK_DIR/isolated-project"
-  local homeDir="$WORK_DIR/isolated-home"
-  rm -rf "$projectDir" "$homeDir" "$FLY_STUB_DIR"
-  mkdir -p "$projectDir" "$homeDir" "$FLY_STUB_DIR"
+  local project_dir="$WORK_DIR/isolated-project"
+  local home_dir="$WORK_DIR/isolated-home"
+  rm -rf "$project_dir" "$home_dir" "$FLY_STUB_DIR"
+  mkdir -p "$project_dir" "$home_dir" "$FLY_STUB_DIR"
   : > "$FLY_STUB_DIR/argv"
   : > "$FLY_STUB_DIR/network"
   : > "$FLY_STUB_DIR/docker-config"
   : > "$FLY_STUB_DIR/flyctl-env"
+  : > "$FLY_STUB_DIR/flyctl-credentials"
 
   STATUS=0
   (
-    cd "$projectDir" || exit 1
-    env -i PATH="$path" HOME="$homeDir" SCRIPTS_DIR="$SCRIPTS_DIR" \
+    cd "$project_dir" || exit 1
+    env -i PATH="$path" HOME="$home_dir" SCRIPTS_DIR="$SCRIPTS_DIR" \
       FLY_STUB_DIR="$FLY_STUB_DIR" FLY_STUB_CHILD_DIGEST="$CHILD_DIGEST" "$@" \
       "$FLY_MINIMAL_BIN/sh" "$FLYIO_SH"
-  ) > "$projectDir/out.txt" 2>&1 || STATUS=$?
+  ) > "$project_dir/out.txt" 2>&1 || STATUS=$?
 
-  REPORT_DIR="$projectDir/build/reports/deploy-flyio"
+  REPORT_DIR="$project_dir/build/reports/deploy-flyio"
   # shellcheck disable=SC2034  # read by assert_true's eval'd conditions, which ShellCheck cannot see
-  OUT="$(cat "$projectDir/out.txt")"
+  OUT="$(cat "$project_dir/out.txt")"
   CMD=""
   if [[ -f "$REPORT_DIR/command.txt" ]]; then CMD="$(cat "$REPORT_DIR/command.txt")"; fi
   # shellcheck disable=SC2034  # read by assert_true's eval'd conditions
@@ -902,7 +917,7 @@ run_flyio_isolated() {
   # shellcheck disable=SC2034  # read by assert_true's eval'd conditions
   STUB_NETWORK="$(cat "$FLY_STUB_DIR/network")"
   # shellcheck disable=SC2034  # read by assert_true's eval'd conditions
-  ISOLATED_HOME="$homeDir"
+  ISOLATED_HOME="$home_dir"
 }
 
 run_flyio_isolated "$FLY_NET_BIN:$FLY_MINIMAL_BIN" DEPLOY_DRY_RUN=true \
@@ -975,6 +990,10 @@ if [[ "$STUB_RESOLVES" == "$FLY_STUB_BIN/flyctl"$'\n'"$FLY_STUB_BIN/crane" ]]; t
   assert_true "flyio: that DOCKER_CONFIG is not under HOME" \
     "[[ \"\$STUB_DOCKER_CONFIG\" != \"\$ISOLATED_HOME\"* ]]"
   assert_true "flyio: that DOCKER_CONFIG is removed when the job ends" "[[ ! -e \"\$STUB_DOCKER_CONFIG\" ]]"
+  # ...and before flyctl runs: flyctl needs neither credential, so it should find
+  # no DOCKER_CONFIG in its environment and no credentials left on disk.
+  assert_true "flyio: flyctl runs after the registry credentials are gone" \
+    "[[ -s '$FLY_STUB_DIR/flyctl-credentials' ]] && ! grep -qv '^gone\$' '$FLY_STUB_DIR/flyctl-credentials'"
   assert_true "flyio: nothing was written to HOME/.docker" "[[ ! -e \"\$ISOLATED_HOME/.docker\" ]]"
   assert_true "flyio: a real image deploy downloads nothing when both CLIs are present" \
     "[[ -z \"\$STUB_NETWORK\" ]]"
@@ -987,7 +1006,7 @@ if [[ "$STUB_RESOLVES" == "$FLY_STUB_BIN/flyctl"$'\n'"$FLY_STUB_BIN/crane" ]]; t
       FLY_IMAGE_REGISTRY_PASSWORD="$SENTINEL-registry" FLY_STUB_FAIL="$failing"
     assert_true "flyio: a failed crane $failing fails the job" "[[ $STATUS -eq 1 ]]"
     assert_true "flyio: a failed crane $failing deploys nothing" \
-      "! grep -q '^flyctl deploy' <<< \"\$STUB_ARGV\" && [[ -z \"\$CMD\" ]]"
+      "! grep -q '^flyctl deploy' <<< \"\$STUB_ARGV\" && $NOTHING_DEPLOYED"
     assert_true "flyio: a failed crane $failing says nothing was deployed" \
       "grep -q 'Nothing has been deployed' <<< \"\$OUT\""
     # shellcheck disable=SC2034  # read by assert_true's eval'd conditions
@@ -1011,7 +1030,7 @@ if [[ "$STUB_RESOLVES" == "$FLY_STUB_BIN/flyctl"$'\n'"$FLY_STUB_BIN/crane" ]]; t
   run_flyio_isolated "$STUB_PATH" FLY_API_TOKEN="$FLY_TOKEN_FIXTURE" FLY_APP_NAME=my-mvp \
     FLY_IMAGE_REGISTRY_USERNAME=fixture-actor FLY_IMAGE_REGISTRY_PASSWORD="$SENTINEL-registry"
   assert_equals "flyio: with no image the real deploy builds from source and runs no crane" \
-    "flyctl deploy --remote-only --app my-mvp" "$STUB_ARGV"
+    "$FLY_SOURCE_BUILD" "$STUB_ARGV"
 else
   echo -e "${RED}  FAIL: the stand-in flyctl and crane are not what PATH resolves, so the real-path cases did not run${NC}"
   echo -e "${RED}        resolved: $STUB_RESOLVES${NC}"

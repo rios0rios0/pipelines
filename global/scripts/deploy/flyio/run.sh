@@ -49,6 +49,8 @@ fly_image_registry() {
     *.* | *:* | localhost) printf '%s\n' "$_fir_first" ;;
     *) printf '%s\n' "index.docker.io" ;;
   esac
+
+  return 0
 }
 
 # fly_registry_token
@@ -84,6 +86,8 @@ fly_registry_token() {
       }
       printf "%s", (macaroons != "" ? macaroons : others)
     }'
+
+  return 0
 }
 
 deploy_require_env "FLY_API_TOKEN" \
@@ -141,6 +145,7 @@ case "$FLY_IMAGE" in
     echo "Nothing has been deployed. Check the value for stray whitespace or quotes." >&2
     exit 1
     ;;
+  *) ;;
 esac
 
 # An image built before this job already carries its version: the delivery job
@@ -455,11 +460,12 @@ fi
 # registry keeps the image, and it is named after the digest, so it can never
 # be moved onto other bytes.
 #
-# Credentials go into a throwaway DOCKER_CONFIG, removed on exit, never into
-# $HOME/.docker, where a persistent self-hosted runner would keep them for the
-# next job. Every secret reaches crane on stdin, never on argv: `crane auth
-# login` only stores what it is given, so a credential that is wrong surfaces at
-# the digest or the copy below, which say so.
+# Credentials go into a throwaway DOCKER_CONFIG, removed as soon as the copy is
+# done (and on any exit before it), never into $HOME/.docker, where a persistent
+# self-hosted runner would keep them for the next job. Every secret reaches
+# crane on stdin, never on argv: `crane auth login` only stores what it is
+# given, so a credential that is wrong surfaces at the digest or the copy below,
+# which say so.
 if [ -n "$FLY_IMAGE" ]; then
   FLY_REGISTRY_REPOSITORY="registry.fly.io/$FLY_RESOLVED_APP"
   if deploy_is_dry_run; then
@@ -526,6 +532,7 @@ if [ -n "$FLY_IMAGE" ]; then
     esac
     case "$FLY_IMAGE_HEX" in
       *[!0-9a-f]*) FLY_IMAGE_HEX="" ;;
+      *) ;;
     esac
     if [ "${#FLY_IMAGE_HEX}" -ne 64 ]; then
       echo "ERROR: '$FLY_IMAGE' resolved to '$FLY_SOURCE_IMAGE', which names no sha256 digest. Nothing has been deployed." >&2
@@ -539,6 +546,13 @@ if [ -n "$FLY_IMAGE" ]; then
       echo "Check that the app '$FLY_RESOLVED_APP' exists and that FLY_API_TOKEN can deploy it. Nothing has been deployed." >&2
       exit 1
     fi
+
+    # The registry credentials have done their job. They are removed now rather
+    # than when the job ends, so flyctl, which runs next, neither inherits a path
+    # to them nor runs while they are on disk -- the reason the password above is
+    # unset. The EXIT trap still covers every path that stops before here.
+    rm -rf "$FLY_DOCKER_CONFIG"
+    unset DOCKER_CONFIG
   fi
   FLY_DEPLOY_IMAGE="$FLY_REGISTRY_REPOSITORY@$FLY_IMAGE_DIGEST"
 fi

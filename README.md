@@ -2150,8 +2150,8 @@ Any platform does the same when `FLY_IMAGE` names an image already pushed, by di
 `FLY_IMAGE_REGISTRY_USERNAME` / `FLY_IMAGE_REGISTRY_PASSWORD` for the registry holding it (a public
 image needs neither). GitLab CI and Azure DevOps build from source unless it is set: their deploy
 templates are included on their own, after delivery templates that record no digest, so there is no
-image to hand over automatically. The credentials go into a throwaway Docker configuration removed
-when the job ends, and reach `crane` on stdin, never on its command line.
+image to hand over automatically. The credentials go into a throwaway Docker configuration, removed
+as soon as the copy is done, and reach `crane` on stdin, never on its command line.
 
 Set `FLY_MACHINE_COUNT` to pin how many machines the app runs. Fly adds a spare machine the first
 time it fills a process group, which is right for a stateless app and wrong for a process that is

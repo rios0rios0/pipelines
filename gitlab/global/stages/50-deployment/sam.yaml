@@ -2,7 +2,7 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/aws-scripts.yaml'
 
 deployment:qa:
-  image: 'ghcr.io/rios0rios0/pipelines/awscli:latest@sha256:30b303d0960116ce1ab258c40a0614a3e6e057c8e4b7741c24e23b593449d5ea'
+  image: 'ghcr.io/rios0rios0/pipelines/awscli:latest@sha256:aca4b1b006b1b77be4cd8542a03e7cd85a6fc4989ef8a9be9487b77271d613e1'
   stage: 'deployment'
   environment:
     name: 'qa'

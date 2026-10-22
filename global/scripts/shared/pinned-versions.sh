@@ -311,24 +311,24 @@ TERRAGRUNT_SHA256_ARM64="44b43df99bae7a309fdb831180bd9efb84fb145cf38a80c139e4903
 # upstream: github-release rios0rios0/terra
 # osv: none
 # checksums: https://github.com/rios0rios0/terra/releases/download/{version}/checksums.txt
-TERRA_PINNED_VERSION="1.18.14"
+TERRA_PINNED_VERSION="1.18.15"
 TERRA_VERSION="${TERRA_VERSION:-${TERRA_PINNED_VERSION}}"
 # asset: https://github.com/rios0rios0/terra/releases/download/{version}/terra-{version}-linux-amd64.tar.gz
-TERRA_SHA256_AMD64="eb1a20ee8b83a61a143ad3d20a47c2195b24fca246cfbca50f01f571df92fe0f"
+TERRA_SHA256_AMD64="0d8c789701c2c0482073327ee777b7f97f919d217127acdbba7867dfa3196e59"
 # asset: https://github.com/rios0rios0/terra/releases/download/{version}/terra-{version}-linux-arm64.tar.gz
-TERRA_SHA256_ARM64="12706b8bcad844eaed1774c036b1641c56dbc0204666490ca99391368a638e4b"
+TERRA_SHA256_ARM64="67a9f4014fd9b01402b10d82c2bc90ba5369eb0b0362f9e0bcb43f507df47549"
 
 # --- Deployment tooling (50-deployment stage) --------------------------------
 
 # upstream: github-release superfly/flyctl
 # osv: Go github.com/superfly/flyctl
 # checksums: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_checksums.txt
-FLYCTL_PINNED_VERSION="0.4.116"
+FLYCTL_PINNED_VERSION="0.4.118"
 FLYCTL_VERSION="${FLYCTL_VERSION:-${FLYCTL_PINNED_VERSION}}"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_x86_64.tar.gz
-FLYCTL_SHA256_X86_64="ab929c80ef0c1f7d623052267885632f47b4c5dd7c0ed8383d16f42472abe7b9"
+FLYCTL_SHA256_X86_64="0f2fabbb29904a7bac8bd96009314d26751084c33e098fcc393e2dac6c472f60"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_arm64.tar.gz
-FLYCTL_SHA256_ARM64="8b34a2b7443db9ee0e0ec3f7b3943b5bae873d009770dae4acec74085ae4d20a"
+FLYCTL_SHA256_ARM64="8b9ae409107d5e268895214e773881904a81d56b9593c14c6b41639f05e25faa"
 
 # mikefarah/yq, resolved by global/scripts/shared/resolve-yq.sh for the
 # golangci-lint config merge. Four digests rather than the usual two because
@@ -372,7 +372,7 @@ YQ_SHA256_DARWIN_ARM64="fee511a181bd8b3e6b7da98842b41973bfac8cd3bcd341ed29a58462
 # upstream: npm wrangler
 WRANGLER_CLI_SPEC="${WRANGLER_CLI_SPEC:-wrangler@4}"
 # upstream: npm vercel
-VERCEL_CLI_SPEC="${VERCEL_CLI_SPEC:-vercel@64}"
+VERCEL_CLI_SPEC="${VERCEL_CLI_SPEC:-vercel@65}"
 # upstream: npm netlify-cli
 NETLIFY_CLI_SPEC="${NETLIFY_CLI_SPEC:-netlify-cli@27}"
 
@@ -441,7 +441,7 @@ PDM_SPEC="${PDM_SPEC:-pdm==2.29.2}"
 # upstream: pypi vulture
 VULTURE_SPEC="${VULTURE_SPEC:-vulture==2.16}"
 # upstream: pypi semgrep
-SEMGREP_SPEC="${SEMGREP_SPEC:-semgrep==1.180.0}"
+SEMGREP_SPEC="${SEMGREP_SPEC:-semgrep==1.181.0}"
 # upstream: rubygems bundler-audit
 BUNDLER_AUDIT_SPEC="${BUNDLER_AUDIT_SPEC:-bundler-audit:0.9.3}"
 # upstream: rubygems debride

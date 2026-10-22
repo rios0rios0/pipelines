@@ -234,6 +234,10 @@ on:
           so the `needs:` edge below is satisfied by a run that verified nothing. On a branch the
           dependency is real and this can stay empty.
 
+          Set, it costs a branch run no API call: there the gate requires every job the deployment
+          `needs:` to have finished `success`, the same run's checks, instead of reading check runs,
+          which GitHub records separately and can record late.
+
           Write the names bare (`tests > test:all`). The gate matches a whole trailing ` / `
           segment, so it does not matter that GitHub records them prefixed with the calling jobs.
       promote_release:
@@ -309,12 +313,15 @@ jobs:
       contents: 'read'
       checks: 'read'
     steps:
-      # Skipped entirely when the caller passes nothing, so a branch deploy pays nothing for a gate
-      # whose guarantee `needs:` already carries.
+      # Skipped entirely when the caller passes nothing. Handed `needs`, a branch run is decided by
+      # the jobs this one needs -- the same run's checks, as the scheduler reported them -- and reads
+      # no check runs, which GitHub records separately and can record late. A tag still reads them:
+      # there the checks are skipped, and the workflow that skipped them still reports `success`.
       - if: "inputs.deployment_required_checks != ''"
         uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/require-checks@main'
         with:
           required_checks: "${{ inputs.deployment_required_checks }}"
+          needs: "${{ toJSON(needs) }}"
 
       # Refused here rather than by the deploy script, whose message is about a missing token and
       # not about why it is missing.

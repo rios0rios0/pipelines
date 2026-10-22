@@ -7,6 +7,19 @@ inputs:
       ship" -- so that the two stay one decision rather than two.
     type: 'string'
     required: true
+  needs:
+    description: |
+      The calling job's `needs` context, as `toJSON(needs)`. Optional. On a BRANCH
+      run verifying its own commit, every job named there must have finished
+      `success`, and check runs are not read at all: the required checks ran
+      inside those jobs in this very run, and a check run is a second record of a
+      job that GitHub can update late, or not at all during an incident. Ignored
+      on a tag, where the checks are skipped and the jobs holding them report
+      `success` regardless, and for a `commit` or `repository` other than the
+      run's own. Leave it empty to always read check runs.
+    type: 'string'
+    required: false
+    default: ''
   commit:
     description: 'Commit to verify. Defaults to the commit that triggered this run.'
     type: 'string'
@@ -42,6 +55,7 @@ runs:
       run: $SCRIPTS_DIR/global/scripts/deploy/require-checks/run.sh
       env:
         REQUIRE_CHECKS_NAMES: "${{ inputs.required_checks }}"
+        REQUIRE_CHECKS_NEEDS: "${{ inputs.needs }}"
         REQUIRE_CHECKS_COMMIT: "${{ inputs.commit }}"
         REQUIRE_CHECKS_REPOSITORY: "${{ inputs.repository }}"
         GH_TOKEN: "${{ inputs.token }}"

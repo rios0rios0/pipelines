@@ -2093,6 +2093,8 @@ jobs:
         with: { render_api_key: '${{ secrets.RENDER_API_KEY }}', render_service_name: 'api-staging' }
 ```
 
+**On a branch, the jobs the deploy `needs:` decide.** When the deploy job `needs:` the jobs that run your checks, also pass `needs: "${{ toJSON(needs) }}"` to `require-checks`. A branch run verifying its own commit then requires every one of those jobs to have finished `success` and reads no check runs. The checks ran inside those jobs in the same run, and a check run is a separate record that GitHub can update late. During one GitHub Actions incident, a finished job's check run read `in_progress` for almost an hour, and the gate refused a deploy whose every check had passed. A tag still reads check runs, because there the checks are skipped and the workflow that skipped them reports `success` anyway. So does a run verifying another `commit`, and any run when `needs` is left out. Every `<toolchain>-<provider>.yaml` here passes it.
+
 **GitLab CI** — add the include and set the CI/CD variables; the job self-gates on them:
 
 ```yaml

@@ -20,6 +20,9 @@
 # strictly more than re-running the suite on the tag would prove, for none of
 # the time.
 #
+# A BRANCH run that hands over its `needs` context is decided from those jobs
+# instead, without reading check runs at all -- see REQUIRE_CHECKS_NEEDS below.
+#
 # GitHub-only by nature: check runs are a GitHub concept. GitLab and Azure
 # DevOps expose the equivalent through their own pipeline-status APIs, and a
 # sibling script can be added here when a consumer needs one.
@@ -42,9 +45,52 @@ deploy_require_env "REQUIRE_CHECKS_COMMIT" \
 deploy_require_env "REQUIRE_CHECKS_REPOSITORY" \
   "The owner/repo to query. Defaults to GITHUB_REPOSITORY inside GitHub Actions."
 
+# ON A BRANCH RUN, THE JOBS THIS DEPLOYMENT NEEDS ARE THE VERDICT, NOT THE CHECK
+# RUNS. There the required checks are jobs of this same run, and the deployment
+# job cannot start until every job it `needs:` has finished, so `toJSON(needs)`
+# -- passed in as REQUIRE_CHECKS_NEEDS -- carries their results from the same
+# scheduler that started this job. A check run is a second record of each of
+# those jobs, written separately, and it can lag behind them or never arrive:
+# during a GitHub Actions incident (githubstatus.com, 2026-10-22, "Incident with
+# Actions Results") a CodeQL job finished, the job waiting on it started seven
+# seconds later, and its check run still read `in_progress` almost an hour on.
+# Read through the check runs that was a pending required check, and this gate
+# refused a deploy whose every check had passed.
+#
+# Every result must be `success`. A reusable workflow reports `success` when some
+# of its jobs were skipped and the rest passed, and `cancelled` when one of them
+# was cancelled (both read off public runs that print `toJSON(needs)`), so
+# `success` is the one value saying nothing failed and nothing was cut short.
+#
+# Only on a branch, and only for this run's own commit and repository. On a tag
+# the checks are SKIPPED while the delivery job still runs, so the workflow
+# holding them reports `success` all the same -- the hole this gate exists for --
+# and a tag reads the check runs the default-branch push left. A commit or a
+# repository other than this run's is not covered by this run's jobs at all. Any
+# ref type but `branch`, an unknown one included, reads check runs, and so does a
+# caller that passes no `needs`, which keeps a hand-written deploy job as it was.
+REQUIRE_CHECKS_NEEDS="${REQUIRE_CHECKS_NEEDS:-}"
+REQUIRE_CHECKS_REF_TYPE="${REQUIRE_CHECKS_REF_TYPE:-${GITHUB_REF_TYPE:-}}"
+RC_FROM_NEEDS='false'
+if [ -n "$REQUIRE_CHECKS_NEEDS" ]; then
+  if [ "$REQUIRE_CHECKS_REF_TYPE" != 'branch' ]; then
+    echo "A '${REQUIRE_CHECKS_REF_TYPE:-unknown}' run, not a branch run: the jobs it needs prove nothing here, so check runs decide."
+  elif [ "$REQUIRE_CHECKS_COMMIT" != "${GITHUB_SHA:-}" ]; then
+    echo "Verifying $REQUIRE_CHECKS_COMMIT, not this run's own commit: the jobs it needs do not cover it, so check runs decide."
+  elif [ "$REQUIRE_CHECKS_REPOSITORY" != "${GITHUB_REPOSITORY:-}" ]; then
+    echo "Verifying $REQUIRE_CHECKS_REPOSITORY, not this run's repository: the jobs it needs do not cover it, so check runs decide."
+  else
+    RC_FROM_NEEDS='true'
+  fi
+fi
+
 # A dry run resolves what would be asserted without calling the API, matching
 # every other script in this family and keeping the validation harness offline.
 if deploy_is_dry_run; then
+  if [ "$RC_FROM_NEEDS" = 'true' ]; then
+    echo "DRY RUN: would require every job this deployment needs to have finished 'success' on $REQUIRE_CHECKS_COMMIT, reading no check runs."
+    exit 0
+  fi
   echo "DRY RUN: would require these checks on $REQUIRE_CHECKS_COMMIT:"
   printf '%s\n' "$REQUIRE_CHECKS_NAMES" | while IFS= read -r _rc_name; do
     [ -n "$_rc_name" ] && echo "  - $_rc_name"
@@ -58,8 +104,63 @@ fi
 # that has neither. `deploy_npm_cli` skips its own installation on a dry run for
 # the same reason.
 if ! command -v jq > /dev/null 2>&1; then
-  echo "ERROR: 'jq' is required to read check runs but is not installed." >&2
+  echo "ERROR: 'jq' is required to read check runs and job results but is not installed." >&2
   exit 1
+fi
+
+# Decided before a transport is even chosen, so a branch deploy needs neither
+# `gh` nor `curl` and does not depend on the API it no longer reads.
+if [ "$RC_FROM_NEEDS" = 'true' ]; then
+  # Projected to `{job, result}` before it is written, because the report
+  # directory is published as an artifact and a job's outputs do not belong in
+  # it. Anything that is not a non-empty object fails here: an empty `needs`
+  # would make "every dependency succeeded" vacuously true.
+  NEEDS_FILE="$REPORT_PATH/needs.json"
+  if ! printf '%s' "$REQUIRE_CHECKS_NEEDS" | jq \
+    'if type == "object" and length > 0
+     then [to_entries[] | {job: .key, result: (.value.result // "none")}]
+     else error("not a needs context") end' > "$NEEDS_FILE" 2> /dev/null; then
+    rm -f "$NEEDS_FILE"
+    echo "ERROR: REQUIRE_CHECKS_NEEDS is not the needs context of a job that has dependencies." >&2
+    echo "Pass toJSON(needs) from a job that declares needs:, or pass nothing to read check runs instead." >&2
+    exit 1
+  fi
+
+  echo "Branch run on its own commit: deciding from the jobs this deployment needs, not from check runs."
+  # Job ids hold no spaces, so a space separates the two fields. Counted with
+  # `for` rather than `while read` for the reason given at the check-run loop
+  # below: a pipeline would count in a subshell and forget the total. `set -f`
+  # keeps an entry from being expanded as a filename pattern on its way in.
+  RC_SEEN=0
+  RC_BAD=0
+  OLD_IFS="$IFS"
+  IFS='
+'
+  set -f
+  for _rc_entry in $(jq -r '.[] | "\(.job) \(.result)"' "$NEEDS_FILE"); do
+    RC_SEEN=$((RC_SEEN + 1))
+    _rc_job="${_rc_entry%% *}"
+    _rc_result="${_rc_entry#* }"
+    if [ "$_rc_result" = 'success' ]; then
+      echo "OK: '$_rc_job' finished 'success'"
+    else
+      echo "ERROR: '$_rc_job' finished '$_rc_result', not 'success'." >&2
+      RC_BAD=$((RC_BAD + 1))
+    fi
+  done
+  set +f
+  IFS="$OLD_IFS"
+
+  # `RC_SEEN` is a belt: the fold above already refused an empty object, and a
+  # gate whose failure mode would be approval does not get to rely on that.
+  if [ "$RC_SEEN" -eq 0 ] || [ "$RC_BAD" -ne 0 ]; then
+    echo "ERROR: this run has not shown that the checks passed for $REQUIRE_CHECKS_COMMIT." >&2
+    echo "Re-run the jobs that did not finish 'success'." >&2
+    exit 1
+  fi
+
+  echo "Every job this deployment needs finished 'success' for $REQUIRE_CHECKS_COMMIT, and on a branch the required checks run inside them."
+  exit 0
 fi
 
 # `gh` is PREFERRED, not required. It ships on GitHub-hosted runners and on

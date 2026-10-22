@@ -1163,6 +1163,165 @@ printf '{"total_count":0,"check_runs":[]}' > "$RC_DIR/rest-untested.json"
 run_require_checks_curl rest-untested.json
 assert_true "require-checks: an empty but well-formed page is still refused as an untested commit" \
   "[[ $RC_STATUS -eq 1 ]] && grep -q 'no successful .tests > test:all.' <<< \"\$RC_OUT\""
+
+# A check run that has not been FINISHED is not a passed one, on the check-run
+# path. That is the right verdict when nothing else is known -- and the wrong
+# one in the case that motivated the branch path below: during a GitHub Actions
+# incident a finished job's check run read `in_progress` for almost an hour
+# while the job waiting on it had already started.
+printf '{"name":"default / go / tests > test:all","conclusion":null}\n{"name":"code-check > style:golangci-lint","conclusion":"success"}\n' \
+  > "$RC_DIR/pending.json"
+run_require_checks pending.json
+assert_true "require-checks: a pending required check is refused when check runs decide" \
+  "[[ $RC_STATUS -eq 1 ]] && grep -q 'pending' <<< \"\$RC_OUT\" && grep -q 'no successful .tests > test:all.' <<< \"\$RC_OUT\""
+
+# THE BRANCH PATH. Given the deployment job's `toJSON(needs)` on a branch run
+# verifying its own commit, the gate decides from those jobs and reads no check
+# runs. Run as the deployment job would be: GITHUB_* describes the run, and the
+# ref type arrives as GITHUB_REF_TYPE, which is all the composite action passes.
+# $1 is the PATH: the jq-only one has neither `gh` nor `curl`, so a branch run
+# that passes on it has provably read no check run, and the gh-stub one answers
+# $5 for the runs that must still read them.
+RC_GH_BIN="$RC_DIR/gh-stub-bin"
+mkdir -p "$RC_GH_BIN"
+for tool in sh dirname realpath sed rm mkdir tr cat env jq; do
+  for dir in /bin /usr/bin; do
+    if [[ -x "$dir/$tool" ]]; then ln -sf "$dir/$tool" "$RC_GH_BIN/$tool"; break; fi
+  done
+done
+cp "$RC_DIR/stub/gh" "$RC_GH_BIN/gh"
+
+run_require_checks_job() {
+  local bin="$1" ref_type="$2" needs="$3" run_sha="${4:-abc}" fixture="${5:-green.json}"
+  RC_STATUS=0
+  (
+    cd "$RC_DIR" || exit 1
+    env -i PATH="$bin" HOME="$RC_DIR" GH_STUB_FIXTURE="$RC_DIR/$fixture" \
+      REQUIRE_CHECKS_NAMES='tests > test:all' REQUIRE_CHECKS_COMMIT=abc \
+      REQUIRE_CHECKS_REPOSITORY=o/r REQUIRE_CHECKS_NEEDS="$needs" \
+      GITHUB_REF_TYPE="$ref_type" GITHUB_SHA="$run_sha" GITHUB_REPOSITORY=o/r \
+      SCRIPTS_DIR="$SCRIPTS_DIR" "$bin/sh" "$REQUIRE_SH"
+  ) > "$RC_DIR/out.txt" 2>&1 || RC_STATUS=$?
+  RC_OUT="$(cat "$RC_DIR/out.txt")"
+}
+
+NEEDS_GREEN='{"go-docker":{"result":"success","outputs":{"tag_name":"fixture-output-sentinel"}}}'
+run_require_checks_job "$RC_NOTRANSPORT_BIN" branch "$NEEDS_GREEN"
+assert_true "require-checks: a branch run whose needs all succeeded passes with no API client on PATH" \
+  "[[ $RC_STATUS -eq 0 ]]"
+assert_true "require-checks: the branch verdict names each job it trusted" \
+  "grep -q \"OK: 'go-docker' finished 'success'\" <<< \"\$RC_OUT\""
+assert_true "require-checks: a branch run reads no check runs" \
+  "! grep -q 'Reading check runs' <<< \"\$RC_OUT\""
+# The report directory is published as an artifact, so it keeps the verdict and
+# none of the jobs' outputs.
+assert_true "require-checks: the branch report records each job's result" \
+  "grep -q '\"result\": \"success\"' '$RC_DIR/build/reports/require-checks/needs.json'"
+assert_true "require-checks: the branch report leaves the jobs' outputs out" \
+  "! grep -q 'fixture-output-sentinel' '$RC_DIR/build/reports/require-checks/needs.json'"
+
+# `success` is the only value that passes. A reusable workflow reports
+# `cancelled` when one of its jobs was cancelled -- a CodeQL extractor killed for
+# memory is reported that way -- and the deployment's own `if:` only refuses a
+# `failure`, so the gate is what stops a deploy whose checks were cut short.
+run_require_checks_job "$RC_NOTRANSPORT_BIN" branch '{"go-docker":{"result":"cancelled","outputs":{}}}'
+assert_true "require-checks: a branch run with a cancelled dependency is refused, naming it" \
+  "[[ $RC_STATUS -eq 1 ]] && grep -q \"'go-docker' finished 'cancelled'\" <<< \"\$RC_OUT\""
+assert_true "require-checks: a refused branch run never reports the jobs as passed" \
+  "! grep -q 'Every job this deployment needs finished' <<< \"\$RC_OUT\""
+
+run_require_checks_job "$RC_NOTRANSPORT_BIN" branch '{"go-docker":{"result":"skipped","outputs":{}}}'
+assert_true "require-checks: a skipped dependency proves nothing and is refused" \
+  "[[ $RC_STATUS -eq 1 ]]"
+
+run_require_checks_job "$RC_NOTRANSPORT_BIN" branch \
+  '{"build":{"result":"success","outputs":{}},"scan":{"result":"failure","outputs":{}}}'
+assert_true "require-checks: one failed dependency among passing ones is refused, naming it" \
+  "[[ $RC_STATUS -eq 1 ]] && grep -q \"'scan' finished 'failure'\" <<< \"\$RC_OUT\""
+
+# THE TAG STAYS ON CHECK RUNS, and this is the assertion the branch path must
+# never weaken. On a tag the checks are skipped while the delivery job still
+# runs, so the workflow holding them reports `success` -- exactly what the gate
+# exists to see through. A pending check therefore still refuses a tag, however
+# green its needs look.
+run_require_checks_job "$RC_GH_BIN" tag "$NEEDS_GREEN" abc pending.json
+assert_true "require-checks: a tag run ignores needs and refuses a pending check" \
+  "[[ $RC_STATUS -eq 1 ]] && grep -q 'no successful .tests > test:all.' <<< \"\$RC_OUT\""
+assert_true "require-checks: a tag run says why it reads check runs" \
+  "grep -q \"'tag' run, not a branch run\" <<< \"\$RC_OUT\""
+
+# This run's jobs say nothing about another commit, nor does an unknown ref
+# type say that this is a branch: both read check runs.
+run_require_checks_job "$RC_GH_BIN" branch "$NEEDS_GREEN" def pending.json
+assert_true "require-checks: a branch run verifying another commit reads check runs" \
+  "[[ $RC_STATUS -eq 1 ]] && grep -q \"not this run's own commit\" <<< \"\$RC_OUT\""
+run_require_checks_job "$RC_GH_BIN" '' "$NEEDS_GREEN" abc pending.json
+assert_true "require-checks: an unknown ref type reads check runs" \
+  "[[ $RC_STATUS -eq 1 ]] && grep -q 'no successful .tests > test:all.' <<< \"\$RC_OUT\""
+
+# Without needs, a branch run keeps today's behaviour: check runs decide.
+run_require_checks_job "$RC_GH_BIN" branch '' abc green.json
+assert_true "require-checks: a branch run given no needs still reads check runs" \
+  "[[ $RC_STATUS -eq 0 ]] && grep -q \"through 'gh'\" <<< \"\$RC_OUT\""
+
+# A value that is not a needs context is a WIRING error and must read as one,
+# never as a red commit -- and an empty one would make "every dependency
+# succeeded" vacuously true.
+for bad_needs in '{}' '"success"' 'success' '[]'; do
+  run_require_checks_job "$RC_NOTRANSPORT_BIN" branch "$bad_needs"
+  assert_true "require-checks: needs of $bad_needs is refused as a wiring error" \
+    "[[ $RC_STATUS -eq 1 ]] && grep -q 'is not the needs context' <<< \"\$RC_OUT\" && ! grep -q 'no successful' <<< \"\$RC_OUT\""
+done
+
+# The dry run stays hermetic on the branch path too: no jq, no client.
+RC_STATUS=0
+(
+  cd "$RC_DIR" || exit 1
+  env -i PATH="$RC_BIN" HOME="$RC_DIR" DEPLOY_DRY_RUN=true \
+    REQUIRE_CHECKS_NAMES='tests > test:all' REQUIRE_CHECKS_COMMIT=abc \
+    REQUIRE_CHECKS_REPOSITORY=o/r REQUIRE_CHECKS_NEEDS="$NEEDS_GREEN" \
+    GITHUB_REF_TYPE=branch GITHUB_SHA=abc GITHUB_REPOSITORY=o/r \
+    SCRIPTS_DIR="$SCRIPTS_DIR" "$RC_BIN/sh" "$REQUIRE_SH"
+) > "$RC_DIR/out.txt" 2>&1 || RC_STATUS=$?
+# Read back only inside `assert_true`'s eval'd string, as with the missing-token
+# case above, so ShellCheck cannot see the use.
+# shellcheck disable=SC2034
+RC_OUT="$(cat "$RC_DIR/out.txt")"
+assert_true "require-checks: a branch dry run says it reads no check runs, with no jq on PATH" \
+  "[[ $RC_STATUS -eq 0 ]] && grep -q 'reading no check runs' <<< \"\$RC_OUT\""
+
+# THE WIRING, DISCOVERED rather than listed, for the reason the build_env_secrets
+# section below gives: a deployment workflow added later is guarded only if it is
+# iterated. Every step that runs the gate must hand it the job's own needs, or
+# that workflow's branch deploys go back to depending on the check-run record.
+RC_WIRING="$(/usr/bin/env python3 - "$SCRIPTS_DIR"/.github/workflows/*.yaml <<'WIRING'
+import sys
+
+try:
+    import yaml
+except ImportError:
+    print('PyYAML is required for this assertion '
+          '(CI installs python3-yaml; locally: pip install pyyaml)')
+    raise SystemExit(0)
+
+for path in sys.argv[1:]:
+    with open(path, encoding="utf-8") as handle:
+        document = yaml.safe_load(handle) or {}
+    for job in (document.get("jobs") or {}).values():
+        for step in (job.get("steps") or []):
+            if "50-deployment/require-checks@" in str(step.get("uses", "")):
+                needs = (step.get("with") or {}).get("needs", "")
+                print(f"{path.rsplit('/', 1)[-1]}\t{needs}")
+WIRING
+)"
+# An empty discovery would otherwise pass every assertion below by running none.
+assert_true "require-checks: the wiring discovery found at least one deployment workflow" \
+  "grep -q '\.yaml' <<< \"\$RC_WIRING\""
+while IFS=$'\t' read -r wiring_file wiring_needs; do
+  [[ "$wiring_file" == *.yaml ]] || continue
+  assert_equals "require-checks: $wiring_file hands the gate its job's needs" \
+    "\${{ toJSON(needs) }}" "$wiring_needs"
+done <<< "$RC_WIRING"
 echo ""
 
 # =============================================================================

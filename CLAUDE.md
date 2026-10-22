@@ -409,6 +409,18 @@ fifteenth assertion holds it clause by clause.
 strings consumers pass to `require-checks`, because GitHub composes a check's name from the calling
 job and the called workflow's job. Renaming a job renames a check for everyone downstream.
 
+**On a branch, `require-checks` trusts `needs`; on a tag, it reads check runs.** Every deployment
+workflow hands the gate `toJSON(needs)`. On a branch run verifying its own commit, the jobs named
+there ran that very run's checks, so each must have finished `success` and no check run is read. A
+check run is a second record of a job, written separately: during a GitHub Actions incident one
+stayed `in_progress` for almost an hour after its job had finished, and the gate refused a deploy
+whose every check had passed. A reusable workflow reports `success` when some of its jobs were
+skipped and the rest passed, and `cancelled` when one was cancelled; both were read off public runs
+that print `toJSON(needs)`. So on a tag, where the checks are skipped and delivery still runs, that
+`success` proves nothing, and the tag reads the check runs the default-branch push left.
+`make test-deploy-providers` holds both halves, and discovers the wiring in every workflow that runs
+the gate.
+
 **A `STANDALONE` workflow is exempt from the composition rules, not from every rule.** The two Claude
 reusables are listed there, so the naming, delegation and suffix assertions skip them by design —
 which left their wiring asserted by nothing at all. The last three assertions cover what that exemption

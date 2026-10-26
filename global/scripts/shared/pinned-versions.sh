@@ -235,12 +235,12 @@ GO_PINNED_VERSION="1.27.3"
 # upstream: github-release golangci/golangci-lint
 # osv: Go github.com/golangci/golangci-lint/v2
 # checksums: https://github.com/golangci/golangci-lint/releases/download/v{version}/golangci-lint-{version}-checksums.txt
-GOLANGCI_LINT_PINNED_VERSION="2.14.0"
+GOLANGCI_LINT_PINNED_VERSION="2.15.0"
 GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-${GOLANGCI_LINT_PINNED_VERSION}}"
 # asset: https://github.com/golangci/golangci-lint/releases/download/v{version}/golangci-lint-{version}-linux-amd64.tar.gz
-GOLANGCI_LINT_SHA256_AMD64="ab90aeb7b066f92a33415b638a50fe5344bbb75a0d32ad30cc248d88f81032ab"
+GOLANGCI_LINT_SHA256_AMD64="9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea"
 # asset: https://github.com/golangci/golangci-lint/releases/download/v{version}/golangci-lint-{version}-linux-arm64.tar.gz
-GOLANGCI_LINT_SHA256_ARM64="ee7ec5f3453d15ddf106fae5a4d6c71737712348a979d1fe9cd52ec7ea299bae"
+GOLANGCI_LINT_SHA256_ARM64="b4d8f17068b35ee6060cc2f69a16fb48740d706fbba81661c318649c114a6998"
 
 # The shared golangci-lint configuration is Marat Reimers' "golden config" with
 # this repository's adjustments on top. It is vendored, not fetched at run time,
@@ -453,7 +453,7 @@ CYCLONEDX_GOMOD_VERSION="${CYCLONEDX_GOMOD_VERSION:-${CYCLONEDX_GOMOD_PINNED_VER
 # behaviour on the day it landed -- it only stopped the behaviour changing
 # underneath a consumer afterwards.
 # upstream: pypi pdm
-PDM_SPEC="${PDM_SPEC:-pdm==2.29.2}"
+PDM_SPEC="${PDM_SPEC:-pdm==2.29.3}"
 # upstream: pypi vulture
 VULTURE_SPEC="${VULTURE_SPEC:-vulture==2.16}"
 # upstream: pypi semgrep
@@ -463,4 +463,4 @@ BUNDLER_AUDIT_SPEC="${BUNDLER_AUDIT_SPEC:-bundler-audit:0.9.3}"
 # upstream: rubygems debride
 DEBRIDE_SPEC="${DEBRIDE_SPEC:-debride:1.15.2}"
 # upstream: npm knip
-KNIP_SPEC="${KNIP_SPEC:-knip@6.41.0}"
+KNIP_SPEC="${KNIP_SPEC:-knip@6.42.0}"

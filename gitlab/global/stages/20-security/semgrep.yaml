@@ -10,7 +10,7 @@ include:
 # Python package.
 sast:semgrep:
   extends: '.scripts-repo'
-  image: 'python:3.13-slim@sha256:27b7c9d4f13ca20bb1170148f02095d50a5dfce1f7f2dabf5ca273727e43b7ea'
+  image: 'python:3.13-slim@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962'
   stage: 'security (sca/sast)'
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends git jq curl

@@ -454,6 +454,13 @@ CYCLONEDX_GOMOD_VERSION="${CYCLONEDX_GOMOD_VERSION:-${CYCLONEDX_GOMOD_PINNED_VER
 # underneath a consumer afterwards.
 # upstream: pypi pdm
 PDM_SPEC="${PDM_SPEC:-pdm==2.29.2}"
+# PDM does not pin its own dependencies, and `unearth` 0.19.0 (2026-10-27) breaks
+# PDM 2.29.2 at install (`super(type, obj): obj (instance of PDMPyPIClient) is
+# not an instance or subtype of type (Client)`), so it is installed beside PDM in
+# the same `pip install`. Drop this pin when PDM moves to 2.29.4 or later (which
+# requires `unearth>=0.19`, past the cooldown on 2026-11-03).
+# upstream: pypi unearth
+UNEARTH_SPEC="${UNEARTH_SPEC:-unearth==0.18.3}"
 # upstream: pypi vulture
 VULTURE_SPEC="${VULTURE_SPEC:-vulture==2.16}"
 # upstream: pypi semgrep

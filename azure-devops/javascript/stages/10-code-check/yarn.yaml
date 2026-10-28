@@ -112,7 +112,7 @@ stages:
 
           # Pinned; `npx --yes knip` executes the newest published knip on
           # every run. See global/scripts/shared/pinned-versions.sh.
-          - script: 'npx --yes --ignore-scripts knip@6.41.0'
+          - script: 'npx --yes --ignore-scripts knip@6.42.1'
             displayName: 'Run Knip unused code detection'
             workingDirectory: "${{ parameters.WORKING_DIRECTORY }}"
 

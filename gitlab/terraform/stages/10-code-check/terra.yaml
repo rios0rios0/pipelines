@@ -22,7 +22,7 @@ style:tflint:
 # Run 'order-check/run.sh --fix' locally to auto-sort.
 order:check:
   extends: '.scripts-repo'
-  image: 'python:3.13-alpine@sha256:c50ccfb66e5cc97a610dcd0b9597de6ef5b52c96280b51997b353a0fc87a8361'
+  image: 'python:3.13-alpine@sha256:8bcfa47b04b853a17aaf909362b847b2112fd6ec4105ea553ef9a43bafbb5916'
   stage: 'code check (style/quality)'
   variables:
     REPORT_PATH: 'build/reports'

@@ -13,7 +13,7 @@ include:
 # `CHECKOV_DIRECTORIES` (space-separated, `.` by default) narrows the scan.
 sast:checkov:
   extends: '.scripts-repo'
-  image: 'python:3.13-slim@sha256:27b7c9d4f13ca20bb1170148f02095d50a5dfce1f7f2dabf5ca273727e43b7ea'
+  image: 'python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb'
   stage: 'security (sca/sast)'
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends git curl

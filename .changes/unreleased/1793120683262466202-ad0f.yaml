@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the Python pipelines failing at PDM install on every platform with `[TypeError]: super(type, obj): obj (instance of PDMPyPIClient) is not an instance or subtype of type (Client).` by pinning `unearth` to `0.18.3` beside PDM `2.29.2`, in every `pip install` of PDM and in `pinned-versions.sh` as `UNEARTH_SPEC`. PDM does not pin its own dependencies, and `unearth` `0.19.0`, released on 2026-10-27, is incompatible with `2.29.2`; the pin goes once PDM moves to `2.29.4` or later'
-time: '2026-10-27T17:04:43.262404729Z'

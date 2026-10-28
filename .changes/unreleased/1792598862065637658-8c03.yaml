@@ -1,3 +1,0 @@
-kind: 'Removed'
-body: 'removed the `python.3.10-pdm-bookworm` and `python.3.13-pdm-bookworm` images, leaving `python.3.14-pdm-trixie` as the one Python image. Their tags stay published in GHCR and keep pulling, but are no longer rebuilt, so anything that builds on `python:3.10-pdm-bookworm` or `python:3.13-pdm-bookworm` should move to `python:3.14-pdm-trixie`. The new tag was published from the fix branch before the GitLab CI pin was written, so the rebuild that follows the merge supersedes that digest until the next scheduled `Dependency Updates` run re-pins it'
-time: '2026-10-21T16:07:42.065525501Z'

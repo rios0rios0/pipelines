@@ -187,10 +187,10 @@ HADOLINT_SHA256_ARM64="f6198ef8090f404dbb771abfee086eb8c48ac177f30da7fd3510aca35
 # upstream: github-release github/codeql-action
 # osv: none
 # checksums: https://github.com/github/codeql-action/releases/download/{version}/codeql-bundle-linux64.tar.gz.checksum.txt
-CODEQL_BUNDLE_PINNED_VERSION="codeql-bundle-v2.27.2"
+CODEQL_BUNDLE_PINNED_VERSION="codeql-bundle-v2.27.3"
 CODEQL_BUNDLE_VERSION="${CODEQL_BUNDLE_VERSION:-${CODEQL_BUNDLE_PINNED_VERSION}}"
 # asset: https://github.com/github/codeql-action/releases/download/{version}/codeql-bundle-linux64.tar.gz
-CODEQL_BUNDLE_SHA256_LINUX64="f002864be6dd8d5d7bdb123aaf7291ec8e291012bd9f70b6d2362f730db52aeb"
+CODEQL_BUNDLE_SHA256_LINUX64="64518dc413c8e7b5733fee2489e830a899bb1e3f28c8873b5869d5cc90164c5c"
 
 # upstream: github-release google/osv-scanner
 # osv: Go github.com/google/osv-scanner/v2
@@ -211,10 +211,10 @@ OSV_SCANNER_SHA256_ARM64="4061ef4c021ed3c47f203b818f337e351336cc5cd67c0274fc36bd
 # digest the way it does for any release binary. The wheel's dependencies are
 # resolved by pip within the ranges the wheel declares, binary-only.
 # upstream: pypi checkov
-CHECKOV_PINNED_VERSION="3.3.29"
+CHECKOV_PINNED_VERSION="3.3.30"
 CHECKOV_VERSION="${CHECKOV_VERSION:-${CHECKOV_PINNED_VERSION}}"
 # asset: https://files.pythonhosted.org/packages/py3/c/checkov/checkov-{version}-py3-none-any.whl
-CHECKOV_SHA256="9a8b3918788faf8e18b181d826d284744b22b9d99c53cf1b67a2e84f0596796f"
+CHECKOV_SHA256="32c3d6a808399f3fd6ec83e68a337050d17f019336f4d8f3b23aae469ba79408"
 
 # --- Language tooling --------------------------------------------------------
 
@@ -235,12 +235,12 @@ GO_PINNED_VERSION="1.27.3"
 # upstream: github-release golangci/golangci-lint
 # osv: Go github.com/golangci/golangci-lint/v2
 # checksums: https://github.com/golangci/golangci-lint/releases/download/v{version}/golangci-lint-{version}-checksums.txt
-GOLANGCI_LINT_PINNED_VERSION="2.14.0"
+GOLANGCI_LINT_PINNED_VERSION="2.15.0"
 GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-${GOLANGCI_LINT_PINNED_VERSION}}"
 # asset: https://github.com/golangci/golangci-lint/releases/download/v{version}/golangci-lint-{version}-linux-amd64.tar.gz
-GOLANGCI_LINT_SHA256_AMD64="ab90aeb7b066f92a33415b638a50fe5344bbb75a0d32ad30cc248d88f81032ab"
+GOLANGCI_LINT_SHA256_AMD64="9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea"
 # asset: https://github.com/golangci/golangci-lint/releases/download/v{version}/golangci-lint-{version}-linux-arm64.tar.gz
-GOLANGCI_LINT_SHA256_ARM64="ee7ec5f3453d15ddf106fae5a4d6c71737712348a979d1fe9cd52ec7ea299bae"
+GOLANGCI_LINT_SHA256_ARM64="b4d8f17068b35ee6060cc2f69a16fb48740d706fbba81661c318649c114a6998"
 
 # The shared golangci-lint configuration is Marat Reimers' "golden config" with
 # this repository's adjustments on top. It is vendored, not fetched at run time,
@@ -295,12 +295,12 @@ TFLINT_SHA256_ARM64="560da89aacf59389d4eb029730dd5b109b7288096c32f2726a0d9e783a5
 # upstream: github-release gruntwork-io/terragrunt
 # osv: Go github.com/gruntwork-io/terragrunt
 # checksums: https://github.com/gruntwork-io/terragrunt/releases/download/v{version}/SHA256SUMS
-TERRAGRUNT_PINNED_VERSION="1.1.6"
+TERRAGRUNT_PINNED_VERSION="1.2.0"
 TERRAGRUNT_VERSION="${TERRAGRUNT_VERSION:-${TERRAGRUNT_PINNED_VERSION}}"
 # asset: https://github.com/gruntwork-io/terragrunt/releases/download/v{version}/terragrunt_linux_amd64
-TERRAGRUNT_SHA256_AMD64="d75a80bb264758ba00dabcb17f4b507fcdab4ca90d9e41f96750df036bf69b04"
+TERRAGRUNT_SHA256_AMD64="45b6df8a8494c8cfe34b4abf919e894709557163e4d3b5704d11083002ab787a"
 # asset: https://github.com/gruntwork-io/terragrunt/releases/download/v{version}/terragrunt_linux_arm64
-TERRAGRUNT_SHA256_ARM64="44b43df99bae7a309fdb831180bd9efb84fb145cf38a80c139e490395581649d"
+TERRAGRUNT_SHA256_ARM64="b069ce4310572bc46ee6f057057acc4bc6a9077ef8687e157a64b0551290a371"
 
 # `rios0rios0/terra` is first-party, which changes nothing about the download:
 # the templates fetched `install.sh` from the `main` BRANCH and piped it into a
@@ -311,24 +311,24 @@ TERRAGRUNT_SHA256_ARM64="44b43df99bae7a309fdb831180bd9efb84fb145cf38a80c139e4903
 # upstream: github-release rios0rios0/terra
 # osv: none
 # checksums: https://github.com/rios0rios0/terra/releases/download/{version}/checksums.txt
-TERRA_PINNED_VERSION="1.18.15"
+TERRA_PINNED_VERSION="1.18.16"
 TERRA_VERSION="${TERRA_VERSION:-${TERRA_PINNED_VERSION}}"
 # asset: https://github.com/rios0rios0/terra/releases/download/{version}/terra-{version}-linux-amd64.tar.gz
-TERRA_SHA256_AMD64="0d8c789701c2c0482073327ee777b7f97f919d217127acdbba7867dfa3196e59"
+TERRA_SHA256_AMD64="2963335d80933d5f4c727704b7e690d1ec2bbe804bab76679bc4a1339e158145"
 # asset: https://github.com/rios0rios0/terra/releases/download/{version}/terra-{version}-linux-arm64.tar.gz
-TERRA_SHA256_ARM64="67a9f4014fd9b01402b10d82c2bc90ba5369eb0b0362f9e0bcb43f507df47549"
+TERRA_SHA256_ARM64="f1fd7926c91ecd29d07391a4836651189dfa1c0c0d7254630c0e68490ac849e1"
 
 # --- Deployment tooling (50-deployment stage) --------------------------------
 
 # upstream: github-release superfly/flyctl
 # osv: Go github.com/superfly/flyctl
 # checksums: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_checksums.txt
-FLYCTL_PINNED_VERSION="0.4.118"
+FLYCTL_PINNED_VERSION="0.4.120"
 FLYCTL_VERSION="${FLYCTL_VERSION:-${FLYCTL_PINNED_VERSION}}"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_x86_64.tar.gz
-FLYCTL_SHA256_X86_64="0f2fabbb29904a7bac8bd96009314d26751084c33e098fcc393e2dac6c472f60"
+FLYCTL_SHA256_X86_64="ef9b938ff3af2b28fad961a676e5ac2295124ad0b892ffb1c5f16a03bd4ee378"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_arm64.tar.gz
-FLYCTL_SHA256_ARM64="8b9ae409107d5e268895214e773881904a81d56b9593c14c6b41639f05e25faa"
+FLYCTL_SHA256_ARM64="d087cf71f2f7d9e42d596faaf1be542a080fa2c48535bc3853f66c8af1a61ab3"
 
 # crane, from google/go-containerregistry. The Fly.io deploy copies the image
 # the pipeline already delivered into registry.fly.io with it -- registry to
@@ -453,7 +453,7 @@ CYCLONEDX_GOMOD_VERSION="${CYCLONEDX_GOMOD_VERSION:-${CYCLONEDX_GOMOD_PINNED_VER
 # behaviour on the day it landed -- it only stopped the behaviour changing
 # underneath a consumer afterwards.
 # upstream: pypi pdm
-PDM_SPEC="${PDM_SPEC:-pdm==2.29.2}"
+PDM_SPEC="${PDM_SPEC:-pdm==2.29.3}"
 # PDM does not pin its own dependencies, and `unearth` 0.19.0 (2026-10-27) breaks
 # PDM 2.29.2 at install (`super(type, obj): obj (instance of PDMPyPIClient) is
 # not an instance or subtype of type (Client)`), so it is installed beside PDM in
@@ -464,10 +464,10 @@ UNEARTH_SPEC="${UNEARTH_SPEC:-unearth==0.18.3}"
 # upstream: pypi vulture
 VULTURE_SPEC="${VULTURE_SPEC:-vulture==2.16}"
 # upstream: pypi semgrep
-SEMGREP_SPEC="${SEMGREP_SPEC:-semgrep==1.181.0}"
+SEMGREP_SPEC="${SEMGREP_SPEC:-semgrep==1.182.0}"
 # upstream: rubygems bundler-audit
 BUNDLER_AUDIT_SPEC="${BUNDLER_AUDIT_SPEC:-bundler-audit:0.9.3}"
 # upstream: rubygems debride
 DEBRIDE_SPEC="${DEBRIDE_SPEC:-debride:1.15.2}"
 # upstream: npm knip
-KNIP_SPEC="${KNIP_SPEC:-knip@6.41.0}"
+KNIP_SPEC="${KNIP_SPEC:-knip@6.42.1}"

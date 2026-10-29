@@ -182,22 +182,6 @@ jobs:
       - name: 'Checkout code'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
-      # At least the `go` directive of this repository's `go.mod`, which the
-      # checker is built against: setup-go sets `GOTOOLCHAIN=local`, so an older
-      # Go would refuse the module instead of fetching a newer one.
-      - name: 'Setup Go'
-        uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
-        with:
-          go-version: '1.27.3'
-          # See `github/golang/stages/10-code-check/golangci-lint/action.yaml` for the measured
-          # reason this is gated: on a self-hosted runner GOMODCACHE and GOCACHE persist on local
-          # disk, the restore untars over files that already exist, `tar` exits 2 and the entire
-          # download is discarded. `runs-on` is hard-coded to a hosted runner in this file, so the
-          # expression is a no-op today. It is written anyway so the rule `make
-          # test-runner-cache-gating` enforces needs no exemption list, and so that adding a
-          # `runs_on` input here later cannot silently reintroduce the defect.
-          cache: ${{ runner.environment != 'self-hosted' }}
-
       # Pass `inputs.pipelines_ref` via `env:` (not `${{ }}` in `run:`) to
       # avoid script injection, then resolve the ref this reusable workflow
       # was invoked with so the shared scripts stay version-locked. Mirrors
@@ -224,6 +208,27 @@ jobs:
           ref: ${{ steps.pipelines-ref.outputs.ref }}
           path: '.pipelines'
           persist-credentials: false
+
+      # At least the `go` directive of this repository's `go.mod`, which the
+      # checker is built against: setup-go sets `GOTOOLCHAIN=local`, so an older
+      # Go would refuse the module instead of fetching a newer one. It runs after
+      # the checkout above because the cache is keyed on the pipelines module's
+      # `go.sum`: the consumer's repository has none, so the default key would only
+      # warn that there is nothing to cache, and this one keeps the checker's
+      # compiled packages between runs.
+      - name: 'Setup Go'
+        uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: '.pipelines/go.sum'
+          # See `github/golang/stages/10-code-check/golangci-lint/action.yaml` for the measured
+          # reason this is gated: on a self-hosted runner GOMODCACHE and GOCACHE persist on local
+          # disk, the restore untars over files that already exist, `tar` exits 2 and the entire
+          # download is discarded. `runs-on` is hard-coded to a hosted runner in this file, so the
+          # expression is a no-op today. It is written anyway so the rule `make
+          # test-runner-cache-gating` enforces needs no exemption list, and so that adding a
+          # `runs_on` input here later cannot silently reintroduce the defect.
+          cache: ${{ runner.environment != 'self-hosted' }}
 
       - name: 'Check file ordering (deps/variables/providers/outputs)'
         run: |
@@ -403,11 +408,13 @@ jobs:
           tests_dir="${TESTS_DIR:-tests/terratest}"
           path=""
           if [ -f "${tests_dir}/go.mod" ]; then
+            # `go 1.25` means 1.25.0, but `sort -V` orders 1.25 before 1.25.0.
+            full() { case "$1" in *.*.*) echo "$1" ;; *.*) echo "$1.0" ;; *) echo "$1" ;; esac; }
             # setup-go reads the `toolchain` directive first, then `go`.
             wanted="$(awk '$1 == "toolchain" { sub(/^go/, "", $2); print $2; exit }' "${tests_dir}/go.mod")"
             [ -n "${wanted}" ] || wanted="$(awk '$1 == "go" { print $2; exit }' "${tests_dir}/go.mod")"
             floor="$(awk '$1 == "go" { print $2; exit }' .pipelines/go.mod)"
-            if [ "$(printf '%s\n%s\n' "${floor}" "${wanted}" | sort -V | head -n 1)" = "${floor}" ]; then
+            if [ "$(printf '%s\n%s\n' "$(full "${floor}")" "$(full "${wanted}")" | sort -V | head -n 1)" = "$(full "${floor}")" ]; then
               path="${tests_dir}/go.mod"
             else
               echo "::notice::${tests_dir}/go.mod asks for Go ${wanted}, older than the ${floor} the pipelines' Go helpers need; using the pinned Go instead."

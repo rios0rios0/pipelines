@@ -439,9 +439,13 @@ the gate.
 **A `STANDALONE` workflow is exempt from the composition rules, not from every rule.** The two Claude
 reusables are listed there, so the naming, delegation and suffix assertions skip them by design —
 which left their wiring asserted by nothing at all. The last three assertions cover what that exemption
-leaves behind, and all read the PARSED document (YAML 1.1 resolves `on:` to the boolean `true`, so no
-indentation rule can reach under it) — which is why this suite needs PyYAML at all, and why it says so
-by name rather than dying when it is absent.
+leaves behind, and all read the PARSED document rather than the indented text: an input declared three
+mappings under `on:` (a key a YAML 1.1 reader does not even spell `on`, resolving it to the boolean
+`true`), or an `if:` or prompt spread over a block scalar, is out of reach of any indentation rule.
+Those three, and every assertion after them, run in the suite's Go command
+`internal/testsuites/workflowcomposition`, which reads YAML 1.2 as GitHub Actions does. The suite
+builds it from the checkout before its first assertion and stops by name when the build fails, so it
+needs a Go toolchain and no Python.
 
 The tenth is the **`runs_on` contract**, and it has two halves because either alone is defeatable. The
 contract half runs over *every* workflow declaring the input — 19 today, not just the Claude pair,
@@ -561,9 +565,12 @@ assertion here that exists to save money rather than to prevent a silent failure
 carries a version number or a dependency pin, and is merged unread — so every review of one is a
 full-diff Claude run, at Opus prices, on a diff nobody reads back. The guard that stops it is a
 job-level `if:`: free text, one expression, exactly what a "tidy these conditions" pass eats
-first. It is therefore **evaluated, not matched** — the expression is translated into Python and
-run against ten pull requests whose verdict is known — so it survives a reordering, an input
+first. It is therefore **evaluated, not matched** — the expression is run against ten pull
+requests whose verdict is known, by a strict evaluator of the part of GitHub's expression language
+a guard is written in and with GitHub's rules for it (strings compare ignoring case, `!` binds
+tighter than `==`, `==` across types compares numbers) — so it survives a reordering, an input
 rename or a rewrite from `startsWith` to `contains`, and still fails when a prefix is dropped.
+Syntax outside that subset fails the case by name rather than being guessed at.
 
 Two of the ten are the traps, and both are cases where the obvious guard is worse than none.
 A plain `feat/…` branch must still BE reviewed, or an expression that skips *everything* passes a

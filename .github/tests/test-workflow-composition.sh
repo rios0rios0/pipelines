@@ -30,33 +30,39 @@ set -e
 #     name from the calling job and the called workflow's job, so the names
 #     consumers list in `deployment_required_checks` are these strings.
 #
-# WHAT IT DOES NOT DO
+# HOW IT READS THE FILES
 #
-# Tests 1-9 do not parse YAML with a library -- the same constraint `order-check`
-# and `var-catalog` work under. They read the files as indented text, which is
-# sufficient because each is about a line shape (a job key at two spaces, a
-# `name:` at four) rather than about a resolved document. A workflow written in
-# flow style would slip past them; none is, and one would fail review long
-# before this.
+# Tests 1-9 do not resolve the YAML -- the same constraint `order-check` and
+# `var-catalog` work under. They are lookups into a fact table read from the
+# files as indented text, which is sufficient because each is about a line shape
+# (a job key at two spaces, a `name:` at four) rather than about a resolved
+# document. A workflow written in flow style would slip past them; none is, and
+# one would fail review long before this.
 #
-# Tests 10 to 17 are the exceptions and do need PyYAML. Test 10 asserts under a
-# key YAML 1.1 RESOLVES -- `on:` parses as the boolean `true`, so `runs_on` sits
-# under no key spelled `on` at all and no indentation rule can reach it -- and
+# Tests 10 to 17 are the exceptions and read the PARSED document. Test 10
+# asserts on an input declared three mappings under `on:` -- a key a YAML 1.1
+# reader does not even spell `on`, since it resolves it to the boolean `true` --
+# where no indentation rule can tell which mapping a line belongs to, and
 # Test 11 needs the `if:` as ONE expression, which a block scalar spreads over
 # ten physical lines, Test 12 walks the whole trigger block for evaluated
 # expressions, Test 13 compares a block-scalar prompt against the tool rules in
 # another block scalar beside it, Test 14 evaluates a folded-scalar `if:`
-# against input defaults declared under that same resolved `on:` key,
-# Test 15 splits every job's `if:` into clauses, which a block scalar may spread
-# over several lines just as Test 11's does, and Test 16 tells a job-level
+# against input defaults declared under that same `on:` key, Test 15 splits
+# every job's `if:` into clauses, which a block scalar may spread over several
+# lines just as Test 11's does, and Test 16 tells a job-level
 # `continue-on-error` from a step-level one, which only nesting distinguishes --
 # and follows the GitLab and Azure DevOps twins through their includes and
 # templates -- and Test 17 reads a job's `permissions:` beside the `with:` of its
-# steps. All eight
-# are written so that a host without PyYAML sees the assertion FAIL BY NAME
-# rather than a traceback -- see the comments there. CI installs `python3-yaml`
-# (`.github/workflows/ci.yaml`), and `make test` already requires it for
-# `test-azure-step-names.sh` and `test-lambda-templates.sh`.
+# steps.
+#
+# The fact table and those eight checks are one Go command,
+# `internal/testsuites/workflowcomposition`, built below from this checkout. It
+# reads YAML 1.2, as GitHub Actions does, so the suite needs a Go toolchain and
+# nothing else -- no Python, no PyYAML. A build that fails stops the suite by
+# name instead of skipping the assertions it serves. Each check prints one
+# finding per line and exits 0 whatever it found, a file it cannot read being a
+# finding about that file: this script runs under `set -e`, where a failing
+# command would end it with no FAIL line and no summary.
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export SCRIPTS_DIR
@@ -132,87 +138,43 @@ echo "Workflow composition standard"
 echo "================================"
 echo ""
 
-# The fact table every assertion below reads. One pass over the workflows,
-# emitting `<kind>\t<workflow>\t<job>\t<detail>` lines, so the assertions are
-# lookups into a flat file rather than nine separate parses.
-FACTS="$(mktemp)" || exit 1
-trap 'rm -f "$FACTS"' EXIT
+# The checks, built once into scratch space the EXIT trap removes. The build pins
+# what `global/scripts/shared/go-helper.sh` pins: no C compiler, go.mod and go.sum
+# never rewritten, and no go.work above the checkout deciding what builds.
+COMPOSITION_TMP="$(mktemp -d)" || exit 1
+trap 'rm -rf "$COMPOSITION_TMP"' EXIT
+COMPOSITION="$COMPOSITION_TMP/workflowcomposition"
+FACTS="$COMPOSITION_TMP/facts"
 
-python3 - "$WORKFLOWS_DIR" > "$FACTS" <<'PY'
-import os
-import re
-import sys
+if ! command -v go > /dev/null 2>&1; then
+  echo -e "${RED}FAIL: Go 1.25 or newer is required to build the workflow composition checks${NC}"
+  exit 1
+fi
+if ! CGO_ENABLED=0 GOFLAGS=-mod=readonly GOWORK=off \
+  go build -C "$SCRIPTS_DIR" -o "$COMPOSITION" ./internal/testsuites/workflowcomposition; then
+  echo -e "${RED}FAIL: could not build ./internal/testsuites/workflowcomposition from $SCRIPTS_DIR${NC}"
+  exit 1
+fi
 
-workflows_dir = sys.argv[1]
+# composition_check <check> <directory>: that check's findings, one per line. The
+# command fails only when it cannot run at all -- called wrongly, or unable to
+# write its output -- and that becomes a finding here rather than the end of a
+# `set -e` suite with no FAIL line.
+composition_check() {
+  local status=0
+  "$COMPOSITION" "$@" || status=$?
+  if [[ $status -ne 0 ]]; then
+    echo "workflowcomposition $1 exited $status"
+  fi
+}
 
-JOB_KEY = re.compile(r'^  ([A-Za-z0-9_-]+):\s*$')
-STAGE_COMMENT = re.compile(r'^  # (\w+) stage\s*$')
-# `uses:` may sit at the job level (a called workflow) or inside a step.
-# Third-party actions are pinned to a full commit SHA with the human-readable
-# version carried in a trailing `# vX.Y.Z` comment, so the ref must be captured
-# WITHOUT anchoring at end-of-line. Anchoring there silently dropped every
-# pinned `uses:` from the fact table, which would make Tests 3, 6 and 7 pass by
-# having nothing left to check rather than by the invariant holding.
-USES = re.compile(r"^\s*-?\s*uses:\s*'?([^'\s]+?)'?(?:\s+#.*)?\s*$")
-NAME = re.compile(r"^    name:\s*'?([^']*)'?\s*$")
-JOB_KEYS = ('needs', 'environment', 'permissions', 'if')
-AT_JOB_LEVEL = {key: re.compile(r'^    ' + key + r':') for key in JOB_KEYS}
-
-
-def emit(kind, workflow, job, detail=''):
-    print('\t'.join((kind, workflow, job, detail)))
-
-
-for filename in sorted(os.listdir(workflows_dir)):
-    if not filename.endswith('.yaml'):
-        continue
-    with open(os.path.join(workflows_dir, filename), encoding='utf-8') as handle:
-        lines = handle.read().splitlines()
-
-    in_jobs = False
-    job = ''
-    stage_comment = ''
-    for line in lines:
-        if line.startswith('jobs:'):
-            in_jobs = True
-            continue
-        if not in_jobs:
-            # The `on:` block. A reusable workflow declares `workflow_call`; the
-            # trap this standard exists to prevent declares `workflow_run`.
-            if re.match(r'^\s+workflow_call:', line):
-                emit('reusable', filename, '')
-            if re.match(r'^\s+workflow_run:', line):
-                emit('workflow-run', filename, '')
-            continue
-
-        stage = STAGE_COMMENT.match(line)
-        if stage:
-            stage_comment = stage.group(1)
-            continue
-
-        job_key = JOB_KEY.match(line)
-        if job_key:
-            job = job_key.group(1)
-            emit('job', filename, job, stage_comment)
-            stage_comment = ''
-            continue
-
-        if not job:
-            continue
-
-        display = NAME.match(line)
-        if display:
-            emit('job-name', filename, job, display.group(1))
-            continue
-
-        for key in JOB_KEYS:
-            if AT_JOB_LEVEL[key].match(line):
-                emit('job-has-' + key, filename, job)
-
-        uses = USES.match(line)
-        if uses:
-            emit('uses', filename, job, uses.group(1))
-PY
+# The fact table every assertion of Tests 1-9 reads. One pass over the
+# workflows, emitting `<kind>\t<workflow>\t<job>\t<detail>` lines, so the
+# assertions are lookups into a flat file rather than nine separate parses. A
+# workflow it cannot read stops the suite, because a table missing a file would
+# let every lookup about that file pass.
+"$COMPOSITION" facts "$WORKFLOWS_DIR" > "$FACTS" \
+  || { echo -e "${RED}FAIL: could not build the fact table from $WORKFLOWS_DIR${NC}"; exit 1; }
 
 # Exact, field-wise lookups into the fact table. `grep -P` would do this in one
 # line and is a GNU extension; awk with -F'\t' behaves the same everywhere.
@@ -392,254 +354,14 @@ echo "Test 10: every workflow declaring runs_on declares and consumes it the sam
 #
 # Two more things about the shape below are deliberate:
 #
-#   - It reads the PARSED document, one of the two assertions here that does, and
-#     the file header says why. Same shape as `test-dart-pipeline.sh`.
-#   - Every path through the Python exits 0 and speaks through stdout. This script
-#     runs under `set -e`, so a non-zero exit inside the command substitution would
-#     kill the suite mid-run with no FAIL line and no summary -- which reads as a
-#     crash rather than as a verdict. `except Exception` around the per-file body
-#     is deliberately that broad: `OSError`/`YAMLError` cover an unreadable file,
-#     but an EMPTY workflow (`safe_load` returns `None`), a scalar `runs_on:` or a
-#     job with an empty body are all well-formed YAML that raise `AttributeError`
-#     on the lookups below -- which would abort the suite for the shapes it exists
-#     to report.
-BAD_RUNS_ON="$(python3 - "$WORKFLOWS_DIR" <<'PY'
-import glob
-import os
-import re
-import sys
-
-try:
-    import yaml
-except ImportError:
-    print('PyYAML is required for this assertion '
-          '(CI installs python3-yaml; locally: pip install pyyaml)')
-    sys.exit(0)
-
-workflows_dir = sys.argv[1]
-
-# `${{inputs.runs_on}}` and `${{ inputs.runs_on }}` are the same forward. Comparing
-# the raw string would report the correct one as "not forwarding runs_on", which
-# points a reader at the wrong defect -- `test-dart-pipeline.sh` checks presence for
-# the same reason. Normalising keeps the stricter check without the false positive.
-EXPRESSION = re.compile(r'\$\{\{\s*(.*?)\s*\}\}')
-
-
-def normalized(value):
-    return EXPRESSION.sub(r'${{ \1 }}', value) if isinstance(value, str) else value
-
-
-# A job's runner must be CALLER-SELECTABLE; it need not be this exact input.
-# `runs-on` is a hard selector, so a hardcoded runner is what strands a consumer --
-# and a workflow spanning two platforms genuinely cannot express both through one
-# input (`flutter-artifacts.yaml` documents an `ipa` job needing macOS). So the rule
-# is "resolves from a DECLARED input", which rejects every hardcoded runner while
-# leaving a second input available for a hard platform requirement.
-# `\s*` inside, not just around: `normalized()` collapses the whitespace bordering
-# `${{ … }}` and a reformat may equally produce `fromJSON( inputs.runs_on )`. Anchoring
-# on exact interior spacing would report that correct job as PINNING A RUNNER -- the
-# wrong-defect message the `with:` compare was already fixed for.
-# The argument may be one input or a FALLBACK CHAIN of them (`inputs.a || inputs.b`);
-# `chain_problems` holds the ways a chain parses and is still partly dead.
-RUNNER = re.compile(
-    r'^\$\{\{\s*fromJSON\(\s*(inputs\.\w+(?:\s*\|\|\s*inputs\.\w+)*)\s*\)\s*\}\}$')
-CHAIN_LINK = re.compile(r'inputs\.(\w+)')
-
-
-def declared_inputs(document):
-    # YAML 1.1 reads the `on:` key as the boolean `true`.
-    trigger = document.get('on', document.get(True)) or {}
-    return (trigger.get('workflow_call') or {}).get('inputs') or {}
-
-
-def runs_on_input(document):
-    return declared_inputs(document).get('runs_on')
-
-
-def callee_document(workflows_dir, uses):
-    """The parsed sibling workflow a job CALLS, or None when it cannot be resolved."""
-    reference = str(uses).split('@')[0]
-    # By basename alone, `someorg/theirrepo/.github/workflows/go.yaml@v1` would resolve
-    # to THIS repository's `go.yaml` and the forward would be demanded of a callee that
-    # does not declare it -- the trap `takes_runs_on` exists to avoid, from the other
-    # side. Only a local path or this repository's own workflows are resolvable.
-    if not (reference.startswith('./')
-            or reference.startswith('rios0rios0/pipelines/.github/workflows/')):
-        return None
-    path = os.path.join(workflows_dir, os.path.basename(reference))
-    if not os.path.isfile(path):
-        return None
-    try:
-        with open(path, encoding='utf-8') as handle:
-            return yaml.safe_load(handle) or {}
-    except (OSError, yaml.YAMLError):
-        return None
-
-
-def takes_runs_on(workflows_dir, uses):
-    """Does the workflow this job CALLS declare a `runs_on` input?
-
-    A `with:` key the callee does not declare is rejected by GitHub outright, so
-    demanding the forward unconditionally would be a trap the day a `runs_on`-
-    declaring workflow calls one without it (`update-major-version-tag.yaml` is the
-    callable example here, and `release.yaml` already calls it). Only a sibling in
-    this directory can be resolved; anything else is assumed to take it, which is
-    the status quo rather than a new silence.
-    """
-    document = callee_document(workflows_dir, uses)
-    return document is None or runs_on_input(document) is not None
-
-
-def runner_overrides(document):
-    """The `<purpose>_runs_on` inputs a workflow declares beside `runs_on`.
-
-    One naming rule for every runner-selecting input is what lets a composed workflow
-    be checked for dropping one without this file listing which purposes exist. An
-    unresolvable callee contributes none: the forwards it wants cannot be known.
-    """
-    return sorted(name for name in declared_inputs(document) if name.endswith('_runs_on'))
-
-
-def chain_problems(job, chain, inputs):
-    """How a fallback chain parses correctly and still never reaches part of itself.
-
-    Each link is read only when every link before it is EMPTY. `runs_on` always has a
-    value -- its default is the hosted runner -- so any link after it is dead; and a
-    link that is required, or defaults to anything but the empty string, is never empty
-    unless a consumer happens to blank it, so the links after it are dead by default.
-    """
-    problems = []
-    if 'runs_on' in chain[:-1]:
-        dead = ', '.join(chain[chain.index('runs_on') + 1:])
-        problems.append(f'job {job} falls back past runs_on, which always has a value, '
-                        f'so {dead} is never read')
-    for name in chain[:-1]:
-        if name == 'runs_on':
-            continue                                # reported above, and only once
-        spec = inputs.get(name)
-        if (not isinstance(spec, dict) or spec.get('required') is True
-                or spec.get('default') not in ('', None)):
-            problems.append(f'job {job} falls back from inputs.{name}, which is not optional '
-                            f'with an empty default, so the rest of its chain is never reached')
-    return problems
-
-
-# DECLARATION half: these must offer the input at all.
-must_declare = sorted(glob.glob(os.path.join(workflows_dir, 'reusable-claude-*.yaml')))
-if not must_declare:
-    print('no reusable-claude-*.yaml in .github/workflows/ -- renamed, or removed')
-
-for path in sorted(glob.glob(os.path.join(workflows_dir, '*.yaml'))):
-    name = os.path.basename(path)
-    problems = []
-    try:
-        with open(path, encoding='utf-8') as handle:
-            document = yaml.safe_load(handle) or {}
-
-        spec = runs_on_input(document)
-        if spec is None:
-            # CONTRACT half applies only to workflows that offer the input, so its
-            # ABSENCE has to be a finding in its own right or the whole assertion
-            # inverts -- a workflow that drops the input stops being iterated and
-            # passes by not being looked at. Two ways it becomes one:
-            if path in must_declare:
-                print(f'{name}: declares no runs_on workflow_call input')
-            elif 'workflow_call' in (document.get('on', document.get(True)) or {}):
-                # A REUSABLE workflow that composes one taking `runs_on` must pass the
-                # choice through; otherwise its consumers cannot reach a self-hosted
-                # runner at all, for the composed pipeline OR its own jobs. `yarn-docker`
-                # and `yarn-library` were exactly this -- their npm twins with the input
-                # dropped. A LEAF caller (this repository's own `claude-review.yaml`) is
-                # not reusable and is entitled to take the default, so it is not asked.
-                for job, body in (document.get('jobs') or {}).items():
-                    body = body or {}
-                    if 'uses' in body and takes_runs_on(workflows_dir, body['uses']):
-                        print(f'{name}: job {job} calls a workflow that takes runs_on, but '
-                              f'{name} declares no runs_on of its own to forward -- its '
-                              f'consumers cannot reach another runner')
-            continue
-
-        if not isinstance(spec, dict):
-            problems.append(f'runs_on is not an input declaration ({spec!r})')
-        else:
-            if spec.get('required') is not False:
-                problems.append('runs_on is not optional')
-            if spec.get('default') != '["ubuntu-latest"]':
-                problems.append('runs_on does not default to ["ubuntu-latest"]')
-
-        inputs = declared_inputs(document)
-        reaches_a_job = False
-        consumed = set()
-        for job, body in (document.get('jobs') or {}).items():
-            body = body or {}
-            # A job that CALLS another workflow cannot declare `runs-on` -- GitHub
-            # rejects the key there -- so it forwards the input instead. Demanding
-            # `runs-on` of every job would fail such a job for being correct; not
-            # asserting anything about it would let half a migration through, the
-            # shape `test-dart-pipeline.sh` calls out on the Dart children.
-            if 'uses' in body:
-                if not takes_runs_on(workflows_dir, body['uses']):
-                    continue
-                forwards = body.get('with') or {}
-                if normalized(forwards.get('runs_on')) != '${{ inputs.runs_on }}':
-                    problems.append(f'job {job} calls a workflow without forwarding runs_on')
-                else:
-                    reaches_a_job = True
-                # The same converse one purpose down: a `<purpose>_runs_on` the callee
-                # takes and this workflow does not forward leaves that job on `runs_on`
-                # for every consumer of this one, and the fallback makes that look like
-                # the default rather than like a drop.
-                for override in runner_overrides(
-                        callee_document(workflows_dir, body['uses']) or {}):
-                    if override not in inputs:
-                        problems.append(f'job {job} calls a workflow that takes {override}, '
-                                        f'which this workflow does not declare to forward')
-                    elif normalized(forwards.get(override)) != f'${{{{ inputs.{override} }}}}':
-                        problems.append(f'job {job} calls a workflow without forwarding '
-                                        f'{override}')
-                    else:
-                        consumed.add(override)
-                continue
-            selected = normalized(body.get('runs-on'))
-            selector = RUNNER.match(selected) if isinstance(selected, str) else None
-            if not selector:
-                problems.append(f'job {job} pins a runner instead of resolving one from an '
-                                f'input ({body.get("runs-on")!r})')
-                continue
-            chain = CHAIN_LINK.findall(selector.group(1))
-            undeclared = [link for link in chain if link not in inputs]
-            if undeclared:
-                problems.append(f'job {job} resolves its runner from inputs.{undeclared[0]}, '
-                                f'which the workflow does not declare')
-                continue
-            problems.extend(chain_problems(job, chain, inputs))
-            consumed.update(chain)
-            if 'runs_on' in chain:
-                reaches_a_job = True
-
-        # A `<purpose>_runs_on` nothing reads is the same silently ignored input the
-        # check below refuses for `runs_on`: the consumer sets it, GitHub accepts it,
-        # and the job it names never moves.
-        for override in runner_overrides(document):
-            if override not in consumed:
-                problems.append(f'declares {override} that no job resolves from or forwards')
-
-        # The runner rule accepts ANY declared input, which is what lets a job with a hard
-        # platform requirement take a second one. Without this, a workflow could declare
-        # `runs_on` and route every job through something else: the consumer sets it, GitHub
-        # accepts it because it is declared, and nobody reads it. A silently ignored input is
-        # worse than a rejected one, and the assertion's label promises it reaches a job.
-        if not problems and not reaches_a_job:
-            problems.append('declares runs_on that no job resolves from or forwards')
-    except (OSError, yaml.YAMLError) as error:
-        problems.append(f'unreadable ({error})')
-    except Exception as error:                      # noqa: BLE001 -- see the note above
-        problems.append(f'{type(error).__name__}: {error}')
-
-    if problems:
-        print(f'{name}: ' + '; '.join(problems))
-PY
-)"
+#   - It reads the PARSED document, and the file header says why. Same shape as
+#     `test-dart-pipeline.sh`.
+#   - A file it cannot read, or one shaped unlike a workflow -- a scalar
+#     `runs_on:`, a job whose body is a list -- is a finding about that file, not
+#     the end of the check. An EMPTY workflow or a job with an empty body is
+#     well-formed and read as empty, which is exactly when a pinned runner or a
+#     missing input has to be reported rather than skipped.
+BAD_RUNS_ON="$(composition_check runs-on "$WORKFLOWS_DIR")"
 assert_empty "every runs_on input is optional, defaults to hosted, and reaches every job, directly or as a fallback" "$BAD_RUNS_ON"
 echo ""
 
@@ -663,103 +385,7 @@ echo "Test 11: the mention responder's trigger guard reads the right author"
 # `github.event_name == 'issues'`, either spelling, because the invariant is what
 # matters and not the idiom. A clause reading no association at all is an unguarded
 # trigger and is reported as one.
-BAD_TRIGGER="$(python3 - "$WORKFLOWS_DIR" <<'PY'
-import json
-import os
-import re
-import sys
-
-try:
-    import yaml
-except ImportError:
-    print('PyYAML is required for this assertion '
-          '(CI installs python3-yaml; locally: pip install pyyaml)')
-    sys.exit(0)
-
-WORKFLOW = 'reusable-claude-mention.yaml'
-ASSOCIATION = re.compile(r'github\.event\.(\w+)\.author_association')
-# Either spelling excludes an `issue_comment` payload, which carries both objects.
-COMMENT_EXCLUSIONS = ("github.event.comment == null", "github.event_name == 'issues'")
-# WHICH association a clause reads is only half the boundary; the other half is what it
-# is read AGAINST. Adding `CONTRIBUTOR` or `NONE` is one token inside the same free-text
-# block, and it opens the job to anyone who has ever landed a commit -- or to anyone at
-# all -- while every pairing check above still passes.
-PRIVILEGED = ['COLLABORATOR', 'MEMBER', 'OWNER']
-ALLOWLIST = re.compile(r'contains\(\s*fromJSON\(\s*\'(\[[^\']*\])\'\s*\)')
-
-
-def or_clauses(expression):
-    """Split on `||` at parenthesis depth 0 -- the clauses are themselves parenthesised."""
-    clauses, depth, current = [], 0, ''
-    index = 0
-    while index < len(expression):
-        character = expression[index]
-        if character == '(':
-            depth += 1
-        elif character == ')':
-            depth -= 1
-        elif depth == 0 and expression[index:index + 2] == '||':
-            clauses.append(current)
-            current = ''
-            index += 2
-            continue
-        current += character
-        index += 1
-    clauses.append(current)
-    return [clause.strip() for clause in clauses if clause.strip()]
-
-
-path = os.path.join(sys.argv[1], WORKFLOW)
-try:
-    with open(path, encoding='utf-8') as handle:
-        document = yaml.safe_load(handle) or {}
-
-    for job, body in (document.get('jobs') or {}).items():
-        condition = ' '.join(str((body or {}).get('if', '')).split())
-        if not condition:
-            print(f'{WORKFLOW}: job {job} has no `if:` -- the trigger is unguarded')
-            continue
-        for clause in or_clauses(condition):
-            authors = set(ASSOCIATION.findall(clause))
-            if not authors:
-                print(f'{WORKFLOW}: job {job} has a clause reading no author_association: {clause}')
-                continue
-            if len(authors) > 1:
-                # `or_clauses` splits at parenthesis depth 0, which only separates the
-                # clauses while each is itself parenthesised. Wrap the expression --
-                # `github.event_name != 'x' && ( (A) || (B) || (C) )`, or anything a
-                # "tidy these conditions" pass produces -- and every `||` sits at depth
-                # 1, the split returns ONE clause, and every check below degrades from
-                # `paired within a clause` to `present somewhere in the expression`
-                # while still printing PASS. That is this assertion's own threat model,
-                # so the assumption is checked rather than documented.
-                print(f'{WORKFLOW}: job {job} has one clause reading {len(authors)} payload '
-                      f'associations {sorted(authors)} -- the top-level `||` split did not '
-                      f'separate them, so the null-check pairing is unverified')
-                continue
-            for raw in ALLOWLIST.findall(clause):
-                try:
-                    allowed = sorted(json.loads(raw))
-                except ValueError:
-                    print(f'{WORKFLOW}: job {job} has an association list that is not JSON: {raw}')
-                    continue
-                if allowed != PRIVILEGED:
-                    print(f'{WORKFLOW}: job {job} admits {allowed} -- the trigger allowlist must '
-                          f'be exactly {PRIVILEGED}')
-            for author in sorted(authors):
-                if f'github.event.{author} != null' not in clause:
-                    print(f'{WORKFLOW}: job {job} reads {author}.author_association '
-                          f'without requiring github.event.{author} != null')
-                if author == 'issue' and not any(x in clause for x in COMMENT_EXCLUSIONS):
-                    print(f'{WORKFLOW}: job {job} reads the THREAD AUTHOR association on a clause '
-                          f'that an issue_comment payload also reaches -- it carries both '
-                          f'`comment` and `issue`')
-except (OSError, yaml.YAMLError) as error:
-    print(f'{WORKFLOW}: unreadable ({error})')
-except Exception as error:                          # noqa: BLE001 -- see Test 10's note
-    print(f'{WORKFLOW}: {type(error).__name__}: {error}')
-PY
-)"
+BAD_TRIGGER="$(composition_check trigger "$WORKFLOWS_DIR")"
 assert_empty "every trigger clause checks the association of whoever wrote what it matched" "$BAD_TRIGGER"
 echo ""
 
@@ -777,56 +403,7 @@ echo "Test 12: no trigger-block description or default carries an evaluated expr
 # only reusable ones -- `workflow_dispatch` inputs evaluate identically), and every
 # `description` AND `default` (a `default:` is the likelier place to write
 # `${{ github.ref_name }}` believing it resolves), including nested `outputs`.
-BAD_ON_EXPRESSION="$(python3 - "$WORKFLOWS_DIR" <<'PY'
-import glob
-import os
-import sys
-
-try:
-    import yaml
-except ImportError:
-    print('PyYAML is required for this assertion '
-          '(CI installs python3-yaml; locally: pip install pyyaml)')
-    sys.exit(0)
-
-workflows_dir = sys.argv[1]
-
-# Only `description` and `default` are documentation-shaped keys a human writes prose
-# into. Every other scalar under `on:` (branch globs, paths, types) is data GitHub
-# reads literally, and none of it would contain `${{` except by the same mistake --
-# so flagging the two keys names the defect precisely instead of pattern-matching text.
-EVALUATED_KEYS = ('description', 'default')
-
-
-def walk(node, path):
-    """Yield (dotted-path, value) for every EVALUATED_KEYS scalar under the trigger block."""
-    if isinstance(node, dict):
-        for key, value in node.items():
-            child = f'{path}.{key}' if path else str(key)
-            if key in EVALUATED_KEYS and isinstance(value, str):
-                yield child, value
-            else:
-                yield from walk(value, child)
-    elif isinstance(node, list):
-        for index, value in enumerate(node):
-            yield from walk(value, f'{path}[{index}]')
-
-
-for workflow in sorted(glob.glob(os.path.join(workflows_dir, '*.yaml'))):
-    name = os.path.basename(workflow)
-    try:
-        document = yaml.safe_load(open(workflow)) or {}
-        # YAML 1.1 resolves `on:` to the boolean True -- the same quirk Test 10 documents.
-        trigger = document.get('on', document.get(True)) or {}
-        for location, value in walk(trigger, ''):
-            if '${{' in value:
-                print(f'{name}: on.{location} contains an evaluated expression')
-    except (OSError, yaml.YAMLError) as error:
-        print(f'{name}: unreadable ({error})')
-    except Exception as error:                      # noqa: BLE001 -- see Test 10's note
-        print(f'{name}: {type(error).__name__}: {error}')
-PY
-)"
+BAD_ON_EXPRESSION="$(composition_check on-expression "$WORKFLOWS_DIR")"
 assert_empty "no trigger-block description or default carries an evaluated expression" "$BAD_ON_EXPRESSION"
 echo ""
 
@@ -870,135 +447,7 @@ echo "Test 13: the Claude prompts describe the tools those jobs actually grant"
 # by the custom prompt -- so adding one to the mention responder without
 # `track_progress: true` would silently stop it answering the question it was mentioned
 # for, while every job stayed green.
-BAD_CLAUDE_TOOLS="$(python3 - "$WORKFLOWS_DIR" <<'PY'
-import glob
-import os
-import re
-import sys
-
-try:
-    import yaml
-except ImportError:
-    print('PyYAML is required for this assertion '
-          '(CI installs python3-yaml; locally: pip install pyyaml)')
-    sys.exit(0)
-
-workflows_dir = sys.argv[1]
-
-ACTION = 'anthropics/claude-code-action'
-# Tag mode adds these itself (`src/modes/tag/index.ts`) whatever `claude_args` says --
-# plus a push wrapper, named by absolute path rather than by a command. They are part of
-# the surface a prompt has to describe, so they count as granted even though no file here
-# names them.
-# -- with `use_commit_signing` at its default `false`; turning it on swaps these for the
-# MCP file-ops tools, and this set would then demand a prompt name commands it no longer
-# holds. Neither workflow sets it.
-TAG_MODE_BASH = {'git add', 'git commit', 'git rm'}
-# The paragraph where a prompt DECLARES its exclusions. Its presence is required, but it
-# is deliberately not where they are CHECKED: a denial reads as a sentence and can be
-# written anywhere. `reusable-claude-mention.yaml` puts one in its Tools paragraph --
-# "`gh` is not granted, and neither is `git diff`" -- and a paragraph-scoped check both
-# missed that sentence and let it satisfy the naming half below, so granting `Bash(gh:*)`
-# left the assertion green while the prompt called that tool denied.
-DENIED_MARKER = 'Denied on purpose:'
-# A sentence, not a paragraph: `.` and `;` end one, and the prompts wrap at 88 columns, so
-# the text is joined before splitting. `:` is NOT a terminator -- splitting on it would cut
-# "Denied on purpose:" away from the list it introduces, leaving the list unclassified.
-SENTENCE_END = re.compile(r'(?<=[.;])\s+')
-# Phrases that make a sentence a denial. Deliberately narrow: "is refused as a whole"
-# describes a REJECTED PIPE in a sentence that grants seven commands, and matching it
-# would flag every one of them.
-DENIAL = re.compile(r'\b(not granted|neither is|is not|are not|denied|absent)\b',
-                    re.IGNORECASE)
-BASH_RULE = re.compile(r'Bash\(([^)]*)\)')
-BACKTICKED = re.compile(r'`([^`]+)`')
-
-
-def command_word(rule):
-    """`git add:*` / `gh:*` -> the binary the rule permits."""
-    head = rule.split(':')[0].strip()
-    return head.split()[0] if head else ''
-
-
-def split_sentences(prompt):
-    """Every sentence of the prompt, unwrapped, partitioned by the caller."""
-    return [s for s in SENTENCE_END.split(' '.join(prompt.split())) if s]
-
-
-def covers(rule, token):
-    """Does granting `rule` make a denial of `token` false?
-
-    A granted `git` covers `git diff`; a granted `git add` does not -- which is what
-    keeps the mention responder's true `git diff` sentence from reading as a collision.
-    """
-    return token == rule or token.startswith(rule + ' ')
-
-
-def action_steps(document):
-    for job in (document.get('jobs') or {}).values():
-        for step in (job or {}).get('steps') or []:
-            step = step or {}
-            if str(step.get('uses', '')).startswith(ACTION):
-                yield step
-
-
-for workflow in sorted(glob.glob(os.path.join(workflows_dir, 'reusable-claude-*.yaml'))):
-    name = os.path.basename(workflow)
-    try:
-        document = yaml.safe_load(open(workflow)) or {}
-        for step in action_steps(document):
-            inputs = step.get('with') or {}
-            prompt = str(inputs.get('prompt') or '')
-            if not prompt.strip():
-                print(f'{name}: the {ACTION} step declares no prompt -- the action template '
-                      f'then tells the model to install dependencies and run builds')
-                continue
-            # Accepts the string spelling too: GitHub hands every input to the action as
-            # a string, so `'true'` runs identically and must not read as a missing pair.
-            if str(inputs.get('track_progress')).lower() != 'true':
-                print(f'{name}: declares a prompt without `track_progress: true` -- a prompt on '
-                      f'a comment or issue event selects AGENT mode, replacing the template that '
-                      f'answers the trigger')
-
-            granted = set(TAG_MODE_BASH)
-            for rule in BASH_RULE.findall(str(inputs.get('claude_args') or '')):
-                word = command_word(rule)
-                if word:
-                    granted.add(word)
-
-            denials, positive = [], []
-            for sentence in split_sentences(prompt):
-                (denials if DENIAL.search(sentence) else positive).append(sentence)
-
-            for rule in sorted(granted):
-                # A prompt may name the rule as granted (`git add`) or name the broader
-                # grant that covers it (`git`); either states the surface truthfully. It
-                # has to do so in a sentence that is not itself a denial -- otherwise
-                # "`gh` is not granted" would count as naming `gh`, which is the reading
-                # that let a stale denial pass for a description.
-                if not any(f'`{spelling}`' in sentence
-                           for sentence in positive
-                           for spelling in (rule, rule.split()[0])):
-                    print(f'{name}: grants Bash({rule}:*) but no sentence of the prompt names it '
-                          f'as held -- the model meets its own tools by being denied them')
-
-            if not any(DENIED_MARKER in paragraph
-                       for paragraph in re.split(r'\n\s*\n', prompt)):
-                print(f'{name}: the prompt has no "{DENIED_MARKER}" paragraph -- nothing states '
-                      f'that the toolchains are excluded by decision rather than by oversight')
-
-            for sentence in denials:
-                for token in BACKTICKED.findall(sentence):
-                    for rule in sorted(granted):
-                        if covers(rule, token):
-                            print(f'{name}: the prompt calls `{token}` denied while the allowlist '
-                                  f'grants Bash({rule}:*)')
-    except (OSError, yaml.YAMLError) as error:
-        print(f'{name}: unreadable ({error})')
-    except Exception as error:                      # noqa: BLE001 -- see Test 10's note
-        print(f'{name}: {type(error).__name__}: {error}')
-PY
-)"
+BAD_CLAUDE_TOOLS="$(composition_check claude-tools "$WORKFLOWS_DIR")"
 assert_empty "every Claude prompt matches the tools its job grants and denies" "$BAD_CLAUDE_TOOLS"
 echo ""
 
@@ -1009,143 +458,17 @@ echo "Test 14: the review job skips the pull requests automation opens"
 # reads back. The guard that stops it is a job-level `if:` -- free-text, one expression,
 # and exactly the shape a "tidy these conditions" pass eats first.
 #
-# So it is EVALUATED, not matched. The expression is translated into Python and run
-# against ten pull requests whose verdict is known, which is what makes the assertion
-# survive a reordering, a rename of the input, or a rewrite from `startsWith` to
-# `contains`, while still failing when a prefix is dropped. Two of the ten are the
-# traps: a plain feature branch must still BE reviewed (or "skip everything" passes this
-# test), and emptying the input must not skip everything either -- `startsWith(ref, '')`
-# is TRUE, so an input used without a non-empty check silently disables every review in
-# the repository that set it.
-BAD_REVIEW_GUARD="$(python3 - "$WORKFLOWS_DIR" <<'PY'
-import os
-import re
-import sys
-
-try:
-    import yaml
-except ImportError:
-    print('PyYAML is required for this assertion '
-          '(CI installs python3-yaml; locally: pip install pyyaml)')
-    sys.exit(0)
-
-WORKFLOW = 'reusable-claude-review.yaml'
-JOB = 'claude-review'
-REPOSITORY = 'rios0rios0/pipelines'
-
-# (label, overrides, must the job run?)
-CASES = [
-    ('a feature branch',              {'ref': 'feat/add-logs'},                 True),
-    ('a fix branch',                  {'ref': 'fix/TICKET-990'},                True),
-    ('an autobump release',           {'ref': 'chore/bump-5.1.0'},              False),
-    ('a manual release',              {'ref': 'bump/5.1.0'},                    False),
-    ('an autoupdate run',             {'ref': 'chore/autoupdate-2026-08-28'},   False),
-    ('a dependabot bump',             {'ref': 'dependabot/github_actions/x'},   False),
-    ('a fork',                        {'ref': 'feat/x', 'fork': True},          False),
-    ('a draft',                       {'ref': 'feat/x', 'draft': True},         False),
-    # The empty-prefix trap, both directions: emptying the input must give up only the
-    # autoupdate exemption, never review (case below) and never everything (this one).
-    ('a feature branch, prefix off',  {'ref': 'feat/x', 'prefix': ''},          True),
-    ('an autobump release, prefix off', {'ref': 'chore/bump-5.1.0', 'prefix': ''}, False),
-]
-
-STRING = re.compile(r"'(?:[^']|'')*'")
-CONTEXT = re.compile(r"(?<![\w.])((?:github|inputs|vars|env)(?:\.[\w-]+)+)")
-LITERALS = [(re.compile(r'\btrue\b'), 'True'),
-            (re.compile(r'\bfalse\b'), 'False'),
-            (re.compile(r'\bnull\b'), 'None')]
-
-
-def to_python(expression):
-    """Translate the GitHub expression subset an `if:` uses into Python.
-
-    Only the chunks OUTSIDE single-quoted strings are rewritten, so a prefix that
-    happens to contain `&&` or the word `false` is carried through untouched.
-    """
-    pieces, position = [], 0
-    for match in STRING.finditer(expression):
-        pieces.append((expression[position:match.start()], False))
-        # Re-emitted through `repr` rather than patched in place: GitHub escapes a quote
-        # by doubling it, and a naive substitution turns the EMPTY string `''` -- the one
-        # this assertion cares most about -- into a stray escape.
-        pieces.append((repr(match.group(0)[1:-1].replace("''", "'")), True))
-        position = match.end()
-    pieces.append((expression[position:], False))
-
-    out = []
-    for chunk, is_string in pieces:
-        if is_string:
-            out.append(chunk)
-            continue
-        chunk = chunk.replace('&&', ' and ').replace('||', ' or ')
-        chunk = chunk.replace('!=', '\0NE\0')
-        chunk = chunk.replace('!', ' not ').replace('\0NE\0', '!=')
-        for pattern, replacement in LITERALS:
-            chunk = pattern.sub(replacement, chunk)
-        chunk = CONTEXT.sub(lambda m: f'ctx({m.group(1)!r})', chunk)
-        out.append(chunk)
-    return ''.join(out)
-
-
-def evaluate(expression, values):
-    def ctx(path):
-        if path not in values:
-            raise KeyError(f'the expression reads {path}, which this test does not model')
-        return values[path]
-
-    functions = {
-        'ctx': ctx,
-        'startsWith': lambda haystack, needle: str(haystack).startswith(str(needle)),
-        'endsWith': lambda haystack, needle: str(haystack).endswith(str(needle)),
-        'contains': lambda haystack, needle: str(needle) in haystack
-                    if isinstance(haystack, str) else needle in haystack,
-        'format': lambda template, *args: re.sub(
-            r'\{(\d+)\}', lambda m: str(args[int(m.group(1))]), template),
-    }
-    return bool(eval(to_python(expression), {'__builtins__': {}}, functions))  # noqa: S307
-
-
-path = os.path.join(sys.argv[1], WORKFLOW)
-try:
-    with open(path, encoding='utf-8') as handle:
-        document = yaml.safe_load(handle) or {}
-
-    # `on:` resolves to the boolean True under YAML 1.1 -- see Test 10.
-    triggers = document.get('on', document.get(True)) or {}
-    declared = (triggers.get('workflow_call') or {}).get('inputs') or {}
-    default_prefix = str((declared.get('autoupdate_branch_prefix') or {}).get('default', ''))
-
-    condition = ' '.join(str(((document.get('jobs') or {}).get(JOB) or {}).get('if', '')).split())
-    if not condition:
-        print(f'{WORKFLOW}: job {JOB} has no `if:` -- every automation pull request is reviewed')
-    else:
-        for label, overrides, expected in CASES:
-            head_repo = 'someone/fork' if overrides.get('fork') else REPOSITORY
-            values = {
-                'github.repository': REPOSITORY,
-                'github.event.pull_request.head.repo.full_name': head_repo,
-                'github.event.pull_request.draft': bool(overrides.get('draft')),
-                'github.event.pull_request.head.ref': overrides['ref'],
-                'github.head_ref': overrides['ref'],
-                'inputs.autoupdate_branch_prefix': overrides.get('prefix', default_prefix),
-                'inputs.runs_on': '["ubuntu-latest"]',
-            }
-            try:
-                actual = evaluate(condition, values)
-            except Exception as error:              # noqa: BLE001 -- see Test 10's note
-                print(f'{WORKFLOW}: {label} ({overrides["ref"]}) could not be evaluated: '
-                      f'{type(error).__name__}: {error}')
-                continue
-            if actual != expected:
-                verb = 'is reviewed' if actual else 'is not reviewed'
-                want = 'must be' if expected else 'must not be'
-                print(f'{WORKFLOW}: {label} ({overrides["ref"]}) {verb}, but it {want}')
-except (OSError, yaml.YAMLError) as error:
-    print(f'{WORKFLOW}: unreadable ({error})')
-except Exception as error:                          # noqa: BLE001 -- see Test 10's note
-    print(f'{WORKFLOW}: {type(error).__name__}: {error}')
-PY
-)"
+# So it is EVALUATED, not matched. The expression is run, with GitHub's rules -- strings
+# compared ignoring case, `!` binding tighter than `==`, `==` across types comparing them as
+# numbers -- against ten pull requests whose verdict is known, which is what makes the
+# assertion survive a reordering, a rename of the input, or a rewrite from `startsWith` to
+# `contains`, while still failing when a prefix is dropped. The evaluator models only the
+# subset a guard is written in (`expression.go` lists it); anything else fails the case by
+# name rather than being guessed at. Two of the ten are the traps: a plain feature branch
+# must still BE reviewed (or "skip everything" passes this test), and emptying the input
+# must not skip everything either -- `startsWith(ref, '')` is TRUE, so an input used
+# without a non-empty check silently disables every review in the repository that set it.
+BAD_REVIEW_GUARD="$(composition_check review-guard "$WORKFLOWS_DIR")"
 assert_empty "the review runs on human pull requests and on no automated one" "$BAD_REVIEW_GUARD"
 echo ""
 
@@ -1179,144 +502,7 @@ echo "Test 15: a job gated on a status function does not start on a cancelled ru
 # The classifier is also run against the gate every delivery job carried, verbatim, and
 # the shapes a "tidy these conditions" pass produces, so a parser that stops matching
 # fails here instead of passing with nothing flagged.
-BAD_CANCEL_GATE="$(python3 - "$WORKFLOWS_DIR" <<'PY'
-import glob
-import os
-import re
-import sys
-
-try:
-    import yaml
-except ImportError:
-    print('PyYAML is required for this assertion '
-          '(CI installs python3-yaml; locally: pip install pyyaml)')
-    sys.exit(0)
-
-workflows_dir = sys.argv[1]
-
-STRING = re.compile(r"'(?:[^']|'')*'")
-# Function names are case-insensitive in GitHub expressions, so `!Cancelled()` counts.
-STATUS = re.compile(r'\b(?:success|failure|cancelled|always)\s*\(\s*\)', re.IGNORECASE)
-# False on a cancelled run, so either one as a conjunct makes its whole clause false.
-GUARDS = {'!cancelled()', 'success()'}
-# Selecting a non-success outcome on purpose: the clause runs after one by design.
-SELECTS = {'failure()', 'cancelled()'}
-
-# (expression, is it safe on a cancelled run?)
-CANARIES = [
-    ("!failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || "
-     "github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))", False),
-    ("inputs.build_web && !failure() && (github.event_name == 'push')", False),
-    ("always() && github.ref == 'refs/heads/main'", False),
-    ("!failure() && (!cancelled() || github.event_name == 'push')", False),
-    ("(success() && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/')", False),
-    ("!success() && github.ref == 'refs/heads/main'", False),
-    ("!failure() && contains(github.ref, '!cancelled() || x')", False),
-    ("!cancelled() && !failure() && ((github.event_name == 'push' && github.ref == "
-     "'refs/heads/main') || startsWith(github.ref, 'refs/tags/'))", True),
-    ("inputs.build_web && !cancelled() && !failure() && (github.event_name == 'push')", True),
-    ("(success() && github.ref == 'refs/heads/main') || "
-     "(!cancelled() && startsWith(github.ref, 'refs/tags/'))", True),
-    ("${{ ! Cancelled( ) && !failure() }}", True),
-    ("github.event_name == 'push'", True),
-    ("failure() && github.ref == 'refs/heads/main'", True),
-]
-
-
-def scan(expression):
-    """Yield (index, character, at depth 0 outside a string) for each character."""
-    depth, quoted = 0, False
-    for index, character in enumerate(expression):
-        if character == "'":
-            quoted = not quoted              # a doubled `''` toggles twice, which is right
-        elif not quoted and character == '(':
-            depth += 1
-        elif not quoted and character == ')':
-            depth -= 1
-        yield index, character, depth == 0 and not quoted
-
-
-def split_top(expression, operator):
-    parts, start, skip = [], 0, 0
-    for index, _, top in scan(expression):
-        if skip:
-            skip -= 1
-            continue
-        if top and expression.startswith(operator, index):
-            parts.append(expression[start:index])
-            start, skip = index + len(operator), len(operator) - 1
-    parts.append(expression[start:])
-    return [part.strip() for part in parts if part.strip()]
-
-
-def strip_parens(term):
-    """`(x)` -> `x`, only while the outer pair encloses the whole term."""
-    term = term.strip()
-    while term.startswith('(') and term.endswith(')'):
-        closes = [index for index, character, top in scan(term) if top and character == ')']
-        if closes != [len(term) - 1]:
-            break
-        term = term[1:-1].strip()
-    return term
-
-
-def canonical(term):
-    term = strip_parens(re.sub(r'\s+', '', term).lower())
-    return '!' + strip_parens(term[1:]) if term.startswith('!') else term
-
-
-def clauses(expression):
-    """Top-level `||` clauses, recursing through redundant outer parentheses."""
-    expression = strip_parens(expression)
-    parts = split_top(expression, '||')
-    if len(parts) == 1:
-        return parts
-    return [clause for part in parts for clause in clauses(part)]
-
-
-def unguarded(expression):
-    """The clauses of a job `if:` that can still be TRUE on a cancelled run."""
-    expression = ' '.join(str(expression).split())
-    wrapped = re.fullmatch(r'\$\{\{(.*)\}\}', expression)
-    if wrapped:
-        expression = wrapped.group(1).strip()
-    if not STATUS.search(STRING.sub("''", expression)):
-        return []                            # GitHub prepends `success()` itself
-    return [clause for clause in clauses(expression)
-            if not {canonical(term) for term in split_top(strip_parens(clause), '&&')}
-            & (GUARDS | SELECTS)]
-
-
-examined = 0
-for path in sorted(glob.glob(os.path.join(workflows_dir, '*.yaml'))):
-    name = os.path.basename(path)
-    try:
-        with open(path, encoding='utf-8') as handle:
-            document = yaml.safe_load(handle) or {}
-        for job, body in (document.get('jobs') or {}).items():
-            condition = (body or {}).get('if')
-            if condition is None:
-                continue
-            if STATUS.search(STRING.sub("''", str(condition))):
-                examined += 1
-            for clause in unguarded(condition):
-                print(f'{name}: job {job} still starts on a cancelled run -- `{clause}` has no '
-                      f'`!cancelled()` or `success()` of its own; write '
-                      f'`!cancelled() && !failure() && (...)`')
-    except (OSError, yaml.YAMLError) as error:
-        print(f'{name}: unreadable ({error})')
-    except Exception as error:                      # noqa: BLE001 -- see Test 10's note
-        print(f'{name}: {type(error).__name__}: {error}')
-
-if not examined:
-    print(f'no job under {workflows_dir} gates on a status function -- the scan read nothing')
-
-for expression, safe in CANARIES:
-    if (not unguarded(expression)) != safe:
-        print(f'the classifier calls `{expression}` {"unsafe" if safe else "safe"} on a '
-              f'cancelled run, but it is {"safe" if safe else "not"}')
-PY
-)"
+BAD_CANCEL_GATE="$(composition_check cancel-gate "$WORKFLOWS_DIR")"
 assert_empty "every status-gated job clause refuses a cancelled run" "$BAD_CANCEL_GATE"
 echo ""
 
@@ -1346,127 +532,7 @@ echo "Test 16: a check job fails the run when its check fails"
 # An entry whose job no longer carries the flag fails as well, so neither list outlives the code
 # it excuses. The classifier also runs against canaries, so a parser that stops matching fails
 # here instead of passing with nothing flagged.
-BAD_ADVISORY_JOB="$(python3 - "$WORKFLOWS_DIR" <<'PY'
-import glob
-import os
-import sys
-
-try:
-    import yaml
-except ImportError:
-    print('PyYAML is required for this assertion '
-          '(CI installs python3-yaml; locally: pip install pyyaml)')
-    sys.exit(0)
-
-workflows_dir = sys.argv[1]
-
-ESLINT = ('advisory by design: `style:format` beside it is the blocking formatting gate, and a '
-          "linter's findings need judgement (README, \"JavaScript / TypeScript Tools\")")
-KNIP = 'advisory by design: unused-export detection (README, "JavaScript / TypeScript Tools")'
-ADVISORY = {
-    ('npm.yaml', 'code_check-style_eslint'): ESLINT,
-    ('yarn.yaml', 'code_check-style_eslint'): ESLINT,
-    ('npm.yaml', 'code_check-quality_knip'): KNIP,
-    ('yarn.yaml', 'code_check-quality_knip'): KNIP,
-    ('dart.yaml', 'code_check-quality_unused_code'):
-        'reachability analysis has a false-positive tail -- framework entry points, generated '
-        'code, `@visibleForTesting` members (github/dart/stages/10-code-check/unused/action.yaml)',
-}
-
-UNREVIEWED = {
-    'bundler.yaml': ('code_check-style_rubocop', 'code_check-quality_debride',
-                     'security-sast_hadolint', 'security-sca_bundle_audit'),
-    'composer.yaml': ('code_check-style_php_lint', 'code_check-quality_phpmd',
-                      'security-sast_hadolint', 'security-sca_composer_audit'),
-    'dart.yaml': ('security-sast_hadolint', 'security-sca_osv_scanner'),
-    'dotnet.yaml': ('code_check-quality_resharper', 'security-sast_hadolint'),
-    'gradle.yaml': ('code_check-style_checkstyle', 'code_check-quality_proguard',
-                    'security-sast_hadolint', 'security-sca_dependency_check'),
-    'maven.yaml': ('code_check-style_maven_verify', 'code_check-quality_proguard',
-                   'security-sast_hadolint', 'security-sca_dependency_check'),
-    'npm.yaml': ('security-sast_hadolint', 'security-sca_npm_audit'),
-    'pdm.yaml': ('code_check-quality_mypy', 'code_check-quality_vulture',
-                 'security-sast_hadolint', 'security-sca_safety'),
-    'terra.yaml': ('code_check-style_tflint', 'security-sast_hadolint'),
-    'yarn.yaml': ('security-sast_hadolint', 'security-sca_yarn_audit'),
-}
-# The ratchet. Lower it when an entry leaves UNREVIEWED; never raise it.
-UNREVIEWED_LIMIT = 30
-
-CHECK_IDS = ('code_check-', 'security-')
-CHECK_NAMES = ('code-check >', 'security >')
-
-# (workflow text, the jobs the classifier must flag in it)
-CANARIES = [
-    ("jobs:\n  code_check-style_lint:\n    name: 'code-check > style:lint'\n"
-     "    continue-on-error: true\n", ['code_check-style_lint']),
-    ("jobs:\n  scan:\n    name: 'security > sca:scan'\n"
-     "    continue-on-error: ${{ inputs.advisory }}\n", ['scan']),
-    ("jobs:\n  security-sast_scan:\n    continue-on-error: 'true'\n", ['security-sast_scan']),
-    ("jobs:\n  code_check-style_lint:\n    continue-on-error: false\n", []),
-    ("jobs:\n  management-report_sonarqube:\n    name: 'management > report:sonarqube'\n"
-     "    continue-on-error: true\n", []),
-    ("jobs:\n  security-sast_scan:\n    steps:\n      - uses: 'actions/upload-artifact@v7'\n"
-     "        continue-on-error: true\n", []),
-]
-
-
-def is_check(job, body):
-    return job.startswith(CHECK_IDS) or str(body.get('name') or '').startswith(CHECK_NAMES)
-
-
-def advisory(body):
-    """True when a job-level `continue-on-error` can let the job's failure pass the run."""
-    if 'continue-on-error' not in body:
-        return False
-    value = body['continue-on-error']
-    return not (value is False or str(value).strip().lower() == 'false')
-
-
-def advisory_checks(document):
-    return sorted(job for job, body in ((document or {}).get('jobs') or {}).items()
-                  if isinstance(body, dict) and is_check(job, body) and advisory(body))
-
-
-listed = set(ADVISORY) | {(workflow, job) for workflow, jobs in UNREVIEWED.items() for job in jobs}
-found = set()
-examined = 0
-for path in sorted(glob.glob(os.path.join(workflows_dir, '*.yaml'))):
-    name = os.path.basename(path)
-    try:
-        with open(path, encoding='utf-8') as handle:
-            document = yaml.safe_load(handle) or {}
-        examined += sum(1 for job, body in (document.get('jobs') or {}).items()
-                        if isinstance(body, dict) and is_check(job, body))
-        for job in advisory_checks(document):
-            found.add((name, job))
-            if (name, job) not in listed:
-                print(f'{name}: job {job} is advisory -- its job-level `continue-on-error` passes '
-                      f'the run whatever the check finds. Remove it (a refused upload is tolerated '
-                      f'at the upload step), or list the job in ADVISORY with the reason it may '
-                      f'stay advisory')
-    except (OSError, yaml.YAMLError) as error:
-        print(f'{name}: unreadable ({error})')
-    except Exception as error:                      # noqa: BLE001 -- see Test 10's note
-        print(f'{name}: {type(error).__name__}: {error}')
-
-for workflow, job in sorted(listed - found):
-    print(f'{workflow}: job {job} is listed as advisory but is not -- remove the entry')
-
-unreviewed = sum(len(jobs) for jobs in UNREVIEWED.values())
-if unreviewed > UNREVIEWED_LIMIT:
-    print(f'UNREVIEWED holds {unreviewed} jobs, more than its limit of {UNREVIEWED_LIMIT}: it may '
-          f'only shrink, so a new advisory job needs an ADVISORY entry with its reason')
-
-if not examined:
-    print(f'no code-check or security job under {workflows_dir} -- the scan read nothing')
-
-for text, expected in CANARIES:
-    flagged = advisory_checks(yaml.safe_load(text))
-    if flagged != expected:
-        print(f'the classifier flags {flagged} where it should flag {expected} in: {text!r}')
-PY
-)"
+BAD_ADVISORY_JOB="$(composition_check advisory-job "$WORKFLOWS_DIR")"
 assert_empty "no code-check or security job is advisory unless listed with its reason" "$BAD_ADVISORY_JOB"
 
 # The same rule on the Go pipeline's GitLab CI and Azure DevOps twins, where the flag is spelled
@@ -1480,202 +546,7 @@ assert_empty "no code-check or security job is advisory unless listed with its r
 # are why AZURE_ADVISORY is not empty: Azure DevOps runs its four SAST tools advisory by the
 # per-platform decision CLAUDE.md records, for every toolchain at once, and making them block is a
 # decision about every Azure pipeline rather than about the Go one.
-BAD_ADVISORY_TWIN="$(python3 - "$SCRIPTS_DIR" <<'PY'
-import os
-import re
-import sys
-
-try:
-    import yaml
-except ImportError:
-    print('PyYAML is required for this assertion '
-          '(CI installs python3-yaml; locally: pip install pyyaml)')
-    sys.exit(0)
-
-root = sys.argv[1]
-
-GITLAB_STAGES = ('gitlab/golang/stages/10-code-check/go.yaml',
-                 'gitlab/golang/stages/20-security/go.yaml')
-AZURE_STAGES = ('azure-devops/golang/stages/10-code-check/go.yaml',
-                'azure-devops/golang/stages/20-security/go.yaml')
-# The Go-specific checks, by the name each platform gives them. Each must be found, or a
-# restructure that moved one out of reach would pass by leaving nothing to read.
-EXPECTED = {
-    'gitlab': {'style:golangci-lint', 'sca:govulncheck'},
-    'azure': {'style_golangci_lint', 'sca_govulncheck'},
-}
-
-SHARED_SAST = ('shared by every Azure DevOps pipeline, not just Go: the platform runs its SAST '
-               'advisory by the decision CLAUDE.md records, for every toolchain at once')
-GITLAB_ADVISORY = {}
-AZURE_ADVISORY = {
-    ('azure-devops/golang/stages/10-code-check/go.yaml',
-     'Trim the Go build cache when the agent is low on disk'):
-        'housekeeping after the lint, not a check: it only frees disk for the cache save',
-    ('azure-devops/global/stages/20-security/semgrep.yaml',
-     'global/scripts/tools/semgrep/run.sh'): SHARED_SAST,
-    ('azure-devops/global/stages/20-security/gitleaks.yaml',
-     'global/scripts/tools/gitleaks/run.sh'): SHARED_SAST,
-    ('azure-devops/global/stages/20-security/codeql.yaml',
-     'global/scripts/tools/codeql/run.sh'): SHARED_SAST,
-    ('azure-devops/global/stages/20-security/hadolint.yaml',
-     'global/scripts/tools/hadolint/run.sh'):
-        SHARED_SAST + ', and consumers of other toolchains carry Hadolint findings today',
-}
-
-REMOTE = 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/'
-GITLAB_KEYWORDS = {'include', 'variables', 'stages', 'default', 'workflow', 'image', 'services',
-                   'before_script', 'after_script', 'cache'}
-RUNNER = re.compile(r'global/scripts/[\w./-]+/run\.sh')
-
-
-class GitLabLoader(yaml.SafeLoader):
-    """GitLab's `!reference [ .job, key ]` is a custom tag; read it as the list it is."""
-
-
-GitLabLoader.add_constructor('!reference', lambda loader, node: loader.construct_sequence(node))
-
-
-def flagged(value):
-    return value is not None and not (value is False or str(value).strip().lower() == 'false')
-
-
-def gitlab_jobs(document):
-    return {key: body for key, body in (document or {}).items()
-            if isinstance(body, dict) and not str(key).startswith('.')
-            and key not in GITLAB_KEYWORDS}
-
-
-def gitlab_advisory(document):
-    """GitLab jobs that `allow_failure` -- `true`, or a mapping of exit codes."""
-    return sorted(job for job, body in gitlab_jobs(document).items()
-                  if flagged(body.get('allow_failure')))
-
-
-def step_id(step):
-    if step.get('displayName'):
-        return str(step['displayName'])
-    body = str(step.get('script') or step.get('bash') or step.get('pwsh') or '')
-    runner = RUNNER.search(body)
-    return runner.group(0) if runner else body.strip()[:60]
-
-
-def azure_advisory(jobs):
-    """(job, step or None) for every job or check step that `continueOnError`."""
-    found = []
-    for job in jobs:
-        name = str(job.get('job') or job.get('deployment') or '')
-        if flagged(job.get('continueOnError')):
-            found.append((name, None))
-        for step in job.get('steps') or []:
-            if not isinstance(step, dict) or 'task' in step or 'template' in step:
-                continue
-            if flagged(step.get('continueOnError')):
-                found.append((name, step_id(step)))
-    return found
-
-
-def load(relative, loader=yaml.SafeLoader):
-    with open(os.path.join(root, relative), encoding='utf-8') as handle:
-        return yaml.load(handle, Loader=loader) or {}  # SafeLoader or a subclass of it: safe
-
-
-def gitlab_files():
-    """The Go stage files plus every stage template they include from this repository."""
-    files = list(GITLAB_STAGES)
-    for stage in GITLAB_STAGES:
-        includes = load(stage, GitLabLoader).get('include') or []
-        for entry in includes if isinstance(includes, list) else [includes]:
-            remote = entry.get('remote', '') if isinstance(entry, dict) else str(entry)
-            if remote.startswith(REMOTE) and '/stages/' in remote:
-                files.append(remote[len(REMOTE):])
-    return files
-
-
-def azure_jobs(relative, seen):
-    """Every job of a stage file, descending into the job templates it names."""
-    document = load(relative)
-    entries = []
-    for stage in document.get('stages') or []:
-        entries.extend((stage or {}).get('jobs') or [])
-    entries.extend(document.get('jobs') or [])
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        if 'template' in entry:
-            target = os.path.normpath(os.path.join(os.path.dirname(relative), entry['template']))
-            if target not in seen:
-                seen.add(target)
-                yield from azure_jobs(target, seen)
-        else:
-            yield relative, entry
-
-
-problems = []
-present = {'gitlab': set(), 'azure': set()}
-seen_azure = set()
-used = set()
-try:
-    for relative in gitlab_files():
-        document = load(relative, GitLabLoader)
-        present['gitlab'].update(gitlab_jobs(document))
-        for job in gitlab_advisory(document):
-            if (relative, job) in GITLAB_ADVISORY:
-                used.add((relative, job))
-            else:
-                problems.append(f'{relative}: job {job} is `allow_failure` -- a failure passes the '
-                                f'pipeline; remove it, or list it in GITLAB_ADVISORY with its reason')
-    for stage in AZURE_STAGES:
-        seen_azure.add(stage)
-        for relative, job in azure_jobs(stage, seen_azure):
-            present['azure'].add(str(job.get('job') or ''))
-            for name, step in azure_advisory([job]):
-                key = (relative, step if step is not None else name)
-                if key in AZURE_ADVISORY:
-                    used.add(key)
-                else:
-                    where = f'step "{step}" of job {name}' if step else f'job {name}'
-                    problems.append(f'{relative}: {where} is `continueOnError` -- a failure passes '
-                                    f'the stage; remove it, or list it in AZURE_ADVISORY with its '
-                                    f'reason')
-except (OSError, yaml.YAMLError) as error:
-    problems.append(f'unreadable ({error})')
-except Exception as error:                          # noqa: BLE001 -- see Test 10's note
-    problems.append(f'{type(error).__name__}: {error}')
-
-for platform, names in EXPECTED.items():
-    for missing in sorted(names - present[platform]):
-        problems.append(f'{platform}: no job {missing} found in the Go stages or their templates '
-                        f'-- the scan cannot vouch for a check it never read')
-
-for key in sorted((set(GITLAB_ADVISORY) | set(AZURE_ADVISORY)) - used):
-    problems.append(f'{key[0]}: "{key[1]}" is listed as advisory but is not -- remove the entry')
-
-GITLAB_CANARIES = [
-    ('lint:\n  script: [ run ]\n  allow_failure: true\n', ['lint']),
-    ('scan:\n  script: [ run ]\n  allow_failure:\n    exit_codes: [ 4 ]\n', ['scan']),
-    ('lint:\n  script: [ run ]\n  allow_failure: false\n', []),
-    ('.hidden:\n  allow_failure: true\nvariables:\n  A: b\n', []),
-]
-AZURE_CANARIES = [
-    ([{'job': 'scan', 'continueOnError': True, 'steps': []}], [('scan', None)]),
-    ([{'job': 'scan', 'steps': [{'script': 'global/scripts/tools/x/run.sh',
-                                 'continueOnError': 'true'}]}],
-     [('scan', 'global/scripts/tools/x/run.sh')]),
-    ([{'job': 'scan', 'steps': [{'task': 'PublishPipelineArtifact@1',
-                                 'continueOnError': True}]}], []),
-    ([{'job': 'scan', 'continueOnError': False, 'steps': [{'script': 'run'}]}], []),
-]
-for text, expected in GITLAB_CANARIES:
-    if gitlab_advisory(yaml.load(text, Loader=GitLabLoader)) != expected:
-        problems.append(f'the GitLab classifier misreads the canary {text!r}')
-for jobs, expected in AZURE_CANARIES:
-    if azure_advisory(jobs) != expected:
-        problems.append(f'the Azure DevOps classifier misreads the canary {jobs!r}')
-
-print('\n'.join(problems))
-PY
-)"
+BAD_ADVISORY_TWIN="$(composition_check advisory-twin "$SCRIPTS_DIR")"
 assert_empty "the Go pipeline's GitLab and Azure DevOps twins keep no check advisory unless listed" \
   "$BAD_ADVISORY_TWIN"
 echo ""
@@ -1694,86 +565,7 @@ echo "Test 17: a deployment handed a delivered image may pull it"
 # shorthand). A job declaring none inherits its caller's grant and is not asked. The scan must find
 # at least one such job, so renaming the output cannot make it pass by reading nothing, and the
 # classifier is run against canaries first.
-BAD_PACKAGES_GRANT="$(python3 - "$WORKFLOWS_DIR" <<'PY'
-import glob
-import os
-import re
-import sys
-
-try:
-    import yaml
-except ImportError:
-    print('PyYAML is required for this assertion '
-          '(CI installs python3-yaml; locally: pip install pyyaml)')
-    sys.exit(0)
-
-workflows_dir = sys.argv[1]
-DELIVERED = re.compile(r'needs\.[A-Za-z0-9_-]+\.outputs\.image\b')
-
-
-def handed_an_image(job):
-    for step in job.get('steps') or []:
-        for value in (step.get('with') or {}).values():
-            if DELIVERED.search(str(value)):
-                return True
-    return False
-
-
-def may_pull(job):
-    """None when the job declares no `permissions:` (it inherits), else whether they grant packages."""
-    if 'permissions' not in job:
-        return None
-    grant = job['permissions']
-    if isinstance(grant, str):
-        return grant in ('read-all', 'write-all')
-    if isinstance(grant, dict):
-        return str(grant.get('packages', 'none')) in ('read', 'write')
-    return False
-
-
-IMAGE = "${{ !inputs.opt_out && needs.go-docker.outputs.image || '' }}"
-CANARIES = [
-    ({'permissions': {'contents': 'read'}, 'steps': [{'with': {'image': IMAGE}}]}, False),
-    ({'permissions': {'contents': 'read', 'packages': 'read'}, 'steps': [{'with': {'image': IMAGE}}]}, True),
-    ({'permissions': {'packages': 'write'}, 'steps': [{'with': {'image': IMAGE}}]}, True),
-    ({'permissions': 'read-all', 'steps': [{'with': {'image': IMAGE}}]}, True),
-    ({'permissions': {}, 'steps': [{'with': {'image': IMAGE}}]}, False),
-    ({'steps': [{'with': {'image': IMAGE}}]}, None),
-]
-
-problems = []
-for job, expected in CANARIES:
-    if not handed_an_image(job) or may_pull(job) != expected:
-        problems.append(f'the classifier misreads the canary {job!r}')
-if handed_an_image({'steps': [{'with': {'version': '${{ needs.go-docker.outputs.tag_name }}'}}]}):
-    problems.append('the classifier reads a `tag_name` output as an image')
-
-examined = 0
-for path in sorted(glob.glob(os.path.join(workflows_dir, '*.yaml'))):
-    name = os.path.basename(path)
-    try:
-        with open(path, encoding='utf-8') as handle:
-            document = yaml.safe_load(handle) or {}
-        for job_name, job in (document.get('jobs') or {}).items():
-            job = job or {}
-            if not handed_an_image(job):
-                continue
-            examined += 1
-            if may_pull(job) is False:
-                problems.append(f'{name}: job {job_name} is handed a delivered image, but its '
-                                f'`permissions:` grant no `packages` -- add `packages: read`, or its '
-                                f'token cannot pull a private image')
-    except (OSError, yaml.YAMLError) as error:
-        problems.append(f'{name}: unreadable ({error})')
-    except Exception as error:                      # noqa: BLE001 -- see Test 10's note
-        problems.append(f'{name}: {type(error).__name__}: {error}')
-
-if not examined:
-    problems.append(f'no job under {workflows_dir} is handed a delivered image -- the scan read nothing')
-
-print('\n'.join(problems))
-PY
-)"
+BAD_PACKAGES_GRANT="$(composition_check packages-grant "$WORKFLOWS_DIR")"
 assert_empty "every deployment handed a delivered image may pull it" "$BAD_PACKAGES_GRANT"
 echo ""
 

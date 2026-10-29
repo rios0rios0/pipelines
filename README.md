@@ -1163,6 +1163,31 @@ extends:
 Microsoft-hosted `ubuntu-latest` agents already carry the Android SDK and a JDK,
 so the Android target works without extra setup.
 
+#### Usage Example (Python/PDM with integration tests)
+
+```yaml
+resources:
+  repositories:
+    - repository: 'pipelines'
+      type: 'github'
+      name: 'rios0rios0/pipelines'
+      ref: 'refs/heads/main'
+      endpoint: 'YOUR_GITHUB_SERVICE_CONNECTION'
+
+stages:
+  - template: 'azure-devops/python/pdm-docker.yaml@pipelines'
+    parameters:
+      RUN_INTEGRATION_TESTS: true
+```
+
+`RUN_INTEGRATION_TESTS` (boolean, default `false`) adds a `Run Integration Tests`
+step to the `test:all` job, after the unit tests and their published results:
+it runs `make test-integration`, so the project's own Makefile decides what an
+integration test needs -- typically services started with Docker, which
+Microsoft-hosted agents provide. A failing target fails the job. When the
+Makefile defines no `test-integration` target the step raises a warning and
+passes. Left at `false`, the pipeline is unchanged.
+
 #### Usage Example (Go with ARM Deployment)
 
 ```yaml

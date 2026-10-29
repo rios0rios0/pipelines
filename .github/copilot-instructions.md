@@ -7,7 +7,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go helpers, Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, terra-install, docker-multi-arch, basic-checks, fixture-isolation, gitignore, hadolint-discovery, checkov, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, phpmd, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, dependency-updates, azure-step-names, azure-secret-env, containers-detect, report-uploads)
+- `make test` - Run all validation tests (Go helpers, Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, terra-install, docker-multi-arch, basic-checks, fixture-isolation, gitignore, hadolint-discovery, checkov, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, phpmd, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, dependency-updates, azure-step-names, azure-secret-env, containers-detect, report-uploads, python-integration-tests)
 - `make test-go-script` - Test Go script changes specifically
 - `make test-go-module-toolchain` - Test that every `go.mod` toolchain directive is readable by the images/analysers that consume it specifically
 - `make test-go-tool-staleness` - Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves specifically
@@ -58,6 +58,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 - `make test-azure-step-names` - Test Azure DevOps step-name uniqueness across expanded templates specifically
 - `make test-azure-secret-env` - Test that every Azure DevOps step consuming a credential maps it through `env:` specifically
 - `make test-report-uploads` - Test that no GitHub Actions report upload can fail its job, while mandatory reports stay enforced, specifically
+- `make test-python-integration-tests` - Test the Azure DevOps PDM pipeline's opt-in `make test-integration` step (runner and template wiring) specifically
 - `make check-dependency-updates` - Report which pinned dependencies have a newer release (hits the network)
 - `make apply-dependency-updates` - Rewrite every stale pin in the working tree, digests and inline copies included -- what the scheduled pull request carries (hits the network; commits nothing)
 - `bash global/scripts/shared/cleanup.sh` - Clean up build reports
@@ -896,6 +897,7 @@ make test-go-helpers
 make test-azure-step-names
 make test-azure-secret-env
 make test-report-uploads
+make test-python-integration-tests
 ```
 
 Test scripts are located in `.github/tests/`.

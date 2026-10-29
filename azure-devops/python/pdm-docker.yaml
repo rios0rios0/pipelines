@@ -5,11 +5,17 @@ parameters:
   - name: 'RUN_BEFORE_BUILD'
     type: 'string'
     default: ''
+  # Runs `make test-integration` after the unit tests; see `stages/30-tests/pdm.yaml`.
+  - name: 'RUN_INTEGRATION_TESTS'
+    type: 'boolean'
+    default: false
 
 stages:
   - template: 'stages/10-code-check/pdm.yaml'
   - template: 'stages/20-security/pdm.yaml'
   - template: 'stages/30-tests/pdm.yaml'
+    parameters:
+      RUN_INTEGRATION_TESTS: ${{ parameters.RUN_INTEGRATION_TESTS }}
   - template: 'stages/35-management/pdm.yaml'
   - template: 'stages/40-delivery/docker.yaml'
     parameters:

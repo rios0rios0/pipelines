@@ -3,6 +3,17 @@ parameters:
     type: object
     default: ''
 
+  # Opt-in: runs `make test-integration` in `test:all` after the unit tests,
+  # when the repository's Makefile defines that target (a warning, not a
+  # failure, when it does not). Off by default because integration tests
+  # usually start services -- containers through the agent's Docker -- that a
+  # unit-test job never needed, so turning it on is the consumer's decision.
+  # It runs after the unit results are published, so a target that writes the
+  # same report files cannot replace them.
+  - name: 'RUN_INTEGRATION_TESTS'
+    type: 'boolean'
+    default: false
+
 stages:
   - stage: 'tests'
     displayName: 'tests'
@@ -34,5 +45,9 @@ stages:
               artifactName: 'coverage'
               targetPath: 'build/reports'
             displayName: 'Publish Coverage Files'
+
+          - ${{ if parameters.RUN_INTEGRATION_TESTS }}:
+              - script: $(Scripts.Directory)/global/scripts/languages/python/test-integration/run.sh
+                displayName: 'Run Integration Tests'
 
         continueOnError: false

@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added the opt-in `RUN_INTEGRATION_TESTS` parameter to the Azure DevOps PDM pipeline (`pdm-docker.yaml` and its test stage): when `true`, the `test:all` job runs `make test-integration` after the unit tests, and warns instead of failing when the Makefile defines no such target; it defaults to `false`, so existing pipelines are unchanged'
+time: '2026-10-29T12:39:55.519577157Z'

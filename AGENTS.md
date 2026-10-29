@@ -1019,6 +1019,29 @@ that is shell by contract (`build_command`, `pre_script`, the `command` of opena
 pdm-lint) runs as `eval "$VAR"` on an `env:` value: in the step's own `bash -e -o pipefail`, which a
 child `sh -c` would drop, so it behaves exactly as the expression did.
 
+### CodeQL Reads Go Only Under a Go as New as the Module
+
+Two things have to read a module's `go` directive before CodeQL can analyse it, and either one
+failing loses the analysis. `make test-go-module-toolchain` (sections 3, 3c and 4) holds both:
+
+| What | Why it must reach the module's Go | Where it comes from |
+|------|-----------------------------------|---------------------|
+| The `go` on PATH | The Go autobuilder builds the module with it. Under `GOTOOLCHAIN=local` it refuses a newer directive; under `auto` it fetches that toolchain only with a route to proxy.golang.org | GitHub Actions: `actions/setup-go` from `go_version_file`, before `init`. GitLab CI: the Go stage's `sast:codeql` override, in `.go`'s image. Azure DevOps: the pinned `GoTool@0` the Go stage passes through the CodeQL template's `PRE_STEPS`. `make codeql`: the developer's own Go |
+| The bundle's Go extractor | A prebuilt binary whose type checker refuses a language version newer than the Go it was built with | `CODEQL_BUNDLE_PINNED_VERSION` for `run.sh`. On GitHub, the CLI GitHub's servers pick for the pinned action: it ran 2.27.1 under a pin whose own default was 2.26.3 |
+
+Four constraints shape it; do not "simplify" any of them away:
+
+| Constraint | Why |
+|------------|-----|
+| **The extractor's refusal is silent, so it is checked by table** | CLI 2.26.3 logs `package requires newer Go version go1.27 (application built with go1.26)` over a `go 1.27` module and still creates the database, exit 0, with broken types. That is why this repository waived Go from 2026-08-21. Every bundle from `codeql-bundle-v2.26.4` (2026-08-26) is built with go1.27. Section 4 records the first bundle for each Go minor, and fails when a module here moves to a minor it does not list or the pin falls below it |
+| **GitLab's shared job cannot start CodeQL, so the Go stage moves it** | It runs in the pipeline's default `docker:x.y` image, which is Alpine: the bundle's glibc-linked Java fails with `java: not found`, and there is no Go. The override takes `.go`'s IMAGE only. `.go`'s before_script and cache put GOPATH in the checkout, and the autobuilder searches every `go.mod` under the source root (it skips only `vendor/`), so a module cache there would be extracted as hundreds of projects. The other languages still fail there: `.docs/known-issues.md`, KI-02 |
+| **Azure's failure would not be red** | The `run.sh` step is `continueOnError`, by the shared-SAST decision recorded under "A Failing Check Fails the Run", so a missing Go reads as "succeeded with issues". Hosted images carry Go 1.24 to 1.26 only (Ubuntu 24.04 defaults to 1.24, 26.04 to 1.26), so the pinned `GoTool@0` is what makes the result independent of the agent |
+| **The autobuilder runs `make` first, with no target** | It does so wherever a Makefile exists, and offers no switch. Here the default goal is `login`, a `docker login` that fails without a terminal and is skipped. In a consumer whose Makefile includes `common.mk` before its own targets, under the `SCRIPTS_DIR` that `run.sh` exports, it is `setup`, which clones or fast-forwards `PIPELINES_HOME`: KI-03 |
+
+This repository's self-scan extracts two modules under one Go, the helpers at the root and the
+tor-proxy health probe, so `go_version_file` names the newer directive; section 3 fails if another
+module overtakes it.
+
 ### Report Uploads Never Gate a Job
 
 On GitHub Actions every `actions/upload-artifact` step that publishes a report is

@@ -373,6 +373,30 @@ lines the pull request changed. A finding in code it never touched passes the pu
 the next push to the default branch: this repository's own scan passed #746 on 8 findings and failed
 its merge push on 29.
 
+#### CodeQL and the Go Toolchain
+
+CodeQL's Go analysis builds the module, so the job needs a Go at least as new as the module's `go`
+directive. So does the bundle's Go extractor: it refuses a language version newer than the Go it
+was built with, and the scan still reports success over the broken types. Every bundle from
+`codeql-bundle-v2.26.4` reads `go 1.27`; the pinned one is `codeql-bundle-v2.27.3`.
+
+| Platform       | The Go the Go analysis builds with                                                                  |
+|----------------|-----------------------------------------------------------------------------------------------------|
+| GitHub Actions | the one `go_version_file` asks for, set up by `actions/setup-go` before CodeQL starts               |
+| GitLab CI      | the pinned Go of the `.go` image, which the Go stage's `sast:codeql` runs in; `GOTOOLCHAIN=auto` fetches a newer one the module asks for |
+| Azure DevOps   | the pinned Go, installed by `GoTool@0` before CodeQL starts; Go's own default, `GOTOOLCHAIN=auto`, fetches a newer one |
+| `make codeql`  | yours                                                                                               |
+
+Before, GitLab CI ran the job in the pipeline's default Alpine image, where CodeQL cannot start
+(`java: not found`) and there is no Go, so no Go project was analysed there. Azure DevOps took
+whatever Go the agent carried, 1.24 to 1.26 on a Microsoft-hosted one, and on an agent without one
+the analysis failed as "succeeded with issues". GitLab CI's other languages still run in that image:
+see [KI-02](.docs/known-issues.md#ki-02--gitlab-ci-cannot-start-codeql-in-the-default-image).
+
+Wherever a Makefile exists, CodeQL's Go autobuilder runs `make` with no target before it builds the
+module itself, so your default goal runs inside the analysis:
+[KI-03](.docs/known-issues.md#ki-03--the-go-autobuild-runs-the-default-goal-of-a-consumer-makefile).
+
 #### Usage Example (Go with Docker)
 
 ```yaml

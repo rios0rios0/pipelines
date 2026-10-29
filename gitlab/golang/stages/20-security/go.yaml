@@ -10,6 +10,27 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/golang/abstracts/go.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
 
+# The shared `sast:codeql` (included above) keeps its script and report; only WHERE it runs is
+# overridden, because CodeQL's Go extraction builds the module. The shared job runs in the
+# pipeline's default `docker:x.y` image, which is Alpine: the bundle's Java runtime is linked
+# against glibc and cannot start there (`codeql/tools/linux64/java/bin/java: not found`), and the
+# image has no Go, so no Go project was analysed. `.go` is the image every other Go job here runs
+# in -- glibc and the pinned Go.
+#
+# Only its image, though. `.go`'s before_script and cache keep GOPATH inside the checkout, and the
+# Go autobuilder searches the whole source root for go.mod files (it skips only `vendor/`), so a
+# module cache there would be extracted as hundreds of extra projects. GOPATH stays the image's
+# `/go`, the cache is off, and `jq` is installed because the findings gate reads the SARIF with it.
+sast:codeql:
+  extends: [ '.go', '.scripts-repo' ]
+  cache: []
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends jq
+    # As `.go` does: the image sets `GOTOOLCHAIN=local`, so a module ahead of its Go could not
+    # fetch the toolchain its directive asks for.
+    - export GOTOOLCHAIN=auto
+    - !reference [ .scripts-repo, before_script ]
+
 # Delegates to the shared runner instead of inlining `go install` -- see the note
 # on the Azure DevOps twin. It reads the pinned version from
 # global/scripts/shared/pinned-versions.sh, so the version lives in one place.

@@ -1,12 +1,22 @@
 parameters:
   - name: 'CODEQL_LANGUAGE'
     type: 'string'
+  # Steps injected before CodeQL runs. A compiled language's extractor BUILDS the code with the
+  # toolchain on PATH, which this job does not otherwise provide: the Go stage passes the pinned
+  # `GoTool@0` here, as every other Go job on this platform runs it.
+  - name: 'PRE_STEPS'
+    type: 'stepList'
+    default: []
 
 jobs:
   - job: 'sast_codeql'
     displayName: 'sast:codeql'
     steps:
       - template: '../../abstracts/scripts-repo.yaml'
+
+      - ${{ each step in parameters.PRE_STEPS }}:
+          - ${{ step }}
+
       # `CODEQL_LANGUAGE` is passed through `env:` and expanded by the shell at
       # run time. Interpolated with `${{ }}` it was substituted into the script
       # text before the agent ran it, so a value carrying a quote could close

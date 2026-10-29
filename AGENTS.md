@@ -151,22 +151,22 @@ explicitly; `secrets: inherit` fails Semgrep's
 
 ### Supply-Chain Pinning
 
-**Enforced by `.github/tests/test-supply-chain.sh` (`make test-supply-chain`), 28 assertions, every one of
+**Enforced by `.github/tests/test-supply-chain.sh` (`make test-supply-chain`), 29 assertions, every one of
 them proven to fire against a deliberate violation.** Read this before adding an action, an image, or
 anything that downloads a binary.
 
 | What | Pinned to | Enforced by |
 |------|-----------|-------------|
 | Third-party GitHub Actions | 40-character commit SHA + trailing `# vX.Y.Z` comment | assertions 1-4 |
-| Container images (`image:`, `FROM`) | `tag@sha256:<digest>` | assertions 5-6 |
-| Downloaded binaries | exact version **and** a committed SHA-256 | assertions 8-15 |
-| `go install` / `pip` / `gem` / `npx` | exact version | assertions 16-19 |
+| Container images (`image:` -- a scalar, or the `name:` of a mapping -- and `FROM`) | `tag@sha256:<digest>` | assertions 5-7 |
+| Downloaded binaries | exact version **and** a committed SHA-256 | assertions 9-16 |
+| `go install` / `pip` / `gem` / `npx` | exact version | assertions 17-20 |
 
 `global/scripts/shared/pinned-versions.sh` holds every version and digest; `verify-download.sh` is the
 only sanctioned way to fetch a binary, and it DELETES an artifact whose checksum does not match rather
 than merely reporting it — a later step that only tests for existence would otherwise install the thing
 just rejected. Every `download_verified` call is handed a digest its own script resolved through
-`pinned_digest` (assertion 15): `SKIP` or a digest typed into an installer would pass through the
+`pinned_digest` (assertion 16): `SKIP` or a digest typed into an installer would pass through the
 verifier and verify nothing this repository decided. The Dart and Flutter SDKs are the one named
 exception, because their version is the consumer's to choose.
 
@@ -1072,7 +1072,7 @@ records what each one was observed to carry, and an image with no row fails unti
 | Python | a Python 3 | the shared default, `python:3.13-slim` | `UsePythonVersion@0`, as the Python jobs | a GitHub-hosted runner |
 | JavaScript / TypeScript | Node.js, which parses TypeScript | the shared default, with `nodejs` installed | `UseNode@1`, as the JavaScript jobs | `setup-node`, before `init` |
 | Java, Gradle | a JDK and Gradle: it builds | `gradle:8.7.0-jdk21`, on `.gradle`'s runner tags | `JavaToolInstaller@0`, as the Java jobs | a GitHub-hosted runner |
-| Java, Maven | a JDK and Maven: it builds | `maven:3.8.8-eclipse-temurin-11` | no Maven template | a GitHub-hosted runner |
+| Java, Maven | a JDK and Maven: it builds | `.maven`'s `maven:3.8.8-eclipse-temurin-11` | no Maven template | a GitHub-hosted runner |
 | C# | the .NET SDK | `.sdk`, without building (`CODEQL_BUILD_MODE: 'none'`) | `UseDotNet@2`, as the .NET jobs | a GitHub-hosted runner |
 
 Seven constraints shape it; do not "simplify" any of them away:
@@ -1080,7 +1080,7 @@ Seven constraints shape it; do not "simplify" any of them away:
 | Constraint | Why |
 |------------|-----|
 | **The shared default sits on `.codeql-runtime`, not on `sast:codeql`** | An `image:` on the job outranks the image an override takes through `extends`, so with the default on the job every override would analyse in it: Go with no Go. Overrides replace `extends` and keep the shared script, report and stage |
-| **No `apt-get` in a Debian 11 image** | `.yarn`, `.npm` and `.maven` are Debian 11, whose security updates left the Debian mirrors when its LTS ended: the index still lists them and the packages answer 404, so `apt-get install jq` fails. That is why JavaScript and Maven do not run in their languages' own images. The `apt` fact in `IMAGE_FACTS` holds it |
+| **No GitLab CI image is Debian 11** | Debian 11's security updates left the Debian mirrors when its LTS ended: the index still lists them and the packages answer 404, so `apt-get install` fails before a job does any work. `.npm`, `.yarn` and `.maven` were Debian 11, which cost `report:dependency-track` and the Maven `sca:dependency-check` their installs (KI-04) and kept the CodeQL jobs off them; they are Debian 12 and Ubuntu 22.04 now. Section 7 of the suite fails on any GitLab CI image `IMAGE_FACTS` marks `debian11`, and the `apt` fact keeps `sast:codeql` and those two jobs on an image where `apt-get` works |
 | **Gradle runs in the glibc twin of `.gradle`'s image** | `.gradle` is Alpine. With the image's musl JDK as `CODEQL_JAVA_HOME` the CLI starts, but the build cannot: CodeQL's build tracer, `preload_tracer`, is glibc too |
 | **`run.sh` recreates the report directory after the build** | The Java autobuilder runs Gradle's `clean`, which deletes `build/`, including the `build/reports/codeql/` that `cleanup.sh` made. On a CI runner the build runs in the checkout, and `database analyze` ended in `Could not write SARIF file` |
 | **GitLab CI extracts C# without building it** | Its .NET templates build .NET Framework projects on Windows runners, and on Linux the C# autobuilder stops at `MSB3644` and `Could not auto-detect a suitable build method`. `CODEQL_BUILD_MODE` is unset everywhere else, which keeps the CLI's default: the autobuild every other platform relies on |

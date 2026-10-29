@@ -410,7 +410,7 @@ toolchain its other jobs set up, so the analysis no longer depends on what the a
 | Python | the shared default, `python:3.13-slim` | Python 3.14 (`UsePythonVersion@0`) |
 | JavaScript / TypeScript | the shared default, with Node.js installed for TypeScript | Node.js 20.20.2 (`UseNode@1`) |
 | Java, Gradle | `gradle:8.7.0-jdk21`, the glibc build of `.gradle`'s Gradle and JDK | JDK 25 (`JavaToolInstaller@0`) |
-| Java, Maven | `maven:3.8.8-eclipse-temurin-11` | no Maven template |
+| Java, Maven | `.maven`'s `maven:3.8.8-eclipse-temurin-11` | no Maven template |
 | C# | `.sdk`, without building the project | .NET SDK 6.x (`UseDotNet@2`) |
 
 C# is extracted without a build on GitLab CI because its .NET templates build .NET Framework

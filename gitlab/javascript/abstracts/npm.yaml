@@ -1,5 +1,11 @@
+# Debian 12, not the Debian 11 image this used to be: Debian 11's security updates left the Debian
+# mirrors when its LTS ended, so every `apt-get install` that reached an updated package answered
+# 404, and `report:dependency-track` stopped installing `curl`, `jq` and `git` (KI-04 in
+# `.docs/known-issues.md`). Node 16.14.0 was never built on Debian 12, so this is the nearest
+# Node 16 that was: 16.20.2, the last release of that line. Node 16 itself is past its end of life
+# (KI-05); moving to another major is a decision for the JavaScript pipeline, not a digest bump.
 .npm:
-  image: 'node:16.14.0-bullseye@sha256:56a3030a46e1956a8c12725235210db2ef76c18ab5dcdaf3eab3a3fc80b447ee'
+  image: 'node:16.20.2-bookworm@sha256:73e677f85fbc56d22c817b4e5d7f72086c5343c0859f3bf8aaadab22aab29ce6'
   cache: # relative to the project directory ($CI_PROJECT_DIR)
     key: "$CI_JOB_NAME"
     paths:

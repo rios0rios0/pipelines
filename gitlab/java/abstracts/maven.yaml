@@ -1,5 +1,10 @@
+# Maven 3.8 and JDK 11, as before, on Ubuntu 22.04 rather than Debian 11, whose security updates
+# left the Debian mirrors when its LTS ended: every `apt-get install` that reached an updated
+# package answered 404, and `sca:dependency-check` stopped installing `git` and `jq` (KI-04 in
+# `.docs/known-issues.md`). The JDK is now Eclipse Temurin's build of OpenJDK 11, and the image
+# ships `git` besides; it is the image the Maven `sast:codeql` was proven in.
 .maven:
-  image: 'maven:3.8-jdk-11-slim@sha256:2cb7c73ba2fd0f7ae64cfabd99180030ec85841a1197b4ae821d21836cb0aa3b'
+  image: 'maven:3.8.8-eclipse-temurin-11@sha256:a9023829d06570e9e4f99928b360aca6a6ebec642901fa15b69726221dd2eda4'
   cache: # relative to the project directory ($CI_PROJECT_DIR)
     key: "$CI_JOB_NAME"
     paths:

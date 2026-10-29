@@ -1,6 +1,10 @@
+# The same Node 18.17.1, npm and Yarn as before, on Debian 12 rather than Debian 11, whose security
+# updates left the Debian mirrors when its LTS ended (KI-04 in `.docs/known-issues.md`). Pinned by
+# digest like the other images here: by tag alone, what every JavaScript job ran could change under
+# it unseen. Node 18 itself is past its end of life (KI-05).
 .yarn:
   image:
-    name: 'node:18.17.1-bullseye'
+    name: 'node:18.17.1-bookworm@sha256:933bcfad91e9052a02bc29eb5aa29033e542afac4174f9524b79066d97b23c24'
     docker:
       user: 'node'
   cache: # relative to the project directory ($CI_PROJECT_DIR)

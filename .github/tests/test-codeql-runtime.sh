@@ -32,6 +32,8 @@
 #     Gradle's `clean` -- and hands `database create` the build mode the job sets, or none
 #   * every Azure DevOps language stage hands its CodeQL job the toolchain its other jobs set up
 #   * the GitHub Actions composite sets up Node.js for a JavaScript analysis on a self-hosted runner
+#   * no GitLab CI image is Debian 11, whose packages no longer install (KI-04): the abstracts that
+#     left it stay pinned and off it, and the jobs that install packages run where `apt-get` works
 #
 # What an image ships cannot be read from a template, and this suite runs no container: the table
 # in IMAGE_FACTS records what each image was observed to carry, and an image it has no row for
@@ -53,18 +55,21 @@ REMOTE_PREFIX='https://raw.githubusercontent.com/rios0rios0/pipelines/main/'
 # `<glob over repository:tag, digest left off>|<libc>|<what it carries>`, and the FIRST matching row
 # wins, so the musl and Debian 11 rows come before the rows they would otherwise shadow
 # (`gradle:8.7.0-jdk21-alpine` is not `gradle:8.7.0-jdk21`). `root` means the image runs its jobs as
-# root, and `apt` that `apt-get install` works there: on Debian 11 it does not, because its security
-# updates left the Debian mirrors when its LTS ended -- the index still lists them, and the packages
-# answer 404. These are facts about upstream images, not choices: a row is added after looking,
-# never to make this suite pass. None of them ships `jq`. Two rows are rules rather than
-# observations: Alpine is built on musl, and every Debian 11 image has the same archive.
+# root, and `apt` that `apt-get install` works there. `debian11` marks Debian 11, where it does not:
+# its security updates left the Debian mirrors when its LTS ended -- the index still lists them, and
+# the packages answer 404 -- which is how `report:dependency-track` and the Maven
+# `sca:dependency-check` stopped installing anything (KI-04 in `.docs/known-issues.md`). These are
+# facts about upstream images, not choices: a row is added after looking, never to make this suite
+# pass. None of them ships `jq`. Two rows are rules rather than observations: Alpine is built on
+# musl, and every Debian 11 image has the same archive.
 IMAGE_FACTS=(
   'docker:*|musl|root wget'
   'gradle:*-alpine|musl|root java gradle git wget python3'
   '*alpine*|musl|'
-  'node:*-bullseye|glibc|root node git curl'
-  'maven:3.8-jdk-11-slim|glibc|root java mvn curl'
-  '*bullseye*|glibc|'
+  'node:*-bullseye|glibc|root node git curl debian11'
+  'maven:3.8-jdk-11-slim|glibc|root java mvn curl debian11'
+  '*bullseye*|glibc|debian11'
+  'node:*-bookworm|glibc|root apt node git curl'
   'python:*-slim*|glibc|root apt python3'
   'golang:*-bookworm|glibc|root apt go git curl'
   'maven:*-eclipse-temurin-*|glibc|root apt java mvn git curl'
@@ -103,6 +108,18 @@ AZURE_TOOLCHAINS=(
   'azure-devops/javascript/stages/20-security/yarn.yaml|UseNode@1|version|azure-devops/javascript/abstracts/corepack-node-no-cache.yaml'
   'azure-devops/java/stages/20-security/java.yaml|JavaToolInstaller@0|versionSpec|azure-devops/java/abstracts/gradle.yaml'
   'azure-devops/dotnet/stages/20-security/csharp.yaml|UseDotNet@2|version|azure-devops/dotnet/abstracts/core-sdk6.x.yaml'
+)
+
+# The GitLab CI abstracts that left Debian 11 (`<file>|<abstract>`), and the jobs on them that
+# install packages (`<entry template>|<job>`): the two KI-04 found unable to install anything.
+ABSTRACTS_OFF_DEBIAN_11=(
+  'gitlab/javascript/abstracts/npm.yaml|.npm'
+  'gitlab/javascript/abstracts/yarn.yaml|.yarn'
+  'gitlab/java/abstracts/maven.yaml|.maven'
+)
+INSTALLING_JOBS=(
+  'gitlab/javascript/yarn-docker.yaml|report:dependency-track'
+  'gitlab/java/maven-docker.yaml|sca:dependency-check'
 )
 
 RED='\033[0;31m'
@@ -381,6 +398,12 @@ carries() {
   [[ " $1 " == *" $2 "* ]]
 }
 
+# apt_works <carried> <user> -- whether `apt-get install` works for a job: the image runs it as
+# root, and its distribution's archive still serves its packages.
+apt_works() {
+  carries "$1" root && carries "$1" apt && [[ -z "$2" || "$2" == 'root' ]]
+}
+
 # ---------------------------------------------------------------------------
 # The assertions
 # ---------------------------------------------------------------------------
@@ -455,7 +478,7 @@ check_template() {
     "carries '$carried' curl || carries '$carried' wget || [[ -n '$curl_at$wget_at' ]]"
   if grep -qzE '(apt-get|apt)[[:space:]]' "$lines"; then
     assert_true "apt-get can install there: the image runs the job as root (${user:-image default}) on a distribution its archive still serves" \
-      "carries '$carried' root && carries '$carried' apt && [[ -z '$user' || '$user' == 'root' ]]"
+      "apt_works '$carried' '$user'"
   fi
   rm -f "$lines"
 
@@ -676,6 +699,51 @@ STUB
     "[[ -n '$node_at' && -n '$init_at' ]] && ((${node_at:-0} < ${init_at:-0}))"
   assert_true "...and restores no package cache" \
     "INDEX='${node_at:-0}' \"\$YQ\" eval -e '.runs.steps[env(INDEX)].with | ((has(\"cache\") | not) and (.\"package-manager-cache\" == false))' '$composite' > /dev/null 2>&1"
+
+  # -------------------------------------------------------------------------
+  echo ""
+  echo "7. No GitLab CI image is Debian 11"
+  # -------------------------------------------------------------------------
+  # Debian 11's packages no longer install (KI-04), so a job that installs one there fails before it
+  # does any work: `report:dependency-track` and the Maven `sca:dependency-check` did exactly that,
+  # in `.npm`'s and `.maven`'s images. The abstracts moved to Debian 12 and Ubuntu 22.04; this keeps
+  # them there, keeps the two jobs on an image `apt-get` works in, and keeps every other image any
+  # GitLab CI template names off Debian 11 too.
+  local abstract_file abstract job document image facts user image_facts_carried installing file named
+  local debian11=''
+  for entry in "${ABSTRACTS_OFF_DEBIAN_11[@]}"; do
+    IFS='|' read -r abstract_file abstract <<< "$entry"
+    document="$(gitlab_document "$abstract_file")"
+    image="$(gitlab_job_image "$document" "$abstract")"
+    facts="$(image_facts "$image")"
+    assert_true "$abstract runs in an image pinned by digest (${image:-none})" \
+      "[[ '$image' =~ @sha256:[0-9a-f]{64}$ ]]"
+    assert_true "...that IMAGE_FACTS records, and that is not Debian 11 (${facts:-no row})" \
+      "[[ -n '$facts' ]] && ! carries '${facts#*|}' debian11"
+  done
+  for entry in "${INSTALLING_JOBS[@]}"; do
+    IFS='|' read -r template job <<< "$entry"
+    document="$(gitlab_document "$template")"
+    image="$(gitlab_job_image "$document" "$job")"
+    facts="$(image_facts "$image")"
+    image_facts_carried="${facts#*|}"
+    user="$(gitlab_job_user "$document" "$job")"
+    installing="$TEST_DIR/installing.$$"
+    { gitlab_lines "$document" "$job" before_script; gitlab_lines "$document" "$job" script; } > "$installing"
+    assert_true "$template: $job installs packages with apt-get" \
+      "grep -qzE '(apt-get|apt)[[:space:]]+(-[^ ]+[[:space:]]+)*install' '$installing'"
+    assert_true "...where apt-get can install them: as root, on a distribution its archive still serves (${image%%@*})" \
+      "apt_works '$image_facts_carried' '$user'"
+    rm -f "$installing"
+  done
+  while IFS= read -r file; do
+    while IFS= read -r named; do
+      [[ -z "$named" ]] && continue
+      facts="$(image_facts "$named")"
+      carries "${facts#*|}" debian11 && debian11="${debian11}${file#"$SCRIPTS_DIR/"}: ${named}"$'\n'
+    done < <("$YQ" eval '.. | select(tag == "!!map") | select(has("image")) | .image | ((select(tag == "!!map") | .name) // .) | select(tag == "!!str")' "$file" 2> /dev/null)
+  done < <(find "$SCRIPTS_DIR/gitlab" -name '*.yaml' -type f | sort)
+  assert_empty "no GitLab CI template names a Debian 11 image" "$debian11"
 
   echo ""
   echo "================================"

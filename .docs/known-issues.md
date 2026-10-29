@@ -19,7 +19,8 @@ privately and fix them.
 | [KI-01](#ki-01--the-dart-test-job-has-no-timeout) | `.github/workflows/dart.yaml`, `tests > test:all` | The Dart test job has no timeout | Open |
 | [KI-02](#ki-02--gitlab-ci-cannot-start-codeql-in-the-default-image) | `gitlab/global/stages/20-security/codeql.yaml`, `sast:codeql` | GitLab CI cannot start CodeQL in the default image | Fixed in #<PR> |
 | [KI-03](#ki-03--the-go-autobuild-runs-the-default-goal-of-a-consumer-makefile) | `global/scripts/tools/codeql/run.sh` and the `20-security/codeql` action, Go | The Go autobuild runs the default goal of a consumer Makefile | Won't fix |
-| [KI-04](#ki-04--gitlab-cis-debian-11-images-can-no-longer-install-packages) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml`, `gitlab/java/abstracts/maven.yaml` | GitLab CI's Debian 11 images can no longer install packages | Open |
+| [KI-04](#ki-04--gitlab-cis-debian-11-images-can-no-longer-install-packages) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml`, `gitlab/java/abstracts/maven.yaml` | GitLab CI's Debian 11 images can no longer install packages | Fixed in #<PR> |
+| [KI-05](#ki-05--gitlab-cis-javascript-images-run-a-nodejs-past-its-end-of-life) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml` | GitLab CI's JavaScript images run a Node.js past its end of life | Open |
 
 ## KI-01 — The Dart test job has no timeout
 
@@ -82,15 +83,18 @@ privately and fix them.
     only glibc: a Ruby analysis run there, with no override, found its planted command injection.
   - JavaScript runs in the same image and installs `nodejs`: the extractor parses TypeScript with
     Node.js, and without it stops at `Could not start Node.js. It is required for TypeScript
-    extraction.` The JavaScript jobs' own images could not be used: `.yarn` and `.npm` are Debian 11,
+    extraction.` The JavaScript jobs' own images could not be used: `.yarn` and `.npm` were Debian 11,
     whose security updates left the Debian mirrors when its LTS ended (the index still lists them,
-    the packages answer 404, `archive.debian.org` serves them), so `apt-get install jq` fails there.
+    the packages answer 404, `archive.debian.org` serves them), so `apt-get install jq` failed there
+    (KI-04 has since moved them to Debian 12; `.yarn` still runs as an unprivileged user, and both
+    carry a Node past its end of life, KI-05).
   - Gradle moves to `gradle:8.7.0-jdk21`, the glibc build of `.gradle`'s Gradle and JDK, keeping
     `.gradle`'s runner tags. `.gradle`'s own image is Alpine; with the image's musl JDK as
     `CODEQL_JAVA_HOME` the CLI starts, but the build cannot, because CodeQL's build tracer
     `preload_tracer` is glibc too (`error=2, No such file or directory`).
   - Maven moves to `maven:3.8.8-eclipse-temurin-11`, `.maven`'s Maven 3.8 and JDK 11 on Ubuntu
-    22.04: `.maven` is Debian 11 as well. The Maven entry template had never loaded: since
+    22.04: `.maven` was Debian 11 as well (KI-04 has since moved `.maven` itself to that image, and
+    the job takes it from there). The Maven entry template had never loaded: since
     2023-10-02 it included `java/stages/2-security/` and `3-tests/` paths, and its security stage
     `global/stages/2-security.yaml`, none of which exist, so GitLab refused the whole pipeline.
   - C# runs in `.sdk` without building (`CODEQL_BUILD_MODE: 'none'`). The GitLab .NET templates build
@@ -141,14 +145,14 @@ privately and fix them.
 
 ## KI-04 — GitLab CI's Debian 11 images can no longer install packages
 
-- **Where:** three GitLab CI abstracts run Debian 11 ("bullseye") images: `.npm`
+- **Where:** three GitLab CI abstracts ran Debian 11 ("bullseye") images: `.npm`
   (`node:16.14.0-bullseye`, `gitlab/javascript/abstracts/npm.yaml`), `.yarn`
   (`node:18.17.1-bullseye`, `gitlab/javascript/abstracts/yarn.yaml`) and `.maven`
   (`maven:3.8-jdk-11-slim`, `gitlab/java/abstracts/maven.yaml`). Two jobs on them install packages:
   `report:dependency-track` (`gitlab/javascript/stages/35-management/npm-yarn.yaml`,
   `apt install ... curl jq git`) and the Maven `sca:dependency-check`
   (`gitlab/java/stages/20-security/maven.yaml`, through `.scripts-repo-debian`).
-- **What happens:**
+- **What happened:**
   - Debian 11's LTS ended, and its security updates left the Debian mirrors: on 2026-10-29
     `deb.debian.org` and `security.debian.org` still served a `bullseye-security` index (dated
     2026-09-12) listing `jq 1.6-2.1+deb11u3`, while the package itself answered 404 there and 200 on
@@ -157,11 +161,51 @@ privately and fix them.
     `E: Failed to fetch http://security.debian.org/debian-security/pool/updates/main/j/jq/jq_1.6-2.1%2bdeb11u3_amd64.deb  404  Not Found`,
     then `E: Unable to fetch some archives`. Reproduced on 2026-10-29 with `apt-get install jq` in
     `.npm`'s image and `apt-get install git jq` in `.maven`'s.
-  - `report:dependency-track` therefore cannot upload an SBOM, and `sca:dependency-check` fails
-    before scanning (it is `allow_failure: true`, so the pipeline stays green).
-  - The CodeQL jobs no longer use these images, for this reason: KI-02.
-- **The fix it needs:** move each abstract to a supported base. The same tools exist on one:
-  `maven:3.8.8-eclipse-temurin-11` (Ubuntu 22.04) carries `.maven`'s Maven 3.8 and JDK 11, and the
-  official `node` images publish Debian 12 builds. Node 16 and 18 are themselves past their end of
-  life, so which Node replaces them is a decision for the JavaScript pipeline, not a digest bump.
+  - `report:dependency-track` therefore could not upload an SBOM, and `sca:dependency-check` failed
+    before scanning (it is `allow_failure: true`, so the pipeline stayed green). Run with the jobs'
+    own commands, both stopped at the install, exit 100, the first on `curl`'s security update.
+  - The CodeQL jobs could not use these images for the same reason: KI-02.
+- **Fixed:** each abstract moved to a supported base, pinned by digest, keeping its toolchain:
+
+  | Abstract | Before | After |
+  |---|---|---|
+  | `.npm` | `node:16.14.0-bullseye`: Node 16.14.0, npm 8.3.1, Yarn 1.22.17 | `node:16.20.2-bookworm`: Node 16.20.2, npm 8.19.4, Yarn 1.22.19 |
+  | `.yarn` | `node:18.17.1-bullseye`, by tag only: Node 18.17.1, npm 9.6.7, Yarn 1.22.19 | `node:18.17.1-bookworm`, by digest: the same three |
+  | `.maven` | `maven:3.8-jdk-11-slim`: Maven 3.8.6, OpenJDK 11.0.16, no `git` | `maven:3.8.8-eclipse-temurin-11` (Ubuntu 22.04): Maven 3.8.8, Temurin 11.0.21, `git` |
+
+  Node 16.14.0 was never built on Debian 12, so `.npm` takes 16.20.2, the last Node 16. The Maven
+  `sast:codeql` now runs in `.maven`'s image, which is the image it was already pinned to. `.yarn`
+  had been the one image of these pipelines pinned by tag alone, and `.sonarqube`'s
+  `sonar-scanner-cli:latest` was another, both in the `image:` mapping form that
+  `test-supply-chain.sh` did not read: both are pinned now (the scanner to the build every other
+  platform runs), and the suite reads that form.
+- **How it was proven:** each job run in Docker in its new image, with its own commands as
+  `.github/tests/test-codeql-runtime.sh` resolves them:
+  - `report:dependency-track` installed `curl`, `jq` and `git` from Debian 12, generated the
+    CycloneDX BOM of an npm project and uploaded it, exit 0. The server was a stub answering 200.
+  - `sca:dependency-check` installed `git` and `jq`, built its database from the NVD datafeed,
+    scanned a Maven project and reported `CVE-2015-6420` in `commons-collections` 3.2.1, exit 0.
+  - The abstracts' other jobs pass on them: the Maven `test:all` (tests, the JaCoCo summary,
+    `mvn verify`), the Yarn `style:eslint`, `style:format`, `test:all`, `test:build` and
+    `sca:yarn-audit` over a Yarn 4 project, and the Maven `sast:codeql`.
+  - Section 7 of `make test-codeql-runtime` fails on any GitLab CI image marked Debian 11, and keeps
+    the two jobs on an image where `apt-get` works.
+- **Status:** Fixed in #<PR>.
+
+## KI-05 — GitLab CI's JavaScript images run a Node.js past its end of life
+
+- **Where:** `.npm` (`gitlab/javascript/abstracts/npm.yaml`) runs Node 16 and `.yarn`
+  (`gitlab/javascript/abstracts/yarn.yaml`) Node 18. Every job of the GitLab CI JavaScript pipeline
+  runs on one of them: `.yarn` for the code check, the tests and the audit, `.npm` for
+  `report:dependency-track`. Azure DevOps runs these jobs on Node 20.20.2, and GitHub Actions on the
+  `node_version` input, `20` by default.
+- **What happens:**
+  - Node 16 reached its end of life on 2023-09-11, and Node 18 on 2025-04-30: neither gets security
+    fixes. KI-04 moved both images to Debian 12 and kept their Node, deliberately.
+  - `quality:knip` cannot run on Node 18: knip 6.42.1 requires `^20.19.0 || >=22.12.0`, so `npx`
+    stops at `EBADENGINE` and the job fails, on the old image and the new one alike. It is
+    `allow_failure: true`, so nothing shows it.
+- **The fix it needs:** move both abstracts to a supported Node major. That changes the Node every
+  consumer's lint, tests and build run on, so it is a decision for the JavaScript pipeline, not a
+  digest bump.
 - **Status:** Open.

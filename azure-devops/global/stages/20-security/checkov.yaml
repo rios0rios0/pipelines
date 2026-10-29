@@ -1,5 +1,6 @@
 # Checkov, the IaC misconfiguration scanner, installs from PyPI into a virtualenv
-# (it ships no binary), so the agent needs `python3` with its venv module.
+# (it ships no binary), so the agent needs `python3` with its venv module, and
+# `jq`, which reads the verdict from Checkov's JSON report.
 #
 # Advisory by default, in the script itself: findings are reported and the step
 # passes unless the pipeline variable `CHECKOV_BLOCKING` is `'true'`, which every

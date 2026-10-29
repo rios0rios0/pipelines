@@ -6,6 +6,7 @@ if [ -z "$SCRIPTS_DIR" ]; then
 fi
 TOOL_NAME="semgrep" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
 . "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/venv-distribution.sh"
 
 SEMGREP_LANGUAGE="$1" # it takes the first param as the main language
 fileName="$REPORT_PATH/semgrep.json"
@@ -56,13 +57,13 @@ SEMGREP_PINNED_VERSION="${SEMGREP_SPEC##*==}"
 # Two properties are checked instead, and both are ours to assert: `semgrep`
 # on PATH must resolve to the launcher this script symlinks, and the
 # distribution installed in this script's own virtualenv must be the pinned
-# version. Neither goes through the CLI's self-report.
+# version. Neither goes through the CLI's self-report, and the second reads the
+# metadata pip wrote rather than asking the venv's interpreter (see
+# shared/venv-distribution.sh).
 semgrep_matches_pin() {
   [ -x "$SEMGREP_VENV/bin/python" ] || return 1
   [ "$(command -v semgrep 2>/dev/null)" = "$HOME/.local/bin/semgrep" ] || return 1
-  _sg_current=$("$SEMGREP_VENV/bin/python" -c \
-    'import importlib.metadata as m; print(m.version("semgrep"))' 2>/dev/null)
-  [ "$_sg_current" = "$SEMGREP_PINNED_VERSION" ]
+  [ "$(venv_distribution_version "$SEMGREP_VENV" semgrep)" = "$SEMGREP_PINNED_VERSION" ]
 }
 
 if ! command -v semgrep > /dev/null 2>&1 || ! semgrep_matches_pin; then
@@ -100,8 +101,7 @@ if ! command -v semgrep > /dev/null 2>&1 || ! semgrep_matches_pin; then
     echo "ERROR: Semgrep on PATH is not the pinned $SEMGREP_PINNED_VERSION after installation." >&2
     echo "       PATH resolves 'semgrep' to: $(command -v semgrep 2>/dev/null || echo '<not found>')" >&2
     echo "       Expected it to resolve to:  $HOME/.local/bin/semgrep" >&2
-    echo "       Version installed in it:    '$("$SEMGREP_VENV/bin/python" -c \
-      'import importlib.metadata as m; print(m.version("semgrep"))' 2>&1 | tail -1)'" >&2
+    echo "       Version installed in it:    '$(venv_distribution_version "$SEMGREP_VENV" semgrep)'" >&2
     echo "       (note: 'semgrep --version' is NOT used here -- it can disagree" >&2
     echo "        with the installed distribution; see semgrep_matches_pin)" >&2
     exit 1

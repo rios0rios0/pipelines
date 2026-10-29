@@ -48,26 +48,19 @@ jobs:
             test -f "$f" && echo "  ✓ $f" || { echo "  ✗ $f is missing"; exit 1; }
           done
 
+      # Parsed with mikefarah/yq, resolved the way every script here resolves it (the one on PATH,
+      # else the pinned release, downloaded and verified). It reads GitLab CI's custom tags such as
+      # `!reference` as tagged nodes, so no loader has to be taught them.
       - name: 'Validate YAML syntax'
         run: |
           echo "Validating YAML files across all providers..."
+          . global/scripts/shared/pinned-versions.sh
+          . global/scripts/shared/verify-download.sh
+          . global/scripts/shared/resolve-yq.sh
+          resolve_yq "$RUNNER_TEMP/yq" || exit 1
           errors=0
           for template in $(find github gitlab azure-devops global .github/workflows .docs/examples -name '*.yaml' -o -name '*.yml' 2>/dev/null); do
-            if python3 -c "
-          import yaml
-          # Handle custom YAML tags used by GitLab CI (e.g., !reference)
-          class CustomSafeLoader(yaml.SafeLoader):
-              pass
-          def default_constructor(loader, tag_suffix, node):
-              if isinstance(node, yaml.ScalarNode):
-                  return loader.construct_scalar(node)
-              elif isinstance(node, yaml.SequenceNode):
-                  return loader.construct_sequence(node)
-              elif isinstance(node, yaml.MappingNode):
-                  return loader.construct_mapping(node)
-          CustomSafeLoader.add_multi_constructor('!', default_constructor)
-          yaml.load(open('$template'), Loader=CustomSafeLoader)
-          " 2>/dev/null; then
+            if "$YQ" eval 'true' "$template" > /dev/null 2>&1; then
               echo "  ✓ $template"
             else
               echo "  ✗ $template -- invalid YAML"

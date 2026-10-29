@@ -3,7 +3,9 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
 
 # Checkov, the IaC misconfiguration scanner, installs from PyPI (it ships no
-# binary) on the same pinned Python image as `sast:semgrep`.
+# binary) on the same pinned Python image as `sast:semgrep`. `jq` reads the
+# verdict from Checkov's JSON report; a repository's `.checkov.yaml` is read with
+# mikefarah/yq, which the runner downloads at its pinned version and verifies.
 #
 # ADVISORY by default, although GitLab blocks on every other SAST job: the
 # choice lives in the script, because every consumer meets this scanner on the
@@ -16,7 +18,7 @@ sast:checkov:
   image: 'python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb'
   stage: 'security (sca/sast)'
   before_script:
-    - apt-get update && apt-get install -y --no-install-recommends git curl
+    - apt-get update && apt-get install -y --no-install-recommends git curl jq
     - !reference [ .scripts-repo, before_script ]
   script:
     - $SCRIPTS_DIR/global/scripts/tools/checkov/run.sh

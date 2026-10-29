@@ -30,7 +30,12 @@
 #     "No comment provided";
 #   * a file Checkov could not parse. Checkov lists it and exits 0, so syntax it
 #     does not understand would otherwise read as a clean scan of a file nobody
-#     scanned.
+#     scanned. Each is listed with where Checkov's HCL parser stopped and, for the
+#     valid Terraform it is known to reject, the equivalent rewrite it reads.
+#
+# Only the `*.tf` files Terraform reads are scanned: every `*.hcl` file (Terragrunt
+# configuration, `terraform test` files) is skipped, beside the repository's own
+# `skip-path` entries.
 #
 # Settings (environment):
 #   CHECKOV_BLOCKING     `true` makes findings fail the scan; `false` (default)
@@ -189,13 +194,48 @@ set --
 for _ck_dir in $CHECKOV_DIRECTORIES; do
   set -- "$@" --directory "$_ck_dir"
 done
+_ck_config_file=''
 for _ck_config in .checkov.yaml .checkov.yml; do
   if [ -f "$_ck_config" ]; then
     echo "Using the repository's Checkov configuration: $_ck_config"
     set -- "$@" --config-file "$_ck_config"
+    _ck_config_file="$_ck_config"
     break
   fi
 done
+
+# Terraform reads `*.tf` and `*.tf.json` and nothing else, but Checkov's Terraform runner parses
+# every `*.hcl` file as Terraform too: Terragrunt's `terragrunt.hcl` and `root.hcl`, the
+# `*.tftest.hcl` files `terraform test` runs, Packer templates. None of them is infrastructure
+# Terraform deploys, none yields a check, and syntax Terraform never has to read there (a
+# Terragrunt `exclude { if = ... }`, a test file's `run` blocks) only ever produced parse errors --
+# each one a finding nobody could fix. So they are skipped. A `--skip-path` on the command line
+# REPLACES the configuration file's `skip-path` list rather than adding to it, so the repository's
+# own entries are passed again beside this one.
+if [ -n "$_ck_config_file" ]; then
+  _ck_skip_list=$(mktemp) || scan_incomplete "could not create a temporary file for the skip-path entries."
+  if ! "$CHECKOV_VENV/bin/python" - "$_ck_config_file" > "$_ck_skip_list" <<'PY'; then
+import sys
+
+import yaml
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    config = yaml.safe_load(handle) or {}
+entries = config.get("skip-path") if isinstance(config, dict) else None
+if isinstance(entries, str):
+    entries = [entries]
+for entry in entries or []:
+    print(entry)
+PY
+    rm -f "$_ck_skip_list"
+    scan_incomplete "the repository's $_ck_config_file could not be read, so its skip-path entries could not be kept."
+  fi
+  while IFS= read -r _ck_skip; do
+    [ -n "$_ck_skip" ] && set -- "$@" --skip-path "$_ck_skip"
+  done < "$_ck_skip_list"
+  rm -f "$_ck_skip_list"
+fi
+set -- "$@" --skip-path '\.hcl$'
 
 # `--skip-download` keeps the scan offline once installed: without an API key there
 # is nothing of ours to fetch from the vendor's platform, only documentation links.
@@ -224,6 +264,7 @@ esac
 # report cannot be read.
 "$CHECKOV_VENV/bin/python" - "$jsonFile" <<'PY' || _ck_verdict=$?
 import json
+import re
 import sys
 
 try:
@@ -254,6 +295,45 @@ def where(check):
     return "%s:%s" % (check.get("file_path", "?"), lines)
 
 
+# Valid Terraform that Checkov's HCL parser (bc-python-hcl2) rejects, and the rewrite -- one that
+# Terraform reads identically -- that gets the file scanned. Each test looks at the line the parser
+# stopped on and the one before it, since an exponent is reported on the line that follows it.
+EXPONENT = re.compile(r"(?<![\w.])\d+(?:\.\d+)?[eE][+-]?\d+(?![\w.])")
+HINTS = (
+    (lambda text: re.match(r"\s*[?:]", text) is not None,
+     "a conditional whose '?' or ':' starts a line after a unary operator such as '!' in its condition"
+     " (bridgecrewio/python-hcl2#153): end the line before with the operator instead"),
+    (lambda text: EXPONENT.search(text) is not None,
+     "a number in scientific notation, which the parser cannot read: write it as a plain decimal"
+     " (1e-07 as 0.0000001)"),
+    (lambda text: re.match(r"\s*(?:if|for)\s*=", text) is not None,
+     "'if' or 'for' as an unquoted object key, which the parser reads as a keyword: quote it ('\"if\" = ...')"),
+)
+
+
+def diagnose(path):
+    """Why the parser Checkov uses rejects `path`: its own message, and the likely rewrite."""
+    try:
+        import hcl2
+    except ImportError:
+        return []
+    try:
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+    except OSError:
+        return []
+    try:
+        hcl2.loads(text)
+    except Exception as error:  # lark raises several types, and the parser adds its own
+        notes = [(str(error).strip().splitlines() or [type(error).__name__])[0]]
+        line = getattr(error, "line", None)
+        if isinstance(line, int) and line > 0:
+            nearby = text.splitlines()[max(line - 2, 0):line]
+            notes.extend("likely cause: " + hint for test, hint in HINTS if any(test(row) for row in nearby))
+        return notes
+    return ["the parser reads this file on its own; run Checkov on it with LOG_LEVEL=DEBUG to see why it was not"]
+
+
 if unreasoned:
     print("")
     print("Checks skipped WITHOUT a reason -- write it as #checkov:skip=<ID>:<reason>:")
@@ -262,8 +342,14 @@ if unreasoned:
 if unparsed:
     print("")
     print("Files Checkov could not parse, and so did not scan:")
+    rewrites = False
     for name in unparsed:
         print("  %s" % name)
+        for note in diagnose(name):
+            print("      %s" % note)
+            rewrites = rewrites or note.startswith("likely cause: ")
+    if rewrites:
+        print("Each rewrite named above is valid Terraform that Terraform reads exactly as before.")
 print("")
 print(
     "Checkov: %d failed check(s), %d skip(s) without a reason, %d file(s) it could not parse."

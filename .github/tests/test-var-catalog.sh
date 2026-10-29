@@ -3,7 +3,7 @@ set -e
 
 # Test script for the shared variable-declaration generator.
 #
-# Exercises gen_shared_variables.py against synthetic Terragrunt layouts. The
+# Exercises the var-catalog generator against synthetic Terragrunt layouts. The
 # cases concentrate on the two classes of bug this tool can have, because both
 # are quiet:
 #
@@ -23,7 +23,6 @@ set -e
 #      second one the expensive way.
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-GEN="$SCRIPTS_DIR/global/scripts/languages/terraform/var-catalog/gen_shared_variables.py"
 RUN_SH="$SCRIPTS_DIR/global/scripts/languages/terraform/var-catalog/run.sh"
 TEST_DIR="$(mktemp -d)" || exit 1
 
@@ -49,7 +48,16 @@ assert_true() {
 cleanup() { rm -rf "$TEST_DIR"; }
 trap cleanup EXIT
 
-gen() { python3 "$GEN" "$@"; }
+# The generator is Go. It is built ONCE for the suite, with the same pinned
+# environment `global/scripts/shared/go-helper.sh` builds it with, rather than on
+# every call the way `run.sh` does -- the last case drives `run.sh` itself.
+GEN="$TEST_DIR/var-catalog"
+if ! CGO_ENABLED=0 GOFLAGS=-mod=readonly GOWORK=off \
+  go -C "$SCRIPTS_DIR" build -trimpath -o "$GEN" ./global/scripts/languages/terraform/var-catalog; then
+  echo -e "${RED}FAIL: could not build the var-catalog generator (it needs Go 1.25 or newer)${NC}"
+  exit 1
+fi
+gen() { "$GEN" "$@"; }
 
 # new_repo <name> -- a synthetic repo with a two-entry catalog, echoing its path.
 new_repo() {

@@ -9,21 +9,17 @@
 #
 # The canonical bodies live in the consumer's own `.terraform-var-catalog.hcl`,
 # the same split the sibling order-check uses (generic script here,
-# repo-specific data in the consumer). Stdlib-only: the sole runtime dependency
-# is python3, matching the sibling tftest-gen.
+# repo-specific data in the consumer).
+#
+# The generator is Go, built from this checkout on every run (see
+# global/scripts/shared/go-helper.sh); it needs a Go toolchain, 1.25 or newer,
+# and nothing else.
 set -eu
 
-SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
-PY="${SCRIPT_DIR}/gen_shared_variables.py"
-
-if [ ! -f "${PY}" ]; then
-  echo "var-catalog: ${PY} not found" >&2
-  exit 1
+if [ -z "${SCRIPTS_DIR:-}" ]; then
+  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
+  export SCRIPTS_DIR
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "var-catalog: python3 is required" >&2
-  exit 1
-fi
-
-exec python3 "${PY}" "$@"
+. "$SCRIPTS_DIR/global/scripts/shared/go-helper.sh"
+go_helper_run global/scripts/languages/terraform/var-catalog "$@"

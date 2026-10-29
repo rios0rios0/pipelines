@@ -11,7 +11,7 @@ include:
   # `tests/terratest/` requires one (Terratest suites frequently pin
   # `go 1.26`+). Bumping from 1.23 unblocks consumers whose terratest
   # `go.mod` declares a Go version the base image can't satisfy.
-  image: 'golang:1.27.3@sha256:b76020929b709ddb6202afc05410a0faefae20ae05e27ad548b3870092688a69'
+  image: 'golang:1.27.3@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b'
   before_script:
     - !reference [.scripts-repo, before_script]
     - "$SCRIPTS_DIR/global/scripts/languages/terraform/terra/install.sh"

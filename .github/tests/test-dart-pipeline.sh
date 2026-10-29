@@ -300,7 +300,9 @@ done
 # A Dart job installs no Python, so nothing in the family may need it again.
 assert_equals "no Python helper is left in the Dart scripts" \
   "" "$(find "$DART_DIR" -name '*.py' | sort | tr '\n' ' ')"
-assert_true "no Dart script runs python3" "! grep -rq 'python3' '$DART_DIR'"
+# `__pycache__` is skipped: a checkout that ran the old suite keeps the bytecode the Python helpers
+# compiled to, ignored by git and naming `python3` inside, though no Dart script runs it.
+assert_true "no Dart script runs python3" "! grep -rq --exclude-dir=__pycache__ 'python3' '$DART_DIR'"
 assert_true "the GitLab Dart job installs no python3" \
   "! grep -A2 'apt-get install' '$SCRIPTS_DIR/gitlab/dart/abstracts/dart.yaml' | grep -q 'python3'"
 

@@ -12,6 +12,8 @@
 #
 # Prerequisites: Terraform CLI >= 1.11 (required for `terraform test
 # -junit-xml` output). `terra-cli install` pins a compatible version.
+# `test-gen` also needs Go 1.25 or newer: the generator is built from the
+# pipelines checkout on every run (`global/scripts/shared/go-helper.sh`).
 
 SEMGREP_LANGUAGE ?= terraform
 

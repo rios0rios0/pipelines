@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'rewrote the Python and PyYAML inside nine test suites (`test-azure-secret-env`, `test-azure-step-names`, `test-working-directory`, `test-lambda-templates`, `test-codeql-gate`, `test-report-uploads`, `test-deploy-providers`, `test-build-version` and `test-runner-cache-gating`) as Go test support under `internal/testsuites/`, which each suite builds from the checkout for its run, and as `jq` where a check reads JSON, so those suites need neither Python nor PyYAML; a file they cannot read now fails its assertion instead of passing it unread'
+time: '2026-10-29T21:19:33.881589312Z'

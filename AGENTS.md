@@ -72,7 +72,7 @@ make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
 make build NAME=<image> TAG=<tag>           # Build both architectures, publish nothing (verification)
 ```
 
-Test scripts live in `.github/tests/`. The CI workflow (`.github/workflows/ci.yaml`) validates YAML syntax, script permissions, and runs ShellCheck on all shell scripts.
+Test scripts live in `.github/tests/`. The CI workflow (`.github/workflows/ci.yaml`) validates YAML syntax, script permissions, and runs ShellCheck on all shell scripts. A suite whose checks parse YAML or read files structurally keeps them as Go test support under `internal/testsuites/<suite>/`, which the suite builds from the checkout for its run (`go build -C "$SCRIPTS_DIR" ...`) and stops on if the build fails; `make test-go-helpers` runs their unit tests.
 
 ## Architecture
 
@@ -108,6 +108,7 @@ All platforms follow consistent numbered stages:
 - `global/containers/` — Docker image definitions for CI environments
 - `makefiles/` — Includable `.mk` fragments for downstream projects (`common.mk`, `golang.mk`, `python.mk`, etc.)
 - `global/gitignore/` — Canonical ignore rules for the files the pipeline writes into a consumer's working tree, one fragment per language plus `common`. Git has no `include` for ignore files and refuses to follow a symlinked `.gitignore`, so these are GENERATED into a delimited block in the consumer's own `.gitignore` by `make gitignore`, and `make gitignore-check` fails when that block is stale. See Shared Ignore Rules below
+- `internal/testsuites/` — Go test support for the suites in `.github/tests/`, never run by a consumer: one `main` package per suite that needs one, plus `yamldoc` (reads YAML into a tree that keeps document order and REFUSES duplicate keys, merge keys, a second document and unknown tags, so a file the platforms would reject fails its check instead of passing it empty; renders values the way the suites' messages always spelled them) and `filetext` (the walk order findings are reported in, lines, whole-line comments)
 - `.docs/examples/` — Complete per-platform usage examples
 - `.docs/known-issues.md` — Defects consumers observed in the shared workflows and not fixed yet (never security defects: this repository is public); read it before diagnosing a workflow, and record a new one there
 

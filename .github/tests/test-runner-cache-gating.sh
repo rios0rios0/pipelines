@@ -57,10 +57,10 @@ set -e
 #
 # WHAT IT DOES NOT DO
 #
-# It does not parse YAML with a library, the same way `order-check` and
-# `var-catalog` read their files. It reads them as indented text, which is
-# sufficient because every assertion is about a step's own keys. A step written
-# in flow style would slip past it; none is.
+# It does not parse YAML with a library: like `order-check` and `var-catalog`,
+# it reads the files as indented text, which is sufficient because every
+# assertion is about a step's own keys. A step written in flow style would slip
+# past it; none is.
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export SCRIPTS_DIR

@@ -248,7 +248,7 @@ fi
 # What the Terraform coverage generator CANNOT measure, excluded so it does not
 # read as uncovered. Derived here rather than copied into every consumer,
 # because the list only means anything beside the generator it mirrors: that
-# tool (`terra-test/terra_coverage.py`) walks `modules/` and reports exactly one
+# tool (`terra-test/coverage`) walks `modules/` and reports exactly one
 # kind of file, `.tf`, one `lineToCover` per declared block. Everything else in
 # the tree is unmeasurable by construction -- not badly tested, never on the
 # scale -- and an unmeasurable file left coverable reads as 0% and fails

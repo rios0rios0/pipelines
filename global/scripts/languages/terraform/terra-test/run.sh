@@ -447,17 +447,21 @@ timestamp=$(date +%s)
 #
 # Deliberately SOFT: a coverage report is a report, not a gate. The only thing
 # allowed to fail this script is `exit_code` from `terraform test`. A host
-# without python3, a tool not yet shipped in this checkout, or a parser that
+# without Go, a generator not yet shipped in this checkout, or a parser that
 # chokes on one exotic file must all degrade to a warning, never to a red
-# build that hides a green test suite.
-coverage_generic_py="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)/terra_coverage.py"
-if ! command -v python3 > /dev/null 2>&1; then
-  echo "WARNING: python3 not on PATH; skipping ${COVERAGE_GENERIC}" >&2
-elif [ ! -f "${coverage_generic_py}" ]; then
-  echo "WARNING: ${coverage_generic_py} not found; skipping ${COVERAGE_GENERIC}" >&2
+# build that hides a green test suite. The generator is Go, built from this
+# checkout through go-helper.sh, so it needs Go 1.25 or newer on PATH -- which
+# every template running this tier provisions for the Terratest tier anyway.
+coverage_generic_dir="global/scripts/languages/terraform/terra-test/coverage"
+if ! command -v go > /dev/null 2>&1; then
+  echo "WARNING: go not on PATH; skipping ${COVERAGE_GENERIC}" >&2
+elif [ ! -f "${SCRIPTS_DIR}/${coverage_generic_dir}/main.go" ]; then
+  echo "WARNING: ${SCRIPTS_DIR}/${coverage_generic_dir} not found; skipping ${COVERAGE_GENERIC}" >&2
 else
-  python3 "${coverage_generic_py}" --repo-dir . --output "${COVERAGE_GENERIC}" \
-    || echo "WARNING: terra_coverage.py failed; ${COVERAGE_GENERIC} may be missing or stale. If REPORT_PATH points outside the checkout, the generator refuses to write there by design -- use a path inside the repository." >&2
+  # shellcheck source=/dev/null
+  . "${SCRIPTS_DIR}/global/scripts/shared/go-helper.sh"
+  go_helper_run "${coverage_generic_dir}" --repo-dir . --output "${COVERAGE_GENERIC}" \
+    || echo "WARNING: the coverage generator failed; ${COVERAGE_GENERIC} may be missing or stale. If REPORT_PATH points outside the checkout, the generator refuses to write there by design -- use a path inside the repository." >&2
 fi
 
 # ---------- JSON report ----------

@@ -65,6 +65,15 @@ if ! command -v terraform > /dev/null 2>&1; then
   exit 0
 fi
 
+# Every aggregate JUnit is checked with the Go report checker, built ONCE for the
+# suite: it parses a report at least as strictly as a conforming XML parser.
+REPORTS="$TEST_DIR/terraform-reports"
+if ! CGO_ENABLED=0 GOFLAGS=-mod=readonly GOWORK=off \
+  go -C "$SCRIPTS_DIR" build -trimpath -o "$REPORTS" ./internal/testsuites/terraform-reports; then
+  echo -e "${RED}FAIL: could not build the report checker (it needs Go 1.25 or newer)${NC}"
+  exit 1
+fi
+
 # A provider-less configuration with one test: a variable, an output, and a
 # `run` block asserting on the output. Nothing is downloaded.
 #   $1 directory
@@ -224,7 +233,7 @@ assert_true "the root's JUnit records its case" "grep -q 'name=\"set_root\"' '$S
 assert_true "the tier's aggregate carries the root's case" "grep -q 'name=\"set_root\"' '$SET_REPORTS/terra-tests.xml'"
 assert_true "and the module's" "grep -q 'name=\"set_module\"' '$SET_REPORTS/terra-tests.xml'"
 assert_true "the aggregate is well-formed XML" \
-  "python3 -c \"import xml.etree.ElementTree as E; E.parse('$SET_REPORTS/terra-tests.xml')\""
+  "'$REPORTS' well-formed '$SET_REPORTS/terra-tests.xml'"
 assert_true "the summary reports the root" \
   '[[ "$SET_OUT" == *"roots tested     : 1 (TERRA_TEST_ROOTS='"'"'stacks'"'"')"* ]]'
 assert_true "the Markdown report lists the root" "grep -q '^- \`stacks/app\`' '$SET_REPORTS/terra-coverage.md'"
@@ -291,7 +300,7 @@ assert_true "runs tier 1" '[[ "$ALL_OUT" == *"=== Tier 1: terraform test (terra-
 assert_true "reports tier 1 as run" '[[ "$ALL_OUT" == *"tier 1 (terra-test)   : exit=0 (ran=1)"* ]]'
 assert_true "the merged JUnit carries the root's case" "grep -q 'name=\"all_root\"' '$ALL_MERGED'"
 assert_true "the merged JUnit is well-formed XML" \
-  "python3 -c \"import xml.etree.ElementTree as E; E.parse('$ALL_MERGED')\""
+  "'$REPORTS' well-formed '$ALL_MERGED'"
 
 ALL_UNSET_RC=0
 rm -rf "$ALL_REPO/build"
@@ -509,7 +518,7 @@ assert_true "keeps going: the next root still runs" \
 assert_true "a refused root's JUnit records the failure and the run block" \
   "grep -q '<failure' '$REFUSE_REPORTS/terra-tests/stacks_apply_default.xml' && grep -qF 'run \"default_apply\"' '$REFUSE_REPORTS/terra-tests/stacks_apply_default.xml'"
 assert_true "the aggregate is well-formed XML" \
-  "python3 -c \"import xml.etree.ElementTree as E; E.parse('$REFUSE_REPORTS/terra-tests.xml')\""
+  "'$REPORTS' well-formed '$REFUSE_REPORTS/terra-tests.xml'"
 assert_true "the summary counts one failed case per refused root" \
   '[[ "$REFUSE_OUT" == *"test cases       : 6 (passed=1 failed=5 errored=0)"* ]]'
 assert_true "the summary separates the refused roots from the tested one" \
@@ -651,7 +660,7 @@ assert_true "exits non-zero" "[ $ALL_REFUSE_RC -ne 0 ]"
 assert_true "and blames tier 1" '[[ "$ALL_REFUSE_OUT" == *"tier 1 (terra-test)   : exit=1 (ran=1)"* ]]'
 assert_true "the merged JUnit carries the refusal" "grep -q '<failure' '$ALL_REFUSE_MERGED'"
 assert_true "the merged JUnit is well-formed XML" \
-  "python3 -c \"import xml.etree.ElementTree as E; E.parse('$ALL_REFUSE_MERGED')\""
+  "'$REPORTS' well-formed '$ALL_REFUSE_MERGED'"
 assert_true "and nothing was applied" "[ ! -f '$ALL_REFUSE_REPO/stacks/app/applied.marker' ]"
 
 echo ""

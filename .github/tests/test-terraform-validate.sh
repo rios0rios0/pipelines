@@ -45,6 +45,15 @@ if ! command -v terraform > /dev/null 2>&1; then
   exit 0
 fi
 
+# The JUnit report is checked with the Go report checker, built ONCE for the
+# suite: it parses a report at least as strictly as a conforming XML parser.
+REPORTS="$TEST_DIR/terraform-reports"
+if ! CGO_ENABLED=0 GOFLAGS=-mod=readonly GOWORK=off \
+  go -C "$SCRIPTS_DIR" build -trimpath -o "$REPORTS" ./internal/testsuites/terraform-reports; then
+  echo -e "${RED}FAIL: could not build the report checker (it needs Go 1.25 or newer)${NC}"
+  exit 1
+fi
+
 # A root module that is valid: declares the provider it uses and references
 # only identifiers that exist.
 make_valid_root() {
@@ -218,7 +227,7 @@ run_validate "$XML_REPO" > /dev/null 2>&1 || XML_RC=$?
 XML_JUNIT="$XML_REPO/build/reports/junit-validate.xml"
 assert_true "exits non-zero" "[ $XML_RC -ne 0 ]"
 assert_true "the JUnit report is well-formed XML" \
-  "python3 -c \"import xml.etree.ElementTree as E; E.parse('$XML_JUNIT')\""
+  "'$REPORTS' well-formed '$XML_JUNIT'"
 
 echo ""
 echo "Passed: $TESTS_PASSED, Failed: $TESTS_FAILED"

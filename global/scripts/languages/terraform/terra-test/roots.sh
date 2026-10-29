@@ -22,7 +22,7 @@
 # - Vendored and derived trees are pruned at any depth -- `terraform init`
 #   copies module sources into `.terraform/`, and Terragrunt copies whole
 #   stacks, `tests/` included, into `.terragrunt-cache/`. Same set as
-#   `VENDORED_DIRS` in `terra_coverage.py`.
+#   `vendored()` in the coverage generator (`terra-test/coverage`).
 # - A leading `./` is stripped, so `.`, `./stacks` and `stacks` name a root the
 #   same way. The runner names each JUnit file after this path.
 # - `modules/<name>` is dropped: the module loop already runs it, so a broad

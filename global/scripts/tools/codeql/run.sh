@@ -77,6 +77,22 @@ case "$CODEQL_SOURCE_SCOPE" in
     ;;
 esac
 
+# How the database is built. Unset, which is every platform's default, no `--build-mode` is passed:
+# the CLI autobuilds a compiled language (Go, Java, C#) and reads an interpreted one, as the GitHub
+# Actions job does. `none` extracts C# or Java without building it, for code no build here can
+# compile: GitLab CI's C# job sets it, because those pipelines build .NET Framework projects on
+# Windows runners, and on Linux the autobuilder stops at `MSB3644: The reference assemblies for
+# .NETFramework,Version=v4.8 were not found`.
+BUILD_MODE_FLAG=""
+case "${CODEQL_BUILD_MODE:-}" in
+  '') ;;
+  none | autobuild) BUILD_MODE_FLAG="--build-mode=$CODEQL_BUILD_MODE" ;;
+  *)
+    echo "ERROR: CODEQL_BUILD_MODE must be 'none' or 'autobuild', or unset, not '$CODEQL_BUILD_MODE'." >&2
+    exit 1
+    ;;
+esac
+
 # When `--ram` is not given, CodeQL sizes its own JVM heap -- and inside a
 # memory-limited container it gets that badly wrong, because the number it
 # reasons from is the host's total rather than the cgroup's. On an 8 GiB CI pod
@@ -218,12 +234,13 @@ else
   echo "Scanning $SOURCE_ROOT as it is (CODEQL_SOURCE_SCOPE=$CODEQL_SOURCE_SCOPE)."
 fi
 
-echo "Creating CodeQL database for language: $CODEQL_LANGUAGE"
+echo "Creating CodeQL database for language: $CODEQL_LANGUAGE${CODEQL_BUILD_MODE:+ (build mode: $CODEQL_BUILD_MODE)}"
 CODEQL_DB_ACTIVE=true
 # shellcheck disable=SC2086
 if ! codeql database create \
   --language="$CODEQL_LANGUAGE" \
   --source-root="$SOURCE_ROOT" \
+  $BUILD_MODE_FLAG \
   $THREADS_FLAG \
   $CONFIG_FLAG \
   "$CODEQL_DB"; then
@@ -233,6 +250,12 @@ if ! codeql database create \
   fi
   exit 1
 fi
+
+# The build `database create` ran may have deleted the report directory `cleanup.sh` made: the Java
+# autobuilder runs Gradle's `clean`, which removes the whole `build/` tree, and on a CI runner the
+# build runs in the checkout itself. `database analyze` does not create the directory it writes to,
+# so a Gradle project's analysis ended in `Could not write SARIF file` after every query had run.
+mkdir -p "$(dirname "$fileName")" || exit 1
 
 echo "Running CodeQL analysis..."
 # shellcheck disable=SC2086

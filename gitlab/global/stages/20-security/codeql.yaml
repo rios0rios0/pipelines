@@ -1,14 +1,39 @@
 include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo-alpine-docker.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
+
+# Where `sast:codeql` runs unless a language stage moves it. The CodeQL bundle's Java runtime is
+# linked against glibc, so the job cannot run in the pipeline's default `docker:x.y` image, which is
+# Alpine (musl). It used to, and no language that included this job was ever analysed: the image
+# has no `curl` and BusyBox's `wget` rejects `--https-only`, so the bundle never downloaded, and
+# where it was in place its Java runtime could not start (`java: not found`).
+#
+# The default is the pinned Debian image the sibling `sast:semgrep` and `sast:gitleaks` jobs run in.
+# It carries the Python the Python extractor runs on, and an extractor that needs nothing but glibc
+# works there too, so a language added later is analysed before anyone writes it an override. A
+# language whose extractor BUILDS the code (Go, Java, C#), or needs Node.js to parse TypeScript,
+# moves the job onto its own toolchain image in its security stage by replacing `extends`. That is
+# why the default sits on this abstract rather than on the job: an `image:` on the job itself would
+# outrank the image an override takes through `extends`, and every override would analyse in it.
+#
+# `git` is installed because `.scripts-repo` clones the scripts, `curl` because `run.sh` downloads
+# the bundle, and `jq` because the findings gate reads the SARIF with it.
+.codeql-runtime:
+  extends: '.scripts-repo'
+  image: 'python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb'
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends git jq curl
+    - !reference [ .scripts-repo, before_script ]
 
 sast:codeql:
-  extends: '.scripts-repo-alpine-docker'
+  extends: '.codeql-runtime'
   stage: 'security (sca/sast)'
   script:
     - $SCRIPTS_DIR/global/scripts/tools/codeql/run.sh $CODEQL_LANGUAGE
   artifacts:
     when: 'always'
     reports:
-      sast: "$REPORT_PATH/codeql.sarif"
+      # `run.sh` sources `cleanup.sh` with `TOOL_NAME=codeql`, which nests the report under a
+      # per-tool subdirectory: `build/reports/codeql/`.
+      sast: "$REPORT_PATH/codeql/codeql.sarif"
   dependencies: [] # prevent from fetching artifacts

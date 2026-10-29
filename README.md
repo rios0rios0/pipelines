@@ -390,12 +390,32 @@ was built with, and the scan still reports success over the broken types. Every 
 Before, GitLab CI ran the job in the pipeline's default Alpine image, where CodeQL cannot start
 (`java: not found`) and there is no Go, so no Go project was analysed there. Azure DevOps took
 whatever Go the agent carried, 1.24 to 1.26 on a Microsoft-hosted one, and on an agent without one
-the analysis failed as "succeeded with issues". GitLab CI's other languages still run in that image:
-see [KI-02](.docs/known-issues.md#ki-02--gitlab-ci-cannot-start-codeql-in-the-default-image).
+the analysis failed as "succeeded with issues". The other languages are below.
 
 Wherever a Makefile exists, CodeQL's Go autobuilder runs `make` with no target before it builds the
 module itself, so your default goal runs inside the analysis:
 [KI-03](.docs/known-issues.md#ki-03--the-go-autobuild-runs-the-default-goal-of-a-consumer-makefile).
+
+#### CodeQL on GitLab CI and Azure DevOps, Per Language
+
+Until 2026-10-29 GitLab CI analysed nothing: every language's `sast:codeql` ran in the pipeline's
+default Alpine image, where the bundle could neither be downloaded nor started
+([KI-02](.docs/known-issues.md#ki-02--gitlab-ci-cannot-start-codeql-in-the-default-image)). Each
+language's job now runs where its extractor has what it needs, and Azure DevOps hands each one the
+toolchain its other jobs set up, so the analysis no longer depends on what the agent happens to carry:
+
+| Language | GitLab CI `sast:codeql` runs in | Azure DevOps sets up first |
+|----------|---------------------------------|----------------------------|
+| Go | `.go`'s Go image | the pinned Go (`GoTool@0`) |
+| Python | the shared default, `python:3.13-slim` | Python 3.14 (`UsePythonVersion@0`) |
+| JavaScript / TypeScript | the shared default, with Node.js installed for TypeScript | Node.js 20.20.2 (`UseNode@1`) |
+| Java, Gradle | `gradle:8.7.0-jdk21`, the glibc build of `.gradle`'s Gradle and JDK | JDK 25 (`JavaToolInstaller@0`) |
+| Java, Maven | `maven:3.8.8-eclipse-temurin-11` | no Maven template |
+| C# | `.sdk`, without building the project | .NET SDK 6.x (`UseDotNet@2`) |
+
+C# is extracted without a build on GitLab CI because its .NET templates build .NET Framework
+projects on Windows runners, which CodeQL's Linux autobuilder cannot build. On GitHub Actions a
+JavaScript analysis sets up Node.js before CodeQL starts, for a self-hosted runner without one.
 
 #### Usage Example (Go with Docker)
 
@@ -2387,6 +2407,7 @@ out exactly as on CI.
 |-----------------------|---------------|-------------------|------------------------------------------------------------------------|
 | `CODEQL_SOURCE_SCOPE` | `tree`        | `git`             | `git` scans the copy; `tree` scans the directory as it is              |
 | `CODEQL_THREADS`      | `1`           | `0` (every core)  | Threads for `database create` and `database analyze`                  |
+| `CODEQL_BUILD_MODE`   | unset         | unset             | `none` extracts C# or Java without building it; unset, the CLI builds a compiled language |
 
 CI is recognised by `CI` (GitHub Actions, GitLab CI) or `TF_BUILD` (Azure DevOps). If a project's
 build needs a file `.gitignore` keeps out of the repository, scan it with

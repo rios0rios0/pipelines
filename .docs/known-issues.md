@@ -17,8 +17,9 @@ privately and fix them.
 | ID | Workflow and job | Issue | Status |
 |---|---|---|---|
 | [KI-01](#ki-01--the-dart-test-job-has-no-timeout) | `.github/workflows/dart.yaml`, `tests > test:all` | The Dart test job has no timeout | Open |
-| [KI-02](#ki-02--gitlab-ci-cannot-start-codeql-in-the-default-image) | `gitlab/global/stages/20-security/codeql.yaml`, `sast:codeql` | GitLab CI cannot start CodeQL in the default image | Fixed for Go; open for the other languages |
+| [KI-02](#ki-02--gitlab-ci-cannot-start-codeql-in-the-default-image) | `gitlab/global/stages/20-security/codeql.yaml`, `sast:codeql` | GitLab CI cannot start CodeQL in the default image | Fixed in #<PR> |
 | [KI-03](#ki-03--the-go-autobuild-runs-the-default-goal-of-a-consumer-makefile) | `global/scripts/tools/codeql/run.sh` and the `20-security/codeql` action, Go | The Go autobuild runs the default goal of a consumer Makefile | Won't fix |
+| [KI-04](#ki-04--gitlab-cis-debian-11-images-can-no-longer-install-packages) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml`, `gitlab/java/abstracts/maven.yaml` | GitLab CI's Debian 11 images can no longer install packages | Open |
 
 ## KI-01 — The Dart test job has no timeout
 
@@ -52,30 +53,63 @@ privately and fix them.
 
 ## KI-02 — GitLab CI cannot start CodeQL in the default image
 
-- **Where:** `gitlab/global/stages/20-security/codeql.yaml`, job `sast:codeql`. It extends
-  `.scripts-repo-alpine-docker` and sets no `image:`, so it runs in the pipeline's default image,
+- **Where:** `gitlab/global/stages/20-security/codeql.yaml`, job `sast:codeql`. It extended
+  `.scripts-repo-alpine-docker` and set no `image:`, so it ran in the pipeline's default image,
   `docker:24.0.3` (`gitlab/global/abstracts/default-image.yaml`). Every GitLab CI entry template
   includes that default.
-- **What happens:**
+- **What happened:**
   - `docker:24.0.3` is Alpine Linux, which uses musl. The CodeQL bundle's Java runtime is linked
     against glibc, so the launcher cannot start it. Reproduced on 2026-10-29 by running the job's
     steps in that image with the pinned `codeql-bundle-v2.27.3`:
     `codeql: line 149: .../codeql/tools/linux64/java/bin/java: not found`, then
     `ERROR: 'codeql database create' failed`.
-  - The job has no `allow_failure`, so it fails the pipeline for every language that includes it:
-    Go, Java, Python, JavaScript and C#. Nothing is analysed.
-- **Fixed for Go:** `gitlab/golang/stages/20-security/go.yaml` overrides the job onto `.go`, the
-  `golang:<pinned>-bookworm` image the other Go jobs use, and installs `jq` for the gate. Reproduced
-  in that image: a cold install of the pinned bundle, then a `go 1.27.3` module whose command
-  injection the gate reports and fails on.
-- **The fix for the rest:**
-  - Python and JavaScript need no build, so any glibc image with `git`, `jq` and `curl` would do.
-    Give the shared job one, pinned by digest.
-  - Java and C# build the code, so their stages should move the job onto their own toolchain
-    images, as the Go stage does.
-- **How to prove it:** the Docker reproduction above, per language, and an assertion like the
-  GitLab half of section 3c of `.github/tests/test-go-module-toolchain.sh`.
-- **Status:** Fixed for Go. Open for Java, Python, JavaScript and C#.
+  - On a runner the job did not get that far. The image has no `curl`, and BusyBox's `wget` rejects
+    the `--https-only` that `verify-download.sh` passes, so a cold job stopped at
+    `wget: unrecognized option: https-only`, then `ERROR: failed to download` the bundle.
+    Reproduced on 2026-10-29 with the job's own commands, for the Python and C# templates.
+  - The job has no `allow_failure`, so it failed the pipeline for every language that includes it:
+    Go, Java, Python, JavaScript and C#. Nothing was analysed.
+- **Fixed for Go in #769:** `gitlab/golang/stages/20-security/go.yaml` overrides the job onto `.go`,
+  the `golang:<pinned>-bookworm` image the other Go jobs use, and installs `jq` for the gate.
+  Reproduced in that image: a cold install of the pinned bundle, then a `go 1.27.3` module whose
+  command injection the gate reports and fails on.
+- **Fixed for the rest:**
+  - The shared job's default moved to the abstract it extends, `.codeql-runtime`: the pinned
+    `python:3.13-slim` image `sast:semgrep` and `sast:gitleaks` run in, plus `git`, `jq` and `curl`.
+    The default sits on the abstract, not on the job, because an `image:` on the job would outrank
+    the image an override takes through `extends`. Python runs there unchanged: its extractor needs
+    a Python 3 and builds nothing. So does a language no template analyses yet whose extractor needs
+    only glibc: a Ruby analysis run there, with no override, found its planted command injection.
+  - JavaScript runs in the same image and installs `nodejs`: the extractor parses TypeScript with
+    Node.js, and without it stops at `Could not start Node.js. It is required for TypeScript
+    extraction.` The JavaScript jobs' own images could not be used: `.yarn` and `.npm` are Debian 11,
+    whose security updates left the Debian mirrors when its LTS ended (the index still lists them,
+    the packages answer 404, `archive.debian.org` serves them), so `apt-get install jq` fails there.
+  - Gradle moves to `gradle:8.7.0-jdk21`, the glibc build of `.gradle`'s Gradle and JDK, keeping
+    `.gradle`'s runner tags. `.gradle`'s own image is Alpine; with the image's musl JDK as
+    `CODEQL_JAVA_HOME` the CLI starts, but the build cannot, because CodeQL's build tracer
+    `preload_tracer` is glibc too (`error=2, No such file or directory`).
+  - Maven moves to `maven:3.8.8-eclipse-temurin-11`, `.maven`'s Maven 3.8 and JDK 11 on Ubuntu
+    22.04: `.maven` is Debian 11 as well. The Maven entry template had never loaded: since
+    2023-10-02 it included `java/stages/2-security/` and `3-tests/` paths, and its security stage
+    `global/stages/2-security.yaml`, none of which exist, so GitLab refused the whole pipeline.
+  - C# runs in `.sdk` without building (`CODEQL_BUILD_MODE: 'none'`). The GitLab .NET templates build
+    .NET Framework projects on Windows runners, and on Linux the C# autobuilder stops at
+    `MSB3644: The reference assemblies for .NETFramework,Version=v4.8 were not found`, then
+    `Could not auto-detect a suitable build method`. Without a build, the planted finding is found in
+    an old-style .NET Framework project and in an SDK-style one alike.
+  - Two defects in what every language shares, found on the way. `run.sh` now recreates the report
+    directory before `database analyze`: the Java autobuilder runs Gradle's `clean`, which deletes
+    `build/`, so a Gradle analysis on a CI runner ended in `Could not write SARIF file`. And the
+    job's report path gained the per-tool directory `run.sh` has written into since 2026-02-17.
+- **How it was proven:** each language's job run in Docker in its pinned image, with the job's own
+  `before_script` and `script` as `.github/tests/test-codeql-runtime.sh` resolves them, its own
+  `.scripts-repo` clone and a cold install of the pinned bundle (served from a local copy instead of
+  the network, and checked by `run.sh` against the committed digest): a project with a planted
+  finding fails the gate (exit 1) and a clean one passes it (exit 0), for Go, Python, JavaScript
+  (TypeScript), Java with Gradle and with Maven, and C#, SDK-style and .NET Framework.
+  `make test-codeql-runtime` holds the templates to it.
+- **Status:** Fixed in #<PR>.
 
 ## KI-03 — The Go autobuild runs the default goal of a consumer Makefile
 
@@ -104,3 +138,30 @@ privately and fix them.
 - **Status:** Won't fix. On 2026-10-29 the owner decided not to change the default goal of the shared
   makefiles: a bare `make` keeps meaning what it means in every consumer today, and the cost above
   stays. Do not propose `.DEFAULT_GOAL :=` again without a new reason.
+
+## KI-04 — GitLab CI's Debian 11 images can no longer install packages
+
+- **Where:** three GitLab CI abstracts run Debian 11 ("bullseye") images: `.npm`
+  (`node:16.14.0-bullseye`, `gitlab/javascript/abstracts/npm.yaml`), `.yarn`
+  (`node:18.17.1-bullseye`, `gitlab/javascript/abstracts/yarn.yaml`) and `.maven`
+  (`maven:3.8-jdk-11-slim`, `gitlab/java/abstracts/maven.yaml`). Two jobs on them install packages:
+  `report:dependency-track` (`gitlab/javascript/stages/35-management/npm-yarn.yaml`,
+  `apt install ... curl jq git`) and the Maven `sca:dependency-check`
+  (`gitlab/java/stages/20-security/maven.yaml`, through `.scripts-repo-debian`).
+- **What happens:**
+  - Debian 11's LTS ended, and its security updates left the Debian mirrors: on 2026-10-29
+    `deb.debian.org` and `security.debian.org` still served a `bullseye-security` index (dated
+    2026-09-12) listing `jq 1.6-2.1+deb11u3`, while the package itself answered 404 there and 200 on
+    `archive.debian.org`.
+  - So any `apt-get install` that reaches an updated package fails, in both images:
+    `E: Failed to fetch http://security.debian.org/debian-security/pool/updates/main/j/jq/jq_1.6-2.1%2bdeb11u3_amd64.deb  404  Not Found`,
+    then `E: Unable to fetch some archives`. Reproduced on 2026-10-29 with `apt-get install jq` in
+    `.npm`'s image and `apt-get install git jq` in `.maven`'s.
+  - `report:dependency-track` therefore cannot upload an SBOM, and `sca:dependency-check` fails
+    before scanning (it is `allow_failure: true`, so the pipeline stays green).
+  - The CodeQL jobs no longer use these images, for this reason: KI-02.
+- **The fix it needs:** move each abstract to a supported base. The same tools exist on one:
+  `maven:3.8.8-eclipse-temurin-11` (Ubuntu 22.04) carries `.maven`'s Maven 3.8 and JDK 11, and the
+  official `node` images publish Debian 12 builds. Node 16 and 18 are themselves past their end of
+  life, so which Node replaces them is a decision for the JavaScript pipeline, not a digest bump.
+- **Status:** Open.

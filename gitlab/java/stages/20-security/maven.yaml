@@ -5,14 +5,31 @@ variables:
 include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo-debian.yaml'
-  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/2-security.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/semgrep.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/gitleaks.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/codeql.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/hadolint.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/java/abstracts/maven.yaml'
 
+# The shared `sast:codeql` (included above) keeps its script and report; only WHERE it runs is
+# overridden, because CodeQL's Java extraction builds the project: the autobuilder runs Maven and
+# extracts what `javac` compiles. It runs as the other Maven jobs do (`.maven`), with the same Maven
+# 3.8 and JDK 11, but not in `.maven`'s image: that is Debian 11, whose security updates left the
+# Debian mirrors when its LTS ended, so `apt-get install jq` fails there with a 404. This image is
+# the same toolchain on Ubuntu 22.04, and ships `git` and `curl`; `jq` is installed because the
+# findings gate reads the SARIF with it. `.maven`'s `.m2` cache stays off: a scan that needs a
+# dependency downloads it, and nothing a later job reads is saved.
+sast:codeql:
+  extends: [ '.maven', '.scripts-repo' ]
+  image: 'maven:3.8.8-eclipse-temurin-11@sha256:a9023829d06570e9e4f99928b360aca6a6ebec642901fa15b69726221dd2eda4'
+  cache: []
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends jq
+    - !reference [ .scripts-repo, before_script ]
+
 sca:dependency-check:
   extends: '.maven'
-  stage: 'security (sca)'
+  stage: 'security (sca/sast)'
   cache:
     paths: # this list can't be merged. It's not how YAML works (https://github.com/yaml/yaml/issues/48)
       - '.m2'

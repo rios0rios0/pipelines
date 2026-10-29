@@ -42,6 +42,7 @@ make test-hadolint-discovery  # Test which files the Hadolint runner lints as Do
 make test-checkov      # Test the Checkov IaC scanner tier (verified install, report verdict, advisory default, wiring on every platform) only
 make test-codeql-scope  # Test that a local CodeQL scan builds from the files git would ship, on every core, only
 make test-codeql-gate   # Test that CodeQL fails on findings `.codeql-false-positives` does not list, on every platform, and that the GitHub upload cannot fail the job, only
+make test-codeql-runtime  # Test where each language's CodeQL analysis runs and with what (GitLab CI images and installs, run.sh's report and build mode, the Azure DevOps and GitHub Actions toolchains) only
 make test-dependency-check  # Test the OWASP Dependency-Check NVD cache / API-key contract only
 make test-dependency-track  # Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, retry of a briefly unreachable server, cross-platform wiring) only
 make test-python-cyclonedx  # Test static/non-distribution and dynamic Python SBOM versions, including resolution failures
@@ -1048,13 +1049,46 @@ Four constraints shape it; do not "simplify" any of them away:
 | Constraint | Why |
 |------------|-----|
 | **The extractor's refusal is silent, so it is checked by table** | CLI 2.26.3 logs `package requires newer Go version go1.27 (application built with go1.26)` over a `go 1.27` module and still creates the database, exit 0, with broken types. That is why this repository waived Go from 2026-08-21. Every bundle from `codeql-bundle-v2.26.4` (2026-08-26) is built with go1.27. Section 4 records the first bundle for each Go minor, and fails when a module here moves to a minor it does not list or the pin falls below it |
-| **GitLab's shared job cannot start CodeQL, so the Go stage moves it** | It runs in the pipeline's default `docker:x.y` image, which is Alpine: the bundle's glibc-linked Java fails with `java: not found`, and there is no Go. The override takes `.go`'s IMAGE only. `.go`'s before_script and cache put GOPATH in the checkout, and the autobuilder searches every `go.mod` under the source root (it skips only `vendor/`), so a module cache there would be extracted as hundreds of projects. The other languages still fail there: `.docs/known-issues.md`, KI-02 |
+| **GitLab's shared job has no Go, so the Go stage moves it** | The shared job ran in the pipeline's default `docker:x.y` image, which is Alpine: the bundle's glibc-linked Java failed with `java: not found`, and there is no Go. Its default image is glibc now, but carries no Go either. The override takes `.go`'s IMAGE only. `.go`'s before_script and cache put GOPATH in the checkout, and the autobuilder searches every `go.mod` under the source root (it skips only `vendor/`), so a module cache there would be extracted as hundreds of projects. Every other language's job is covered under "Every Language's CodeQL Has What Its Extractor Needs" below |
 | **Azure's failure would not be red** | The `run.sh` step is `continueOnError`, by the shared-SAST decision recorded under "A Failing Check Fails the Run", so a missing Go reads as "succeeded with issues". Hosted images carry Go 1.24 to 1.26 only (Ubuntu 24.04 defaults to 1.24, 26.04 to 1.26), so the pinned `GoTool@0` is what makes the result independent of the agent |
 | **The autobuilder runs `make` first, with no target** | It does so wherever a Makefile exists, and offers no switch. Here the default goal is `login`, a `docker login` that fails without a terminal and is skipped. In a consumer whose Makefile includes `common.mk` before its own targets, under the `SCRIPTS_DIR` that `run.sh` exports, it is `setup`, which clones or fast-forwards `PIPELINES_HOME`: KI-03 |
 
 This repository's self-scan extracts two modules under one Go, the helpers at the root and the
 tor-proxy health probe, so `go_version_file` names the newer directive; section 3 fails if another
 module overtakes it.
+
+### Every Language's CodeQL Has What Its Extractor Needs
+
+**Enforced by `.github/tests/test-codeql-runtime.sh` (`make test-codeql-runtime`).** Until 2026-10-29
+no GitLab CI analysis ran at all, for any language (KI-02 in `.docs/known-issues.md`), and nothing
+was red for the right reason: the image a job runs in is rarely written on the job, so the suite
+resolves each GitLab CI entry template the way GitLab does (`include:`, `extends:`, `!reference`)
+before asserting on it. What an image ships cannot be read from a template, so `IMAGE_FACTS` there
+records what each one was observed to carry, and an image with no row fails until somebody looks.
+
+| Language | Its extractor needs | GitLab CI `sast:codeql` runs in | Azure DevOps `PRE_STEPS` | GitHub Actions |
+|----------|---------------------|---------------------------------|--------------------------|----------------|
+| Go | the module's Go: it builds | `.go`'s `golang:<pinned>-bookworm` | `GoTool@0`, as the Go jobs | `setup-go` from `go_version_file` |
+| Python | a Python 3 | the shared default, `python:3.13-slim` | `UsePythonVersion@0`, as the Python jobs | a GitHub-hosted runner |
+| JavaScript / TypeScript | Node.js, which parses TypeScript | the shared default, with `nodejs` installed | `UseNode@1`, as the JavaScript jobs | `setup-node`, before `init` |
+| Java, Gradle | a JDK and Gradle: it builds | `gradle:8.7.0-jdk21`, on `.gradle`'s runner tags | `JavaToolInstaller@0`, as the Java jobs | a GitHub-hosted runner |
+| Java, Maven | a JDK and Maven: it builds | `maven:3.8.8-eclipse-temurin-11` | no Maven template | a GitHub-hosted runner |
+| C# | the .NET SDK | `.sdk`, without building (`CODEQL_BUILD_MODE: 'none'`) | `UseDotNet@2`, as the .NET jobs | a GitHub-hosted runner |
+
+Seven constraints shape it; do not "simplify" any of them away:
+
+| Constraint | Why |
+|------------|-----|
+| **The shared default sits on `.codeql-runtime`, not on `sast:codeql`** | An `image:` on the job outranks the image an override takes through `extends`, so with the default on the job every override would analyse in it: Go with no Go. Overrides replace `extends` and keep the shared script, report and stage |
+| **No `apt-get` in a Debian 11 image** | `.yarn`, `.npm` and `.maven` are Debian 11, whose security updates left the Debian mirrors when its LTS ended: the index still lists them and the packages answer 404, so `apt-get install jq` fails. That is why JavaScript and Maven do not run in their languages' own images. The `apt` fact in `IMAGE_FACTS` holds it |
+| **Gradle runs in the glibc twin of `.gradle`'s image** | `.gradle` is Alpine. With the image's musl JDK as `CODEQL_JAVA_HOME` the CLI starts, but the build cannot: CodeQL's build tracer, `preload_tracer`, is glibc too |
+| **`run.sh` recreates the report directory after the build** | The Java autobuilder runs Gradle's `clean`, which deletes `build/`, including the `build/reports/codeql/` that `cleanup.sh` made. On a CI runner the build runs in the checkout, and `database analyze` ended in `Could not write SARIF file` |
+| **GitLab CI extracts C# without building it** | Its .NET templates build .NET Framework projects on Windows runners, and on Linux the C# autobuilder stops at `MSB3644` and `Could not auto-detect a suitable build method`. `CODEQL_BUILD_MODE` is unset everywhere else, which keeps the CLI's default: the autobuild every other platform relies on |
+| **The job restores no cache** | A Go module cache in the checkout is extracted as hundreds of extra projects, and a restored Java `build/` or build cache can mark the compilation up to date, so the extractor sees nothing compiled |
+| **Every language and every Azure stage has a row** | A stage that includes the shared job without a row in `EXTRACTOR_NEEDS`, or an Azure stage without one in `AZURE_TOOLCHAINS`, fails, and so does a row nothing reaches: a language that stops being analysed looks exactly like one nobody thought of |
+
+The findings gate reads the SARIF with `jq`. GitHub-hosted runners and Microsoft-hosted agents carry
+it, and no job installs it on a self-hosted one, where the gate fails closed without it.
 
 ### Report Uploads Never Gate a Job
 

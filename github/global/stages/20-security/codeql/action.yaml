@@ -116,6 +116,20 @@ runs:
         # a lockfile this action never resolves would cost more to warm than it saves.
         cache: false
 
+    # BEFORE `init`, for the same reason as Go's: the JavaScript extractor parses TypeScript by
+    # running the TypeScript compiler on the `node` on PATH, which the CodeQL bundle does not ship.
+    # A GitHub-hosted runner has one; a self-hosted runner, where `npm.yaml` and `yarn.yaml` can
+    # send this job (`codeql_runs_on`), need not, and the extraction then stops at `Could not start
+    # Node.js. It is required for TypeScript extraction.` Any Node.js reads the sources -- nothing
+    # is built or installed -- so the major is the JavaScript workflows' default, and no package
+    # cache is restored: on a self-hosted runner that would untar into a `$HOME` the last job left.
+    - name: 'Set up Node.js'
+      if: "inputs.codeql_language == 'javascript-typescript' || inputs.codeql_language == 'javascript' || inputs.codeql_language == 'typescript'"
+      uses: 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1' # v7.1.0
+      with:
+        node-version: '20'
+        package-manager-cache: false
+
     # `make codeql` hands a project's `codeql-config.yml` to `database create`, so the analysis here
     # reads it too: a gate that scanned what the project excludes locally would fail on findings
     # nobody can reproduce. An empty output is no configuration, which `init` reads as unset.

@@ -220,6 +220,8 @@ The Terra CLI pipeline test stage exposes parallel jobs on every platform (Azure
 | **var-catalog**          | Generates `stacks/<stack>/variables-shared.tf` from one canonical body per shared `variable` in a per-repo `.terraform-var-catalog.hcl`; output is committed (not a Terragrunt `generate` block) and hand-written declarations are never overwritten. `--check` is the CI gate | `global/scripts/languages/terraform/var-catalog/run.sh`  |
 | **Terraform CycloneDX**  | SBOM generation for Terraform projects             | `global/scripts/languages/terraform/cyclonedx/run.sh`   |
 
+`order-check`, `tftest-gen`, `var-catalog` and the terra-test tier's generic coverage report (`terra-test/coverage/`) are standard-library-only Go helpers, built from the pipelines checkout on every run through `global/scripts/shared/go-helper.sh`: they need Go 1.25 or newer, the `go` directive of the root `go.mod`, and nothing else. Every template that runs one provisions that Go (`make test-go-module-toolchain` holds it per job), and running one locally -- `run.sh --fix`, `make test-gen` -- needs Go on `PATH`.
+
 ### Container Images
 
 **Available Pre-built Images:**

@@ -1967,6 +1967,8 @@ since that is where every lint lands).
 | **terra-test**   | `terraform test` runner over module test suites      | `global/scripts/languages/terraform/terra-test/`      |
 | **validate**     | `terraform validate` over root modules (opt-in)      | `global/scripts/languages/terraform/validate/`        |
 
+`order-check`, `tftest-gen`, `var-catalog` and the terra-test tier's generic coverage report (`terra-test/coverage/`) are standard-library-only Go helpers, built from the pipelines checkout on every run through `global/scripts/shared/go-helper.sh`: they need Go 1.25 or newer, the `go` directive of the root `go.mod`, and nothing else. Every template that runs one provisions that Go (`make test-go-module-toolchain` holds it per job), and running one locally -- `run.sh --fix`, `make test-gen` -- needs Go on `PATH`.
+
 #### MVP Hosting Providers
 
 See [MVP Hosting & Deployment](#mvp-hosting--deployment) for the ranked comparison and usage.

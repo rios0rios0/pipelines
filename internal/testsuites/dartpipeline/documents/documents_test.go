@@ -136,89 +136,38 @@ func TestCheckXML(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("should fail when a tag is not closed by its own end tag", func(t *testing.T) {
-		t.Parallel()
-		// given
-		input := []byte("<a><b></a>")
+	// Each case is a document the suite's XML checks must refuse; `want` names the error when the
+	// checker has its own for it, and is nil where any refusal from the decoder will do.
+	malformed := []struct {
+		name  string
+		input string
+		want  error
+	}{
+		{"should fail when a tag is not closed by its own end tag", "<a><b></a>", nil},
+		{"should fail when an ampersand is not escaped", "<a>x & y</a>", nil},
+		{"should fail when the document holds a character XML forbids", "<a>\x01</a>", nil},
+		{"should fail when an element is left open", "<a><b/>", nil},
+		{"should fail when there are two root elements", "<a/><b/>", documents.ErrSeveralRoots},
+		{"should fail when text sits outside the root element", "<a/>trailing", documents.ErrTextOutsideRoot},
+		{"should fail when there is no element at all", "<?xml version=\"1.0\"?>\n", documents.ErrNoRoot},
+	}
+	for _, testCase := range malformed {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			// given
+			input := []byte(testCase.input)
 
-		// when
-		err := documents.CheckXML(input)
+			// when
+			err := documents.CheckXML(input)
 
-		// then
-		require.Error(t, err)
-	})
-
-	t.Run("should fail when an ampersand is not escaped", func(t *testing.T) {
-		t.Parallel()
-		// given
-		input := []byte("<a>x & y</a>")
-
-		// when
-		err := documents.CheckXML(input)
-
-		// then
-		require.Error(t, err)
-	})
-
-	t.Run("should fail when the document holds a character XML forbids", func(t *testing.T) {
-		t.Parallel()
-		// given
-		input := []byte("<a>\x01</a>")
-
-		// when
-		err := documents.CheckXML(input)
-
-		// then
-		require.Error(t, err)
-	})
-
-	t.Run("should fail when an element is left open", func(t *testing.T) {
-		t.Parallel()
-		// given
-		input := []byte("<a><b/>")
-
-		// when
-		err := documents.CheckXML(input)
-
-		// then
-		require.Error(t, err)
-	})
-
-	t.Run("should fail when there are two root elements", func(t *testing.T) {
-		t.Parallel()
-		// given
-		input := []byte("<a/><b/>")
-
-		// when
-		err := documents.CheckXML(input)
-
-		// then
-		require.ErrorIs(t, err, documents.ErrSeveralRoots)
-	})
-
-	t.Run("should fail when text sits outside the root element", func(t *testing.T) {
-		t.Parallel()
-		// given
-		input := []byte("<a/>trailing")
-
-		// when
-		err := documents.CheckXML(input)
-
-		// then
-		require.ErrorIs(t, err, documents.ErrTextOutsideRoot)
-	})
-
-	t.Run("should fail when there is no element at all", func(t *testing.T) {
-		t.Parallel()
-		// given
-		input := []byte("<?xml version=\"1.0\"?>\n")
-
-		// when
-		err := documents.CheckXML(input)
-
-		// then
-		require.ErrorIs(t, err, documents.ErrNoRoot)
-	})
+			// then
+			if testCase.want == nil {
+				require.Error(t, err)
+				return
+			}
+			require.ErrorIs(t, err, testCase.want)
+		})
+	}
 }
 
 func TestRun(t *testing.T) {

@@ -58,37 +58,73 @@ run_against_stub() {
 
   # Set PREWARM_DB=1 to simulate a restored cache that a previous run finished writing: both the H2
   # file and the completion marker present. run.sh treats that -- and only that -- as warm, which is
-  # what lets it choose the API delta over a datafeed bootstrap.
+  # what lets it choose the API delta over a datafeed bootstrap. The marker's first line is the epoch
+  # second that run finished, stamped "now" unless PREWARM_MARKER says otherwise (an older epoch, or
+  # the bare ISO date markers held before they carried one).
   if [[ -n "${PREWARM_DB:-}" ]]; then
     mkdir -p "$projectDir/.owasp"
     : > "$projectDir/.owasp/odc.mv.db"
-    echo '2026-07-20T00:00:00Z' > "$projectDir/.owasp/.odc-complete"
+    printf '%s\n' "${PREWARM_MARKER:-$(date -u '+%s')}" > "$projectDir/.owasp/.odc-complete"
+  fi
+  # Set PRESEED_REPORT=1 to leave the report of an EARLIER run where this run writes its own.
+  if [[ -n "${PRESEED_REPORT:-}" ]]; then
+    mkdir -p "$projectDir/build/reports/dependency-check"
+    echo '{}' > "$projectDir/build/reports/dependency-check/dependency-check-report.json"
   fi
 
+  # The stub records its argv and, like the real plugins, writes the JSON report that run.sh takes as
+  # the proof the analysis ran: Maven is told the directory by -Dodc.outputDirectory, Gradle through
+  # the environment init.gradle reads. STUB_WRITES_REPORT=false, STUB_REPORT_EXCEPTION=true and
+  # STUB_EXIT=<n> reproduce the ways a run goes wrong -- no report (an analysis that never ran), a
+  # report the engine wrote after a non-fatal failed update, and a failing build.
   local argvFile="$projectDir/argv.txt"
   cat > "$projectDir/bin/$stubName" <<EOF
 #!/usr/bin/env sh
 printf '%s\n' "\$@" > '$argvFile'
+reportDir="\${DEPENDENCY_CHECK_REPORT_DIR:-}"
+for argument in "\$@"; do
+  case "\$argument" in
+    -Dodc.outputDirectory=*) reportDir="\${argument#-Dodc.outputDirectory=}" ;;
+  esac
+done
+if [ "\${STUB_WRITES_REPORT:-true}" = 'true' ] && [ -n "\$reportDir" ]; then
+  mkdir -p "\$reportDir"
+  # The shape Dependency-Check 12 writes: scanInfo gains "analysisExceptions" only when there is one.
+  if [ "\${STUB_REPORT_EXCEPTION:-false}" = 'true' ]; then
+    printf '%s\n' '{"reportSchema":"1.1","scanInfo":{"engineVersion":"12.2.0","dataSource":[],"analysisExceptions":[{"exception":{"message":"org.owasp.dependencycheck.data.update.exception.UpdateException: Unable to download meta file"}}]},"dependencies":[]}' > "\$reportDir/dependency-check-report.json"
+  else
+    printf '%s\n' '{"reportSchema":"1.1","scanInfo":{"engineVersion":"12.2.0","dataSource":[]},"dependencies":[]}' > "\$reportDir/dependency-check-report.json"
+  fi
+fi
+exit "\${STUB_EXIT:-0}"
 EOF
   chmod +x "$projectDir/bin/$stubName"
 
+  # A failing run is an outcome under test, not an error in the suite, so its status is recorded
+  # rather than allowed to end the script under `set -e`. Read only inside `assert_true` strings, like
+  # the variables below.
+  # shellcheck disable=SC2034
+  EXIT_CODE=0
+  # shellcheck disable=SC2034
   (
     cd "$projectDir" || exit 1
     # `env -i` would drop PATH; unset only the variables under test so each case starts clean.
-    unset NVD_API_KEY NVD_DATAFEED_URL NVD_VALID_FOR_HOURS DEPENDENCY_CHECK_DATA_DIR
+    unset NVD_API_KEY NVD_DATAFEED_URL NVD_VALID_FOR_HOURS NVD_API_MAX_AGE_DAYS DEPENDENCY_CHECK_DATA_DIR
     export PATH="$projectDir/bin:$PATH"
     export SCRIPTS_DIR
     env "$@" "$RUN_SH" > "$projectDir/stdout.txt" 2>&1
-  )
+  ) || EXIT_CODE=$?
 
   # Every assertion below reads these through `assert_true`, whose condition is a STRING it
-  # `eval`s -- so ShellCheck sees `\$ARGV` as literal text and reports both as unused. They
+  # `eval`s -- so ShellCheck sees `\$ARGV` as literal text and reports them as unused. They
   # are the entire output of this helper; the disables are per-assignment so a genuinely dead
-  # variable added later is still reported.
+  # variable added later is still reported. ARGV is empty when run.sh stopped before the build tool.
   # shellcheck disable=SC2034
-  ARGV="$(cat "$argvFile")"
+  ARGV="$(cat "$argvFile" 2>/dev/null || true)"
   # shellcheck disable=SC2034
   STDOUT="$(cat "$projectDir/stdout.txt")"
+  # shellcheck disable=SC2034
+  MARKER="$(cat "$projectDir/.owasp/.odc-complete" 2>/dev/null || true)"
 }
 
 # =============================================================================
@@ -243,8 +279,9 @@ assert_true "gates the save on the completion marker so a partial database is ne
   "grep -qE \"steps.odc_complete.outputs.complete == 'true'\" '$ACTION'"
 assert_true "derives that flag from the marker run.sh writes on success" \
   "grep -qE '\\.owasp/\\.odc-complete' '$ACTION'"
-assert_true "run.sh writes the completion marker only after the analysis returns" \
-  "grep -qE '^date -u .* > \\\"\\\$completionMarker\\\"' '$RUN_SH'"
+# Which runs write the marker is exercised for real in Test 10; this pins only where the write sits.
+assert_true "run.sh writes the completion marker only after checking for the analysis's report" \
+  "[ \$(grep -nF '[ ! -s \"\$reportFile\" ]' '$RUN_SH' | cut -d: -f1) -lt \$(grep -nF '} > \"\$completionMarker\"' '$RUN_SH' | cut -d: -f1) ]"
 assert_true "run.sh clears a stale marker before running so it describes this run" \
   "grep -qE '^rm -f \\\"\\\$completionMarker\\\"' '$RUN_SH'"
 assert_true "does not use the all-in-one actions/cache, whose save is skipped on cancellation" \
@@ -284,6 +321,105 @@ assert_true "GitLab CI (gradle) calls the shared runner" \
   "grep -q 'global/scripts/languages/java/dependency-check/run.sh' gitlab/java/stages/20-security/gradle.yaml"
 assert_true "Azure DevOps calls the shared runner" \
   "grep -q 'global/scripts/languages/java/dependency-check/run.sh' azure-devops/java/stages/20-security/java.yaml"
+
+# =============================================================================
+# Test 10: the database is complete only when the analysis wrote its report
+# =============================================================================
+echo "TEST 10: the CVE database is marked complete only when the analysis wrote its report"
+# given a build that analyses the project and writes its report
+# when dependency-check runs
+run_against_stub 'pom.xml' 'mvn'
+# then the run passes and the marker records, first, the epoch second it finished
+assert_true "a completed analysis exits 0" "[ \"\$EXIT_CODE\" -eq 0 ]"
+assert_true "a completed analysis marks the database complete" "[ -n \"\$MARKER\" ]"
+assert_true "the marker's first line is the epoch second the run finished" \
+  "head -n 1 <<< \"\$MARKER\" | grep -qE '^[1-9][0-9]{9,}\$'"
+
+# given a build that exits 0 WITHOUT a report: what `failOnError=false` does when the NVD download
+# fails -- the plugin logs "Unable to continue dependency-check analysis" and the build "succeeds"
+# having scanned nothing. On 2026-10-22 that passed rest-arch's job and cached its near-empty
+# database as complete; every later run then pulled the whole NVD through the API and was cancelled.
+run_against_stub 'pom.xml' 'mvn' STUB_WRITES_REPORT='false'
+assert_true "fails a build that exits 0 without writing a report" "[ \"\$EXIT_CODE\" -ne 0 ]"
+assert_true "leaves that database unmarked, so it is never cached" "[ -z \"\$MARKER\" ]"
+assert_true "names failOnError=false as the likely cause" "grep -q 'failOnError=false' <<< \"\$STDOUT\""
+run_against_stub 'build.gradle' 'gradle' STUB_WRITES_REPORT='false'
+assert_true "does the same on the Gradle path" "[ \"\$EXIT_CODE\" -ne 0 ] && [ -z \"\$MARKER\" ]"
+
+# given a build that fails only because failBuildOnCVSS found a vulnerability: the report records no
+# exception and covers a whole database. Discarding it made every such repository rebuild it each run.
+run_against_stub 'pom.xml' 'mvn' STUB_EXIT='1'
+assert_true "still fails the job on the findings" "[ \"\$EXIT_CODE\" -eq 1 ]"
+assert_true "keeps the database, so the next run tops it up instead of downloading it again" \
+  "[ -n \"\$MARKER\" ]"
+
+# given a report written after an update that failed non-fatally: the engine analyses against what the
+# database already holds -- part of an interrupted bootstrap, or the snapshot a failed delta targeted
+# -- writes the report anyway, and lists the failure under scanInfo.analysisExceptions. Marking that
+# database complete would cache a partial one as whole, and restamp a stale one as fresh.
+run_against_stub 'pom.xml' 'mvn' STUB_EXIT='1' STUB_REPORT_EXCEPTION='true'
+assert_true "fails a run whose report records an exception" "[ \"\$EXIT_CODE\" -eq 1 ]"
+assert_true "leaves that database unmarked, so a partial one is never cached as whole" \
+  "[ -z \"\$MARKER\" ]"
+assert_true "names the recorded exceptions as the cause" \
+  "grep -q 'analysisExceptions' <<< \"\$STDOUT\""
+run_against_stub 'pom.xml' 'mvn' STUB_REPORT_EXCEPTION='true'
+assert_true "fails it even when failOnError=false let the build exit 0" \
+  "[ \"\$EXIT_CODE\" -ne 0 ] && [ -z \"\$MARKER\" ]"
+PREWARM_DB=1 PREWARM_MARKER="$(( $(date -u '+%s') - 3 * 86400 ))" run_against_stub 'pom.xml' 'mvn' NVD_API_KEY='k' STUB_EXIT='1' STUB_REPORT_EXCEPTION='true'
+unset PREWARM_DB PREWARM_MARKER
+assert_true "does not restamp a restored database whose delta failed, so its age keeps counting" \
+  "[ -z \"\$MARKER\" ]"
+
+# given a build that fails with no report (a fatal error under the default failOnError=true)
+run_against_stub 'pom.xml' 'mvn' STUB_EXIT='3' STUB_WRITES_REPORT='false'
+assert_true "propagates the build tool's own exit status" "[ \"\$EXIT_CODE\" -eq 3 ]"
+assert_true "and leaves the database unmarked" "[ -z \"\$MARKER\" ]"
+
+# given a report an EARLIER run left behind, and a build that writes none this time
+PRESEED_REPORT=1 run_against_stub 'pom.xml' 'mvn' STUB_WRITES_REPORT='false'
+unset PRESEED_REPORT
+assert_true "does not take an earlier run's report for this run's" \
+  "[ \"\$EXIT_CODE\" -ne 0 ] && [ -z \"\$MARKER\" ]"
+
+# =============================================================================
+# Test 11: the API tops up only a recent database
+# =============================================================================
+echo "TEST 11: the API only tops up a recent database; an older one is refreshed from the datafeed"
+# The delta of an old database can be most of the NVD, which the API serves at the same rate as a
+# cold build, so past NVD_API_MAX_AGE_DAYS (default 7) the datafeed refreshes it in ~3 minutes.
+eightDaysAgo=$(( $(date -u '+%s') - 8 * 86400 ))
+# given a complete database finished eight days ago
+PREWARM_DB=1 PREWARM_MARKER="$eightDaysAgo" run_against_stub 'pom.xml' 'mvn' NVD_API_KEY='k'
+unset PREWARM_DB PREWARM_MARKER
+assert_true "refreshes a database older than seven days from the datafeed" \
+  "grep -q -- '-DnvdDatafeedUrl=' <<< \"\$ARGV\""
+assert_true "still passes the key by variable name" \
+  "grep -qx -- '-DnvdApiKeyEnvironmentVariable=NVD_API_KEY' <<< \"\$ARGV\""
+assert_true "explains the refresh by the database's age" \
+  "grep -q 'completed 8 days ago' <<< \"\$STDOUT\""
+
+# given a marker written before markers carried an epoch: its age is unknown
+PREWARM_DB=1 PREWARM_MARKER='2026-07-20T00:00:00Z' run_against_stub 'pom.xml' 'mvn' NVD_API_KEY='k'
+unset PREWARM_DB PREWARM_MARKER
+assert_true "treats a marker with no completion time as too old for the API" \
+  "grep -q -- '-DnvdDatafeedUrl=' <<< \"\$ARGV\""
+
+# given a wider window
+PREWARM_DB=1 PREWARM_MARKER="$eightDaysAgo" run_against_stub 'pom.xml' 'mvn' NVD_API_KEY='k' NVD_API_MAX_AGE_DAYS='30'
+unset PREWARM_DB PREWARM_MARKER
+assert_true "honours NVD_API_MAX_AGE_DAYS" "! grep -q -- '-DnvdDatafeedUrl' <<< \"\$ARGV\""
+
+# given a value that is not a number of days
+run_against_stub 'pom.xml' 'mvn' NVD_API_KEY='k' NVD_API_MAX_AGE_DAYS='a week'
+assert_true "rejects a non-numeric NVD_API_MAX_AGE_DAYS before running anything" \
+  "[ \"\$EXIT_CODE\" -ne 0 ] && [ -z \"\$ARGV\" ]"
+
+# given Azure DevOps passed an undefined `$(NVD_API_MAX_AGE_DAYS)` verbatim
+PREWARM_DB=1 run_against_stub 'pom.xml' 'mvn' NVD_API_KEY='k' NVD_API_MAX_AGE_DAYS='$(NVD_API_MAX_AGE_DAYS)'
+unset PREWARM_DB
+assert_true "treats an unexpanded Azure DevOps macro as the default" \
+  "[ \"\$EXIT_CODE\" -eq 0 ] && ! grep -q -- '-DnvdDatafeedUrl' <<< \"\$ARGV\""
 
 # =============================================================================
 echo

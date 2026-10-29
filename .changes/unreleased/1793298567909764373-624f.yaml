@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed `sca:dependency-check` passing without scanning and caching a near-empty NVD database: `run.sh` now marks the database complete only when the analysis wrote a report recording no exception (`scanInfo.analysisExceptions`), so a `failOnError=false` build whose NVD download failed, or an update that failed against a partial database, fails the job instead of passing; keeps the database when the build fails only on findings, so the next run tops it up instead of downloading it again; and refreshes a database completed more than seven days ago (`NVD_API_MAX_AGE_DAYS`) from the datafeed instead of the slow NVD API'
+time: '2026-10-29T18:29:27.909699388Z'

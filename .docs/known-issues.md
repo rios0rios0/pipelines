@@ -18,7 +18,7 @@ privately and fix them.
 |---|---|---|---|
 | [KI-01](#ki-01--the-dart-test-job-has-no-timeout) | `.github/workflows/dart.yaml`, `tests > test:all` | The Dart test job has no timeout | Open |
 | [KI-02](#ki-02--gitlab-ci-cannot-start-codeql-in-the-default-image) | `gitlab/global/stages/20-security/codeql.yaml`, `sast:codeql` | GitLab CI cannot start CodeQL in the default image | Fixed for Go; open for the other languages |
-| [KI-03](#ki-03--the-go-autobuild-runs-the-default-goal-of-a-consumer-makefile) | `global/scripts/tools/codeql/run.sh` and the `20-security/codeql` action, Go | The Go autobuild runs the default goal of a consumer Makefile | Open |
+| [KI-03](#ki-03--the-go-autobuild-runs-the-default-goal-of-a-consumer-makefile) | `global/scripts/tools/codeql/run.sh` and the `20-security/codeql` action, Go | The Go autobuild runs the default goal of a consumer Makefile | Won't fix |
 
 ## KI-01 — The Dart test job has no timeout
 
@@ -101,4 +101,6 @@ privately and fix them.
 - **The fix it needs:** end `common.mk` and each language fragment with `.DEFAULT_GOAL :=`. GNU make
   then takes the next target it reads, the consumer's first own target, as the default goal. That
   changes what a bare `make` does in every consumer, so it needs its own change and changelog entry.
-- **Status:** Open.
+- **Status:** Won't fix. On 2026-10-29 the owner decided not to change the default goal of the shared
+  makefiles: a bare `make` keeps meaning what it means in every consumer today, and the cost above
+  stays. Do not propose `.DEFAULT_GOAL :=` again without a new reason.

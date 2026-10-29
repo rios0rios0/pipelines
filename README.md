@@ -976,9 +976,11 @@ A value other than `true` or `false` fails the job rather than quietly reading a
 
 - a failed check;
 - a check skipped without a reason. A deliberate exception is recorded beside the resource, with the reason that justifies it — `#checkov:skip=CKV_AWS_18:access logs are collected centrally (ADR-012)` — and `#checkov:skip=CKV_AWS_18` alone, which Checkov itself accepts as "No comment provided", is a finding;
-- a file Checkov could not parse, which it lists and then exits 0 over: an unparsed file was never scanned.
+- a file Checkov could not parse, which it lists and then exits 0 over: an unparsed file was never scanned. Each is listed with where Checkov's HCL parser stopped and, for valid Terraform it is known to reject, the equivalent rewrite: a `?` or `:` that starts a line after a `!` in the condition (end the line before with it instead), a number in scientific notation (write the plain decimal), or `if`/`for` as an unquoted object key (quote it).
 
-A `.checkov.yaml` at the repository root is passed as Checkov's configuration. Its `skip-check` list is honoured, but Checkov records no reason for those, so prefer the inline skip for anything deliberate.
+Only the `*.tf` files Terraform reads are scanned. Every `*.hcl` file (Terragrunt configuration, `terraform test` files) is skipped, because Checkov would otherwise parse it as Terraform and report syntax Terraform never reads as a finding.
+
+A `.checkov.yaml` at the repository root is passed as Checkov's configuration. Its own `skip-path` entries are kept beside the `*.hcl` skip. Its `skip-check` list is honoured, but Checkov records no reason for those, so prefer the inline skip for anything deliberate.
 
 **The install** follows the lesson of Trivy's compromise: the pinned release's wheel (`CHECKOV_PINNED_VERSION` in `pinned-versions.sh`) is downloaded by name and refused unless its SHA-256 matches the committed digest, then installed binary-only into a virtualenv of its own and run by path. Its dependencies resolve within the ranges the wheel declares, binary-only. The scan runs offline once installed (`--skip-download`, no update lookup). On GitLab the job uses the same pinned Python image as `sast:semgrep`; on GitHub and Azure DevOps the agent needs `python3` with its `venv` module. What Trivy's removal took that this does not restore: SBOM generation stays out of scope.
 

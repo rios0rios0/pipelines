@@ -13,12 +13,14 @@
 #      binary-only into a virtualenv of its own, run by path;
 #   2. the verdict: a failed check, a skip without a reason and a file Checkov could not parse
 #      are findings; a reasoned skip is not; the verdict is read from the JSON report, not from
-#      Checkov's exit code, which says nothing about the last two;
+#      Checkov's exit code, which says nothing about the last two; an unparsed file is named
+#      with where the parser stopped and, for valid Terraform it is known to reject, the rewrite;
 #   3. advisory by default: findings, and a scan that cannot complete, never fail the job
 #      unless CHECKOV_BLOCKING is `true`, and a typo in that switch fails instead of quietly
 #      meaning "advisory";
 #   4. the scope: every directory in CHECKOV_DIRECTORIES, the repository's `.checkov.yaml`,
-#      Terraform only, offline once installed, and a project with no Terraform skipped;
+#      Terraform only (`*.tf`: every `*.hcl` is skipped, beside the repository's own
+#      `skip-path` entries), offline once installed, and a project with no Terraform skipped;
 #   5. the wiring on every platform: terra.yaml and its composite action (GitHub), both terra
 #      security stages (GitLab, Azure DevOps), and `make sast` for both Terraform fragments.
 #
@@ -135,6 +137,39 @@ printf '{"passed": 0, "failed": 0, "skipped": 0, "parsing_errors": 0, "resource_
 printf '[%s, %s]' "$(document '' '' '')" "$(document "$(check CKV_OCI_7 oci_objectstorage_bucket.second -)" '' '')" \
   > "$REPORTS/two-frameworks.json"
 echo 'not json' > "$REPORTS/garbage.json"
+
+# Files Checkov's HCL parser rejects although Terraform accepts them, one per construct the runner
+# names a rewrite for, and one it has no rewrite for. The verdict asks the parser itself where it
+# stopped; the virtualenv's real one is not here, so a stand-in raises an error of lark's shape
+# (message, `line`, `column`) at the position CHECKOV_STUB_HCL2_ERROR gives, as `line:column:token`.
+PARSE="$WORK/parse"
+FAKE_HCL2="$WORK/fake-hcl2"
+mkdir -p "$PARSE" "$FAKE_HCL2" || exit 1
+printf 'locals {\n  name = (\n    !var.enabled\n    ? "off"\n    : "on"\n  )\n}\n' > "$PARSE/ternary.tf"
+printf 'locals {\n  rate = 1e-07\n  next = 2\n}\n' > "$PARSE/exponent.tf"
+printf 'locals {\n  rule = jsonencode({\n    if = { kind = "example" }\n  })\n}\n' > "$PARSE/keyword.tf"
+printf 'locals {\n  name = "unclosed\n}\n' > "$PARSE/other.tf"
+cat > "$FAKE_HCL2/hcl2.py" <<'STUB'
+import os
+
+
+class UnexpectedToken(Exception):
+    def __init__(self, line, column, value):
+        super().__init__("Unexpected token %r at line %d, column %d." % (value, line, column))
+        self.line = line
+        self.column = column
+
+
+def loads(text):
+    spec = os.environ.get("CHECKOV_STUB_HCL2_ERROR", "")
+    if not spec:
+        return {}
+    line, column, value = spec.split(":", 2)
+    raise UnexpectedToken(int(line), int(column), value)
+STUB
+for construct in ternary exponent keyword other; do
+  document '' '' "\"$PARSE/$construct.tf\"" > "$REPORTS/unparsed-$construct.json"
+done
 
 # A project with one Terraform file, and one with none.
 PROJECT="$WORK/project"
@@ -254,6 +289,33 @@ run_scan "$PROJECT" clean CHECKOV_BLOCKING=true CHECKOV_STUB_EXIT=2
 assert_true "an exit code other than 0 or 1 fails a blocking scan" \
   "[ '$STATUS' -eq 1 ] && printf '%s' \"\$OUTPUT\" | grep -q 'exited with code 2'"
 
+# An unparsed file is named with where the parser stopped and, for valid Terraform the parser is
+# known to reject, the rewrite Terraform reads the same -- so the developer can act on the finding.
+run_scan "$PROJECT" unparsed-ternary CHECKOV_BLOCKING=true PYTHONPATH="$FAKE_HCL2" CHECKOV_STUB_HCL2_ERROR='4:5:?'
+assert_true "an unparsed file is still a finding" "[ '$STATUS' -eq 1 ]"
+assert_true "...named with the parser's own message and position" \
+  "printf '%s' \"\$OUTPUT\" | grep -qF \"Unexpected token '?' at line 4, column 5.\""
+assert_true "...and, for a '?' starting a line after a '!', the rewrite that moves it up" \
+  "printf '%s' \"\$OUTPUT\" | grep -qF \"likely cause: a conditional whose '?' or ':' starts a line\""
+assert_true "...pointing at the upstream parser defect" "printf '%s' \"\$OUTPUT\" | grep -qF 'bridgecrewio/python-hcl2#153'"
+assert_true "...saying the rewrite changes nothing Terraform does" \
+  "printf '%s' \"\$OUTPUT\" | grep -qF 'Terraform reads exactly as before'"
+run_scan "$PROJECT" unparsed-exponent CHECKOV_BLOCKING=true PYTHONPATH="$FAKE_HCL2" CHECKOV_STUB_HCL2_ERROR='3:8:='
+assert_true "a number in scientific notation is named, though the parser stops on the line after it" \
+  "printf '%s' \"\$OUTPUT\" | grep -qF 'likely cause: a number in scientific notation'"
+run_scan "$PROJECT" unparsed-keyword CHECKOV_BLOCKING=true PYTHONPATH="$FAKE_HCL2" CHECKOV_STUB_HCL2_ERROR='3:5:if'
+assert_true "'if' as an unquoted object key is named, with the quoting that fixes it" \
+  "printf '%s' \"\$OUTPUT\" | grep -qF \"likely cause: 'if' or 'for' as an unquoted object key\""
+run_scan "$PROJECT" unparsed-other CHECKOV_BLOCKING=true PYTHONPATH="$FAKE_HCL2" CHECKOV_STUB_HCL2_ERROR='2:10:x'
+assert_true "an error with no known rewrite gets the parser's message only" \
+  "printf '%s' \"\$OUTPUT\" | grep -qF 'at line 2, column 10.' && ! printf '%s' \"\$OUTPUT\" | grep -qE 'likely cause|Terraform reads exactly as before'"
+run_scan "$PROJECT" unparsed-other CHECKOV_BLOCKING=true PYTHONPATH="$FAKE_HCL2"
+assert_true "a file the parser reads on its own says so, rather than guessing a cause" \
+  "printf '%s' \"\$OUTPUT\" | grep -qF 'the parser reads this file on its own'"
+run_scan "$PROJECT" unparsed-ternary CHECKOV_BLOCKING=true
+assert_true "without the parser to ask, the file is still listed, with no cause made up" \
+  "[ '$STATUS' -eq 1 ] && printf '%s' \"\$OUTPUT\" | grep -qF '$PARSE/ternary.tf' && ! printf '%s' \"\$OUTPUT\" | grep -q 'likely cause'"
+
 echo ""
 echo "--- 3. Advisory unless CHECKOV_BLOCKING is true ---"
 
@@ -293,6 +355,29 @@ echo 'framework: [terraform]' > "$PROJECT/.checkov.yaml"
 run_scan "$PROJECT" clean
 assert_true "the repository's .checkov.yaml is passed as Checkov's configuration" \
   "grep -A1 -x -- '--config-file' '$WORK/argv' | grep -qx '.checkov.yaml'"
+rm -f "$PROJECT/.checkov.yaml"
+
+# Terraform reads only *.tf; Checkov's Terraform runner would parse every *.hcl as well (Terragrunt
+# configuration, `terraform test` files), which yields parse errors and never a check.
+run_scan "$PROJECT" clean
+assert_true "only the *.tf files Terraform reads: every *.hcl file is skipped" \
+  "grep -A1 -x -- '--skip-path' '$WORK/argv' | grep -qxF '\\.hcl\$'"
+assert_true "...and nothing else when the repository skips nothing" \
+  "[ \"\$(grep -cx -- '--skip-path' '$WORK/argv')\" -eq 1 ]"
+# A --skip-path on the command line REPLACES the configuration file's list, so the repository's own
+# entries must be passed again beside it -- in either of the shapes YAML allows.
+printf 'skip-path:\n  - vendor/\n  - legacy\n' > "$PROJECT/.checkov.yaml"
+run_scan "$PROJECT" clean
+assert_true "the repository's skip-path entries are kept beside it" \
+  "grep -A1 -x -- '--skip-path' '$WORK/argv' | grep -qx 'vendor/' && grep -A1 -x -- '--skip-path' '$WORK/argv' | grep -qx 'legacy' && grep -A1 -x -- '--skip-path' '$WORK/argv' | grep -qxF '\\.hcl\$'"
+printf 'skip-path: vendor/\n' > "$PROJECT/.checkov.yaml"
+run_scan "$PROJECT" clean
+assert_true "...including a single entry written as a string" \
+  "grep -A1 -x -- '--skip-path' '$WORK/argv' | grep -qx 'vendor/'"
+printf 'skip-path: [unclosed\n' > "$PROJECT/.checkov.yaml"
+run_scan "$PROJECT" clean CHECKOV_BLOCKING=true
+assert_true "a .checkov.yaml that cannot be read fails a blocking scan instead of dropping its entries" \
+  "[ '$STATUS' -eq 1 ] && printf '%s' \"\$OUTPUT\" | grep -q 'its skip-path entries could not be kept' && [ ! -f '$WORK/argv' ]"
 rm -f "$PROJECT/.checkov.yaml"
 
 mkdir -p "$PROJECT/modules" || exit 1

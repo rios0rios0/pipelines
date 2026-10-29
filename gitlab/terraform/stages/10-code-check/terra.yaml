@@ -18,10 +18,11 @@ style:tflint:
 # Enforces the team's file-ordering standard (dependency/inputs in root.hcl,
 # .HCL/.ENV grouping in variables.tf, heaviest->lightest providers.tf,
 # main.tf-ordered outputs.tf). The checker is a Go helper built from the
-# pipelines checkout, so the job runs on the same Go image as '.terra' -- at
-# least the `go` directive of this repository's `go.mod`, and git is already
-# in it -- but needs no terra CLI or Terraform, so it extends '.scripts-repo'
-# rather than '.terra'. Run 'order-check/run.sh --fix' locally to auto-sort.
+# pipelines checkout, so the job runs on the `golang` image the terra
+# template's '.terra' uses -- at least the `go` directive of this repository's
+# `go.mod`, and git is already in it -- and needs no Terraform, so it extends
+# '.scripts-repo' rather than this template's '.terra'. Run
+# 'order-check/run.sh --fix' locally to auto-sort.
 order:check:
   extends: '.scripts-repo'
   image: 'golang:1.27.3@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b'

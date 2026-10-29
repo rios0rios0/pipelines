@@ -52,6 +52,7 @@ make test-release-reconcile  # Test release reconciliation gap detection only
 make test-release-promotion  # Test release promotion (the tag run a bump merge now starts) only
 make test-deploy-providers   # Test the MVP hosting deployment providers (Cloudflare, Vercel, Render, Netlify, Fly.io) only
 make test-build-env-vars   # Test the step that resolves `build_env_vars` in the three Cloudflare deployment workflows (one identical step, what it writes, no Python) only
+make test-no-python    # Test that the repository runs no Python of its own: no `.py` file, and no interpreter outside the Python pipelines and the Semgrep/Checkov installs, only
 make test-memory-detection  # Test the cgroup-aware memory ceiling detection only
 make test-dart-pipeline # Test the Dart/Flutter pipeline (scripts, report converters, Semgrep rules, cross-platform wiring) only
 make test-terra-pipeline # Test the Terraform/terra pipeline's CodeQL tool gap (GitHub, GitLab, Azure, terra.mk, terraform.mk) only
@@ -701,6 +702,29 @@ All `run.sh` scripts follow this pattern:
 | `dependency-track`                             | no tool binary — uploads the CycloneDX BOM with `curl`                              |
 
 Because the tools run directly on the host, the consuming CI job only needs the tool's own runtime dependencies (e.g. `python3` for `semgrep`, `git`/`jq`/`curl` for `gitleaks`) — not a Docker-in-Docker service.
+
+### No Python of Its Own
+
+**Enforced by `.github/tests/test-no-python.sh` (`make test-no-python`).** This repository's scripts
+run in every consumer's CI, so a helper here is code every consumer executes. The helpers that used
+to be Python -- the Terraform ordering, coverage, smoke-test and variable-catalog generators, the
+Dart report converters, and the Python inside the test suites -- are Go (the root module, built from
+the checkout on every run by `global/scripts/shared/go-helper.sh`) or POSIX shell. A new helper is
+written in one of those two, never in Python, and `jq` and mikefarah/yq (`resolve-yq.sh`) are the
+tools for JSON and YAML.
+
+Python stays only where it is really needed, and the suite names each place:
+
+| Where | Why it has to be Python |
+|-------|-------------------------|
+| The Python pipelines: `*/python/`, `makefiles/python.mk`, `global/scripts/languages/python/`, the `python.*` images, `pdm*.yaml` | They build consumers' Python projects |
+| `python3 -m venv` and the virtualenv's pip in the Semgrep and Checkov runners | Both are Python programs with no binary release |
+| One heredoc in `checkov/run.sh`, at most 30 lines, asked once | It asks Checkov's HCL parser -- `bc-python-hcl2`, a Python library that exists only in Checkov's virtualenv -- where it stopped in a file it could not parse |
+
+The excused lines are listed verbatim, so a new use of Python beside them fails like any other, and an
+excused line that disappears fails too, so the list cannot outlive what it excuses. Prose that only
+names Python -- "install python3 and re-run", `command -v python3`, a `python:3.13-slim` image -- is
+not a call and is not flagged.
 
 ### OWASP Dependency-Check and the NVD
 

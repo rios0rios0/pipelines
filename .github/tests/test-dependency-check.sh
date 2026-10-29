@@ -74,8 +74,9 @@ run_against_stub() {
 
   # The stub records its argv and, like the real plugins, writes the JSON report that run.sh takes as
   # the proof the analysis ran: Maven is told the directory by -Dodc.outputDirectory, Gradle through
-  # the environment init.gradle reads. STUB_WRITES_REPORT=false and STUB_EXIT=<n> reproduce the two
-  # ways a run goes wrong -- no report (an analysis that never ran) and a failing build.
+  # the environment init.gradle reads. STUB_WRITES_REPORT=false, STUB_REPORT_EXCEPTION=true and
+  # STUB_EXIT=<n> reproduce the ways a run goes wrong -- no report (an analysis that never ran), a
+  # report the engine wrote after a non-fatal failed update, and a failing build.
   local argvFile="$projectDir/argv.txt"
   cat > "$projectDir/bin/$stubName" <<EOF
 #!/usr/bin/env sh
@@ -88,7 +89,12 @@ for argument in "\$@"; do
 done
 if [ "\${STUB_WRITES_REPORT:-true}" = 'true' ] && [ -n "\$reportDir" ]; then
   mkdir -p "\$reportDir"
-  printf '%s\n' '{"reportSchema": "1.1", "dependencies": []}' > "\$reportDir/dependency-check-report.json"
+  # The shape Dependency-Check 12 writes: scanInfo gains "analysisExceptions" only when there is one.
+  if [ "\${STUB_REPORT_EXCEPTION:-false}" = 'true' ]; then
+    printf '%s\n' '{"reportSchema":"1.1","scanInfo":{"engineVersion":"12.2.0","dataSource":[],"analysisExceptions":[{"exception":{"message":"org.owasp.dependencycheck.data.update.exception.UpdateException: Unable to download meta file"}}]},"dependencies":[]}' > "\$reportDir/dependency-check-report.json"
+  else
+    printf '%s\n' '{"reportSchema":"1.1","scanInfo":{"engineVersion":"12.2.0","dataSource":[]},"dependencies":[]}' > "\$reportDir/dependency-check-report.json"
+  fi
 fi
 exit "\${STUB_EXIT:-0}"
 EOF
@@ -340,12 +346,30 @@ assert_true "names failOnError=false as the likely cause" "grep -q 'failOnError=
 run_against_stub 'build.gradle' 'gradle' STUB_WRITES_REPORT='false'
 assert_true "does the same on the Gradle path" "[ \"\$EXIT_CODE\" -ne 0 ] && [ -z \"\$MARKER\" ]"
 
-# given a build that fails only because failBuildOnCVSS found a vulnerability: the report is written
-# over a whole database. Discarding that database made every such repository rebuild it on every run.
+# given a build that fails only because failBuildOnCVSS found a vulnerability: the report records no
+# exception and covers a whole database. Discarding it made every such repository rebuild it each run.
 run_against_stub 'pom.xml' 'mvn' STUB_EXIT='1'
 assert_true "still fails the job on the findings" "[ \"\$EXIT_CODE\" -eq 1 ]"
 assert_true "keeps the database, so the next run tops it up instead of downloading it again" \
   "[ -n \"\$MARKER\" ]"
+
+# given a report written after an update that failed non-fatally: the engine analyses against what the
+# database already holds -- part of an interrupted bootstrap, or the snapshot a failed delta targeted
+# -- writes the report anyway, and lists the failure under scanInfo.analysisExceptions. Marking that
+# database complete would cache a partial one as whole, and restamp a stale one as fresh.
+run_against_stub 'pom.xml' 'mvn' STUB_EXIT='1' STUB_REPORT_EXCEPTION='true'
+assert_true "fails a run whose report records an exception" "[ \"\$EXIT_CODE\" -eq 1 ]"
+assert_true "leaves that database unmarked, so a partial one is never cached as whole" \
+  "[ -z \"\$MARKER\" ]"
+assert_true "names the recorded exceptions as the cause" \
+  "grep -q 'analysisExceptions' <<< \"\$STDOUT\""
+run_against_stub 'pom.xml' 'mvn' STUB_REPORT_EXCEPTION='true'
+assert_true "fails it even when failOnError=false let the build exit 0" \
+  "[ \"\$EXIT_CODE\" -ne 0 ] && [ -z \"\$MARKER\" ]"
+PREWARM_DB=1 PREWARM_MARKER="$(( $(date -u '+%s') - 3 * 86400 ))" run_against_stub 'pom.xml' 'mvn' NVD_API_KEY='k' STUB_EXIT='1' STUB_REPORT_EXCEPTION='true'
+unset PREWARM_DB PREWARM_MARKER
+assert_true "does not restamp a restored database whose delta failed, so its age keeps counting" \
+  "[ -z \"\$MARKER\" ]"
 
 # given a build that fails with no report (a fatal error under the default failOnError=true)
 run_against_stub 'pom.xml' 'mvn' STUB_EXIT='3' STUB_WRITES_REPORT='false'

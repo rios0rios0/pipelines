@@ -25,9 +25,9 @@
 #      the API serves as slowly as a cold build, so a database last completed more than
 #      NVD_API_MAX_AGE_DAYS ago is refreshed from the datafeed instead -- about three minutes.
 #
-#   5. The database counts as complete only when the analysis wrote its report, never because the
-#      build tool exited 0: a project that sets `failOnError=false` exits 0 when the NVD download
-#      fails, having scanned nothing.
+#   5. The database counts as complete only when the analysis wrote a report recording no exception,
+#      never because the build tool exited 0: a project that sets `failOnError=false` exits 0 when the
+#      NVD download fails, having scanned nothing or scanned against a partial database.
 #
 # Environment:
 #   NVD_API_KEY               NVD API key -- https://nvd.nist.gov/developers/request-an-api-key
@@ -206,10 +206,8 @@ fi
 # -- a plugin `<configuration>` value, which no command-line property overrides -- exits 0 when the NVD
 # update fails ("Unable to continue dependency-check analysis"), having scanned nothing. Trusting that
 # status passed the job AND cached the near-empty database as complete, after which every run sent the
-# whole NVD through the API and was cancelled at the timeout. The other way round, a build that fails
-# only because `failBuildOnCVSS` found a vulnerability HAS written its report over a whole database,
-# which is kept, so the next run tops it up rather than downloading it all again. cleanup.sh emptied
-# the report directory above, so a report found here can only be this run's.
+# whole NVD through the API and was cancelled at the timeout. cleanup.sh emptied the report directory
+# above, so a report found here can only be this run's.
 reportFile="$reportDirectory/dependency-check-report.json"
 if [ ! -s "$reportFile" ]; then
   echo "ERROR: Dependency-Check wrote no report ($reportFile), so the analysis did not run."
@@ -217,6 +215,26 @@ if [ ! -s "$reportFile" ]; then
   if [ "$toolStatus" -eq 0 ]; then
     echo "ERROR: the build still exited 0 -- a 'failOnError=false' in the project's Dependency-Check"
     echo "ERROR: configuration hides the failure; remove it so a scan that cannot run fails the build."
+    exit 1
+  fi
+  exit "$toolStatus"
+fi
+
+# A report proves the analysis ran, not that the NVD update finished. The engine treats a failed update
+# as NON-fatal whenever the database already holds data -- part of an interrupted bootstrap, or the
+# snapshot a failed delta was applied to -- logs "Unable to update 1 or more Cached Web DataSource",
+# analyses against what it has and writes the report anyway; the plugin then fails the build only
+# under `failOnError=true`. Marking that database complete would cache a partial one as whole, and
+# stamp a stale one as fresh so the API delta behind it grows on every run. The engine lists every
+# such exception under `scanInfo.analysisExceptions`, a key the report carries only when there is one,
+# so a report holding it fails the run and leaves the database unmarked. A build that fails only
+# because `failBuildOnCVSS` found a vulnerability records no exception: its database is whole and is
+# kept, so the next run tops it up rather than downloading it all again.
+if grep -q '"analysisExceptions":' "$reportFile"; then
+  echo "ERROR: Dependency-Check recorded exceptions in its report (scanInfo.analysisExceptions in $reportFile),"
+  echo "ERROR: most often an NVD update that did not finish, so the scan may have used a partial or stale database."
+  echo "ERROR: the CVE database at $dataDirectory is not marked complete, so it will not be cached."
+  if [ "$toolStatus" -eq 0 ]; then
     exit 1
   fi
   exit "$toolStatus"

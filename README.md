@@ -1816,7 +1816,9 @@ The Java `sca:dependency-check` job scans dependencies against a local copy of t
 
 Without a key the scan still works: it falls back to NIST's gzipped [JSON data feeds](https://nvd.nist.gov/vuln/data-feeds), which are not rate limited, and logs a warning. A key is still recommended — it is faster and keeps findings fresher.
 
-The database is cached at `.owasp/` on every platform and reused for 24 hours before Dependency-Check refreshes it, so the usual run is an incremental update rather than a rebuild. On GitHub Actions the cache key rotates daily and falls back to the most recent snapshot; note that a cache written on a PR branch is visible only to that branch, so the snapshot every PR restores from is the one written by the default branch. The job is capped at 30 minutes on all three platforms.
+The database is cached at `.owasp/` on every platform and reused for 24 hours before Dependency-Check refreshes it, so the usual run is an incremental update rather than a rebuild. On GitHub Actions the cache key rotates daily and falls back to the most recent snapshot; note that a cache written on a PR branch is visible only to that branch, so the snapshot every PR restores from is the one written by the default branch. The API only tops up a snapshot completed in the last seven days (`NVD_API_MAX_AGE_DAYS`); an older one is refreshed from the data feeds instead, in a few minutes, because its delta can be most of the NVD. The job is capped at 45 minutes on all three platforms.
+
+**A scan that writes no report fails the job.** The database counts as complete, and is cached, only when Dependency-Check wrote `dependency-check-report.json`. A build that sets `failOnError=false` exits 0 when the NVD download fails, having scanned nothing; that run now fails instead of passing, and its database is not cached. Remove `failOnError=false` from your Dependency-Check configuration. A build that fails on findings (`failBuildOnCVSS`) still fails, but its database is kept, so the next run only fetches the update.
 
 Optional environment variables:
 
@@ -1825,6 +1827,7 @@ Optional environment variables:
 | `NVD_API_KEY`               | *(unset)*                                           | Authenticates against the NVD API, raising the rate limit tenfold     |
 | `NVD_DATAFEED_URL`          | NIST's public feeds when no key is set              | Points at a self-hosted [`vulnz`](https://github.com/jeremylong/open-vulnerability-cli) mirror; `{0}` expands to each year |
 | `NVD_VALID_FOR_HOURS`       | `24`                                                | How long a cached database is reused before refreshing               |
+| `NVD_API_MAX_AGE_DAYS`      | `7`                                                 | Oldest cached database the API tops up; an older one is refreshed from the data feeds |
 | `DEPENDENCY_CHECK_DATA_DIR` | `./.owasp`                                          | Where the CVE database lives — this is the directory to cache        |
 
 ### Language-Specific Tools

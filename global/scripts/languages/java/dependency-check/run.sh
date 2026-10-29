@@ -7,7 +7,7 @@
 # other project on the platform, so an unauthenticated bootstrap spends most of its time in 429 backoff
 # and does not finish in a usable amount of time (~174 pages, observed at 5h+ and still climbing).
 #
-# Three things keep that from happening here:
+# Five things keep that from happening here, and keep the cached database honest:
 #
 #   1. The API key reaches the tool. Neither plugin picks NVD_API_KEY up from the environment on its
 #      own -- Maven wants a `nvdApiKey*` user property, Gradle wants the `dependencyCheck.nvd.apiKey`
@@ -21,10 +21,19 @@
 #   3. The database is pinned to one absolute, cacheable directory. The plugins otherwise default it
 #      into ~/.m2 and $GRADLE_USER_HOME respectively, where the pipelines were not caching it.
 #
+#   4. The API only tops up a RECENT database. The delta of an old one can be most of the NVD, which
+#      the API serves as slowly as a cold build, so a database last completed more than
+#      NVD_API_MAX_AGE_DAYS ago is refreshed from the datafeed instead -- about three minutes.
+#
+#   5. The database counts as complete only when the analysis wrote its report, never because the
+#      build tool exited 0: a project that sets `failOnError=false` exits 0 when the NVD download
+#      fails, having scanned nothing.
+#
 # Environment:
 #   NVD_API_KEY               NVD API key -- https://nvd.nist.gov/developers/request-an-api-key
 #   NVD_DATAFEED_URL          NVD datafeed to use instead of the API; '{0}' expands to each year
 #   NVD_VALID_FOR_HOURS       how long a cached database is reused before refreshing (default 24)
+#   NVD_API_MAX_AGE_DAYS      oldest cached database the API tops up; older ones use the datafeed (default 7)
 #   DEPENDENCY_CHECK_DATA_DIR where the H2 database lives (default ./.owasp) -- this is what to cache
 
 set -e
@@ -62,16 +71,35 @@ case "${NVD_DATAFEED_URL:-}" in
 esac
 export NVD_API_KEY
 
+apiMaxAgeDays="${NVD_API_MAX_AGE_DAYS:-7}"
+case "$apiMaxAgeDays" in
+  '$('*) apiMaxAgeDays=7 ;;
+esac
+case "$apiMaxAgeDays" in
+  ''|*[!0-9]*)
+    echo "ERROR: NVD_API_MAX_AGE_DAYS must be a whole number of days; got '$apiMaxAgeDays'."
+    exit 1
+    ;;
+esac
+
 # A run that populated the database all the way through leaves this marker behind; one killed
 # mid-download does not. The marker -- not the mere presence of the H2 file -- is what makes a cached
 # directory trustworthy, because a cancelled run leaves a partial `odc.mv.db` that looks identical to
 # a good one on disk. It decides the update mechanism below, and the GitHub Actions job keys its
 # `cache/save` off the same file so a partial database is never published to the cache.
 completionMarker="$dataDirectory/.odc-complete"
+databaseIsWarm='false'
+databaseAgeDays=''
 if [ -f "$completionMarker" ] && [ -f "$dataDirectory/odc.mv.db" ]; then
   databaseIsWarm='true'
-else
-  databaseIsWarm='false'
+  # The marker's first line is the epoch second the run that wrote it finished. A marker from before
+  # it carried one holds only an ISO date, and a damaged one holds anything: either leaves the age
+  # unknown, which the API path below treats as too old. A leading zero would read as octal.
+  completedAt="$(head -n 1 "$completionMarker")"
+  case "$completedAt" in
+    ''|0*|*[!0-9]*) ;;
+    *) databaseAgeDays=$(( ($(date -u '+%s') - completedAt) / 86400 )) ;;
+  esac
 fi
 
 # The API and the datafeed are chosen per *run state*, not per credential. A key makes the incremental
@@ -79,17 +107,30 @@ fi
 # hosted runners share egress IPs and the observed throughput is ~30 records/s, i.e. >3h for a cold
 # build -- far past any sane job timeout, so the job is cancelled and starts over next time. The
 # datafeed is a handful of gzipped files with no rate limit, so it is always the right way to *build*
-# the database; the API is the right way to *top it up* once one exists.
-if [ -n "${NVD_API_KEY:-}" ] && [ "$databaseIsWarm" = 'true' ]; then
-  echo "NVD API key found and a complete database is cached: updating the delta over the authenticated NVD API (50 requests / 30s)."
+# the database; the API is the right way to *top up a recent one*. The delta of an old database is
+# not small -- NVD re-touches records in bulk -- and the API serves it at the same ~30 records/s, so
+# past NVD_API_MAX_AGE_DAYS the datafeed refreshes it instead, in about three minutes.
+if [ -n "${NVD_API_KEY:-}" ] && [ "$databaseIsWarm" = 'true' ] \
+  && [ -n "$databaseAgeDays" ] && [ "$databaseAgeDays" -le "$apiMaxAgeDays" ]; then
+  echo "NVD API key found and a complete database from $databaseAgeDays day(s) ago is cached: updating the delta over the authenticated NVD API (50 requests / 30s)."
 elif [ -n "${NVD_API_KEY:-}" ]; then
   if [ -z "$datafeedUrl" ]; then
     datafeedUrl="$DEFAULT_DATAFEED_URL"
   fi
-  echo "NVD API key found, but no complete CVE database is cached yet."
-  echo "Bootstrapping from the NVD datafeed at $datafeedUrl instead of the API: a cold API build"
-  echo "downloads ~350k records at a rate that does not finish inside a CI job timeout. Subsequent"
-  echo "runs that restore a complete database will use the authenticated API for the delta."
+  if [ "$databaseIsWarm" = 'true' ]; then
+    if [ -n "$databaseAgeDays" ]; then
+      echo "NVD API key found and a complete CVE database is cached, but it was completed $databaseAgeDays days ago (the API tops up one from the last $apiMaxAgeDays days)."
+    else
+      echo "NVD API key found and a complete CVE database is cached, but its marker does not record when it was completed."
+    fi
+    echo "Refreshing it from the NVD datafeed at $datafeedUrl instead of the API: the delta of an old"
+    echo "database can be most of the NVD, which the API does not serve inside a CI job timeout."
+  else
+    echo "NVD API key found, but no complete CVE database is cached yet."
+    echo "Bootstrapping from the NVD datafeed at $datafeedUrl instead of the API: a cold API build"
+    echo "downloads ~350k records at a rate that does not finish inside a CI job timeout. Subsequent"
+    echo "runs that restore a complete database from the last $apiMaxAgeDays days will use the authenticated API for the delta."
+  fi
 else
   if [ -z "$datafeedUrl" ]; then
     datafeedUrl="$DEFAULT_DATAFEED_URL"
@@ -144,21 +185,48 @@ runGradle() {
     dependencyCheckAnalyze
 }
 
-# Cleared up front and rewritten only after the tool returns 0, so the marker always describes the
-# run that last touched this directory. Without the clear, a cancelled *delta* update would inherit
-# the marker left by the previous good run and republish a half-written database as if it were sound.
+# Cleared up front and rewritten only once the analysis has written its report, so the marker always
+# describes the run that last touched this directory. Without the clear, a cancelled *delta* update
+# would inherit the marker left by the previous good run and republish a half-written database as if
+# it were sound.
 rm -f "$completionMarker"
 
+toolStatus=0
 if [ -f 'pom.xml' ]; then
-  runMaven
+  runMaven || toolStatus=$?
 elif [ -f 'gradlew' ] || [ -f 'build.gradle' ] || [ -f 'build.gradle.kts' ]; then
-  runGradle
+  runGradle || toolStatus=$?
 else
   echo "ERROR: no 'pom.xml' and no Gradle build script found in $(pwd)."
   echo "ERROR: Dependency-Check runs against a Maven or Gradle project."
   exit 1
 fi
 
-# `set -e` means reaching this line implies the analysis completed and the database is whole.
-date -u '+%Y-%m-%dT%H:%M:%SZ' > "$completionMarker"
-echo "Dependency-Check completed; marked the CVE database at $dataDirectory as complete."
+# The report, not the exit status, proves the analysis ran. A project that sets `failOnError=false`
+# -- a plugin `<configuration>` value, which no command-line property overrides -- exits 0 when the NVD
+# update fails ("Unable to continue dependency-check analysis"), having scanned nothing. Trusting that
+# status passed the job AND cached the near-empty database as complete, after which every run sent the
+# whole NVD through the API and was cancelled at the timeout. The other way round, a build that fails
+# only because `failBuildOnCVSS` found a vulnerability HAS written its report over a whole database,
+# which is kept, so the next run tops it up rather than downloading it all again. cleanup.sh emptied
+# the report directory above, so a report found here can only be this run's.
+reportFile="$reportDirectory/dependency-check-report.json"
+if [ ! -s "$reportFile" ]; then
+  echo "ERROR: Dependency-Check wrote no report ($reportFile), so the analysis did not run."
+  echo "ERROR: the CVE database at $dataDirectory is not marked complete, so it will not be cached."
+  if [ "$toolStatus" -eq 0 ]; then
+    echo "ERROR: the build still exited 0 -- a 'failOnError=false' in the project's Dependency-Check"
+    echo "ERROR: configuration hides the failure; remove it so a scan that cannot run fails the build."
+    exit 1
+  fi
+  exit "$toolStatus"
+fi
+
+# The epoch second comes first because the next run reads it to decide whether the API may top this
+# database up; the ISO date is for a person looking at the cache.
+{
+  date -u '+%s'
+  date -u '+%Y-%m-%dT%H:%M:%SZ'
+} > "$completionMarker"
+echo "Dependency-Check completed its analysis; marked the CVE database at $dataDirectory as complete."
+exit "$toolStatus"

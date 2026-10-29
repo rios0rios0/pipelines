@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'refreshed `AGENTS.md`, `.github/copilot-instructions.md`, the code-review skill and `CONTRIBUTING.md` to point at `AGENTS.md` instead of `CLAUDE.md`, document the `$/` self-reference beside `@main`, and drop stale `make test` lists, `make setup`, Docker and Go test runner claims'
+time: '2026-10-29T00:27:53.263484622Z'

@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents (Claude Code, Codex, Cursor, GitHub Copilot) when working with code in this repository.
 
 ## What This Is
 
@@ -9,8 +9,10 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run all validation tests (Go helpers, Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, terra-install, docker-multi-arch, basic-checks, fixture-isolation, gitignore, sast-gate, hadolint-discovery, checkov, codeql-scope, codeql-gate, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, phpmd, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, azure-step-names, azure-secret-env, dependency-updates, containers-detect, report-uploads)
+make test              # Run every validation suite; the prerequisites of the Makefile's `test` target are the authoritative list
 make test-go-script    # Test Go validation script only
+make test-cyclonedx-main  # Test the Go CycloneDX entry-point detection only
+make test-go-cache-trim   # Test the Go build-cache disk guard (threshold parsing, trim decision) only
 make test-go-module-toolchain  # Test that every go.mod toolchain directive is readable by the images/analysers/workflows that consume it only
 make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves only
 make test-govulncheck-verdict  # Test that govulncheck fails on a vulnerability the code calls, read from its report rather than the `-json` exit code only
@@ -18,6 +20,7 @@ make test-go-tmpdir-modcache   # Test that the Go module cache stays out of $TMP
 make test-go-integration-scope  # Test which packages the Go runner's integration phase selects only
 make test-lambda       # Test Lambda template validation only
 make test-yaml-merge   # Test golangci-lint/run.sh (config merge, binary reuse and install, toolchain guard) only
+make test-golangci-scanner-markers  # Test that `golangci-lint/run.sh --fix` keeps other scanners' allow markers (e.g. `//gitleaks:allow`) only
 make test-sonarqube    # Test SonarQube auto-derivation and the retry of a scanner run the server broke only
 make test-release-tag-idempotency  # Test release tag idempotency only
 make test-tftest-gen   # Test tftest-gen generator only
@@ -72,7 +75,7 @@ Test scripts live in `.github/tests/`. The CI workflow (`.github/workflows/ci.ya
 
 ## Architecture
 
-### 5-Stage Pipeline Model
+### Pipeline Stage Model
 
 All platforms follow consistent numbered stages:
 1. **10 - Code Check** — Linting, formatting, basic checks (rebase verification, changelog validation). The `terra`/`terraform` templates add an **order-check** job here that enforces the file-ordering standard (dependency/inputs ordering in `root.hcl`, `// SET ON .HCL` / `// SET ON .ENV` grouping in `variables.tf`, heaviest→lightest `providers.tf`, `main*.tf`-ordered `outputs.tf`) and flags dead terragrunt inputs (`inputs = {}` keys not declared as a stack `variable`); see Terraform Ordering Standard below
@@ -688,7 +691,7 @@ Because the tools run directly on the host, the consuming CI job only needs the 
 
 ### OWASP Dependency-Check and the NVD
 
-`global/scripts/languages/java/dependency-check/run.sh` is the one runner all three platforms call for the Java `sca:dependency-check` job. Dependency-Check scans against a local H2 copy of the NVD (~350k CVE records), and **building that copy is the only expensive part of the job** — the NVD API rate limits it per source IP (5 requests/30s anonymous, 50 with a key), and hosted runners share their egress IPs, so an unauthenticated bootstrap does not finish. Three non-obvious constraints shape the design; do not "simplify" any of them away:
+`global/scripts/languages/java/dependency-check/run.sh` is the one runner all three platforms call for the Java `sca:dependency-check` job. Dependency-Check scans against a local H2 copy of the NVD (~350k CVE records), and **building that copy is the only expensive part of the job** — the NVD API rate limits it per source IP (5 requests/30s anonymous, 50 with a key), and hosted runners share their egress IPs, so an unauthenticated bootstrap does not finish. Five non-obvious constraints shape the design; do not "simplify" any of them away:
 
 | Constraint | Why |
 |------------|-----|

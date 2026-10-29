@@ -20,7 +20,7 @@ The canonical engineering standards live in the
 repo-tailored index into that guide plus the rules that only apply here. Precedence, highest
 first:
 
-1. This repository's `.github/copilot-instructions.md`, `CLAUDE.md`, and `CONTRIBUTING.md` —
+1. This repository's `AGENTS.md`, `.github/copilot-instructions.md`, and `CONTRIBUTING.md` —
    they describe *this* codebase and its load-bearing invariants.
 2. The **rios0rios0/guide** wiki — the shared standard.
 3. General language idiom.
@@ -73,7 +73,7 @@ global/containers/     shared container definitions
 makefiles/             the Makefile targets consumers import
 ```
 
-- **Supply-chain pinning is non-negotiable, and `make test-supply-chain` enforces it.** GitHub Actions are pinned to a full 40-character commit SHA with a trailing `# vX.Y.Z` comment — never a bare tag. The single exception is `rios0rios0/pipelines/…@main`, a same-repository reference that `test-workflow-composition.sh` separately **requires** to stay `@main`.
+- **Supply-chain pinning is non-negotiable, and `make test-supply-chain` enforces it.** GitHub Actions are pinned to a full 40-character commit SHA with a trailing `# vX.Y.Z` comment — never a bare tag. First-party references are the exception, in two forms that `test-workflow-composition.sh` (Test 7) holds: `rios0rios0/pipelines/…@main`, which moves on purpose, and `$/path/to/action`, which resolves at the exact commit of the running workflow and is **required** in the Yarn Semgrep chain. Replacing `$/` with `@main` is a finding.
 - **Container images are pinned as `tag@sha256:<digest>`**, in `image:` keys and in Dockerfile `FROM` lines alike.
 - **Downloaded binaries carry a version and a SHA-256** in `global/scripts/shared/pinned-versions.sh` and are fetched through `download_verified` from `verify-download.sh`. **Never `curl | sh`**, and never an unverified `curl`/`wget` of a release artefact. This is a **Critical** finding every time.
 - **Packages are version-pinned**: `go install …@<version>`, `pip install "pkg==<version>"`, `gem install pkg -v <version>`, `npx --yes pkg@<version>`. Never `@latest`, never a bare package name.
@@ -90,7 +90,7 @@ makefiles/             the Makefile targets consumers import
 make test-supply-chain          # pinning gate — must pass
 make test-dependency-updates    # upstream annotation coverage
 make test                       # the full test-* script suite
-make test-workflow-composition  # the @main self-reference rule
+make test-workflow-composition  # the @main and $/ self-reference rules
 ```
 
 ### YAML
@@ -129,7 +129,7 @@ hand.
 - Fragment bodies start with a lowercase verb in simple past tense, capitalise proper nouns
   (GitHub, Go, Docker), and wrap code identifiers and versions in backticks.
 - `README.md` is updated whenever usage, setup, configuration, or architecture changes;
-  `.github/copilot-instructions.md` and `CLAUDE.md` whenever the workflow, commands, or
+  `AGENTS.md` and `.github/copilot-instructions.md` whenever the workflow, commands, or
   structure changes. Documentation and code ship in one commit.
 
 ## Git Flow and pull-request hygiene
@@ -172,7 +172,7 @@ See [Security](https://github.com/rios0rios0/guide/wiki/Security).
 
 A review that raises noise gets ignored. Do not report these:
 
-- The `@main` reference on `rios0rios0/pipelines/...` — it is required, not an unpinned action.
+- The `@main` reference on `rios0rios0/pipelines/...` and the `$/` self-reference — both are required forms, not unpinned actions.
 - Long-running scanner and container-build steps.
 - The per-vendor duplication between `github/`, `gitlab/`, and `azure-devops/` — the platforms genuinely differ.
 - Anything the guide does not require and this file does not list, unless it is a genuine correctness or security defect — say so plainly and label it a Suggestion.
@@ -194,7 +194,7 @@ A review that raises noise gets ignored. Do not report these:
 ### Change-control checklist
 - [ ] Changelog entry present for every behavioural change
 - [ ] `README.md` updated if usage, setup, or architecture changed
-- [ ] `.github/copilot-instructions.md` and `CLAUDE.md` updated if the workflow, commands, or structure changed
+- [ ] `AGENTS.md` and `.github/copilot-instructions.md` updated if the workflow, commands, or structure changed
 - [ ] Commit messages follow `type(SCOPE): message` in simple past tense
 - [ ] Breaking changes flagged in the commit footer, the changelog, and the PR description
 

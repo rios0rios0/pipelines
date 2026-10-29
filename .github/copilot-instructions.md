@@ -1,67 +1,19 @@
 # CI/CD Pipeline Templates Repository
 
-**ALWAYS FOLLOW THESE INSTRUCTIONS FIRST.** Only fallback to additional search and context gathering if the information in these instructions is incomplete or found to be in error.
+Start from these instructions. When they disagree with the code, the root `Makefile` or the suites in `.github/tests/`, the code is right and this file is stale.
 
 This repository provides comprehensive SDLC pipeline templates for GitHub Actions, GitLab CI, and Azure DevOps across multiple programming languages including GoLang, Java, Python, JavaScript, PHP, Ruby, .NET, Dart/Flutter, and Terraform/Terra.
 
 ## Quick Reference
 
 **Essential Commands:**
-- `make test` - Run all validation tests (Go helpers, Go, go-module-toolchain, CycloneDX main detection, Go cache trim, Lambda, YAML merge, SonarQube, release tag, tftest-gen, terra-coverage, order-check, var-catalog, terraform-validate, terraform-provider-mirror, terra-test-roots, terra-install, docker-multi-arch, basic-checks, fixture-isolation, gitignore, hadolint-discovery, checkov, dependency-check, dependency-track, goreleaser-prepare, release-version-extraction, release-reconcile, release-promotion, deploy-providers, memory-detection, dart-pipeline, javascript-pipeline, phpmd, terra-pipeline, workflow-composition, working-directory, supply-chain, runner-cache-gating, dependency-updates, azure-step-names, azure-secret-env, containers-detect, report-uploads)
-- `make test-go-script` - Test Go script changes specifically
-- `make test-go-module-toolchain` - Test that every `go.mod` toolchain directive is readable by the images/analysers that consume it specifically
-- `make test-go-tool-staleness` - Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves specifically
-- `make test-govulncheck-verdict` - Test that govulncheck fails on a vulnerability the code calls, read from its report rather than the `-json` exit code, specifically
-- `make test-go-tmpdir-modcache` - Test that the Go module cache stays out of `$TMPDIR` specifically
-- `make test-go-integration-scope` - Test which packages the Go runner's integration phase selects specifically
-- `make test-lambda` - Test Lambda template validation specifically
-- `make test-yaml-merge` - Test `golangci-lint/run.sh` (YAML config merge, binary reuse and install, toolchain guard) specifically
-- `make test-sonarqube` - Test SonarQube auto-derivation and the retry of a scanner run the server broke specifically
-- `make test-release-tag-idempotency` - Test release tag idempotency specifically
-- `make test-tftest-gen` - Test tftest-gen generator specifically
-- `make test-terra-coverage` - Test the Terraform generic coverage report generator specifically
-- `make test-order-check` - Test the Terragrunt file-ordering checker/fixer specifically
-- `make test-var-catalog` - Test the shared variable-declaration generator specifically
-- `make test-terraform-validate` - Test the root-module `terraform validate` tier specifically
-- `make test-terraform-provider-mirror` - Test the local Terraform provider mirror specifically
-- `make test-terra-test-roots` - Test the terra-test tier's opt-in root-module run (`TERRA_TEST_ROOTS`) specifically
-- `make test-terra-install` - Test the terra CLI installer (pin check, installs that run together on one HOME, Azure DevOps step stops at a failed install) specifically
-- `make test-docker-multi-arch` - Test 40-delivery/docker multi-arch contract specifically
-- `make test-build-version` - Test the version build argument (shared helper, GitHub image delivery, Fly.io deploy, Go workflow wiring) and the delivered image's way to the Fly.io deploy specifically
-- `make test-containers-detect` - Test the Container Images change detection (deleted/renamed folders, dispatch inputs) specifically
-- `make test-basic-checks` - Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) specifically
-- `make test-fixture-isolation` - Test that every suite builds its fixtures in mktemp space and guards every `cd` specifically
-- `make test-gitignore` - Test the shared `.gitignore` block generator specifically
-- `make test-sast-gate` - Test that `make sast` and every individual SAST target propagate tool failures specifically
-- `make test-hadolint-discovery` - Test which files the Hadolint runner lints as Dockerfiles (every name the delivery templates build) specifically
-- `make test-checkov` - Test the Checkov IaC scanner tier (verified install, report verdict, advisory default, wiring on every platform) specifically
-- `make test-codeql-scope` - Test that a local CodeQL scan builds from the files git would ship, on every core, while CI keeps the checkout and one thread, specifically
-- `make test-dependency-check` - Test the OWASP Dependency-Check NVD cache / API-key contract specifically
-- `make test-dependency-track` - Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, retry of a briefly unreachable server, cross-platform wiring) specifically
-- `make test-goreleaser-prepare` - Test the GoReleaser main package detection specifically
-- `make test-release-version-extraction` - Test release version extraction (tag ref + bump commit) specifically
-- `make test-release-reconcile` - Test release reconciliation gap detection specifically
-- `make test-release-promotion` - Test release promotion (the tag run a bump merge now starts) specifically
-- `make test-deploy-providers` - Test the MVP hosting deployment providers (Cloudflare, Vercel, Render, Netlify, Fly.io) specifically
-- `make test-memory-detection` - Test the cgroup-aware memory ceiling detection specifically
-- `make test-dart-pipeline` - Test the Dart/Flutter pipeline (scripts, Semgrep rules, cross-platform wiring) specifically
-- `make test-javascript-pipeline` - Test the JavaScript formatting gate (Prettier runner + cross-platform wiring) specifically
-- `make test-phpmd` - Test the PHPMD runner (the command line each major takes, the verdict, a report that stays JSON) specifically
-- `make test-terra-pipeline` - Test the Terraform/terra pipeline's CodeQL tool gap (GitHub, GitLab, Azure, terra.mk, terraform.mk) specifically
-- `make test-workflow-composition` - Test the GitHub Actions workflow composition standard specifically
-- `make test-working-directory` - Test that the `working_directory` input is declared, forwarded and threaded to every project-scoped step -- and kept away from the repository-wide scanners -- specifically
-- `make test-supply-chain` - Test the supply-chain pinning contract (actions, images, binaries, packages) specifically
-- `make test-runner-cache-gating` - Test that no GitHub Actions cache restores into `$HOME` on a self-hosted runner specifically
-- `make test-dependency-updates` - Test the dependency-update checker specifically
+- `make test` - Run every validation suite; the prerequisites of the root `Makefile`'s `test` target are the authoritative list
+- `make test-<suite>` - Run one suite; each target runs one script in `.github/tests/` (`AGENTS.md` lists every target with what it covers)
 - `make test-go-helpers` - Run the Go helpers' unit tests (`go test ./...` over the root module; offline)
 - `make lint-go-helpers` - Lint the Go helpers with the shared golden golangci-lint configuration (downloads the pinned golangci-lint)
-- `make test-azure-step-names` - Test Azure DevOps step-name uniqueness across expanded templates specifically
-- `make test-azure-secret-env` - Test that every Azure DevOps step consuming a credential maps it through `env:` specifically
-- `make test-report-uploads` - Test that no GitHub Actions report upload can fail its job, while mandatory reports stay enforced, specifically
 - `make check-dependency-updates` - Report which pinned dependencies have a newer release (hits the network)
 - `make apply-dependency-updates` - Rewrite every stale pin in the working tree, digests and inline copies included -- what the scheduled pull request carries (hits the network; commits nothing)
 - `bash global/scripts/shared/cleanup.sh` - Clean up build reports
-- `docker --version && make --version && go version` - Check dependencies
 
 **Common Pipeline Usage:**
 - **GitHub Actions:** Use `.github/workflows/go-docker.yaml@main`, `pdm-docker.yaml@main`, `gradle-docker.yaml@main`, `maven-docker.yaml@main`, `yarn-docker.yaml@main`, `npm-docker.yaml@main`, `composer-docker.yaml@main`, `bundler-docker.yaml@main`, `dotnet-docker.yaml@main`
@@ -72,15 +24,17 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 **SCA Tools:** govulncheck (Go), Safety (Python), OWASP Dependency-Check (Java), yarn npm audit (JavaScript/Yarn), npm audit (JavaScript/npm), Composer Audit (PHP), bundler-audit (Ruby), OSV-Scanner (Dart, and container image rebuilds in the dependency-update checks)
 **Quality Tools:** SonarQube, Dependency Track
 **Performance:** Security scans 2-10min, Container builds 5-30min
-**Architecture:** 5-stage pipeline (Code Check [lint + basic-checks] → Security → Tests → Management → Delivery)
+**Architecture:** numbered stages 10 Code Check [lint + basic-checks] → 20 Security → 30 Tests → 35 Management → 40 Delivery → 50 Deployment
 
 ## Supply-Chain Pinning (non-negotiable)
 
 Everything the pipelines execute is pinned, and `make test-supply-chain` fails the build if it is not:
 
 - **GitHub Actions** — full 40-character commit SHA plus a trailing `# vX.Y.Z` comment. Never a bare tag.
-  The one exception is `rios0rios0/pipelines/...@main`, which is a same-repository reference and is
-  separately REQUIRED to stay `@main` by `test-workflow-composition.sh`.
+  First-party references are the exception, in two forms that `test-workflow-composition.sh` (Test 7)
+  holds: `rios0rios0/pipelines/...@main`, which moves on purpose, and `$/path/to/action`, which
+  resolves at the exact commit of the running workflow (runner 2.336.0+; unavailable on GitHub
+  Enterprise Server) and is required in the Yarn Semgrep chain. Never replace `$/` with `@main`.
 - **Container images** — `tag@sha256:<digest>`, in both `image:` keys and Dockerfile `FROM` lines.
 - **Downloaded binaries** — add the version and SHA-256 to `global/scripts/shared/pinned-versions.sh` and
   fetch through `download_verified` from `verify-download.sh`. Never `curl | sh`, and never an unverified
@@ -122,13 +76,9 @@ connection refused.
 ## Working Effectively
 
 ### Bootstrap and Setup
-- **Using `make setup` (recommended, idempotent -- clones or fast-forwards):**
-  ```bash
-  make setup
-  ```
-  It runs `git` directly. It used to pipe `clone.sh` from a branch into `bash`, which executed whatever
-  that URL returned at that moment with the developer's own privileges -- the pattern this repository's
-  SAST stage flags in consumers' pipelines.
+- **`make setup` in a consumer project** that includes `makefiles/common.mk` clones this repository
+  into `$(PIPELINES_HOME)` or fast-forwards it, running `git` directly. This repository's own root
+  `Makefile` does not include `makefiles/*.mk`, so it has no `setup` target.
 
 - **Manual clone:**
   ```bash
@@ -144,25 +94,17 @@ connection refused.
   -include $(SCRIPTS_DIR)/makefiles/common.mk
   ```
 
-### Core Commands That Work
-- **Basic dependency check:**
-  ```bash
-  docker --version  # Available - 0.01s
-  make --version    # Available - 0.04s
-  python3 --version # Available - 0.002s
-  go version        # Available - 0.67s
-  ```
-
-- **Working scripts (all require proper environment setup):**
+### Running Scripts Locally
+- **Scripts (all require proper environment setup):**
   ```bash
   # Clean up build reports directory
-  bash global/scripts/shared/cleanup.sh  # Works - 0.004s
+  bash global/scripts/shared/cleanup.sh
 
-  # Run GoLang linting (downloads and runs golangci-lint)
-  bash global/scripts/languages/golang/golangci-lint/run.sh  # Works - 1.8s, exits with code 7 (no Go modules)
+  # Run GoLang linting (downloads the pinned golangci-lint; needs a Go module in the current directory)
+  bash global/scripts/languages/golang/golangci-lint/run.sh
 
   # Run security scanning with Gitleaks
-  bash global/scripts/tools/gitleaks/run.sh  # Works (downloads the Gitleaks static binary)
+  bash global/scripts/tools/gitleaks/run.sh  # downloads the pinned Gitleaks static binary
   ```
 
 - **Container building:**
@@ -175,14 +117,6 @@ connection refused.
   docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/containers/awscli.latest/
   ```
 
-### Working Go Example
-- **The repository contains a working Go application for testing:**
-  ```bash
-  cd global/containers/tor-proxy.latest/health
-  go mod tidy      # Downloads dependencies - 2.2s
-  go build -o health main.go  # Builds successfully - 11.6s
-  ```
-
 ### Scripts That Require Environment Variables
 - **codeql/run.sh** - Requires language argument (e.g., go, python, java, javascript, csharp)
 - **hadolint/run.sh** - Auto-discovers Dockerfiles (`Dockerfile`, `Dockerfile.*`, `*.Dockerfile`, `*.dockerfile`), skips gracefully if none found
@@ -190,7 +124,7 @@ connection refused.
 - **sonarqube/run.sh** - Requires `sonar-scanner` installed and SonarQube environment; derives project key/name and the `githubactions:S7637` ignore rules for first-party workflow references (owners from `SONAR_FIRST_PARTY_OWNERS`, else the owner of `GITHUB_REPOSITORY`) for every key absent from `sonar-project.properties`, plus the test classification (`sonar.sources`, `sonar.tests`, `sonar.test.inclusions`, `sonar.exclusions`) as one unit, only when the file declares none of the four -- they are a partition, and an overlap aborts the scanner with "can't be indexed twice"; runs `sonar-scanner` again when its output shows the server was unreachable or answered 5xx, never after a quality gate verdict (`SONARQUBE_ATTEMPTS`, default 5; `SONARQUBE_RETRY_DELAY`, default 30 seconds, growing per attempt)
 - **semgrep/run.sh** - May run for 10+ minutes, installs Semgrep from PyPI into a virtualenv
 - **checkov/run.sh** - Scans Terraform under `CHECKOV_DIRECTORIES` (default `.`); advisory unless `CHECKOV_BLOCKING=true`; installs the pinned, digest-verified wheel into a virtualenv; skips gracefully when there is no Terraform
-- **golang/test/run.sh** - Requires Go project with cmd/, pkg/, or internal/ directories
+- **golang/test/run.sh** - Tests `cmd/`, `pkg/` and `internal/` when present, otherwise the whole module (`./...`)
 
 ## Available Tools & Scripts
 
@@ -259,7 +193,7 @@ One set of scripts serves both toolchains: `dart_detect_toolchain` reads the pro
 | **build**        | Release artifacts (APK, AAB, web, exe, …)                    | `global/scripts/languages/dart/build/run.sh`     |
 | **publish**      | pub.dev publication with a validation gate                   | `global/scripts/languages/dart/publish/run.sh`   |
 
-**Three tools in the standard stack do not support Dart, and each gap is handled deliberately — do not "restore consistency" with the other languages:**
+**Four gaps in the standard stack for Dart are handled deliberately — do not "restore consistency" with the other languages:**
 
 - **CodeQL is omitted from every Dart template.** It ships no Dart extractor ([dart-lang/sdk#52953](https://github.com/dart-lang/sdk/issues/52953)); a `sast:codeql` job could only fail. `makefiles/dart.mk` leaves `CODEQL_LANGUAGE` unset and `common.mk` skips the target with an explanation.
 - **The Semgrep Registry publishes no Dart rules** (`p/dart` is HTTP 404, `r/dart` returns an empty `rules: []`). `semgrep/run.sh` probes the registry (retrying an inconclusive answer) and skips a missing pack — passing one is fatal to the whole invocation — then loads this repository's own ruleset from `global/scripts/tools/semgrep/rules/dart.yaml`.
@@ -321,15 +255,14 @@ pipelines/
 │   ├── bundler-docker.yaml    # Ruby/Bundler with Docker delivery
 │   ├── dotnet-docker.yaml     # .NET with Docker delivery
 │   └── ...
-├── github/                     # GitHub Actions pipeline stage templates
-│   ├── golang/                # Go language pipelines
-│   ├── java/                  # Java language pipelines
-│   ├── python/                # Python language pipelines
-│   ├── javascript/            # JavaScript/Node.js pipelines
-│   ├── dotnet/                # .NET language pipelines
-│   ├── php/                   # PHP language pipelines
-│   ├── ruby/                  # Ruby language pipelines
-│   └── terra/                 # Terra CLI pipelines
+├── github/                     # GitHub Actions composite actions the reusable workflows call
+│   ├── golang/                # Go stages
+│   ├── java/                  # Java stages
+│   ├── python/                # Python stages
+│   ├── javascript/            # JavaScript/Node.js stages
+│   ├── dart/                  # Dart/Flutter stages
+│   ├── global/                # Language-agnostic stages (basic-checks, SAST, release, docker, 50-deployment)
+│   └── terra/                 # `terra.yaml`, a symlink into .github/workflows/
 ├── gitlab/                     # GitLab CI pipeline templates
 │   ├── golang/                # Go language pipelines
 │   ├── java/                  # Java language pipelines
@@ -398,7 +331,7 @@ pipelines/
 
 ### Pipeline Architecture
 
-Each platform follows a consistent **5-stage pipeline architecture**:
+Each platform follows the same numbered stages (10, 20, 30, 35, 40, 50; GitHub Actions has no 35 stage):
 
 1. **🔍 Code Check (Style/Quality)** - Linting, formatting, code quality, rebase verification
 2. **🔒 Security (SCA/SAST)** - Vulnerability scanning, secret detection
@@ -436,7 +369,7 @@ rules those files follow; `make test-workflow-composition` enforces them.
 
 ### Workflow Composition Standard
 
-Full rationale in [CLAUDE.md](../CLAUDE.md#workflow-composition-standard). The rules an agent is
+Full rationale in [AGENTS.md](../AGENTS.md#workflow-composition-standard). The rules an agent is
 most likely to break, in order of how expensive the mistake was:
 
 1. **Never couple two workflows with `on: workflow_run:`.** It matches by DISPLAY NAME and naming a
@@ -456,8 +389,8 @@ most likely to break, in order of how expensive the mistake was:
    step-level `if:` cannot read the `secrets` context at all; hoist it into a job-level `env:`.
 8. **A `uses:` job cannot declare `environment:`**, so its `with:`/`secrets:` are evaluated with no
    environment selected — `vars.API_URL` there is the repository-level value, usually empty, with
-   no error. Name environment-scoped variables through `build_env_vars` and pass environment-scoped
-   secrets with `secrets: inherit`.
+   no error. Name environment-scoped variables through `build_env_vars`; environment-scoped secrets
+   cannot cross at all (next rule).
 9. **Environment-scoped SECRETS cannot reach a workflow in this repository — at all.** Not via
    `secrets: inherit` (this library is a different owner from its consumers, and `inherit` only
    works within one organization), not explicitly, not by declaring `environment:` on the called
@@ -843,62 +776,11 @@ way.
 
 ### Test Suite Usage
 ```bash
-# Run all validation tests (see the Quick Reference above for the full target list)
-make test
-
-# Run individual test suites
-make test-go-script
-make test-go-module-toolchain
-make test-go-tool-staleness
-make test-govulncheck-verdict
-make test-go-tmpdir-modcache
-make test-go-integration-scope
-make test-lambda
-make test-yaml-merge
-make test-sonarqube
-make test-release-tag-idempotency
-make test-tftest-gen
-make test-terra-coverage
-make test-order-check
-make test-var-catalog
-make test-terraform-validate
-make test-terraform-provider-mirror
-make test-terra-test-roots
-make test-terra-install
-make test-docker-multi-arch
-make test-build-version
-make test-containers-detect
-make test-basic-checks
-make test-fixture-isolation
-make test-gitignore
-make test-sast-gate
-make test-hadolint-discovery
-make test-checkov
-make test-codeql-scope
-make test-dependency-check
-make test-dependency-track
-make test-goreleaser-prepare
-make test-release-version-extraction
-make test-release-reconcile
-make test-release-promotion
-make test-deploy-providers
-make test-memory-detection
-make test-dart-pipeline
-make test-javascript-pipeline
-make test-phpmd
-make test-terra-pipeline
-make test-workflow-composition
-make test-working-directory
-make test-supply-chain
-make test-runner-cache-gating
-make test-dependency-updates
-make test-go-helpers
-make test-azure-step-names
-make test-azure-secret-env
-make test-report-uploads
+make test                       # every suite (the Makefile's `test` prerequisites)
+make test-workflow-composition  # one suite, e.g. before touching .github/workflows/
 ```
 
-Test scripts are located in `.github/tests/`.
+Test scripts are located in `.github/tests/`; the Quick Reference above covers the target families.
 
 ### Coverage Testing Requirements
 - Coverage reports MUST include all packages with Go files
@@ -907,7 +789,7 @@ Test scripts are located in `.github/tests/`.
 - Test scenarios MUST validate comprehensive coverage behavior
 
 ### Environment Requirements
-- Docker (for container builds and security tools)
+- Docker (for container builds; the security tools install natively)
 - Go 1.25+ (for GoLang pipelines, and to build and test the Go helpers such as the dependency-update checker)
 - Python 3 (for script dependencies and Python pipelines)
 - Make (for build automation)
@@ -944,7 +826,7 @@ Test scripts are located in `.github/tests/`.
 
 ### Known Limitations in Sandbox Environments
 - Container builds may fail due to SSL certificate issues
-- Security tools require Docker daemon access
+- Security tools download their pinned binaries, so they need network access
 - Some scripts need specific environment variables set
 - Network restrictions may prevent tool downloads
 
@@ -981,7 +863,7 @@ Test scripts are located in `.github/tests/`.
 
 **Issue: Gitleaks takes too long or fails**
 - **Cause:** Large repository or network issues
-- **Solution:** Increase timeout values, ensure Docker daemon is accessible
+- **Solution:** Increase timeout values, ensure the pinned Gitleaks release can be downloaded
 
 **Issue: Semgrep timeout or hangs**
 - **Cause:** Large codebase, downloading security rules
@@ -996,10 +878,6 @@ Test scripts are located in `.github/tests/`.
 - **Solution:** Ensure `DEPENDENCY_TRACK_TOKEN` and `DEPENDENCY_TRACK_HOST_URL` are set
 
 #### Pipeline-Specific Issues
-
-**Issue: "No directories found to test it" (Go projects)**
-- **Cause:** a Go module that uses none of the `cmd/`, `pkg/`, or `internal/` directories (packages kept at the repository root or under a differently named directory)
-- **Solution:** none required -- the test runner now falls back to testing the whole module (`./...`) when none of those directories exist; modules that do use them keep their existing, narrower test scope
 
 **Issue: "golangci-lint: command not found"**
 - **Cause:** golangci-lint not installed or not in PATH

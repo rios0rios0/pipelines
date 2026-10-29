@@ -15,6 +15,7 @@
 #      are findings; a reasoned skip is not; the verdict is read from the JSON report, not from
 #      Checkov's exit code, which says nothing about the last two; an unparsed file is named
 #      with where the parser stopped and, for valid Terraform it is known to reject, the rewrite;
+#      and the virtualenv's interpreter runs for nothing but that question to the parser;
 #   3. advisory by default: findings, and a scan that cannot complete, never fail the job
 #      unless CHECKOV_BLOCKING is `true`, and a typo in that switch fails instead of quietly
 #      meaning "advisory";
@@ -24,8 +25,10 @@
 #   5. the wiring on every platform: terra.yaml and its composite action (GitHub), both terra
 #      security stages (GitLab, Azure DevOps), and `make sast` for both Terraform fragments.
 #
-# Runs OFFLINE. Checkov, its virtualenv's Python, pip and curl are stubs: this is about what
-# the runner hands Checkov and what it makes of the report, not about Checkov's own checks.
+# Runs OFFLINE, and runs no Python. Checkov, its virtualenv's interpreter, pip and curl are
+# stubs: this is about what the runner hands Checkov and what it makes of the report, not about
+# Checkov's own checks. `jq` and mikefarah/yq are the real ones, since the runner's verdict and
+# its reading of `.checkov.yaml` are what is under test.
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RUNNER="$SCRIPTS_DIR/global/scripts/tools/checkov/run.sh"
@@ -52,32 +55,80 @@ assert_true() {
 WORK="$(mktemp -d)" || exit 1
 trap 'rm -rf "$WORK"' EXIT
 
+# mikefarah/yq, resolved the way every suite here resolves it -- in a subshell, so the pins it
+# sources do not leak into the environment the runner is started with. Its directory goes first
+# on PATH, so the runner reading `.checkov.yaml` resolves the same binary rather than downloading.
+YQ="$(
+  # shellcheck source=/dev/null
+  . "$PINS"
+  # shellcheck source=/dev/null
+  . "$SCRIPTS_DIR/global/scripts/shared/verify-download.sh"
+  # shellcheck source=/dev/null
+  . "$SCRIPTS_DIR/global/scripts/shared/resolve-yq.sh"
+  resolve_yq "$WORK/yq" >&2 && printf '%s' "$YQ"
+)"
+[ -n "$YQ" ] || { echo "could not resolve mikefarah/yq; cannot run this suite" >&2; exit 1; }
+PATH="$(dirname "$YQ"):$PATH"
+
 # shellcheck source=/dev/null
 PINNED="$(. "$PINS" && printf '%s' "$CHECKOV_PINNED_VERSION")"
 
 # --- Stubs -----------------------------------------------------------------------------------
-# A HOME of its own, holding a fake virtualenv where `run.sh` looks for one. Its `python`
-# answers the pin check from a file the fake `pip` rewrites, and hands everything else (the
-# verdict script) to the real python3. `checkov` records its argv and environment and writes
-# the JSON report of the scenario it is told to play.
+# A HOME of its own, holding a fake virtualenv where `run.sh` looks for one. The version it
+# holds is the METADATA of a `.dist-info`, as pip writes it: `installed` seeds it and the fake
+# `pip` rewrites it. Its `python` stands in for the one question the runner asks the
+# virtualenv's interpreter -- where Checkov's HCL parser stopped in each file it could not parse
+# -- answering in the runner's line protocol: CHECKOV_STUB_HCL2 is `present`, `unreadable` or
+# unset (the parser cannot be imported), and CHECKOV_STUB_HCL2_ERROR is `line:column:token`, or
+# empty for "it parses". It records every call, so the suite can assert nothing else runs it.
+# `checkov` records its argv and environment and writes the JSON report of the scenario it is
+# told to play.
 STUB_HOME="$WORK/home"
 VENV="$STUB_HOME/.local/share/checkov-venv"
-mkdir -p "$VENV/bin" "$STUB_HOME/.local/bin" "$WORK/reports" || exit 1
+SITE="$VENV/lib/python3.13/site-packages"
+mkdir -p "$VENV/bin" "$SITE" "$STUB_HOME/.local/bin" "$WORK/reports" || exit 1
+
+installed() { # installed <version>... -- the checkov distributions the virtualenv holds
+  local version
+  rm -rf "$SITE"/checkov-*.dist-info
+  for version in "$@"; do
+    mkdir -p "$SITE/checkov-$version.dist-info" || exit 1
+    printf 'Metadata-Version: 2.1\nName: checkov\nVersion: %s\n' "$version" \
+      > "$SITE/checkov-$version.dist-info/METADATA"
+  done
+}
 
 cat > "$VENV/bin/python" <<'STUB'
 #!/usr/bin/env sh
-if [ "$1" = "-c" ]; then
-  case "$2" in
-    *importlib.metadata*) cat "$CHECKOV_STUB_VERSION_FILE"; exit 0 ;;
-  esac
-fi
-exec python3 "$@"
+printf '%s\n' "$*" >> "$CHECKOV_STUB_PYTHON_CALLS"
+[ "$1" = "-" ] || exit 64
+shift
+cat > /dev/null
+case "${CHECKOV_STUB_HCL2:-}" in
+  present | unreadable) ;;
+  *) exit 0 ;;
+esac
+for file in "$@"; do
+  if [ "$CHECKOV_STUB_HCL2" = "unreadable" ]; then
+    echo "unreadable"
+  elif [ -z "${CHECKOV_STUB_HCL2_ERROR:-}" ]; then
+    echo "parsed"
+  else
+    line=${CHECKOV_STUB_HCL2_ERROR%%:*}
+    rest=${CHECKOV_STUB_HCL2_ERROR#*:}
+    printf "error\t%s\tUnexpected token '%s' at line %s, column %s.\n" "$line" "${rest#*:}" "$line" "${rest%%:*}"
+  fi
+done
 STUB
 
 cat > "$VENV/bin/pip" <<'STUB'
 #!/usr/bin/env sh
 printf '%s\n' "$@" > "$CHECKOV_STUB_PIP_ARGV"
-printf '%s\n' "$CHECKOV_STUB_INSTALLS" > "$CHECKOV_STUB_VERSION_FILE"
+site="$(dirname "$0")/../lib/python3.13/site-packages"
+rm -rf "$site"/checkov-*.dist-info
+mkdir -p "$site/checkov-$CHECKOV_STUB_INSTALLS.dist-info"
+printf 'Metadata-Version: 2.1\nName: checkov\nVersion: %s\n' "$CHECKOV_STUB_INSTALLS" \
+  > "$site/checkov-$CHECKOV_STUB_INSTALLS.dist-info/METADATA"
 exit 0
 STUB
 
@@ -140,36 +191,18 @@ echo 'not json' > "$REPORTS/garbage.json"
 
 # Files Checkov's HCL parser rejects although Terraform accepts them, one per construct the runner
 # names a rewrite for, and one it has no rewrite for. The verdict asks the parser itself where it
-# stopped; the virtualenv's real one is not here, so a stand-in raises an error of lark's shape
-# (message, `line`, `column`) at the position CHECKOV_STUB_HCL2_ERROR gives, as `line:column:token`.
+# stopped; the virtualenv's real one is not here, so the stand-in `python` above answers with an
+# error of lark's shape (message, line) at the position CHECKOV_STUB_HCL2_ERROR gives.
 PARSE="$WORK/parse"
-FAKE_HCL2="$WORK/fake-hcl2"
-mkdir -p "$PARSE" "$FAKE_HCL2" || exit 1
+mkdir -p "$PARSE" || exit 1
 printf 'locals {\n  name = (\n    !var.enabled\n    ? "off"\n    : "on"\n  )\n}\n' > "$PARSE/ternary.tf"
 printf 'locals {\n  rate = 1e-07\n  next = 2\n}\n' > "$PARSE/exponent.tf"
 printf 'locals {\n  rule = jsonencode({\n    if = { kind = "example" }\n  })\n}\n' > "$PARSE/keyword.tf"
 printf 'locals {\n  name = "unclosed\n}\n' > "$PARSE/other.tf"
-cat > "$FAKE_HCL2/hcl2.py" <<'STUB'
-import os
-
-
-class UnexpectedToken(Exception):
-    def __init__(self, line, column, value):
-        super().__init__("Unexpected token %r at line %d, column %d." % (value, line, column))
-        self.line = line
-        self.column = column
-
-
-def loads(text):
-    spec = os.environ.get("CHECKOV_STUB_HCL2_ERROR", "")
-    if not spec:
-        return {}
-    line, column, value = spec.split(":", 2)
-    raise UnexpectedToken(int(line), int(column), value)
-STUB
 for construct in ternary exponent keyword other; do
   document '' '' "\"$PARSE/$construct.tf\"" > "$REPORTS/unparsed-$construct.json"
 done
+document '' '' "\"$PARSE/ternary.tf\", \"$PARSE/keyword.tf\"" > "$REPORTS/unparsed-pair.json"
 
 # A project with one Terraform file, and one with none.
 PROJECT="$WORK/project"
@@ -182,8 +215,9 @@ STATUS=0
 run_scan() {
   local project="$1" scenario="$2"
   shift 2
-  rm -f "$WORK/argv" "$WORK/env" "$WORK/pip-argv" "$WORK/curl-url"
-  printf '%s\n' "$PINNED" > "$WORK/version"
+  rm -f "$WORK/argv" "$WORK/env" "$WORK/pip-argv" "$WORK/curl-url" "$WORK/python-calls"
+  # shellcheck disable=SC2086 # CHECKOV_TEST_INSTALLED may name several versions, one per word
+  installed ${CHECKOV_TEST_INSTALLED:-$PINNED}
   STATUS=0
   OUTPUT="$(
     cd "$project" || exit 97
@@ -191,7 +225,7 @@ run_scan() {
       CHECKOV_BLOCKING='' CHECKOV_DIRECTORIES='' CHECKOV_SHA256_OVERRIDE='' \
       CHECKOV_STUB_SCENARIO="$scenario" CHECKOV_STUB_REPORTS="$REPORTS" \
       CHECKOV_STUB_ARGV="$WORK/argv" CHECKOV_STUB_ENV="$WORK/env" \
-      CHECKOV_STUB_VERSION_FILE="$WORK/version" CHECKOV_STUB_PIP_ARGV="$WORK/pip-argv" \
+      CHECKOV_STUB_PYTHON_CALLS="$WORK/python-calls" CHECKOV_STUB_PIP_ARGV="$WORK/pip-argv" \
       CHECKOV_STUB_INSTALLS="$PINNED" CHECKOV_STUB_CURL_URL="$WORK/curl-url" \
       "$@" "$RUNNER" 2>&1
   )" || STATUS=$?
@@ -219,8 +253,8 @@ assert_true "the runner downloads exactly the file the asset template names" \
 # A "wheel" whose digest is not the committed one: the download is refused and pip never runs.
 # The virtualenv reports an old version, so the runner takes its install path.
 run_scan_tampered() { # run_scan_tampered <CHECKOV_BLOCKING> <CHECKOV_SHA256_OVERRIDE>
-  rm -f "$WORK/pip-argv" "$WORK/argv"
-  printf '0.0.0\n' > "$WORK/version"
+  rm -f "$WORK/pip-argv" "$WORK/argv" "$WORK/python-calls"
+  installed 0.0.0
   STATUS=0
   OUTPUT="$(
     cd "$PROJECT" || exit 97
@@ -228,7 +262,7 @@ run_scan_tampered() { # run_scan_tampered <CHECKOV_BLOCKING> <CHECKOV_SHA256_OVE
       CHECKOV_DIRECTORIES='' CHECKOV_SHA256_OVERRIDE="$2" CHECKOV_BLOCKING="$1" \
       CHECKOV_STUB_SCENARIO=clean CHECKOV_STUB_REPORTS="$REPORTS" \
       CHECKOV_STUB_ARGV="$WORK/argv" CHECKOV_STUB_ENV="$WORK/env" \
-      CHECKOV_STUB_VERSION_FILE="$WORK/version" CHECKOV_STUB_PIP_ARGV="$WORK/pip-argv" \
+      CHECKOV_STUB_PYTHON_CALLS="$WORK/python-calls" CHECKOV_STUB_PIP_ARGV="$WORK/pip-argv" \
       CHECKOV_STUB_INSTALLS="$PINNED" CHECKOV_STUB_CURL_URL="$WORK/curl-url" \
       CHECKOV_STUB_WHEEL='a wheel nobody published' "$RUNNER" 2>&1
   )" || STATUS=$?
@@ -256,6 +290,15 @@ assert_true "the runner never installs Checkov from the index by name" \
   "! grep -v '^[[:space:]]*#' '$RUNNER' | grep -qE 'pip[^|]* install [^|]*checkov(==|[[:space:]]|\$)'"
 assert_true "the scan runs the virtualenv's own launcher, so another checkov on PATH cannot shadow it" \
   "grep -q '\"\$CHECKOV_VENV/bin/checkov\" \"\$@\"' '$RUNNER'"
+
+# The pin is read from the METADATA pip wrote, never by running the virtualenv's interpreter, and a
+# virtualenv holding two checkov distributions -- a broken install -- is reinstalled, not trusted.
+run_scan "$PROJECT" clean CHECKOV_BLOCKING=true
+assert_true "the installed version is read without running the virtualenv's interpreter" \
+  "[ '$STATUS' -eq 0 ] && [ ! -f '$WORK/pip-argv' ] && [ ! -f '$WORK/python-calls' ]"
+CHECKOV_TEST_INSTALLED="$PINNED 0.0.1" run_scan "$PROJECT" clean CHECKOV_BLOCKING=true
+assert_true "a virtualenv holding two checkov distributions is reinstalled rather than trusted" \
+  "[ -f '$WORK/curl-url' ] && [ ! -f '$WORK/argv' ]"
 
 echo ""
 echo "--- 2. The verdict comes from the report ---"
@@ -291,8 +334,10 @@ assert_true "an exit code other than 0 or 1 fails a blocking scan" \
 
 # An unparsed file is named with where the parser stopped and, for valid Terraform the parser is
 # known to reject, the rewrite Terraform reads the same -- so the developer can act on the finding.
-run_scan "$PROJECT" unparsed-ternary CHECKOV_BLOCKING=true PYTHONPATH="$FAKE_HCL2" CHECKOV_STUB_HCL2_ERROR='4:5:?'
+run_scan "$PROJECT" unparsed-ternary CHECKOV_BLOCKING=true CHECKOV_STUB_HCL2=present CHECKOV_STUB_HCL2_ERROR='4:5:?'
 assert_true "an unparsed file is still a finding" "[ '$STATUS' -eq 1 ]"
+assert_true "...asking the virtualenv's interpreter once, and about that file alone" \
+  "[ \"\$(wc -l < '$WORK/python-calls')\" -eq 1 ] && grep -qxF -- '- $PARSE/ternary.tf' '$WORK/python-calls'"
 assert_true "...named with the parser's own message and position" \
   "printf '%s' \"\$OUTPUT\" | grep -qF \"Unexpected token '?' at line 4, column 5.\""
 assert_true "...and, for a '?' starting a line after a '!', the rewrite that moves it up" \
@@ -300,21 +345,29 @@ assert_true "...and, for a '?' starting a line after a '!', the rewrite that mov
 assert_true "...pointing at the upstream parser defect" "printf '%s' \"\$OUTPUT\" | grep -qF 'bridgecrewio/python-hcl2#153'"
 assert_true "...saying the rewrite changes nothing Terraform does" \
   "printf '%s' \"\$OUTPUT\" | grep -qF 'Terraform reads exactly as before'"
-run_scan "$PROJECT" unparsed-exponent CHECKOV_BLOCKING=true PYTHONPATH="$FAKE_HCL2" CHECKOV_STUB_HCL2_ERROR='3:8:='
+run_scan "$PROJECT" unparsed-exponent CHECKOV_BLOCKING=true CHECKOV_STUB_HCL2=present CHECKOV_STUB_HCL2_ERROR='3:8:='
 assert_true "a number in scientific notation is named, though the parser stops on the line after it" \
   "printf '%s' \"\$OUTPUT\" | grep -qF 'likely cause: a number in scientific notation'"
-run_scan "$PROJECT" unparsed-keyword CHECKOV_BLOCKING=true PYTHONPATH="$FAKE_HCL2" CHECKOV_STUB_HCL2_ERROR='3:5:if'
+run_scan "$PROJECT" unparsed-keyword CHECKOV_BLOCKING=true CHECKOV_STUB_HCL2=present CHECKOV_STUB_HCL2_ERROR='3:5:if'
 assert_true "'if' as an unquoted object key is named, with the quoting that fixes it" \
   "printf '%s' \"\$OUTPUT\" | grep -qF \"likely cause: 'if' or 'for' as an unquoted object key\""
-run_scan "$PROJECT" unparsed-other CHECKOV_BLOCKING=true PYTHONPATH="$FAKE_HCL2" CHECKOV_STUB_HCL2_ERROR='2:10:x'
+run_scan "$PROJECT" unparsed-other CHECKOV_BLOCKING=true CHECKOV_STUB_HCL2=present CHECKOV_STUB_HCL2_ERROR='2:10:x'
 assert_true "an error with no known rewrite gets the parser's message only" \
   "printf '%s' \"\$OUTPUT\" | grep -qF 'at line 2, column 10.' && ! printf '%s' \"\$OUTPUT\" | grep -qE 'likely cause|Terraform reads exactly as before'"
-run_scan "$PROJECT" unparsed-other CHECKOV_BLOCKING=true PYTHONPATH="$FAKE_HCL2"
+run_scan "$PROJECT" unparsed-other CHECKOV_BLOCKING=true CHECKOV_STUB_HCL2=present
 assert_true "a file the parser reads on its own says so, rather than guessing a cause" \
   "printf '%s' \"\$OUTPUT\" | grep -qF 'the parser reads this file on its own'"
 run_scan "$PROJECT" unparsed-ternary CHECKOV_BLOCKING=true
 assert_true "without the parser to ask, the file is still listed, with no cause made up" \
   "[ '$STATUS' -eq 1 ] && printf '%s' \"\$OUTPUT\" | grep -qF '$PARSE/ternary.tf' && ! printf '%s' \"\$OUTPUT\" | grep -q 'likely cause'"
+run_scan "$PROJECT" unparsed-pair CHECKOV_BLOCKING=true CHECKOV_STUB_HCL2=present CHECKOV_STUB_HCL2_ERROR='3:5:if'
+assert_true "several unparsed files are each read for their own cause, in the report's order" \
+  "printf '%s' \"\$OUTPUT\" | grep -F -e '$PARSE/ternary.tf' -e '$PARSE/keyword.tf' | head -n 1 | grep -qF 'ternary.tf' && [ \"\$(printf '%s' \"\$OUTPUT\" | grep -c 'likely cause: ')\" -eq 1 ] && printf '%s' \"\$OUTPUT\" | grep -qF \"likely cause: 'if' or 'for' as an unquoted object key\""
+run_scan "$PROJECT" unparsed-other CHECKOV_BLOCKING=true CHECKOV_STUB_HCL2=unreadable
+assert_true "a file the parser could not even read is listed with no cause made up" \
+  "[ '$STATUS' -eq 1 ] && printf '%s' \"\$OUTPUT\" | grep -qF '$PARSE/other.tf' && ! printf '%s' \"\$OUTPUT\" | grep -qE 'likely cause|reads this file on its own'"
+run_scan "$PROJECT" failed CHECKOV_BLOCKING=true
+assert_true "a verdict with no unparsed file runs no Python at all" "[ ! -f '$WORK/python-calls' ]"
 
 echo ""
 echo "--- 3. Advisory unless CHECKOV_BLOCKING is true ---"
@@ -395,7 +448,7 @@ run_scan "$WORK/no-terraform" failed CHECKOV_BLOCKING=true
 assert_true "a project with no Terraform skips, even when blocking" "[ '$STATUS' -eq 0 ]"
 assert_true "...without running Checkov" "[ ! -f '$WORK/argv' ]"
 assert_true "...and leaves a valid, empty SARIF report" \
-  "python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d[\"runs\"][0][\"results\"] == []' '$WORK/no-terraform/build/reports/checkov/checkov.sarif'"
+  "jq -e '.runs[0].results == []' '$WORK/no-terraform/build/reports/checkov/checkov.sarif' > /dev/null"
 mkdir -p "$WORK/no-terraform/.terraform/modules/x" "$WORK/no-terraform/node_modules/y" || exit 1
 echo 'resource "null_resource" "vendored" {}' > "$WORK/no-terraform/.terraform/modules/x/main.tf"
 echo 'resource "null_resource" "vendored" {}' > "$WORK/no-terraform/node_modules/y/main.tf"
@@ -406,79 +459,60 @@ assert_true "Terraform only under hidden directories or node_modules does not co
 echo ""
 echo "--- 5. Wired in on every platform ---"
 
-WIRING="$(python3 - "$SCRIPTS_DIR" <<'PY'
-import os
-import sys
+# yq_true <expression> <file> -- whether the expression holds for the file. A file that is missing
+# or cannot be parsed holds nothing, so it reads as broken wiring rather than as a pass. yq's `|`
+# binds tighter than its `and`, which is why each test is parenthesised after its pipe.
+yq_true() {
+  [ "$("$YQ" eval "$1" "$SCRIPTS_DIR/$2" 2> /dev/null)" = "true" ]
+}
 
-import yaml
+wiring_problems() {
+  local workflow=".github/workflows/terra.yaml" action="github/global/stages/20-security/checkov/action.yaml"
+  local job name relative needle
+  yq_true '.on.workflow_call.inputs.checkov_blocking.default | ((tag == "!!bool") and (. == false))' "$workflow" \
+    || echo "terra.yaml: checkov_blocking must default to false"
+  yq_true '.on.workflow_call.inputs.checkov_blocking.type == "boolean"' "$workflow" \
+    || echo "terra.yaml: checkov_blocking must be a boolean"
+  yq_true '.on.workflow_call.inputs.checkov_directories.default == "."' "$workflow" \
+    || echo "terra.yaml: checkov_directories must default to '.'"
+  job='.jobs["security-sast_checkov"]'
+  yq_true "$job.name == \"security > sast:checkov\"" "$workflow" \
+    || echo "terra.yaml: the job must be named 'security > sast:checkov'"
+  yq_true "$job | has(\"continue-on-error\") | not" "$workflow" \
+    || echo "terra.yaml: advisory mode lives in the script, not in a job-level continue-on-error"
+  yq_true "$job.steps[0].uses == \"rios0rios0/pipelines/github/global/stages/20-security/checkov@main\"" "$workflow" \
+    || echo "terra.yaml: the job must run the checkov stage @main"
+  yq_true "$job"'.steps[0].with | (((keys | length) == 2) and (.blocking == "${{ inputs.checkov_blocking }}") and (.directories == "${{ inputs.checkov_directories }}"))' "$workflow" \
+    || echo "terra.yaml: the job must pass checkov_blocking and checkov_directories through"
+  for name in tests-test_all tests-test_validate tests-test_structural; do
+    yq_true "[.jobs[\"$name\"].needs] | flatten | any_c(. == \"security-sast_checkov\")" "$workflow" \
+      || echo "terra.yaml: $name must need security-sast_checkov, as it needs the other scans"
+  done
 
+  if ! yq_true '[.runs.steps[] | select(.name == "Execute")] | ((length > 0) and (.[0].env | (((keys | length) == 2) and (.CHECKOV_BLOCKING == "${{ inputs.blocking }}") and (.CHECKOV_DIRECTORIES == "${{ inputs.directories }}"))))' "$action"; then
+    echo "action.yaml: the inputs must reach the script through env:"
+  elif ! yq_true '[.runs.steps[] | select(.name == "Execute")][0].run | contains("checkov/run.sh")' "$action"; then
+    echo "action.yaml: Execute must run checkov/run.sh"
+  fi
+  yq_true '.inputs.blocking.default | ((tag == "!!str") and (. == "false"))' "$action" \
+    || echo "action.yaml: blocking must default to 'false'"
 
-class Loader(yaml.SafeLoader):
-    pass
+  yq_true '.["sast:checkov"].script | any_c((tag == "!!str") and contains("checkov/run.sh"))' \
+    "gitlab/global/stages/20-security/checkov.yaml" \
+    || echo "gitlab: sast:checkov must run checkov/run.sh"
+  yq_true '.jobs[0].steps | any_c((.script // "") | contains("checkov/run.sh"))' \
+    "azure-devops/global/stages/20-security/checkov.yaml" \
+    || echo "azure-devops: sast_checkov must run checkov/run.sh"
 
-
-Loader.add_constructor("!reference", lambda loader, node: loader.construct_sequence(node))
-root = sys.argv[1]
-
-
-def load(relative):
-    with open(os.path.join(root, relative), encoding="utf-8") as handle:
-        return yaml.load(handle, Loader=Loader)
-
-
-problems = []
-workflow = load(".github/workflows/terra.yaml")
-inputs = workflow[True]["workflow_call"]["inputs"]
-if inputs.get("checkov_blocking", {}).get("default") is not False:
-    problems.append("terra.yaml: checkov_blocking must default to false")
-if inputs.get("checkov_blocking", {}).get("type") != "boolean":
-    problems.append("terra.yaml: checkov_blocking must be a boolean")
-if inputs.get("checkov_directories", {}).get("default") != ".":
-    problems.append("terra.yaml: checkov_directories must default to '.'")
-jobs = workflow["jobs"]
-job = jobs.get("security-sast_checkov") or {}
-if job.get("name") != "security > sast:checkov":
-    problems.append("terra.yaml: the job must be named 'security > sast:checkov'")
-if "continue-on-error" in job:
-    problems.append("terra.yaml: advisory mode lives in the script, not in a job-level continue-on-error")
-step = (job.get("steps") or [{}])[0]
-if step.get("uses") != "rios0rios0/pipelines/github/global/stages/20-security/checkov@main":
-    problems.append("terra.yaml: the job must run the checkov stage @main")
-if step.get("with") != {"blocking": "${{ inputs.checkov_blocking }}", "directories": "${{ inputs.checkov_directories }}"}:
-    problems.append("terra.yaml: the job must pass checkov_blocking and checkov_directories through")
-for name in ("tests-test_all", "tests-test_validate", "tests-test_structural"):
-    if "security-sast_checkov" not in (jobs[name].get("needs") or []):
-        problems.append("terra.yaml: %s must need security-sast_checkov, as it needs the other scans" % name)
-
-action = load("github/global/stages/20-security/checkov/action.yaml")
-execute = [s for s in action["runs"]["steps"] if s.get("name") == "Execute"]
-if not execute or execute[0].get("env") != {"CHECKOV_BLOCKING": "${{ inputs.blocking }}", "CHECKOV_DIRECTORIES": "${{ inputs.directories }}"}:
-    problems.append("action.yaml: the inputs must reach the script through env:")
-elif "checkov/run.sh" not in execute[0].get("run", ""):
-    problems.append("action.yaml: Execute must run checkov/run.sh")
-if action["inputs"]["blocking"].get("default") != "false":
-    problems.append("action.yaml: blocking must default to 'false'")
-
-gitlab = load("gitlab/global/stages/20-security/checkov.yaml").get("sast:checkov") or {}
-if not any("checkov/run.sh" in line for line in gitlab.get("script") or []):
-    problems.append("gitlab: sast:checkov must run checkov/run.sh")
-azure = load("azure-devops/global/stages/20-security/checkov.yaml")["jobs"][0]
-if not any("checkov/run.sh" in str(s.get("script", "")) for s in azure["steps"]):
-    problems.append("azure-devops: sast_checkov must run checkov/run.sh")
-
-for relative, needle in (
-    ("gitlab/terra/stages/20-security/terra.yaml", "gitlab/global/stages/20-security/checkov.yaml"),
-    ("gitlab/terraform/stages/20-security/terra.yaml", "gitlab/global/stages/20-security/checkov.yaml"),
-    ("azure-devops/terra/stages/20-security/terra.yaml", "global/stages/20-security/checkov.yaml"),
-    ("azure-devops/terraform/stages/20-security/terra.yaml", "global/stages/20-security/checkov.yaml"),
-):
-    with open(os.path.join(root, relative), encoding="utf-8") as handle:
-        if needle not in handle.read():
-            problems.append("%s: the security stage must include the Checkov job" % relative)
-
-print("\n".join(problems))
-PY
-)"
+  for relative in gitlab/terra/stages/20-security/terra.yaml gitlab/terraform/stages/20-security/terra.yaml \
+    azure-devops/terra/stages/20-security/terra.yaml azure-devops/terraform/stages/20-security/terra.yaml; do
+    needle="global/stages/20-security/checkov.yaml"
+    [[ "$relative" == gitlab/* ]] && needle="gitlab/$needle"
+    grep -qF "$needle" "$SCRIPTS_DIR/$relative" 2> /dev/null \
+      || echo "$relative: the security stage must include the Checkov job"
+  done
+}
+WIRING="$(wiring_problems)"
 assert_true "terra.yaml, its action and both terra security stages on GitLab and Azure DevOps wire the scan" \
   "[ -z \"\$WIRING\" ] || { printf '%s\n' \"\$WIRING\" | sed 's/^/         /'; false; }"
 

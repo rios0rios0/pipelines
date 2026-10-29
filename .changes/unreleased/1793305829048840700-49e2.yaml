@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'replaced the Python embedded in the Cloudflare deployment workflows, the Composer audit job and this repository''s YAML syntax check with shell, `jq` and `yq`; the Semgrep and Checkov runners now read their pinned version from the virtualenv''s package metadata, and Checkov reads its report with `jq` and `.checkov.yaml` with `yq`, so the only Python left in them is one question to Checkov''s own HCL parser (GitLab''s `sast:checkov` job now installs `jq`)'
+time: '2026-10-29T20:30:29.048732279Z'

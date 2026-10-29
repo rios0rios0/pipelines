@@ -402,38 +402,51 @@ jobs:
       # environment to read them from -- see `build_env_vars` for why a caller cannot pass them.
       #
       # `toJSON(vars)` is evaluated in this job's context, so it carries the repository variables
-      # merged with the ones scoped to the environment above. python3 rather than `jq` because the
-      # rest of this library already assumes a stdlib python3 and not every self-hosted runner has
-      # `jq`.
+      # merged with the ones scoped to the environment above. Each name is looked up with `jq`,
+      # which this library's CodeQL gate already requires on every runner that runs its security
+      # stage; a runner without it gets an error that says so instead of a failure further down.
+      #
+      # A line is `KEY=VARIABLE_NAME`, split on its FIRST `=`, and both halves are trimmed. A
+      # variable that is unset or empty is not exported as an empty string: every missing name is
+      # reported at once and the job fails, because a build that silently bakes in `API_URL=` is
+      # worse than one that does not build.
       - if: "inputs.build_env_vars != ''"
         run: |
-          python3 - <<'RESOLVE'
-          import json
-          import os
-          import sys
+          if ! command -v jq > /dev/null 2>&1; then
+            echo '::error::resolving build_env_vars needs jq on the runner'
+            exit 1
+          fi
 
-          available = json.loads(os.environ['ALL_VARS'])
-          resolved = []
-          missing = []
-          for line in os.environ['BUILD_ENV_VARS'].splitlines():
-              line = line.strip()
-              if not line:
-                  continue
-              key, _, name = line.partition('=')
-              value = available.get(name.strip())
-              if not value:
-                  missing.append(name.strip())
-                  continue
-              resolved.append('%s=%s' % (key.strip(), value))
+          trim() {
+            local text="$1"
+            text="${text#"${text%%[![:space:]]*}"}"
+            printf '%s' "${text%"${text##*[![:space:]]}"}"
+          }
 
-          if missing:
-              print('::error::these variables are not set for this environment: %s' % ', '.join(missing))
-              sys.exit(1)
+          resolved=()
+          missing=()
+          while IFS= read -r line; do
+            line="$(trim "$line")"
+            [ -z "$line" ] && continue
+            key="$(trim "${line%%=*}")"
+            name=''
+            [[ "$line" == *=* ]] && name="$(trim "${line#*=}")"
+            value="$(jq -r --arg name "$name" '.[$name] // empty' <<< "$ALL_VARS")"
+            if [ -z "$value" ]; then
+              missing+=("$name")
+              continue
+            fi
+            resolved+=("$key=$value")
+          done <<< "$BUILD_ENV_VARS"
 
-          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as handle:
-              handle.write('\n'.join(resolved) + '\n')
-          print('resolved %d variable(s) for the build' % len(resolved))
-          RESOLVE
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf -v names '%s, ' "${missing[@]}"
+            echo "::error::these variables are not set for this environment: ${names%, }"
+            exit 1
+          fi
+
+          printf '%s\n' "${resolved[@]}" >> "$GITHUB_ENV"
+          echo "resolved ${#resolved[@]} variable(s) for the build"
         shell: 'bash'
         env:
           ALL_VARS: ${{ toJSON(vars) }}

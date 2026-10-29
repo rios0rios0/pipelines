@@ -55,6 +55,8 @@ fi
 TOOL_NAME="checkov" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"
 . "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
 . "$SCRIPTS_DIR/global/scripts/shared/verify-download.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/resolve-yq.sh"
+. "$SCRIPTS_DIR/global/scripts/shared/venv-distribution.sh"
 
 sarifFile="$REPORT_PATH/checkov.sarif"
 jsonFile="$REPORT_PATH/checkov.json"
@@ -137,6 +139,12 @@ EOF
   exit 0
 fi
 
+# The verdict is read from Checkov's JSON report with `jq`, so a runner without it is refused
+# here, before a hundred packages are installed for a report nothing could read.
+if ! command -v jq > /dev/null 2>&1; then
+  scan_incomplete "the verdict is read from Checkov's JSON report with jq, which is not installed here."
+fi
+
 # Install Checkov into a virtualenv of its own when the pinned version is not
 # already there. It is a PyPI package with no standalone binary, and a venv keeps
 # it clear of the PEP 668 "externally-managed-environment" refusal and of the
@@ -148,14 +156,13 @@ fi
 # FILE, binary-only (`--only-binary :all:` -- an sdist runs its build script AS
 # PART OF THE INSTALL). The scan runs the venv's own launcher by path, so another
 # `checkov` on PATH can neither shadow the pin nor satisfy it, and the pin is
-# checked against the package metadata in this venv, never `checkov --version`.
+# checked against the package metadata in this venv (read without running its
+# interpreter, see shared/venv-distribution.sh), never `checkov --version`.
 CHECKOV_VENV="$HOME/.local/share/checkov-venv"
 
 checkov_matches_pin() {
   [ -x "$CHECKOV_VENV/bin/checkov" ] || return 1
-  _ck_current=$("$CHECKOV_VENV/bin/python" -c \
-    'import importlib.metadata as m; print(m.version("checkov"))' 2> /dev/null)
-  [ "$_ck_current" = "$CHECKOV_VERSION" ]
+  [ "$(venv_distribution_version "$CHECKOV_VENV" checkov)" = "$CHECKOV_VERSION" ]
 }
 
 if ! checkov_matches_pin; then
@@ -212,28 +219,30 @@ done
 # each one a finding nobody could fix. So they are skipped. A `--skip-path` on the command line
 # REPLACES the configuration file's `skip-path` list rather than adding to it, so the repository's
 # own entries are passed again beside this one.
+#
+# They are read with mikefarah/yq: the one on PATH, or the pinned release, downloaded and verified
+# into a directory removed after the read. `skip-path` is a path or a list of paths; any other
+# shape is refused rather than guessed at, exactly as a file yq cannot parse is.
 if [ -n "$_ck_config_file" ]; then
-  _ck_skip_list=$(mktemp) || scan_incomplete "could not create a temporary file for the skip-path entries."
-  if ! "$CHECKOV_VENV/bin/python" - "$_ck_config_file" > "$_ck_skip_list" <<'PY'; then
-import sys
-
-import yaml
-
-with open(sys.argv[1], encoding="utf-8") as handle:
-    config = yaml.safe_load(handle) or {}
-entries = config.get("skip-path") if isinstance(config, dict) else None
-if isinstance(entries, str):
-    entries = [entries]
-for entry in entries or []:
-    print(entry)
-PY
-    rm -f "$_ck_skip_list"
+  _ck_yq_dir=$(mktemp -d) || scan_incomplete "could not create a directory to resolve yq into."
+  YQ=''
+  if ! resolve_yq "$_ck_yq_dir/bin"; then
+    rm -rf "$_ck_yq_dir"
+    scan_incomplete "yq, which reads the skip-path entries of $_ck_config_file, could not be resolved."
+  fi
+  if ! "$YQ" eval '(if tag == "!!map" then .["skip-path"] else null end)
+      | (if tag == "!!seq" then (.[] | select(tag != "!!null"))
+         elif tag == "!!str" then .
+         elif tag == "!!null" then select(false)
+         else error("skip-path is neither a path nor a list of paths") end)' \
+    "$_ck_config_file" > "$_ck_yq_dir/skip-path"; then
+    rm -rf "$_ck_yq_dir"
     scan_incomplete "the repository's $_ck_config_file could not be read, so its skip-path entries could not be kept."
   fi
   while IFS= read -r _ck_skip; do
     [ -n "$_ck_skip" ] && set -- "$@" --skip-path "$_ck_skip"
-  done < "$_ck_skip_list"
-  rm -f "$_ck_skip_list"
+  done < "$_ck_yq_dir/skip-path"
+  rm -rf "$_ck_yq_dir"
 fi
 set -- "$@" --skip-path '\.hcl$'
 
@@ -257,115 +266,149 @@ case "${CHECKOV_EXIT:-0}" in
   *) scan_incomplete "Checkov exited with code $CHECKOV_EXIT, which is neither a clean scan (0) nor findings (1)." ;;
 esac
 
-# The verdict comes from the JSON report rather than from Checkov's exit code,
-# which says nothing about skips without a reason or files it could not parse,
-# and which a repository's own `.checkov.yaml` can soften (`soft-fail: true`).
-# Exits 0 when there is nothing to report, 3 when there are findings, 2 when the
-# report cannot be read.
-"$CHECKOV_VENV/bin/python" - "$jsonFile" <<'PY' || _ck_verdict=$?
-import json
-import re
-import sys
+# The verdict comes from the JSON report rather than from Checkov's exit code, which says nothing
+# about skips without a reason or files it could not parse, and which a repository's own
+# `.checkov.yaml` can soften (`soft-fail: true`). One framework gives one object and several give
+# a list; a scan that found no file it could read gives a bare summary object with no `results`
+# at all, and an empty value (`null`, `[]`, `""`) counts as absent wherever one is read. A report
+# that is not exactly one JSON document, or whose entries are not shaped as Checkov writes them,
+# leaves the scan without a verdict.
+_CK_JQ_DEFS='
+def report: if length == 1 then .[0] else error("the report is not one JSON document") end;
+def or_else(default): if . == null or . == false or . == 0 or . == "" or . == [] or . == {} then default else . end;
+def py: if . == null then "None" else tostring end;
+def where: "\((if has("file_path") then .file_path else "?" end) | py):\(.file_line_range | or_else([]) | map(tostring) | join("-"))";
+def findings:
+  [(if type == "array" then .[] else . end) | select(type == "object") | (.results | or_else({}))] as $results
+  | {
+      failed: [$results[] | (.failed_checks | or_else([]))[]],
+      unreasoned: [$results[] | (.skipped_checks | or_else([]))[]
+        | select((.check_result | or_else({})).suppress_comment | or_else("") | gsub("^\\s+|\\s+$"; "")
+          | . == "" or . == "No comment provided")],
+      unparsed: [$results[] | (.parsing_errors | or_else([]))[]]
+    };
+report | findings
+'
+_ck_counts=$(jq -r -s "$_CK_JQ_DEFS"'| "\(.failed | length) \(.unreasoned | length) \(.unparsed | length)"' "$jsonFile") \
+  || scan_incomplete "Checkov's JSON report ($jsonFile) could not be read."
+_ck_failed=${_ck_counts%% *}
+_ck_unparsed=${_ck_counts##* }
+_ck_unreasoned=${_ck_counts#* }
+_ck_unreasoned=${_ck_unreasoned%% *}
 
-try:
-    with open(sys.argv[1], encoding="utf-8") as handle:
-        report = json.load(handle)
-except (OSError, ValueError) as error:
-    print("Checkov's JSON report could not be read: %s" % error, file=sys.stderr)
-    sys.exit(2)
-
-# One framework gives one object and several give a list; a scan that found no
-# file it could read gives a bare summary object with no `results` at all.
-documents = report if isinstance(report, list) else [report]
-failed, unreasoned, unparsed = [], [], []
-for document in documents:
-    if not isinstance(document, dict):
-        continue
-    results = document.get("results") or {}
-    failed.extend(results.get("failed_checks") or [])
-    for check in results.get("skipped_checks") or []:
-        comment = ((check.get("check_result") or {}).get("suppress_comment") or "").strip()
-        if comment in ("", "No comment provided"):
-            unreasoned.append(check)
-    unparsed.extend(results.get("parsing_errors") or [])
-
-
-def where(check):
-    lines = "-".join(str(line) for line in check.get("file_line_range") or [])
-    return "%s:%s" % (check.get("file_path", "?"), lines)
-
-
+# checkov_rewrite_hints <line> <file>
+#
 # Valid Terraform that Checkov's HCL parser (bc-python-hcl2) rejects, and the rewrite -- one that
 # Terraform reads identically -- that gets the file scanned. Each test looks at the line the parser
 # stopped on and the one before it, since an exponent is reported on the line that follows it.
-EXPONENT = re.compile(r"(?<![\w.])\d+(?:\.\d+)?[eE][+-]?\d+(?![\w.])")
-HINTS = (
-    (lambda text: re.match(r"\s*[?:]", text) is not None,
-     "a conditional whose '?' or ':' starts a line after a unary operator such as '!' in its condition"
-     " (bridgecrewio/python-hcl2#153): end the line before with the operator instead"),
-    (lambda text: EXPONENT.search(text) is not None,
-     "a number in scientific notation, which the parser cannot read: write it as a plain decimal"
-     " (1e-07 as 0.0000001)"),
-    (lambda text: re.match(r"\s*(?:if|for)\s*=", text) is not None,
-     "'if' or 'for' as an unquoted object key, which the parser reads as a keyword: quote it ('\"if\" = ...')"),
-)
+checkov_rewrite_hints() {
+  awk -v line="$1" '
+    BEGIN {
+      hint[1] = "a conditional whose \047?\047 or \047:\047 starts a line after a unary operator such as \047!\047 in its condition" \
+        " (bridgecrewio/python-hcl2#153): end the line before with the operator instead"
+      hint[2] = "a number in scientific notation, which the parser cannot read: write it as a plain decimal" \
+        " (1e-07 as 0.0000001)"
+      hint[3] = "\047if\047 or \047for\047 as an unquoted object key, which the parser reads as a keyword: quote it (\047\"if\" = ...\047)"
+    }
+    NR >= line - 1 && NR <= line {
+      if ($0 ~ /^[[:space:]]*[?:]/) hit[1] = 1
+      if ($0 ~ /(^|[^[:alnum:]_.])[0-9]+(\.[0-9]+)?[eE][+-]?[0-9]+([^[:alnum:]_.]|$)/) hit[2] = 1
+      if ($0 ~ /^[[:space:]]*(if|for)[[:space:]]*=/) hit[3] = 1
+    }
+    NR >= line { exit }
+    END { for (i = 1; i <= 3; i++) if (i in hit) print "likely cause: " hint[i] }
+  ' "$2"
+}
 
+if [ "$_ck_unreasoned" -gt 0 ]; then
+  echo ""
+  echo "Checks skipped WITHOUT a reason -- write it as #checkov:skip=<ID>:<reason>:"
+  jq -r -s "$_CK_JQ_DEFS"'| .unreasoned[] | "  \(.check_id | py)  \(.resource | py)  \(where)"' "$jsonFile"
+fi
+if [ "$_ck_unparsed" -gt 0 ]; then
+  echo ""
+  echo "Files Checkov could not parse, and so did not scan:"
+  _ck_diagnosis=$(mktemp -d) || scan_incomplete "could not create a directory for the parser's diagnosis."
+  jq -r -s "$_CK_JQ_DEFS"'| .unparsed[] | py' "$jsonFile" > "$_ck_diagnosis/names"
+  set --
+  while IFS= read -r _ck_name; do
+    set -- "$@" "$_ck_name"
+  done < "$_ck_diagnosis/names"
 
-def diagnose(path):
-    """Why the parser Checkov uses rejects `path`: its own message, and the likely rewrite."""
-    try:
-        import hcl2
-    except ImportError:
-        return []
+  # THE ONE PLACE THIS RUNNER RUNS PYTHON, and the reason it has to: where a file failed to parse
+  # is known only to the parser that failed, and Checkov's is bc-python-hcl2, a Python library
+  # that exists nowhere but inside Checkov's own virtualenv. So that interpreter is asked once,
+  # about every unparsed file, and answers one line per file, in order:
+  #
+  #   parsed                         the parser reads the file on its own
+  #   unreadable                     the file could not be opened or decoded
+  #   error<TAB><line><TAB><message> where the parser stopped (0 when it says no line), and why
+  #
+  # and nothing at all when the parser cannot be imported. The rewrite each error suggests is read
+  # from the file here. Only a file that failed to parse is asked about, and a failed answer costs
+  # the notes, never the verdict.
+  "$CHECKOV_VENV/bin/python" - "$@" > "$_ck_diagnosis/records" <<'PY'
+import sys
+
+try:
+    import hcl2
+except ImportError:
+    sys.exit(0)
+
+for path in sys.argv[1:]:
     try:
         with open(path, encoding="utf-8") as handle:
             text = handle.read()
-    except OSError:
-        return []
+    except (OSError, ValueError):
+        print("unreadable")
+        continue
     try:
         hcl2.loads(text)
     except Exception as error:  # lark raises several types, and the parser adds its own
-        notes = [(str(error).strip().splitlines() or [type(error).__name__])[0]]
+        message = (str(error).strip().splitlines() or [type(error).__name__])[0]
         line = getattr(error, "line", None)
-        if isinstance(line, int) and line > 0:
-            nearby = text.splitlines()[max(line - 2, 0):line]
-            notes.extend("likely cause: " + hint for test, hint in HINTS if any(test(row) for row in nearby))
-        return notes
-    return ["the parser reads this file on its own; run Checkov on it with LOG_LEVEL=DEBUG to see why it was not"]
-
-
-if unreasoned:
-    print("")
-    print("Checks skipped WITHOUT a reason -- write it as #checkov:skip=<ID>:<reason>:")
-    for check in unreasoned:
-        print("  %s  %s  %s" % (check.get("check_id"), check.get("resource"), where(check)))
-if unparsed:
-    print("")
-    print("Files Checkov could not parse, and so did not scan:")
-    rewrites = False
-    for name in unparsed:
-        print("  %s" % name)
-        for note in diagnose(name):
-            print("      %s" % note)
-            rewrites = rewrites or note.startswith("likely cause: ")
-    if rewrites:
-        print("Each rewrite named above is valid Terraform that Terraform reads exactly as before.")
-print("")
-print(
-    "Checkov: %d failed check(s), %d skip(s) without a reason, %d file(s) it could not parse."
-    % (len(failed), len(unreasoned), len(unparsed))
-)
-sys.exit(3 if failed or unreasoned or unparsed else 0)
+        print("error\t%d\t%s" % (line if isinstance(line, int) and line > 0 else 0, message))
+    else:
+        print("parsed")
 PY
 
-case "${_ck_verdict:-0}" in
-  0)
-    echo "Checkov analysis complete: nothing to report. Results written to: $REPORT_PATH"
-    exit 0
-    ;;
-  3) ;;
-  *) scan_incomplete "Checkov's JSON report ($jsonFile) could not be read." ;;
-esac
+  _ck_tab=$(printf '\t')
+  _ck_rewrites=false
+  exec 3< "$_ck_diagnosis/records"
+  for _ck_name in "$@"; do
+    printf '  %s\n' "$_ck_name"
+    IFS= read -r _ck_record <&3 || _ck_record=''
+    case "$_ck_record" in
+      parsed)
+        echo "      the parser reads this file on its own; run Checkov on it with LOG_LEVEL=DEBUG to see why it was not"
+        ;;
+      "error$_ck_tab"*)
+        _ck_record=${_ck_record#"error$_ck_tab"}
+        _ck_line=${_ck_record%%"$_ck_tab"*}
+        printf '      %s\n' "${_ck_record#*"$_ck_tab"}"
+        if [ "$_ck_line" -gt 0 ] 2> /dev/null; then
+          _ck_hints=$(checkov_rewrite_hints "$_ck_line" "$_ck_name")
+          if [ -n "$_ck_hints" ]; then
+            printf '%s\n' "$_ck_hints" | sed 's/^/      /'
+            _ck_rewrites=true
+          fi
+        fi
+        ;;
+    esac
+  done
+  exec 3<&-
+  rm -rf "$_ck_diagnosis"
+  if [ "$_ck_rewrites" = true ]; then
+    echo "Each rewrite named above is valid Terraform that Terraform reads exactly as before."
+  fi
+fi
+echo ""
+echo "Checkov: $_ck_failed failed check(s), $_ck_unreasoned skip(s) without a reason, $_ck_unparsed file(s) it could not parse."
+
+if [ "$_ck_failed" -eq 0 ] && [ "$_ck_unreasoned" -eq 0 ] && [ "$_ck_unparsed" -eq 0 ]; then
+  echo "Checkov analysis complete: nothing to report. Results written to: $REPORT_PATH"
+  exit 0
+fi
 
 echo "Results written to: $REPORT_PATH"
 if [ "$CHECKOV_BLOCKING" = "true" ]; then

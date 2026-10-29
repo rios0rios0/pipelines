@@ -245,9 +245,8 @@ func checkYAML(path string) error {
 
 // checkJSON holds a file to being one JSON document in UTF-8.
 func checkJSON(path string) error {
-	content, err := os.ReadFile(
-		path,
-	) //nolint:gosec // G703: the file to check is the one the suite names; reading it is the point
+	// G703: the file to check is the one the suite names.
+	content, err := os.ReadFile(path) //nolint:gosec // reading it is the point
 	if err != nil || !utf8.Valid(content) || !json.Valid(content) {
 		return errFailed
 	}

@@ -104,6 +104,18 @@ assert_empty() {
 cleanup() { rm -rf "$TEST_DIR"; }
 trap cleanup EXIT
 
+# Tests 8 and 10 read YAML. Their checks are Go test support (`internal/testsuites/codeqlgate`),
+# built from this checkout for this run; one that does not build stops the suite rather than leave
+# those assertions reading nothing. A file a check cannot read is printed as a finding, so an
+# unreadable action or configuration fails its assertion instead of passing it.
+mkdir -p "$TEST_DIR/tools" || exit 1
+CODEQL_CHECKS="$TEST_DIR/tools/codeqlgate"
+if ! CGO_ENABLED=0 GOFLAGS=-mod=readonly GOWORK=off \
+  go build -C "$SCRIPTS_DIR" -trimpath -o "$CODEQL_CHECKS" ./internal/testsuites/codeqlgate; then
+  echo -e "${RED}could not build ./internal/testsuites/codeqlgate, so no assertion can run${NC}"
+  exit 1
+fi
+
 # result <rule> <uri> <line> <primaryLocationLineHash> [<primaryLocationStartColumnFingerprint>]
 #
 # One SARIF result, shaped as CodeQL writes it.
@@ -299,82 +311,7 @@ assert_true "run.sh keeps no fingerprint filter of its own" "! grep -q 'partialF
 echo ""
 
 echo "Test 8: the GitHub composite analyses, gates, then uploads at best"
-FINDINGS="$(/usr/bin/env python3 - "$ACTION" "$SCRIPTS_DIR" << 'PY'
-import os, re, sys
-try:
-    import yaml
-except ImportError:
-    print('PyYAML is required to read the action')
-    sys.exit(0)
-
-action_path, root = sys.argv[1], sys.argv[2]
-with open(action_path, encoding='utf-8') as handle:
-    steps = (yaml.safe_load(handle).get('runs') or {}).get('steps') or []
-
-def index_of(predicate):
-    return next((i for i, step in enumerate(steps) if predicate(step)), None)
-
-def uses(step, prefix):
-    return str(step.get('uses', '')).startswith(prefix)
-
-init = index_of(lambda s: uses(s, 'github/codeql-action/init@'))
-analyze = index_of(lambda s: uses(s, 'github/codeql-action/analyze@'))
-upload = index_of(lambda s: uses(s, 'github/codeql-action/upload-sarif@'))
-gate = index_of(lambda s: 'global/scripts/tools/codeql/gate.sh' in str(s.get('run', '')))
-
-if init is None or (steps[init].get('with') or {}).get('queries') != 'security-and-quality':
-    print('init does not run the security-and-quality suite run.sh runs')
-if analyze is None:
-    print('no analyze step')
-else:
-    with_ = steps[analyze].get('with') or {}
-    if steps[analyze].get('id') != 'analyze':
-        print("the analyze step is not id 'analyze', which the gate and the upload read")
-    if with_.get('upload') != 'never':
-        print('analyze uploads, so code scanning being unavailable can fail the analysis step')
-if gate is None:
-    print('no step runs the gate')
-else:
-    step = steps[gate]
-    run = str(step.get('run', ''))
-    if 'if' in step:
-        print('the gate step carries an if:, so something can skip it')
-    if step.get('continue-on-error'):
-        print('the gate step is continue-on-error, so a finding fails nothing')
-    if 'steps.analyze.outputs.sarif-output' not in str(step.get('env', '')) + run:
-        print('the gate does not read the analysis output')
-    match = re.search(r'\$GITHUB_ACTION_PATH/([^"\s]+)', run)
-    if not match:
-        print('the gate is not reached through the action path')
-    else:
-        target = os.path.normpath(os.path.join(os.path.dirname(action_path), match.group(1)))
-        expected = os.path.join(root, 'global/scripts/tools/codeql/gate.sh')
-        if target != os.path.normpath(expected):
-            print('the gate path resolves to %s, not the gate script' % os.path.relpath(target, root))
-        elif not os.access(target, os.X_OK):
-            print('the gate script is not executable')
-    if analyze is not None and gate < analyze:
-        print('the gate runs before the analysis')
-if upload is None:
-    print('no upload-sarif step')
-else:
-    step = steps[upload]
-    condition = str(step.get('if', ''))
-    if step.get('continue-on-error') is not True:
-        print('the upload step is not continue-on-error, so a refused upload fails the job')
-    if 'always()' not in condition:
-        print('the upload step does not run after a failed gate')
-    if 'inputs.upload' not in condition:
-        print('the upload step ignores the upload input')
-    if gate is not None and upload < gate:
-        print('the upload runs before the gate has decided')
-    if 'steps.analyze.outputs.sarif-output' not in str((step.get('with') or {}).get('sarif_file', '')):
-        print('the upload does not publish the analysis output')
-for i, step in enumerate(steps):
-    if step.get('continue-on-error') and i != upload:
-        print('step %d (%s) is continue-on-error; only the upload may be' % (i, step.get('name')))
-PY
-)"
+FINDINGS="$("$CODEQL_CHECKS" composite "$ACTION" "$SCRIPTS_DIR")"
 assert_empty "the analysis never uploads, the gate is fatal, the upload is best-effort and last" "$FINDINGS"
 echo ""
 
@@ -389,41 +326,7 @@ echo "Test 10: this repository's own scan narrows nothing it has not explained"
 # The root `codeql-config.yml` and `.codeql-false-positives` are read by this repository's own
 # analysis alone. They are the two places a finding here can be made to disappear, so both stay
 # exactly as narrow as their comments justify, and the consumers' default stays empty.
-FINDINGS="$(/usr/bin/env python3 - "$SCRIPTS_DIR" << 'PY'
-import os, re, sys
-try:
-    import yaml
-except ImportError:
-    print('PyYAML is required to read the configuration')
-    sys.exit(0)
-
-root = sys.argv[1]
-with open(os.path.join(root, 'codeql-config.yml'), encoding='utf-8') as handle:
-    config = yaml.safe_load(handle) or {}
-if sorted(config) != ['query-filters']:
-    print('codeql-config.yml sets more than query-filters: %s' % sorted(config))
-if (config.get('query-filters') or []) != [{'exclude': {'id': 'actions/unpinned-tag'}}]:
-    print('codeql-config.yml filters more than actions/unpinned-tag: %r' % config.get('query-filters'))
-
-dated = False
-with open(os.path.join(root, '.codeql-false-positives'), encoding='utf-8') as handle:
-    for number, line in enumerate(handle, 1):
-        line = line.rstrip('\n')
-        if re.match(r'^# \d{4}-\d{2}-\d{2} -- ', line):
-            dated = True
-        if not line.strip() or line.lstrip().startswith('#'):
-            continue
-        if not re.fullmatch(r'[0-9a-f]+:[0-9]+', line):
-            print('.codeql-false-positives:%d is not a bare fingerprint, so it silences nothing: %r' % (number, line))
-        elif not dated:
-            print('.codeql-false-positives:%d has no dated rationale above it' % number)
-
-with open(os.path.join(root, 'global/scripts/tools/codeql/.codeql-false-positives'), encoding='utf-8') as handle:
-    for number, line in enumerate(handle, 1):
-        if line.strip() and not line.lstrip().startswith('#'):
-            print("the consumers' default .codeql-false-positives lists line %d: %r" % (number, line.strip()))
-PY
-)"
+FINDINGS="$("$CODEQL_CHECKS" own-scan "$SCRIPTS_DIR")"
 assert_empty "the config drops actions/unpinned-tag alone, every suppression is a dated bare fingerprint, the default lists nothing" "$FINDINGS"
 echo ""
 

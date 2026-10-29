@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'rewrote the workflow-composition suite''s fact table and parsed-document checks (Tests 10 to 17) in Go (`internal/testsuites/workflowcomposition`), built by the suite from the checkout, so the suite needs a Go toolchain and no longer needs Python or PyYAML'
+time: '2026-10-29T21:04:43.546770112Z'

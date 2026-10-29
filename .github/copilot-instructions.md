@@ -35,7 +35,7 @@ Everything the pipelines execute is pinned, and `make test-supply-chain` fails t
   holds: `rios0rios0/pipelines/...@main`, which moves on purpose, and `$/path/to/action`, which
   resolves at the exact commit of the running workflow (runner 2.336.0+; unavailable on GitHub
   Enterprise Server) and is required in the Yarn Semgrep chain. Never replace `$/` with `@main`.
-- **Container images** — `tag@sha256:<digest>`, in both `image:` keys and Dockerfile `FROM` lines.
+- **Container images** — `tag@sha256:<digest>`, in `image:` keys (a scalar, or the `name:` of an `image:` mapping, both of which `dependency-updates` reads and re-pins) and Dockerfile `FROM` lines.
 - **Downloaded binaries** — add the version and SHA-256 to `global/scripts/shared/pinned-versions.sh` and
   fetch through `download_verified` from `verify-download.sh`. Never `curl | sh`, and never an unverified
   `curl`/`wget` of a release artifact.

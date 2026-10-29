@@ -1404,6 +1404,10 @@ Images are checked by **digest, not tag**, because that is the question worth
 asking of a container: `python:3.13-slim` is rebuilt with patched system packages
 under the same tag, so "is there a newer tag" would miss every security rebuild.
 Moving to a different tag stays your decision; the workflow never makes it.
+An image is read in every form it can be pinned in -- a scalar `image:`, the
+`name:` of an `image:` mapping (GitLab CI's form for an image that carries an
+`entrypoint:` or a `docker: user:`), a Dockerfile `FROM` -- and one reference is
+one update however many files hold it.
 A rebuild is usually a security refresh, but not always, so each one is
 **scanned against the image it replaces**: both digests are exported straight
 from the registry (no Docker daemon; every layer checked against its digest) and

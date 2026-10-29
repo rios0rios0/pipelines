@@ -485,6 +485,30 @@ func TestVerifyPullRequestCommandImages(t *testing.T) {
 		// then
 		assert.Equal(t, commands.VerdictWarn, findingOf(t, result.Changes[0], commands.CheckScan).Verdict)
 	})
+
+	t.Run("should judge a rebuild that only an image mapping names", func(t *testing.T) {
+		t.Parallel()
+		// given
+		mapping := func(ref string) map[string]string {
+			return map[string]string{
+				"gitlab/yarn.yaml": ".yarn:\n  image:\n    name: '" + ref + "'\n    docker:\n      user: 'node'\n",
+			}
+		}
+		scenario := rebuild(map[string]entities.ImageScan{
+			oldReference: {},
+			newReference: {Findings: []entities.ImageFinding{finding("glibc", "CVE-2026-9", "CRITICAL")}},
+		})
+		scenario.base, scenario.head = mapping(oldReference), mapping(newReference)
+
+		// when
+		result := scenario.run()
+
+		// then
+		require.Len(t, result.Changes, 1, "a pull request re-pinning it is not one that moves nothing")
+		assert.Equal(t, "sha256:"+strings.Repeat("a", 64), result.Changes[0].From)
+		assert.Equal(t, commands.VerdictFail, findingOf(t, result.Changes[0], commands.CheckScan).Verdict)
+		assert.Equal(t, 1, result.Exit())
+	})
 }
 
 func TestVerifyPullRequestCommandGoToolchain(t *testing.T) {

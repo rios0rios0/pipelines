@@ -9,6 +9,13 @@ var (
 	usesPattern  = regexp.MustCompile(`^\s*(?:-\s*)?uses:\s*'([^'@]+)@([0-9a-f]{40})'\s*#\s*(\S+)`)
 	imagePattern = regexp.MustCompile(`^\s*(?:-\s*)?image:\s*'([^']+@sha256:[0-9a-f]+)'`)
 	fromPattern  = regexp.MustCompile(`^FROM\s+(\S+@sha256:[0-9a-f]+)`)
+	// imageBlockPattern opens an `image:` given as a block mapping, whose
+	// `name:` holds the reference; the group is the key's column.
+	imageBlockPattern = regexp.MustCompile(`^(\s*(?:-\s*)?)image:\s*(?:#.*)?$`)
+	imageNamePattern  = regexp.MustCompile(`^\s*name:\s*'([^']+@sha256:[0-9a-f]+)'`)
+	// imageFlowPattern is an `image:` given as a flow mapping on its line.
+	imageFlowPattern = regexp.MustCompile(`^\s*(?:-\s*)?image:\s*\{(?:.*?[\s,{])?name:\s*'([^']+@sha256:[0-9a-f]+)'`)
+	blankOrComment   = regexp.MustCompile(`^\s*(?:#.*)?$`)
 )
 
 // ownerRepositorySegments are the `owner/repo` part of an action path.
@@ -79,18 +86,76 @@ func firstSegments(path string, count int) []string {
 
 // ScanImages records every digest-pinned image reference in `text` in `found`,
 // mapped to its digest. A Dockerfile is read for `FROM`, anything else for
-// `image:`.
+// `image:` in each form `test-supply-chain.sh` holds to a digest -- a scalar,
+// a block mapping whose `name:` is the reference, and a flow mapping on one
+// line -- each of them also as a list item.
+//
+// A form held to a digest there and not read here is a pin nothing maintains:
+// the bump never moves it, and the verification never sees a pull request
+// change it. GitLab CI writes an image as a mapping whenever it carries more
+// than its name -- the `.yarn` abstract's `docker: user:`, the `.sonarqube`
+// abstract's `entrypoint:` -- and the `.yarn` image had no other copy.
 func ScanImages(text string, dockerfile bool, found map[string]string) {
-	pattern := imagePattern
 	if dockerfile {
-		pattern = fromPattern
+		for line := range strings.Lines(text) {
+			if match := fromPattern.FindStringSubmatch(strings.TrimRight(line, "\r\n")); match != nil {
+				recordImage(found, match[1])
+			}
+		}
+		return
 	}
+	scanner := imageMappingScanner{key: -1, child: -1}
 	for line := range strings.Lines(text) {
-		if match := pattern.FindStringSubmatch(strings.TrimRight(line, "\r\n")); match != nil {
-			_, digest, _ := strings.Cut(match[1], "@")
-			found[match[1]] = digest
+		scanner.read(strings.TrimRight(line, "\r\n"), found)
+	}
+}
+
+// imageMappingScanner follows one `image:` block mapping at a time: `key` is
+// the column of its key, -1 outside one, and `child` the column of its keys,
+// set by its first line. Only a `name:` AT that column is the image's own: a
+// deeper one belongs to a nested mapping.
+type imageMappingScanner struct {
+	key, child int
+}
+
+func (s *imageMappingScanner) read(line string, found map[string]string) {
+	if s.key >= 0 && s.within(line, found) {
+		return
+	}
+	if open := imageBlockPattern.FindStringSubmatch(line); open != nil {
+		s.key = len(open[1])
+		return
+	}
+	for _, pattern := range []*regexp.Regexp{imagePattern, imageFlowPattern} {
+		if match := pattern.FindStringSubmatch(line); match != nil {
+			recordImage(found, match[1])
 		}
 	}
+}
+
+// within reads `line` as part of the open mapping, and is false once a line at
+// or left of the key's column has closed it -- that line is read afresh.
+func (s *imageMappingScanner) within(line string, found map[string]string) bool {
+	if blankOrComment.MatchString(line) {
+		return true
+	}
+	column := len(line) - len(strings.TrimLeft(line, " "))
+	if column <= s.key {
+		s.key, s.child = -1, -1
+		return false
+	}
+	if s.child < 0 {
+		s.child = column
+	}
+	if match := imageNamePattern.FindStringSubmatch(line); match != nil && column == s.child {
+		recordImage(found, match[1])
+	}
+	return true
+}
+
+func recordImage(found map[string]string, reference string) {
+	_, digest, _ := strings.Cut(reference, "@")
+	found[reference] = digest
 }
 
 // InlineCopy is a manifest value written a second time in a template that has

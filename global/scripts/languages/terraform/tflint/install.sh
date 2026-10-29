@@ -61,19 +61,33 @@ if ! download_verified \
   exit 1
 fi
 
-# TFLint ships a zip and `unzip` is absent from several slim CI images
-# (alpine, the python:*-slim family, some Azure containers), where its absence
-# would surface as `unzip: not found` immediately after a successful download.
-# Python's stdlib `zipfile` is the fallback, matching how the Dart SDK archive
-# is unpacked in `languages/dart/common.sh`.
-if command -v unzip > /dev/null 2>&1; then
-  unzip -oq /tmp/tflint.zip -d /tmp/tflint-extract
-elif command -v python3 > /dev/null 2>&1; then
-  python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' \
-    /tmp/tflint.zip /tmp/tflint-extract
-else
-  echo "ERROR: cannot unpack /tmp/tflint.zip -- neither 'unzip' nor 'python3' is available." >&2
-  rm -f /tmp/tflint.zip
+# TFLint ships a zip, and `unzip` is absent from several CI images -- the
+# `golang` image the GitLab CI terra jobs run on has neither `unzip` nor
+# `bsdtar` nor BusyBox -- where its absence would surface as `unzip: not found`
+# right after a successful download. The archive holds one member, `tflint`,
+# deflated, which is the one shape GNU gzip decompresses too, checking its CRC;
+# a second member makes gzip fail rather than drop it, so the last fallback
+# cannot quietly install half of an archive. The checksum was verified above, so
+# whichever tool runs only ever unpacks the pinned release.
+unpack_tflint() {
+  mkdir -p /tmp/tflint-extract || return 1
+  if command -v unzip > /dev/null 2>&1; then
+    unzip -oq /tmp/tflint.zip -d /tmp/tflint-extract
+  elif command -v bsdtar > /dev/null 2>&1; then
+    bsdtar -xf /tmp/tflint.zip -C /tmp/tflint-extract
+  elif command -v busybox > /dev/null 2>&1 && busybox --list | grep -qx unzip; then
+    busybox unzip -oq /tmp/tflint.zip -d /tmp/tflint-extract
+  elif command -v gzip > /dev/null 2>&1; then
+    gzip -dc < /tmp/tflint.zip > /tmp/tflint-extract/tflint
+  else
+    echo "ERROR: cannot unpack /tmp/tflint.zip -- none of 'unzip', 'bsdtar', 'busybox' or 'gzip' is available." >&2
+    return 1
+  fi
+}
+
+if ! unpack_tflint; then
+  echo "ERROR: could not unpack /tmp/tflint.zip." >&2
+  rm -rf /tmp/tflint.zip /tmp/tflint-extract
   exit 1
 fi
 

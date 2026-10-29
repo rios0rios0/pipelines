@@ -170,9 +170,9 @@ jobs:
   # Enforces the team's file-ordering standard: dependency/inputs ordering in
   # root.hcl, the // SET ON .HCL / .ENV grouping in variables.tf, the
   # heaviest->lightest provider order in providers.tf, and main.tf-ordered
-  # outputs.tf. Deps-free (only needs python3, preinstalled on the runner),
-  # so it does not install the terra CLI. Run `order-check/run.sh --fix`
-  # locally to auto-sort before pushing.
+  # outputs.tf. The checker is a Go helper built from the pipelines checkout,
+  # so the job provisions Go and nothing else -- no terra CLI, no Terraform.
+  # Run `order-check/run.sh --fix` locally to auto-sort before pushing.
   code_check-style_order_check:
     name: 'code-check > style:order-check'
     runs-on: 'ubuntu-latest'
@@ -181,6 +181,22 @@ jobs:
     steps:
       - name: 'Checkout code'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
+
+      # At least the `go` directive of this repository's `go.mod`, which the
+      # checker is built against: setup-go sets `GOTOOLCHAIN=local`, so an older
+      # Go would refuse the module instead of fetching a newer one.
+      - name: 'Setup Go'
+        uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
+        with:
+          go-version: '1.27.3'
+          # See `github/golang/stages/10-code-check/golangci-lint/action.yaml` for the measured
+          # reason this is gated: on a self-hosted runner GOMODCACHE and GOCACHE persist on local
+          # disk, the restore untars over files that already exist, `tar` exits 2 and the entire
+          # download is discarded. `runs-on` is hard-coded to a hosted runner in this file, so the
+          # expression is a no-op today. It is written anyway so the rule `make
+          # test-runner-cache-gating` enforces needs no exemption list, and so that adding a
+          # `runs_on` input here later cannot silently reintroduce the defect.
+          cache: ${{ runner.environment != 'self-hosted' }}
 
       # Pass `inputs.pipelines_ref` via `env:` (not `${{ }}` in `run:`) to
       # avoid script injection, then resolve the ref this reusable workflow
@@ -310,55 +326,6 @@ jobs:
       - name: 'Checkout code'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
-      # Mirror the `go-version-file: 'go.mod'` pattern used by every
-      # `github/golang/stages/**/action.yaml` in this repo: derive the Go
-      # version from the consumer's `tests/terratest/go.mod` (honoring the
-      # `TESTS_DIR` env override, same contract as the tier runners) so the
-      # toolchain tracks whatever the consumer's Terratest suite declares.
-      # Falls back to a conservative `1.24` pin when no terratest `go.mod`
-      # exists (stack-only repos with only `modules/*/tests/*.tftest.hcl`,
-      # or repos with no Terra tests at all) — `setup-go` errors out when
-      # `go-version-file` points at a missing file.
-      - name: 'Detect terratest go.mod'
-        id: 'terratest-gomod'
-        shell: 'bash'
-        run: |
-          tests_dir="${TESTS_DIR:-tests/terratest}"
-          if [ -f "${tests_dir}/go.mod" ]; then
-            echo "path=${tests_dir}/go.mod" >> "$GITHUB_OUTPUT"
-          else
-            echo "path=" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: 'Setup Go (from terratest go.mod)'
-        if: "steps.terratest-gomod.outputs.path != ''"
-        uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
-        with:
-          go-version-file: ${{ steps.terratest-gomod.outputs.path }}
-          # See `github/golang/stages/10-code-check/golangci-lint/action.yaml` for the measured
-          # reason this is gated: on a self-hosted runner GOMODCACHE and GOCACHE persist on local
-          # disk, the restore untars over files that already exist, `tar` exits 2 and the entire
-          # download is discarded. `runs-on` is hard-coded to a hosted runner in this file, so the
-          # expression is a no-op today. It is written anyway so the rule `make
-          # test-runner-cache-gating` enforces needs no exemption list, and so that adding a
-          # `runs_on` input here later cannot silently reintroduce the defect.
-          cache: ${{ runner.environment != 'self-hosted' }}
-
-      - name: 'Setup Go (fallback when no terratest go.mod)'
-        if: "steps.terratest-gomod.outputs.path == ''"
-        uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
-        with:
-          go-version: '1.27.3'
-          # See `github/golang/stages/10-code-check/golangci-lint/action.yaml` for the measured
-          # reason this is gated: on a self-hosted runner GOMODCACHE and GOCACHE persist on local
-          # disk, the restore untars over files that already exist, `tar` exits 2 and the entire
-          # download is discarded. `runs-on` is hard-coded to a hosted runner in this file, so the
-          # expression is a no-op today. It is written anyway so the rule `make
-          # test-runner-cache-gating` enforces needs no exemption list, and so that adding a
-          # `runs_on` input here later cannot silently reintroduce the defect.
-          cache: ${{ runner.environment != 'self-hosted' }}
-
-
       # Derive the pipelines ref from the reusable workflow's own invocation
       # ref so the shared scripts stay in sync with the workflow. When the
       # consumer calls `uses: 'rios0rios0/pipelines/.github/workflows/terra.yaml@4.20.1'`,
@@ -414,6 +381,68 @@ jobs:
           ref: ${{ steps.pipelines-ref.outputs.ref }}
           path: '.pipelines'
           persist-credentials: false
+
+      # Mirror the `go-version-file: 'go.mod'` pattern used by every
+      # `github/golang/stages/**/action.yaml` in this repo: derive the Go
+      # version from the consumer's `tests/terratest/go.mod` (honoring the
+      # `TESTS_DIR` env override, same contract as the tier runners) so the
+      # toolchain tracks whatever the consumer's Terratest suite declares.
+      # Falls back to the pinned Go below when no terratest `go.mod` exists
+      # (stack-only repos with only `modules/*/tests/*.tftest.hcl`, or repos
+      # with no Terra tests at all) -- `setup-go` errors out when
+      # `go-version-file` points at a missing file -- AND when that `go.mod`
+      # asks for a Go older than the `go` directive of this repository's own
+      # `go.mod`. The terra-test tier builds a Go helper from the pipelines
+      # checkout (its generic coverage report), and setup-go sets
+      # `GOTOOLCHAIN=local`, so an older Go would refuse that module rather than
+      # fetch a newer one. A newer Go builds the consumer's suite just the same.
+      - name: 'Detect terratest go.mod'
+        id: 'terratest-gomod'
+        shell: 'bash'
+        run: |
+          tests_dir="${TESTS_DIR:-tests/terratest}"
+          path=""
+          if [ -f "${tests_dir}/go.mod" ]; then
+            # setup-go reads the `toolchain` directive first, then `go`.
+            wanted="$(awk '$1 == "toolchain" { sub(/^go/, "", $2); print $2; exit }' "${tests_dir}/go.mod")"
+            [ -n "${wanted}" ] || wanted="$(awk '$1 == "go" { print $2; exit }' "${tests_dir}/go.mod")"
+            floor="$(awk '$1 == "go" { print $2; exit }' .pipelines/go.mod)"
+            if [ "$(printf '%s\n%s\n' "${floor}" "${wanted}" | sort -V | head -n 1)" = "${floor}" ]; then
+              path="${tests_dir}/go.mod"
+            else
+              echo "::notice::${tests_dir}/go.mod asks for Go ${wanted}, older than the ${floor} the pipelines' Go helpers need; using the pinned Go instead."
+            fi
+          fi
+          echo "path=${path}" >> "$GITHUB_OUTPUT"
+
+      - name: 'Setup Go (from terratest go.mod)'
+        if: "steps.terratest-gomod.outputs.path != ''"
+        uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
+        with:
+          go-version-file: ${{ steps.terratest-gomod.outputs.path }}
+          # See `github/golang/stages/10-code-check/golangci-lint/action.yaml` for the measured
+          # reason this is gated: on a self-hosted runner GOMODCACHE and GOCACHE persist on local
+          # disk, the restore untars over files that already exist, `tar` exits 2 and the entire
+          # download is discarded. `runs-on` is hard-coded to a hosted runner in this file, so the
+          # expression is a no-op today. It is written anyway so the rule `make
+          # test-runner-cache-gating` enforces needs no exemption list, and so that adding a
+          # `runs_on` input here later cannot silently reintroduce the defect.
+          cache: ${{ runner.environment != 'self-hosted' }}
+
+      - name: 'Setup Go (pinned, when no terratest go.mod or an older one)'
+        if: "steps.terratest-gomod.outputs.path == ''"
+        uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
+        with:
+          go-version: '1.27.3'
+          # See `github/golang/stages/10-code-check/golangci-lint/action.yaml` for the measured
+          # reason this is gated: on a self-hosted runner GOMODCACHE and GOCACHE persist on local
+          # disk, the restore untars over files that already exist, `tar` exits 2 and the entire
+          # download is discarded. `runs-on` is hard-coded to a hosted runner in this file, so the
+          # expression is a no-op today. It is written anyway so the rule `make
+          # test-runner-cache-gating` enforces needs no exemption list, and so that adding a
+          # `runs_on` input here later cannot silently reintroduce the defect.
+          cache: ${{ runner.environment != 'self-hosted' }}
+
 
       # Moved to AFTER the pipelines checkout: the installer that replaces the
       # vendor's `curl ... | sh` one-liner lives in this repository, so it does

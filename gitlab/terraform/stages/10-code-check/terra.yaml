@@ -17,18 +17,17 @@ style:tflint:
 
 # Enforces the team's file-ordering standard (dependency/inputs in root.hcl,
 # .HCL/.ENV grouping in variables.tf, heaviest->lightest providers.tf,
-# main.tf-ordered outputs.tf). Deps-free: a small python image + git is all
-# it needs (no Terraform), so it extends '.scripts-repo' rather than '.terra'.
-# Run 'order-check/run.sh --fix' locally to auto-sort.
+# main.tf-ordered outputs.tf). The checker is a Go helper built from the
+# pipelines checkout, so the job runs on the same Go image as '.terra' -- at
+# least the `go` directive of this repository's `go.mod`, and git is already
+# in it -- but needs no terra CLI or Terraform, so it extends '.scripts-repo'
+# rather than '.terra'. Run 'order-check/run.sh --fix' locally to auto-sort.
 order:check:
   extends: '.scripts-repo'
-  image: 'python:3.13-alpine@sha256:8bcfa47b04b853a17aaf909362b847b2112fd6ec4105ea553ef9a43bafbb5916'
+  image: 'golang:1.27.3@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b'
   stage: 'code check (style/quality)'
   variables:
     REPORT_PATH: 'build/reports'
-  before_script:
-    - apk add --no-cache git
-    - !reference [.scripts-repo, before_script]
   script:
     - "$SCRIPTS_DIR/global/scripts/languages/terraform/order-check/run.sh"
   artifacts:

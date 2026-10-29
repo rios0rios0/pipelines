@@ -452,15 +452,17 @@ timestamp=$(date +%s)
 # build that hides a green test suite. The generator is Go, built from this
 # checkout through go-helper.sh, so it needs Go 1.25 or newer on PATH -- which
 # every template running this tier provisions for the Terratest tier anyway.
-coverage_generic_dir="global/scripts/languages/terraform/terra-test/coverage"
+# The package path is written out in the call, not held in a variable:
+# `.github/tests/test-go-module-toolchain.sh` finds the helpers a template
+# reaches by reading `go_helper_run <path>` calls.
 if ! command -v go > /dev/null 2>&1; then
   echo "WARNING: go not on PATH; skipping ${COVERAGE_GENERIC}" >&2
-elif [ ! -f "${SCRIPTS_DIR}/${coverage_generic_dir}/main.go" ]; then
-  echo "WARNING: ${SCRIPTS_DIR}/${coverage_generic_dir} not found; skipping ${COVERAGE_GENERIC}" >&2
+elif [ ! -f "${SCRIPTS_DIR}/global/scripts/languages/terraform/terra-test/coverage/main.go" ]; then
+  echo "WARNING: the coverage generator is not in ${SCRIPTS_DIR}; skipping ${COVERAGE_GENERIC}" >&2
 else
   # shellcheck source=/dev/null
   . "${SCRIPTS_DIR}/global/scripts/shared/go-helper.sh"
-  go_helper_run "${coverage_generic_dir}" --repo-dir . --output "${COVERAGE_GENERIC}" \
+  go_helper_run global/scripts/languages/terraform/terra-test/coverage --repo-dir . --output "${COVERAGE_GENERIC}" \
     || echo "WARNING: the coverage generator failed; ${COVERAGE_GENERIC} may be missing or stale. If REPORT_PATH points outside the checkout, the generator refuses to write there by design -- use a path inside the repository." >&2
 fi
 

@@ -153,71 +153,399 @@ assert_true "at least one Go module was actually examined" "[[ $MODULE_COUNT -ge
 echo ""
 
 # ---------------------------------------------------------------------------
-echo "1b. The root module is paired with every workflow that builds it"
+echo "1b. The root module is paired with every template that builds it"
 # ---------------------------------------------------------------------------
-# The root `go.mod` holds the Go helpers. No Dockerfile builds it: each helper's
-# `run.sh` compiles it on the runner through `global/scripts/shared/go-helper.sh`,
-# so its builders are the workflows that run a helper, and the Go they provision.
-# The relationship is the one section 1 asserts -- no builder older than the
-# directive -- and the builders are FOUND rather than listed: every `run.sh` that
-# sits beside a `main.go` of this module is a helper, and every GitHub Actions file
-# naming one (or running `make test`, which runs the helpers' tests) is a builder.
-# A helper added later is then covered without anyone remembering this file.
+# The root `go.mod` holds the Go helpers. No Dockerfile builds it: each helper is
+# compiled on the runner through `global/scripts/shared/go-helper.sh`, so its builders
+# are the CI jobs that run a helper, and the Go they provision. The relationship is the
+# one section 1 asserts -- no builder older than the directive -- and both sides are
+# FOUND rather than listed, so a helper or a template added later is covered without
+# anyone remembering this file:
+#
+#   - a helper's entry is every script under `global/` that calls `go_helper_run <dir>`
+#     for a `main.go` of this module, and, followed to a fixed point, every script that
+#     runs one of those by path -- `test-all/run.sh` runs `terra-test/run.sh`, which runs
+#     the coverage generator, so a template running `test-all/run.sh` builds a helper;
+#   - a builder is a JOB, not a file, because the Go is provisioned per job: a workflow
+#     whose other jobs pin Go says nothing about the one that runs the checker. A GitHub
+#     Actions job pins `go-version:`, and may hand a consumer's `go.mod` to setup-go only
+#     where it holds that file to this one's directive (`.pipelines/go.mod`); a GitLab CI
+#     job runs on a `golang:<version>` image of its own or of the job it extends; an
+#     Azure DevOps job installs Go with a `GoTool@0` task of its own.
+#
+# The rules are functions of a repository root, so the fixtures at the end of this
+# section can prove each one fires against a deliberate violation.
+
+# code <file> [first last] -- a file's lines, or a range of them, comments dropped: a
+# comment that names a script documents it, it does not run it. `pinned-versions.sh`
+# names the dependency-updates runner in a comment, and every installer sources it.
+code() {
+  if [[ $# -eq 3 ]]; then
+    sed -n "${2},${3}p" "$1"
+  else
+    cat "$1"
+  fi | grep -vE '^[[:space:]]*#'
+}
+
+# contains <needle> <haystack...> -- true when the needle is one of the words.
+contains() {
+  local needle="$1" item
+  shift
+  for item in "$@"; do
+    [[ "$item" == "$needle" ]] && return 0
+  done
+  return 1
+}
+
+# helper_entries <root> -- the scripts, relative to <root>, that build a Go helper.
+helper_entries() {
+  local root="$1" script package nested module_dir entry relative
+  local -a entries=() scripts=()
+  local nested_modules
+  nested_modules="$(find "$root" -mindepth 2 -type f -name 'go.mod' -not -path '*/.git/*' -exec dirname {} \;)"
+  while IFS= read -r script; do
+    scripts+=("$script")
+  done < <(find "$root/global" -type f -name '*.sh' 2> /dev/null | sort)
+  for script in "${scripts[@]}"; do
+    while IFS= read -r package; do
+      [[ -n "$package" && -f "$root/$package/main.go" ]] || continue
+      nested=false
+      while IFS= read -r module_dir; do
+        [[ -n "$module_dir" && "$root/$package/" == "$module_dir/"* ]] && nested=true
+      done <<< "$nested_modules"
+      [[ "$nested" == false ]] && entries+=("${script#"$root"/}")
+    done < <(code "$script" | grep -oE 'go_helper_run[[:space:]]+[A-Za-z0-9_./-]+' | awk '{print $2}')
+  done
+  local changed=true
+  while [[ "$changed" == true ]]; do
+    changed=false
+    for script in "${scripts[@]}"; do
+      relative="${script#"$root"/}"
+      [[ ${#entries[@]} -gt 0 ]] && contains "$relative" "${entries[@]}" && continue
+      for entry in "${entries[@]}"; do
+        if code "$script" | grep -qF "$entry"; then
+          entries+=("$relative")
+          changed=true
+          break
+        fi
+      done
+    done
+  done
+  [[ ${#entries[@]} -gt 0 ]] && printf '%s\n' "${entries[@]}" | sort -u
+}
+
+# names_entry <file> <first-line> <last-line> -- true when those lines run a helper entry.
+names_entry() {
+  local file="$1" first="$2" last="$3" entry
+  for entry in "${ENTRIES[@]}"; do
+    code "$file" "$first" "$last" | grep -qF "$entry" && return 0
+  done
+  return 1
+}
+
+# github_units <file> -- `first last name` for every job of a workflow, or the whole file
+# for a composite action, which has no jobs.
+github_units() {
+  local file="$1" units
+  units="$(awk '
+    /^jobs:[[:space:]]*$/ { in_jobs = 1; next }
+    in_jobs && /^[^ #]/ { if (name != "") print start, NR - 1, name; name = ""; in_jobs = 0; next }
+    in_jobs && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ {
+      if (name != "") print start, NR - 1, name
+      name = $1; sub(/:$/, "", name); start = NR
+    }
+    END { if (name != "") print start, NR, name }
+  ' "$file")"
+  if [[ -n "$units" ]]; then
+    echo "$units"
+  else
+    echo "1 $(wc -l < "$file") (action)"
+  fi
+}
+
+# github_findings <root> <directive> -- every GitHub Actions job that builds a helper with
+# no pinned Go, an older one, or a consumer's go.mod not held to the directive.
+GITHUB_JOBS=0
+github_findings() {
+  local root="$1" directive="$2" file first last name versions version label
+  while IFS= read -r file; do
+    while read -r first last name; do
+      names_entry "$file" "$first" "$last" \
+        || sed -n "${first},${last}p" "$file" | grep -qE '^ *run: *make test *$' \
+        || continue
+      GITHUB_JOBS=$((GITHUB_JOBS + 1))
+      label="${file#"$root"/} job $name"
+      versions="$(sed -n "${first},${last}p" "$file" | grep -oE "go-version: *'[0-9]+(\.[0-9]+)*'" \
+        | grep -oE "[0-9]+(\.[0-9]+)*" || true)"
+      if [[ -z "$versions" ]]; then
+        echo "$label: builds a Go helper with no 'go-version' pinned, so nothing pins the Go that builds it"
+      fi
+      for version in $versions; do
+        version_le "$directive" "$version" \
+          || echo "$label: go-version '$version' is older than go.mod's 'go $directive' -- go build will refuse to parse it"
+      done
+      if sed -n "${first},${last}p" "$file" | grep -q 'go-version-file:' \
+        && ! sed -n "${first},${last}p" "$file" | grep -qF '.pipelines/go.mod'; then
+        echo "$label: lets a consumer's go.mod choose the Go that builds a helper without holding it to 'go $directive'"
+      fi
+    done < <(github_units "$file")
+  done < <(find "$root/.github/workflows" "$root/github" -type f -name '*.yaml' 2> /dev/null | sort)
+}
+
+# gitlab_block <file> <job> -- the lines of a top-level GitLab CI job.
+gitlab_block() {
+  awk -v job="$2" '
+    { line = $0; sub(/[[:space:]]+$/, "", line) }
+    line == job ":" { inside = 1; next }
+    inside && /^[^ #]/ { exit }
+    inside { print }
+  ' "$1"
+}
+
+# gitlab_includes <root> <file> -- the files of this repository a template includes.
+gitlab_includes() {
+  grep -oE "remote: *'https://raw\.githubusercontent\.com/rios0rios0/pipelines/[^/']+/[^']+'" "$2" \
+    | sed -E "s|.*/rios0rios0/pipelines/[^/]+/||; s|'$||" | while IFS= read -r path; do
+      [[ -f "$1/$path" ]] && echo "$1/$path"
+    done
+}
+
+# gitlab_image <root> <file> <job> [depth] -- the image a job runs on: its own `image:`, or
+# that of the job it extends, looked up in its file and in the files it includes.
+gitlab_image() {
+  local root="$1" file="$2" job="$3" depth="${4:-0}" block image parent candidate
+  [[ "$depth" -gt 5 ]] && return 0
+  block="$(gitlab_block "$file" "$job")"
+  image="$(echo "$block" | grep -oE "^  image: *'[^']+'" | head -1 | sed -E "s/^  image: *'//; s/'$//")"
+  if [[ -n "$image" ]]; then
+    echo "$image"
+    return 0
+  fi
+  parent="$(echo "$block" | grep -oE "^  extends: *'[^']+'" | head -1 | sed -E "s/^  extends: *'//; s/'$//")"
+  [[ -n "$parent" ]] || return 0
+  for candidate in "$file" $(gitlab_includes "$root" "$file"); do
+    if grep -qE "^${parent//./\\.}:[[:space:]]*$" "$candidate"; then
+      gitlab_image "$root" "$candidate" "$parent" $((depth + 1))
+      return 0
+    fi
+  done
+}
+
+# gitlab_findings <root> <directive> -- every GitLab CI job that builds a helper on an image
+# that is not a golang one at least as new as the directive.
+GITLAB_JOBS=0
+gitlab_findings() {
+  local root="$1" directive="$2" file job image version
+  while IFS= read -r file; do
+    while IFS= read -r job; do
+      gitlab_block "$file" "$job" | grep -vE '^[[:space:]]*#' | grep -qF -f <(printf '%s\n' "${ENTRIES[@]}") || continue
+      GITLAB_JOBS=$((GITLAB_JOBS + 1))
+      image="$(gitlab_image "$root" "$file" "$job")"
+      version="$(echo "$image" | grep -oE '^golang:[0-9]+(\.[0-9]+)*' | sed 's/^golang://')"
+      if [[ -z "$version" ]]; then
+        echo "${file#"$root"/} job $job: builds a Go helper on '${image:-no image}', not a golang:<version> image"
+      elif ! version_le "$directive" "$version"; then
+        echo "${file#"$root"/} job $job: golang:$version is older than go.mod's 'go $directive' -- go build will refuse to parse it"
+      fi
+    done < <(grep -oE '^[A-Za-z0-9][^ ]*:[[:space:]]*$' "$file" | sed -E 's/:[[:space:]]*$//' \
+      | grep -vxE 'include|stages|variables|default|workflow|image|services|cache|before_script|after_script')
+  done < <(find "$root/gitlab" -type f -name '*.yaml' 2> /dev/null | sort)
+}
+
+# azure_jobs <file> -- `first last name` for every `- job:` of a template, a job ending at
+# the next line indented no deeper than its own `-`.
+azure_jobs() {
+  awk '
+    function flush() { if (name != "") print start, last, name; name = "" }
+    {
+      if (name != "" && $0 !~ /^[[:space:]]*$/) {
+        match($0, /^ */)
+        if (RLENGTH <= indent) flush()
+      }
+      if ($0 ~ /^ *- job: */) {
+        flush()
+        match($0, /^ */); indent = RLENGTH; start = NR
+        name = $0; sub(/^ *- job: */, "", name); gsub(/'\''/, "", name)
+      }
+      if (name != "") last = NR
+    }
+    END { flush() }
+  ' "$1"
+}
+
+# azure_findings <root> <directive> -- every Azure DevOps job that builds a helper with no
+# `GoTool@0` of its own, or an older one.
+AZURE_JOBS=0
+azure_findings() {
+  local root="$1" directive="$2" file first last name versions version
+  while IFS= read -r file; do
+    while read -r first last name; do
+      names_entry "$file" "$first" "$last" || continue
+      AZURE_JOBS=$((AZURE_JOBS + 1))
+      versions="$(sed -n "${first},${last}p" "$file" | awk '
+        /GoTool@0/ { ahead = 8; next }
+        ahead > 0 { ahead--; if (match($0, /version: *'\''[0-9.]+'\''/)) { v = substr($0, RSTART, RLENGTH); gsub(/[^0-9.]/, "", v); print v; ahead = 0 } }
+      ')"
+      if [[ -z "$versions" ]]; then
+        echo "${file#"$root"/} job $name: builds a Go helper with no GoTool@0 'version' in the job, so nothing pins the Go that builds it"
+      fi
+      for version in $versions; do
+        version_le "$directive" "$version" \
+          || echo "${file#"$root"/} job $name: GoTool@0 version '$version' is older than go.mod's 'go $directive' -- go build will refuse to parse it"
+      done
+    done < <(azure_jobs "$file")
+  done < <(find "$root/azure-devops" -type f -name '*.yaml' 2> /dev/null | sort)
+}
+
 if [[ -f "$ROOT_MODULE" ]]; then
   ROOT_DIRECTIVE="$(grep -oE '^go [0-9]+(\.[0-9]+)*' "$ROOT_MODULE" | head -1 | awk '{print $2}')"
   assert_true "the root module declares a 'go' directive" "[[ -n '$ROOT_DIRECTIVE' ]]"
 
-  # A `main.go` under a NESTED module belongs to that module, not this one.
-  NESTED_MODULES="$(find "$SCRIPTS_DIR" -mindepth 2 -type f -name 'go.mod' -not -path '*/.git/*' -exec dirname {} \;)"
-  HELPERS=()
-  while IFS= read -r main; do
-    [[ -z "$main" ]] && continue
-    dir="$(dirname "$main")"
-    nested=false
-    while IFS= read -r module_dir; do
-      [[ -n "$module_dir" && "$dir/" == "$module_dir/"* ]] && nested=true
-    done <<< "$NESTED_MODULES"
-    if [[ "$nested" == false && -f "$dir/run.sh" ]]; then
-      HELPERS+=("${dir#"$SCRIPTS_DIR"/}/run.sh")
-    fi
-  done < <(find "$SCRIPTS_DIR" -type f -name 'main.go' -not -path '*/.git/*' | sort)
-  assert_true "the root module's helpers were found (${#HELPERS[@]})" "[[ ${#HELPERS[@]} -ge 1 ]]"
+  ENTRIES=()
+  while IFS= read -r entry; do
+    [[ -n "$entry" ]] && ENTRIES+=("$entry")
+  done < <(helper_entries "$SCRIPTS_DIR")
+  assert_true "the root module's helpers were found (${#ENTRIES[@]} entry scripts)" "[[ ${#ENTRIES[@]} -ge 1 ]]"
+  # The indirect chain is the case direct discovery misses: no template names the
+  # coverage generator, they name the runners that reach it.
+  assert_true "a helper reached through another script is found: test-all/run.sh" \
+    "contains global/scripts/languages/terraform/test-all/run.sh ${ENTRIES[*]}"
 
-  BUILDERS=()
-  while IFS= read -r file; do
-    builds=false
-    for helper in "${HELPERS[@]}"; do
-      grep -qF "$helper" "$file" && builds=true
-    done
-    grep -qE '^ *run: *make test *$' "$file" && builds=true
-    [[ "$builds" == true ]] && BUILDERS+=("$file")
-  done < <(find "$SCRIPTS_DIR/.github/workflows" "$SCRIPTS_DIR/github" -type f -name '*.yaml' | sort)
-  assert_true "the workflows that build it were found (${#BUILDERS[@]})" "[[ ${#BUILDERS[@]} -ge 1 ]]"
+  assert_empty "every GitHub Actions job that builds a Go helper provisions a Go that can read go.mod" \
+    "$(github_findings "$SCRIPTS_DIR" "$ROOT_DIRECTIVE")"
+  GITHUB_JOBS=0
+  github_findings "$SCRIPTS_DIR" "$ROOT_DIRECTIVE" > /dev/null
+  assert_true "the GitHub Actions jobs that build it were found ($GITHUB_JOBS)" "[[ $GITHUB_JOBS -ge 1 ]]"
 
-  FINDINGS=""
-  for file in "${BUILDERS[@]}"; do
-    versions="$(grep -oE "go-version: *'[0-9]+(\.[0-9]+)*'" "$file" | grep -oE "[0-9]+(\.[0-9]+)*" || true)"
-    if [[ -z "$versions" ]]; then
-      FINDINGS+="${file#"$SCRIPTS_DIR"/}: builds a Go helper with no 'go-version' pinned, so nothing pins the Go that builds it"$'\n'
-      continue
-    fi
-    for version in $versions; do
-      if ! version_le "$ROOT_DIRECTIVE" "$version"; then
-        FINDINGS+="${file#"$SCRIPTS_DIR"/}: go-version '$version' is older than go.mod's 'go $ROOT_DIRECTIVE' -- go build will refuse to parse it"$'\n'
-      fi
-    done
-  done
-  assert_empty "every workflow that builds a Go helper provisions a Go that can read go.mod" "$FINDINGS"
+  assert_empty "every GitLab CI job that builds a Go helper runs on a golang image that can read go.mod" \
+    "$(gitlab_findings "$SCRIPTS_DIR" "$ROOT_DIRECTIVE")"
+  GITLAB_JOBS=0
+  gitlab_findings "$SCRIPTS_DIR" "$ROOT_DIRECTIVE" > /dev/null
+  assert_true "the GitLab CI jobs that build it were found ($GITLAB_JOBS)" "[[ $GITLAB_JOBS -ge 1 ]]"
 
-  # GitLab CI and Azure DevOps have no pairing rule here yet: a template there
-  # running a helper would build it with whatever Go its image carries, checked by
-  # nothing. So one is reported until this file learns that platform's rule.
-  UNPAIRED=""
-  for helper in "${HELPERS[@]}"; do
-    UNPAIRED+="$(grep -rlF "$helper" "$SCRIPTS_DIR/gitlab" "$SCRIPTS_DIR/azure-devops" 2> /dev/null \
-      | sed "s|^$SCRIPTS_DIR/||" || true)"
-  done
-  assert_empty "no GitLab CI or Azure DevOps template runs a Go helper this file cannot pair" "$UNPAIRED"
+  assert_empty "every Azure DevOps job that builds a Go helper installs a Go that can read go.mod" \
+    "$(azure_findings "$SCRIPTS_DIR" "$ROOT_DIRECTIVE")"
+  AZURE_JOBS=0
+  azure_findings "$SCRIPTS_DIR" "$ROOT_DIRECTIVE" > /dev/null
+  assert_true "the Azure DevOps jobs that build it were found ($AZURE_JOBS)" "[[ $AZURE_JOBS -ge 1 ]]"
+
+  # Each rule is shown to fire against a deliberate violation, beside a compliant twin
+  # it must leave alone: a rule that passes everything would make the checks above pass
+  # for the worst possible reason.
+  FIXTURE="$(mktemp -d)" || exit 1
+  trap 'rm -rf "$FIXTURE"' EXIT
+  mkdir -p "$FIXTURE/global/scripts/helper" "$FIXTURE/global/scripts/wrapper" "$FIXTURE/.github/workflows" \
+    "$FIXTURE/github" "$FIXTURE/gitlab/x/abstracts" "$FIXTURE/gitlab/x/stages" "$FIXTURE/azure-devops/x"
+  printf 'module example.com/fixture\n\ngo 1.25.0\n' > "$FIXTURE/go.mod"
+  printf 'package main\n\nfunc main() {}\n' > "$FIXTURE/global/scripts/helper/main.go"
+  printf '#!/usr/bin/env sh\ngo_helper_run global/scripts/helper "$@"\n' > "$FIXTURE/global/scripts/helper/run.sh"
+  printf '#!/usr/bin/env sh\n"$SCRIPTS_DIR/global/scripts/helper/run.sh"\n' > "$FIXTURE/global/scripts/wrapper/run.sh"
+  cat > "$FIXTURE/.github/workflows/fixture.yaml" << 'YAML'
+on: push
+jobs:
+  no_go:
+    steps:
+      - run: '$SCRIPTS_DIR/global/scripts/wrapper/run.sh'
+  old_go:
+    steps:
+      - uses: 'actions/setup-go@x'
+        with:
+          go-version: '1.24.9'
+      - run: '$SCRIPTS_DIR/global/scripts/helper/run.sh'
+  unguarded_file:
+    steps:
+      - uses: 'actions/setup-go@x'
+        with:
+          go-version-file: 'tests/go.mod'
+      - uses: 'actions/setup-go@x'
+        with:
+          go-version: '1.27.3'
+      - run: '$SCRIPTS_DIR/global/scripts/wrapper/run.sh'
+  github_good:
+    steps:
+      - uses: 'actions/setup-go@x'
+        with:
+          go-version: '1.27.3'
+      - run: '$SCRIPTS_DIR/global/scripts/wrapper/run.sh'
+YAML
+  cat > "$FIXTURE/gitlab/x/abstracts/old.yaml" << 'YAML'
+.old-go:
+  image: 'golang:1.24.9@sha256:0000'
+.new-go:
+  image: 'golang:1.27.3-bookworm@sha256:0000'
+YAML
+  cat > "$FIXTURE/gitlab/x/stages/fixture.yaml" << 'YAML'
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/x/abstracts/old.yaml'
+
+python_image:
+  image: 'python:3.13-alpine@sha256:0000'
+  script:
+    - "$SCRIPTS_DIR/global/scripts/wrapper/run.sh"
+
+extends_old:
+  extends: '.old-go'
+  script:
+    - "$SCRIPTS_DIR/global/scripts/helper/run.sh"
+
+no_image:
+  script:
+    - "$SCRIPTS_DIR/global/scripts/helper/run.sh"
+
+gitlab_good:
+  extends: '.new-go'
+  script:
+    - "$SCRIPTS_DIR/global/scripts/wrapper/run.sh"
+YAML
+  cat > "$FIXTURE/azure-devops/x/fixture.yaml" << 'YAML'
+stages:
+  - stage: 'fixture'
+    jobs:
+      - job: 'no_gotool'
+        steps:
+          - script: $(Scripts.Directory)/global/scripts/wrapper/run.sh
+      - job: 'old_gotool'
+        steps:
+          - task: 'GoTool@0'
+            inputs:
+              version: '1.24.9'
+          - script: $(Scripts.Directory)/global/scripts/helper/run.sh
+      - job: 'azure_good'
+        steps:
+          - task: 'GoTool@0'
+            displayName: 'Use Go'
+            inputs:
+              version: '1.27.3'
+          - script: $(Scripts.Directory)/global/scripts/wrapper/run.sh
+YAML
+  REAL_ENTRIES=("${ENTRIES[@]}")
+  ENTRIES=()
+  while IFS= read -r entry; do
+    [[ -n "$entry" ]] && ENTRIES+=("$entry")
+  done < <(helper_entries "$FIXTURE")
+  assert_true "discovery follows a script that runs a helper's script (fixture)" \
+    "contains global/scripts/wrapper/run.sh ${ENTRIES[*]}"
+  # shellcheck disable=SC2034  # read inside assert_true's eval'd conditions
+  FIXTURE_GITHUB="$(github_findings "$FIXTURE" 1.25.0)"
+  # shellcheck disable=SC2034  # read inside assert_true's eval'd conditions
+  FIXTURE_GITLAB="$(gitlab_findings "$FIXTURE" 1.25.0)"
+  # shellcheck disable=SC2034  # read inside assert_true's eval'd conditions
+  FIXTURE_AZURE="$(azure_findings "$FIXTURE" 1.25.0)"
+  assert_true "the GitHub rule fires on a job with no pinned Go" "grep -q 'job no_go: .*no .go-version.' <<< \"\$FIXTURE_GITHUB\""
+  assert_true "the GitHub rule fires on a job with an older Go" "grep -q \"job old_go: go-version '1.24.9'\" <<< \"\$FIXTURE_GITHUB\""
+  assert_true "the GitHub rule fires on a consumer's go.mod not held to the directive" \
+    "grep -q 'job unguarded_file: lets a consumer' <<< \"\$FIXTURE_GITHUB\""
+  assert_true "the GitHub rule leaves a compliant job alone" "! grep -q 'github_good' <<< \"\$FIXTURE_GITHUB\""
+  assert_true "the GitLab rule fires on a job on a non-golang image" "grep -q \"job python_image: .*'python:3.13\" <<< \"\$FIXTURE_GITLAB\""
+  assert_true "the GitLab rule fires on a job extending an older golang image" \
+    "grep -q 'job extends_old: golang:1.24.9 is older' <<< \"\$FIXTURE_GITLAB\""
+  assert_true "the GitLab rule fires on a job with no image at all" "grep -q \"job no_image: .*'no image'\" <<< \"\$FIXTURE_GITLAB\""
+  assert_true "the GitLab rule leaves a job extending a new enough image alone" "! grep -q 'gitlab_good' <<< \"\$FIXTURE_GITLAB\""
+  assert_true "the Azure rule fires on a job with no GoTool@0" "grep -q 'job no_gotool: .*no GoTool@0' <<< \"\$FIXTURE_AZURE\""
+  assert_true "the Azure rule fires on a job with an older GoTool@0" \
+    "grep -q \"job old_gotool: GoTool@0 version '1.24.9'\" <<< \"\$FIXTURE_AZURE\""
+  assert_true "the Azure rule leaves a compliant job alone" "! grep -q 'azure_good' <<< \"\$FIXTURE_AZURE\""
+  ENTRIES=("${REAL_ENTRIES[@]}")
 fi
 echo ""
 

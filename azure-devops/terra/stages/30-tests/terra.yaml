@@ -91,7 +91,10 @@ stages:
           # Pin a Go toolchain high enough to satisfy consumer `go.mod`
           # directives. `GOTOOLCHAIN=auto` (the Go 1.21+ default) will
           # transparently fetch a newer toolchain when `go.mod` requires
-          # it, so this pin is a lower bound, not a hard version.
+          # it, so this pin is a lower bound, not a hard version. It also
+          # builds the terra-test tier's coverage generator, a Go helper from
+          # the pipelines checkout, so it stays at least that repository's
+          # `go` directive.
           - task: 'GoTool@0'
             displayName: 'Use Go (toolchain auto-upgrades per go.mod)'
             inputs:

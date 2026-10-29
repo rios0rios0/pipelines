@@ -34,7 +34,9 @@ set -e
 #   4. REPORT CONVERSION -- Dart emits coverage as LCOV and its analyzer output
 #      as a pipe-delimited line format; two of the three platforms can read
 #      neither. The converters are exercised against fixtures covering the cases
-#      a naive implementation gets wrong (escaped pipes, repeated `SF:` records).
+#      a naive implementation gets wrong (escaped pipes, repeated `SF:` records),
+#      and against reports recorded from the Python converters they replaced,
+#      byte for byte, so that a consumer reading one sees no change.
 #
 #   5. SECURITY -- no credential may reach a recorded command line. Every report
 #      directory here is published as a job artifact on all three platforms, so a
@@ -100,6 +102,77 @@ WORK_DIR="$(mktemp -d)" || exit 1
 cleanup() { rm -rf "$WORK_DIR"; }
 trap cleanup EXIT
 
+# The templates are YAML and the reports XML, and neither is read with a grep:
+# a small Go program (internal/testsuites/dartpipeline) prints a YAML document
+# as JSON for jq to query, and checks a report's XML strictly -- matching tags,
+# escaped `&` and `<`, one root -- the way the platforms that publish it would.
+# Built once per run, into this run's own directory.
+command -v jq > /dev/null 2>&1 || { echo "jq is required to run this suite" >&2; exit 1; }
+DP="$WORK_DIR/dartpipeline"
+go build -C "$SCRIPTS_DIR" -o "$DP" ./internal/testsuites/dartpipeline \
+  || { echo "could not build internal/testsuites/dartpipeline; cannot run this suite" >&2; exit 1; }
+
+# yaml_query <file> <jq program> [jq options...]
+#
+# Ask a question of a YAML document; the answer is printed raw.
+yaml_query() {
+  local file="$1"
+  local program="$2"
+  shift 2
+  "$DP" yaml "$file" | jq -r "$@" "$program"
+}
+
+# The scripts under test run in an environment of their own, never the
+# developer's, so that every machine reaches the verdict CI reaches:
+#
+#   - a HOME and a PUB_CACHE inside this run's directory, and no pub cache's
+#     `bin` on PATH. `dart_global_activate` skips a package whose launcher is
+#     already found, so on a machine with `junitreport`, `coverage` or
+#     `dart_code_linter` activated the scripts recorded a different command
+#     journal than on CI, and the journal assertions below failed for a reason
+#     that has nothing to do with the scripts;
+#   - no global or system git configuration: the coverage renderer's `git diff`
+#     reads it, and a `core.quotePath = false` there changes what it lists;
+#   - none of the developer's own DART_*, FLUTTER_* or PUB_* settings, PREFIX or
+#     REPORT_PATH, each of which changes what a script does -- so they are
+#     dropped from this suite's environment before anything runs.
+for variable in $(compgen -e); do
+  case "$variable" in
+    DART_* | FLUTTER_* | PUB_* | PREFIX | REPORT_PATH) unset "$variable" ;;
+  esac
+done
+HERMETIC_HOME="$WORK_DIR/home"
+mkdir -p "$HERMETIC_HOME"
+
+# hermetic_path <PATH value>
+#
+# The PATH without a pub cache's `bin`: neither the one under the developer's
+# own HOME nor any other directory that sits beside a pub cache's
+# `global_packages`, wherever PUB_CACHE pointed.
+hermetic_path() {
+  local entry
+  local kept=""
+  local -a entries
+  IFS=: read -r -a entries <<< "$1"
+  for entry in "${entries[@]}"; do
+    if [[ -z "$entry" || "${entry%/}" == "$HOME/.pub-cache/bin" || -d "${entry%/}/../global_packages" ]]; then
+      continue
+    fi
+    kept="${kept:+$kept:}$entry"
+  done
+  printf '%s' "$kept"
+}
+HERMETIC_PATH="$(hermetic_path "$PATH")"
+
+# hermetic <command...>
+#
+# Run a command in that environment. Assignments written before the call still
+# reach the command.
+hermetic() {
+  env HOME="$HERMETIC_HOME" PUB_CACHE="$HERMETIC_HOME/.pub-cache" PATH="$HERMETIC_PATH" \
+    XDG_CONFIG_HOME="$HERMETIC_HOME/.config" GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null "$@"
+}
+
 # make_project <dir> <flutter|dart>
 #
 # Build a minimal but realistic package. The Flutter variant declares
@@ -150,7 +223,7 @@ EOF
 
 # run_dart <project-dir> <script> [env assignments...]
 #
-# Drive one runner in dry-run mode and expose:
+# Drive one runner in dry-run mode, in the hermetic environment, and expose:
 #   STATUS -- the exit code
 #   CMD    -- the recorded command journal, newline-joined
 run_dart() {
@@ -161,7 +234,7 @@ run_dart() {
   STATUS=0
   (
     cd "$project" || exit 1
-    env DART_DRY_RUN=true SCRIPTS_DIR="$SCRIPTS_DIR" "$@" \
+    hermetic DART_DRY_RUN=true SCRIPTS_DIR="$SCRIPTS_DIR" "$@" \
       sh "$DART_DIR/$script/run.sh" > "$WORK_DIR/last.log" 2>&1
   ) || STATUS=$?
 
@@ -206,12 +279,32 @@ assert_true "common.sh is NOT executable (it is sourced, never run)" \
 assert_true "common.sh is not named run.sh (so the CI permission check skips it)" \
   "[[ ! -f '$DART_DIR/common.sh/run.sh' ]]"
 
-for helper in analyze/dart_analyze_report.py test/lcov_to_cobertura.py test/lcov_to_markdown.py \
-              test/filter_test_events.py; do
+# The report converters are executables in their own right -- the tests below
+# and the runners call them by path -- and the awk programs they load are not:
+# they are read with `awk -f`, beside `common.awk`, and running one does nothing.
+for helper in analyze/analyze-report.sh test/lcov-to-cobertura.sh test/lcov-to-markdown.sh \
+              test/filter-test-events.sh; do
   assert_true "$helper exists" "[[ -f '$DART_DIR/$helper' ]]"
-  assert_true "$helper is valid Python" \
-    "python3 -m py_compile '$DART_DIR/$helper'"
+  assert_true "$helper is executable" "[[ -x '$DART_DIR/$helper' ]]"
+  assert_true "$helper declares '#!/usr/bin/env sh'" \
+    "head -1 '$DART_DIR/$helper' | grep -q '^#!/usr/bin/env sh$'"
+  assert_true "$helper parses as sh" "sh -n '$DART_DIR/$helper'"
 done
+for program in common.awk test/lcov.awk test/lcov-to-cobertura.awk test/lcov-to-markdown.awk \
+               test/filter-test-events.awk analyze/analyze-report.awk; do
+  assert_true "$program exists" "[[ -f '$DART_DIR/$program' ]]"
+  assert_true "$program is NOT executable (it is loaded with awk -f, never run)" \
+    "[[ ! -x '$DART_DIR/$program' ]]"
+done
+
+# A Dart job installs no Python, so nothing in the family may need it again.
+assert_equals "no Python helper is left in the Dart scripts" \
+  "" "$(find "$DART_DIR" -name '*.py' | sort | tr '\n' ' ')"
+# `__pycache__` is skipped: a checkout that ran the old suite keeps the bytecode the Python helpers
+# compiled to, ignored by git and naming `python3` inside, though no Dart script runs it.
+assert_true "no Dart script runs python3" "! grep -rq --exclude-dir=__pycache__ 'python3' '$DART_DIR'"
+assert_true "the GitLab Dart job installs no python3" \
+  "! grep -A2 'apt-get install' '$SCRIPTS_DIR/gitlab/dart/abstracts/dart.yaml' | grep -q 'python3'"
 
 # ---------------------------------------------------------------------------
 echo ""
@@ -239,6 +332,39 @@ assert_true "flutter: the JUnit converter is installed" \
 # format_coverage over it would be a no-op at best.
 assert_true "flutter: format_coverage is NOT run (flutter emits LCOV directly)" \
   "! grep -q 'format_coverage' <<< \"\$CMD\""
+
+# The isolation the journal assertions depend on, asserted rather than assumed.
+# A developer's pub cache -- here a stand-in with the three launchers this
+# family activates -- may sit on the PATH this suite was started with and in
+# PUB_CACHE; neither may reach a script. And the assertion above has to notice
+# when one does: with the launcher visible, the activation goes unrecorded.
+DEV_PUB="$WORK_DIR/developer/.pub-cache"
+mkdir -p "$DEV_PUB/bin" "$DEV_PUB/global_packages"
+for launcher in tojunit format_coverage metrics; do
+  printf '#!/bin/sh\nexit 0\n' > "$DEV_PUB/bin/$launcher"
+  chmod +x "$DEV_PUB/bin/$launcher"
+done
+assert_equals "hermetic: a pub cache's bin is kept off the scripts' PATH" \
+  "/usr/bin:/bin" "$(hermetic_path "$DEV_PUB/bin:/usr/bin:$HOME/.pub-cache/bin:/bin")"
+STATUS=0
+(
+  cd "$FLUTTER_PROJECT" || exit 1
+  # This suite, as if started by a developer with that pub cache in use.
+  PATH="$DEV_PUB/bin:$PATH"
+  export PUB_CACHE="$DEV_PUB"
+  HERMETIC_PATH="$(hermetic_path "$PATH")"
+  hermetic DART_DRY_RUN=true SCRIPTS_DIR="$SCRIPTS_DIR" sh "$DART_DIR/test/run.sh" > "$WORK_DIR/hermetic.log" 2>&1
+) || STATUS=$?
+assert_true "hermetic: a developer's activated junitreport does not stop the activation being recorded" \
+  "[[ $STATUS -eq 0 ]] && grep -qx 'dart pub global activate junitreport' '$FLUTTER_PROJECT/build/reports/dart-test/command.txt'"
+STATUS=0
+(
+  cd "$FLUTTER_PROJECT" || exit 1
+  env HOME="$HERMETIC_HOME" PUB_CACHE="$DEV_PUB" PATH="$HERMETIC_PATH" \
+    DART_DRY_RUN=true SCRIPTS_DIR="$SCRIPTS_DIR" sh "$DART_DIR/test/run.sh" > "$WORK_DIR/hermetic.log" 2>&1
+) || STATUS=$?
+assert_true "hermetic: ...and the journal assertion fails when that launcher does reach a script" \
+  "[[ $STATUS -eq 0 ]] && ! grep -q 'dart pub global activate junitreport' '$FLUTTER_PROJECT/build/reports/dart-test/command.txt'"
 
 run_dart "$FLUTTER_PROJECT" build
 assert_true "flutter: the default build target is an APK" \
@@ -292,7 +418,7 @@ assert_true "dart: a package with no bin/ builds nothing" \
 # `exe` alone; these cases keep `js` and `aot-snapshot` from drifting back.
 for target in exe js aot-snapshot; do
   STATUS=0
-  (cd "$LIB_PROJECT" && env DART_DRY_RUN=true SCRIPTS_DIR="$SCRIPTS_DIR" \
+  (cd "$LIB_PROJECT" && hermetic DART_DRY_RUN=true SCRIPTS_DIR="$SCRIPTS_DIR" \
     sh "$DART_DIR/build/run.sh" "$target" > "$WORK_DIR/entry.$target.log" 2>&1) || STATUS=$?
   assert_true "build: the '$target' target fails when no entry point can be resolved" \
     "[[ $STATUS -eq 1 ]]"
@@ -325,15 +451,15 @@ echo "--- 5. Missing test directory is a skip, not a crash ---"
 NOTESTS="$(make_project notests dart)"
 rm -rf "${NOTESTS:?}/test"
 STATUS=0
-(cd "$NOTESTS" && env SCRIPTS_DIR="$SCRIPTS_DIR" sh "$DART_DIR/test/run.sh" > "$WORK_DIR/notests.log" 2>&1) || STATUS=$?
+(cd "$NOTESTS" && hermetic SCRIPTS_DIR="$SCRIPTS_DIR" sh "$DART_DIR/test/run.sh" > "$WORK_DIR/notests.log" 2>&1) || STATUS=$?
 assert_true "a package with no test/ directory passes rather than failing" "[[ $STATUS -eq 0 ]]"
 assert_true "a package with no test/ directory still gets a valid JUnit report" \
-  "python3 -c \"import xml.dom.minidom as m; m.parse('$NOTESTS/build/reports/junit.xml')\""
+  "'$DP' xml '$NOTESTS/build/reports/junit.xml'"
 assert_true "the skip is reported loudly rather than silently" \
   "grep -q 'no .* directory found' '$WORK_DIR/notests.log'"
 
 STATUS=0
-(cd "$NOTESTS" && env SCRIPTS_DIR="$SCRIPTS_DIR" DART_REQUIRE_TESTS=true sh "$DART_DIR/test/run.sh" > /dev/null 2>&1) || STATUS=$?
+(cd "$NOTESTS" && hermetic SCRIPTS_DIR="$SCRIPTS_DIR" DART_REQUIRE_TESTS=true sh "$DART_DIR/test/run.sh" > /dev/null 2>&1) || STATUS=$?
 assert_true "DART_REQUIRE_TESTS=true turns the skip into a failure" "[[ $STATUS -eq 1 ]]"
 
 # ---------------------------------------------------------------------------
@@ -345,7 +471,7 @@ PUB_PROJECT="$(make_project pubpkg dart)"
 SENTINEL='fixture-pub-credential-placeholder'
 
 STATUS=0
-(cd "$PUB_PROJECT" && env DART_DRY_RUN=true SCRIPTS_DIR="$SCRIPTS_DIR" \
+(cd "$PUB_PROJECT" && hermetic DART_DRY_RUN=true SCRIPTS_DIR="$SCRIPTS_DIR" \
   PUB_TOKEN="$SENTINEL" sh "$DART_DIR/publish/run.sh" > /dev/null 2>&1) || STATUS=$?
 CMD="$(cat "$PUB_PROJECT"/build/reports/*/command.txt 2>/dev/null || true)"
 assert_true "publish: the dry run validates the package" \
@@ -357,7 +483,7 @@ assert_no_leak "publish: the pub token is never recorded" "$PUB_PROJECT" "$SENTI
 # flag would put the credential on argv and into the published artifact.
 PUB2="$(make_project pubpkg2 dart)"
 STATUS=0
-(cd "$PUB2" && env SCRIPTS_DIR="$SCRIPTS_DIR" PUB_TOKEN="$SENTINEL" DART_TOOLCHAIN=dart \
+(cd "$PUB2" && hermetic SCRIPTS_DIR="$SCRIPTS_DIR" PUB_TOKEN="$SENTINEL" DART_TOOLCHAIN=dart \
   sh -c 'set -e
     . "$SCRIPTS_DIR/global/scripts/languages/dart/common.sh"
     dart_prepare_reports "dart-publish"
@@ -372,7 +498,7 @@ assert_no_leak "publish: the token value never appears in the report tree" "$PUB
 NOPUB="$(make_project nopub dart)"
 printf 'publish_to: none\n' >> "$NOPUB/pubspec.yaml"
 STATUS=0
-(cd "$NOPUB" && env SCRIPTS_DIR="$SCRIPTS_DIR" PUB_TOKEN="$SENTINEL" \
+(cd "$NOPUB" && hermetic SCRIPTS_DIR="$SCRIPTS_DIR" PUB_TOKEN="$SENTINEL" \
   sh "$DART_DIR/publish/run.sh" > "$WORK_DIR/nopub.log" 2>&1) || STATUS=$?
 assert_true "publish: 'publish_to: none' short-circuits before any pub command" "[[ $STATUS -eq 0 ]]"
 assert_true "publish: 'publish_to: none' is reported as a deliberate skip" \
@@ -401,9 +527,10 @@ DA:4,0
 end_of_record
 EOF
 
-COV_OUT="$(python3 "$DART_DIR/test/lcov_to_cobertura.py" "$WORK_DIR/lcov.info" "$WORK_DIR/cobertura.xml" . 2>&1)"
+COBERTURA="$DART_DIR/test/lcov-to-cobertura.sh"
+COV_OUT="$("$COBERTURA" "$WORK_DIR/lcov.info" "$WORK_DIR/cobertura.xml" . 2>&1)"
 assert_true "the Cobertura report is well-formed XML" \
-  "python3 -c \"import xml.dom.minidom as m; m.parse('$WORK_DIR/cobertura.xml')\""
+  "'$DP' xml '$WORK_DIR/cobertura.xml'"
 # A repeated `SF:` record for the same file is what a multi-entry-point suite
 # produces. Replacing rather than merging would report only the last suite's
 # hits -- here that would turn 5/6 into 1/2.
@@ -428,12 +555,12 @@ assert_true "the coverage line matches the GitLab 'coverage:' regex" \
   "grep -qE 'COVERAGE_PERCENT=[0-9.]+%' <<< \"\$COV_OUT\""
 
 STATUS=0
-DART_COVERAGE_MINIMUM=90 python3 "$DART_DIR/test/lcov_to_cobertura.py" \
+DART_COVERAGE_MINIMUM=90 "$COBERTURA" \
   "$WORK_DIR/lcov.info" "$WORK_DIR/c2.xml" . > /dev/null 2>&1 || STATUS=$?
 assert_true "DART_COVERAGE_MINIMUM fails the job below the threshold" "[[ $STATUS -eq 1 ]]"
 
 STATUS=0
-DART_COVERAGE_MINIMUM=80 python3 "$DART_DIR/test/lcov_to_cobertura.py" \
+DART_COVERAGE_MINIMUM=80 "$COBERTURA" \
   "$WORK_DIR/lcov.info" "$WORK_DIR/c3.xml" . > /dev/null 2>&1 || STATUS=$?
 assert_true "DART_COVERAGE_MINIMUM passes at or above the threshold" "[[ $STATUS -eq 0 ]]"
 
@@ -473,7 +600,7 @@ DA:2,0
 end_of_record
 EOF
 
-GEN_OUT="$(python3 "$DART_DIR/test/lcov_to_cobertura.py" \
+GEN_OUT="$("$COBERTURA" \
   "$WORK_DIR/lcov-generated.info" "$WORK_DIR/gen1.xml" . 2>&1)"
 assert_true "generated sources drag the unexcluded total down (3/22)" \
   "grep -q 'COVERAGE_PERCENT=13.64%' <<< \"\$GEN_OUT\""
@@ -481,7 +608,7 @@ assert_true "generated sources drag the unexcluded total down (3/22)" \
 # `fnmatch`'s `*` crosses `/`, unlike a shell glob, which is what keeps the
 # useful pattern short: no `**/` prefix and no per-directory pattern.
 GEN_OUT="$(DART_COVERAGE_EXCLUDE='*.g.dart *.freezed.dart' \
-  python3 "$DART_DIR/test/lcov_to_cobertura.py" \
+  "$COBERTURA" \
   "$WORK_DIR/lcov-generated.info" "$WORK_DIR/gen2.xml" . 2>&1)"
 assert_true "DART_COVERAGE_EXCLUDE drops generated sources from the percentage" \
   "grep -q 'COVERAGE_PERCENT=75.00%' <<< \"\$GEN_OUT\""
@@ -508,14 +635,14 @@ assert_true "the coverage line still matches the GitLab 'coverage:' regex" \
 # space-separated. Reading only one spelling turns the other into a single
 # pattern that matches nothing, and nothing would say so.
 GEN_OUT="$(DART_COVERAGE_EXCLUDE='*.g.dart,*.freezed.dart' \
-  python3 "$DART_DIR/test/lcov_to_cobertura.py" \
+  "$COBERTURA" \
   "$WORK_DIR/lcov-generated.info" "$WORK_DIR/gen3.xml" . 2>&1)"
 assert_true "comma-separated patterns behave identically to space-separated ones" \
   "grep -q 'COVERAGE_PERCENT=75.00%' <<< \"\$GEN_OUT\""
 
 # A typo'd pattern must announce itself as `0 of N` rather than look like success.
 GEN_OUT="$(DART_COVERAGE_EXCLUDE='*.generated.dart' \
-  python3 "$DART_DIR/test/lcov_to_cobertura.py" \
+  "$COBERTURA" \
   "$WORK_DIR/lcov-generated.info" "$WORK_DIR/gen4.xml" . 2>&1)"
 assert_true "a pattern that matches nothing is reported as '0 of N', not silence" \
   "grep -q 'COVERAGE_EXCLUDED=0 of 3 file(s) dropped' <<< \"\$GEN_OUT\""
@@ -523,18 +650,18 @@ assert_true "a pattern that matches nothing is reported as '0 of N', not silence
 # The gate must see the SAME set the report does, or the two disagree by exactly
 # the generated files -- which is the whole reason the variable exists.
 STATUS=0
-DART_COVERAGE_MINIMUM=70 python3 "$DART_DIR/test/lcov_to_cobertura.py" \
+DART_COVERAGE_MINIMUM=70 "$COBERTURA" \
   "$WORK_DIR/lcov-generated.info" "$WORK_DIR/gen5.xml" . > /dev/null 2>&1 || STATUS=$?
 assert_true "the gate fails on generated sources when nothing is excluded" "[[ $STATUS -eq 1 ]]"
 
 STATUS=0
 DART_COVERAGE_MINIMUM=70 DART_COVERAGE_EXCLUDE='*.g.dart *.freezed.dart' \
-  python3 "$DART_DIR/test/lcov_to_cobertura.py" \
+  "$COBERTURA" \
   "$WORK_DIR/lcov-generated.info" "$WORK_DIR/gen6.xml" . > /dev/null 2>&1 || STATUS=$?
 assert_true "the gate is evaluated on the excluded set, not the raw one" "[[ $STATUS -eq 0 ]]"
 
 # An unset variable must change nothing at all, for every existing consumer.
-GEN_OUT="$(python3 "$DART_DIR/test/lcov_to_cobertura.py" \
+GEN_OUT="$("$COBERTURA" \
   "$WORK_DIR/lcov.info" "$WORK_DIR/gen7.xml" . 2>&1)"
 assert_true "an unset DART_COVERAGE_EXCLUDE prints no exclusion line at all" \
   "! grep -q 'COVERAGE_EXCLUDED' <<< \"\$GEN_OUT\""
@@ -550,15 +677,15 @@ echo "--- 7b. LCOV to Markdown summary (the pull-request comment) ---"
 # must show the number the gate evaluated, over the files the gate counted, or
 # it sends the reader looking for a discrepancy that is only a second
 # implementation.
-MD="$DART_DIR/test/lcov_to_markdown.py"
+MD="$DART_DIR/test/lcov-to-markdown.sh"
 
 assert_true "test/run.sh renders the Markdown summary beside the Cobertura report" \
-  "grep -q 'lcov_to_markdown.py' '$DART_DIR/test/run.sh'"
+  "grep -q 'test/lcov-to-markdown.sh\"' '$DART_DIR/test/run.sh'"
 assert_true "test/run.sh treats a summary it could not render as a warning, not a failure" \
-  "grep -A2 'lcov_to_markdown.py' '$DART_DIR/test/run.sh' | grep -q 'WARNING: could not render the coverage summary'"
+  "grep -A2 'test/lcov-to-markdown.sh\"' '$DART_DIR/test/run.sh' | grep -q 'WARNING: could not render the coverage summary'"
 
 STATUS=0
-DART_COVERAGE_MINIMUM=80 python3 "$MD" "$WORK_DIR/lcov.info" "$WORK_DIR/cov80.md" > /dev/null 2>&1 || STATUS=$?
+DART_COVERAGE_MINIMUM=80 "$MD" "$WORK_DIR/lcov.info" "$WORK_DIR/cov80.md" > /dev/null 2>&1 || STATUS=$?
 assert_true "markdown: the summary is written and the script exits 0" \
   "[[ $STATUS -eq 0 && -s '$WORK_DIR/cov80.md' ]]"
 assert_true "markdown: the Lines row carries the converter's percentage and counts" \
@@ -573,18 +700,18 @@ assert_true "markdown: the branch row carries no threshold marker (the gate is l
 # A report, not a gate: the converter already fails the job below the floor,
 # and a second exit code for the same fact would report one shortfall twice.
 STATUS=0
-DART_COVERAGE_MINIMUM=90 python3 "$MD" "$WORK_DIR/lcov.info" "$WORK_DIR/cov90.md" > /dev/null 2>&1 || STATUS=$?
+DART_COVERAGE_MINIMUM=90 "$MD" "$WORK_DIR/lcov.info" "$WORK_DIR/cov90.md" > /dev/null 2>&1 || STATUS=$?
 assert_true "markdown: a total below the floor is marked red" \
   "grep -q '| 🔴 | Lines | 83.33% (🎯 90%) |' '$WORK_DIR/cov90.md'"
 assert_true "markdown: a total below the floor still exits 0 (the converter holds the gate)" \
   "[[ $STATUS -eq 0 ]]"
 
-python3 "$MD" "$WORK_DIR/lcov.info" "$WORK_DIR/covnone.md" > /dev/null 2>&1
+"$MD" "$WORK_DIR/lcov.info" "$WORK_DIR/covnone.md" > /dev/null 2>&1
 assert_true "markdown: with no floor the row is blue and carries no target" \
   "grep -q '| 🔵 | Lines | 83.33% | 5 / 6 |' '$WORK_DIR/covnone.md'"
 
 # The exclusions the gate applies must be the exclusions the comment shows.
-DART_COVERAGE_EXCLUDE='*.g.dart *.freezed.dart' python3 "$MD" \
+DART_COVERAGE_EXCLUDE='*.g.dart *.freezed.dart' "$MD" \
   "$WORK_DIR/lcov-generated.info" "$WORK_DIR/covgen.md" > /dev/null 2>&1
 assert_true "markdown: DART_COVERAGE_EXCLUDE drops generated sources from the total" \
   "grep -q '| Lines | 75.00% | 3 / 4 |' '$WORK_DIR/covgen.md'"
@@ -628,7 +755,7 @@ cp "$WORK_DIR/lcov.info" "$MD_REPO/app/lcov.info"
 
 STATUS=0
 (cd "$MD_REPO/app" && DART_COVERAGE_MINIMUM=80 DART_COVERAGE_DIFF_BASE="$MD_BASE" \
-  python3 "$MD" lcov.info changed.md > /dev/null 2>&1) || STATUS=$?
+  hermetic "$MD" lcov.info changed.md > /dev/null 2>&1) || STATUS=$?
 assert_true "markdown: a diff base adds a collapsed file section" \
   "[[ $STATUS -eq 0 ]] && grep -q '<details>' '$MD_REPO/app/changed.md'"
 assert_true "markdown: a changed, instrumented file is listed with its own coverage and uncovered lines" \
@@ -652,13 +779,13 @@ md_git add app/test/main_test.dart
 md_git commit --quiet -m 'tests only'
 MD_TESTS_ONLY_BASE="$(md_git rev-parse HEAD~1)"
 (cd "$MD_REPO/app" && DART_COVERAGE_DIFF_BASE="$MD_TESTS_ONLY_BASE" \
-  python3 "$MD" lcov.info testsonly.md > /dev/null 2>&1)
+  hermetic "$MD" lcov.info testsonly.md > /dev/null 2>&1)
 assert_true "markdown: a change with no instrumented file says so in the summary" \
   "grep -q 'File coverage &mdash; none of the 1 changed file(s) since' '$MD_REPO/app/testsonly.md'"
 assert_true "markdown: ...and explains it without claiming anything was listed" \
   "grep -q '^Nothing to list: tests, assets' '$MD_REPO/app/testsonly.md' && ! grep -q 'other changed file' '$MD_REPO/app/testsonly.md'"
 (cd "$MD_REPO/app" && DART_COVERAGE_DIFF_BASE="$(md_git rev-parse HEAD)" \
-  python3 "$MD" lcov.info nochange.md > /dev/null 2>&1)
+  hermetic "$MD" lcov.info nochange.md > /dev/null 2>&1)
 assert_true "markdown: a base equal to HEAD reads as no file changed" \
   "grep -q 'File coverage &mdash; no file changed since' '$MD_REPO/app/nochange.md'"
 
@@ -667,7 +794,7 @@ assert_true "markdown: a base equal to HEAD reads as no file changed" \
 # saw -- and none of them is a reason to fail a green suite.
 STATUS=0
 (cd "$MD_REPO/app" && DART_COVERAGE_DIFF_BASE=0123456789012345678901234567890123456789 \
-  python3 "$MD" lcov.info nobase.md > "$WORK_DIR/nobase.log" 2>&1) || STATUS=$?
+  hermetic "$MD" lcov.info nobase.md > "$WORK_DIR/nobase.log" 2>&1) || STATUS=$?
 assert_true "markdown: an unresolvable diff base exits 0 and still writes the totals" \
   "[[ $STATUS -eq 0 ]] && grep -q '| Lines | 83.33% |' '$MD_REPO/app/nobase.md'"
 assert_true "markdown: the missing file section says why instead of appearing empty" \
@@ -689,7 +816,7 @@ DA:31,0
 end_of_record
 EOF
 (cd "$MD_REPO/app" && DART_COVERAGE_DIFF_BASE="$MD_BASE" \
-  python3 "$MD" ranges.info ranges.md > /dev/null 2>&1)
+  hermetic "$MD" ranges.info ranges.md > /dev/null 2>&1)
 assert_true "markdown: consecutive uncovered lines are folded into ranges" \
   "grep -q '| 1 / 7 | 10-12, 20, 30-31 |' '$MD_REPO/app/ranges.md'"
 
@@ -703,7 +830,7 @@ echo "--- 7c. Test event stream filter (the GitHub Test Results check) ---"
 # `Test Results` check fails the whole report on the first line it cannot
 # parse. `tojunit` tolerates the noise, which is why the JUnit report never
 # showed it. The fixture is the shape one real run produced.
-FILTER="$DART_DIR/test/filter_test_events.py"
+FILTER="$DART_DIR/test/filter-test-events.sh"
 cat > "$WORK_DIR/events.raw" <<'EOF'
 Resolving dependencies...
 Got dependencies!
@@ -716,13 +843,13 @@ Got dependencies!
 {"success":true,"type":"done","time":4}
 EOF
 STATUS=0
-FILTER_OUT="$(python3 "$FILTER" "$WORK_DIR/events.raw" "$WORK_DIR/test-results.json" 2>&1)" || STATUS=$?
+FILTER_OUT="$("$FILTER" "$WORK_DIR/events.raw" "$WORK_DIR/test-results.json" 2>&1)" || STATUS=$?
 assert_true "events: the filter exits 0 and writes the filtered stream" \
   "[[ $STATUS -eq 0 && -s '$WORK_DIR/test-results.json' ]]"
 assert_equals "events: pub's progress lines, the array event and the blank line are dropped" \
   "5" "$(wc -l < "$WORK_DIR/test-results.json" | tr -d ' ')"
 assert_true "events: every kept line is a JSON object carrying a type" \
-  "python3 -c \"import json; [json.loads(l)['type'] for l in open('$WORK_DIR/test-results.json')]\""
+  "jq -e -s 'length == 5 and all(.[]; type == \"object\" and (.type | type) == \"string\")' '$WORK_DIR/test-results.json' > /dev/null"
 assert_true "events: kept lines are written verbatim" \
   "grep -qF '{\"suite\":{\"id\":0,\"platform\":\"vm\",\"path\":\"/w/test/sample_test.dart\"},\"type\":\"suite\",\"time\":1}' '$WORK_DIR/test-results.json'"
 assert_true "events: what was kept and dropped is printed for the job log" \
@@ -735,20 +862,381 @@ assert_true "events: what was kept and dropped is printed for the job log" \
 printf 'Resolving dependencies...\n' > "$WORK_DIR/noise.raw"
 cp "$WORK_DIR/test-results.json" "$WORK_DIR/stale.json"
 STATUS=0
-FILTER_OUT="$(python3 "$FILTER" "$WORK_DIR/noise.raw" "$WORK_DIR/stale.json" 2>&1)" || STATUS=$?
+FILTER_OUT="$("$FILTER" "$WORK_DIR/noise.raw" "$WORK_DIR/stale.json" 2>&1)" || STATUS=$?
 assert_true "events: a stream with no test event exits 0, warns, and removes a stale output" \
   "[[ $STATUS -eq 0 && ! -f '$WORK_DIR/stale.json' ]] && grep -q 'WARNING' <<< \"\$FILTER_OUT\""
 
 assert_true "test/run.sh filters the event stream for the Test Results check" \
-  "grep -q 'filter_test_events.py' '$DART_DIR/test/run.sh'"
+  "grep -q 'test/filter-test-events.sh\"' '$DART_DIR/test/run.sh'"
 assert_true "test/run.sh treats a stream it could not filter as a warning, not a failure" \
-  "grep -A2 'filter_test_events.py' '$DART_DIR/test/run.sh' | grep -q 'WARNING: could not filter'"
+  "grep -A2 'test/filter-test-events.sh\"' '$DART_DIR/test/run.sh' | grep -q 'WARNING: could not filter'"
 # The raw stream's location is a contract the filter reads; a rename would make
 # the check silently skip through `hashFiles` rather than fail.
 assert_true "test/run.sh keeps the raw stream where the filter reads it" \
   "grep -q 'EVENTS_FILE=\"\$DART_TOOL_REPORT_PATH/test-events.json\"' '$DART_DIR/test/run.sh'"
 assert_true "test/run.sh writes the filtered stream as build/reports/test-results.json" \
   "grep -q 'TEST_RESULTS_FILE=\"\$REPORT_ROOT/test-results.json\"' '$DART_DIR/test/run.sh'"
+
+# ---------------------------------------------------------------------------
+echo ""
+echo "--- 7d. Report parity with the Python converters these replaced ---"
+# ---------------------------------------------------------------------------
+
+# Every report below was written by the Python converters this family used
+# until they were rewritten in POSIX sh and awk, from these same inputs, and is
+# asserted byte for byte: whatever reads one -- Azure DevOps and GitLab parse
+# the Cobertura, a pull request shows the Markdown, `dorny/test-reporter`
+# parses the event stream, the GitLab templates scrape the log -- must see no
+# change. The inputs gather what a rewrite gets wrong: repeated `SF:` records,
+# CRLF, an absolute path, counts with leading zeros and underscores, two
+# directories that make one Cobertura package, both quotes in one file name, a
+# non-ASCII name that `?` must take as ONE character, a lone UTF-16 surrogate
+# escape and `NaN` (both of which Python's JSON parser accepts), a byte order
+# mark (which it does not), an escaped key, escaped and surplus pipes, a
+# control character, a trailing backslash.
+assert_same_file() {
+  local description="$1"
+  local expected="$2"
+  local actual="$3"
+  if cmp -s "$expected" "$actual"; then
+    echo -e "${GREEN}  PASS: $description${NC}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  else
+    echo -e "${RED}  FAIL: $description${NC}"
+    diff "$expected" "$actual" 2>&1 | head -20 | sed 's/^/        /'
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+  fi
+}
+
+PARITY="$WORK_DIR/parity"
+mkdir -p "$PARITY/expected"
+(
+  cd "$PARITY" || exit 1
+  {
+    printf 'TN:parity\nDA:9,9\n'
+    printf 'SF:lib/main.dart\nDA:1,1\nDA:2,0\nDA:3,007\nDA:4,1_0\nDA:5,x\nDA:6,-1\nDA:x,1\n'
+    printf 'BRDA:3,0,0,1\nBRDA:3,0,1,-\nLF:99\nend_of_record\n'
+    printf 'SF:lib/src/util.dart\r\nDA:10,2\r\nDA:11,0\r\nend_of_record\r\n'
+    printf 'SF:lib/main.dart\nDA:2,3\nDA:7,0\nBRDA:3,0,1,2\nend_of_record\n'
+    printf 'SF:lib/a.b/dotted.dart\nDA:1,1\nend_of_record\n'
+    printf 'SF:lib/a/b/nested.dart\nDA:1,0\nend_of_record\n'
+    printf '%s\n' "SF:lib/q\"uote's & <tag>.dart" 'DA:1,1' 'end_of_record'
+    printf '%s\n' 'SF:lib/only"double.dart' 'DA:1,1' 'end_of_record' "SF:lib/only'single.dart" 'DA:1,0' 'end_of_record'
+    # Malformed UTF-8 -- an encoded surrogate, then a byte no UTF-8 holds -- read
+    # as Python read it, with errors="replace".
+    printf 'SF:lib/malformed\355\240\200\377.dart\nDA:1,1\nend_of_record\n'
+    printf 'SF:lib/\303\251t\303\251.dart\nDA:1,0\nDA:2,0\nDA:3,1\nDA:5,0\nend_of_record\n'
+    printf 'SF:lib/empty.dart\nend_of_record\n'
+    printf 'SF:%s/lib/absolute.dart\nDA:1,1\nend_of_record\n' "$(pwd -P)"
+    printf 'SF:lib/gen/catalog.g.dart\nDA:1,0\nend_of_record\n'
+  } > parity.info
+  {
+    printf '%s\n' 'Resolving dependencies...' '[{"event":"test.startedProcess"}]'
+    printf '%s\n' '{"type":"start","protocolVersion":"0.1.1"}'
+    printf '%s\n' '  {"type":"print","message":"padded by spaces"}  '
+    printf '\302\240{"type":"print","message":"padded by a no-break space"}\302\240\n'
+    # A backslash is written `\134` in these, so that the escapes reach the file as escapes.
+    printf '{"type":"print","message":"a lone \134ud83d surrogate"}\n'
+    printf '{"type":"print","message":"a pair \134ud83d\134ude00 and \134u00e9"}\n'
+    printf '%s\n' '{"type":"print","value":NaN}' '{"type":"print","value":01}'
+    printf '{"t\134u0079pe":"an escaped key"}\n'
+    printf '%s\n' '{"type":1,"type":"the last one wins"}' '{"type":"x","type":1}' '{"nested":{"type":"inner"}}'
+    printf '{"type":"a\tb"}\n\357\273\277{"type":"bom"}\n{"type":"cr"}\r{"type":"split"}\n'
+    printf '%s\n' '{"type":"done","success":true}'
+  } > parity-events.raw
+  {
+    printf '%s\n' "INFO|LINT|AVOID_PRINT|lib/main.dart|28|3|5|Don't invoke 'print' \"quoted\" & <tagged>."
+    printf '%s\n' 'WARNING|HINT|UNUSED|lib/a\|b.dart|7|1|2|Pipe \| escaped and unescaped | surplus | fields'
+    printf 'ERROR|COMPILE_TIME_ERROR|E1|lib/\303\251t\303\251.dart|x|2|3|Unicode \303\251 \360\237\230\200 and a control \001 char\n'
+    printf '%s\n' 'info|LINT|LOWER|lib/x.dart|1|1|1|lowercase is not a row'
+    printf '%s\n' ' INFO|LINT|LEAD|lib/x.dart|1|1|1|leading space is not a row' 'INFO|LINT|SHORT|lib/x.dart|1|1'
+    printf 'INFO|LINT|CR|lib/cr.dart|9|9|9|carriage return\r\n'
+    printf '%s\n' 'INFO|LINT|TRAIL|.dart|1|2|3|trailing backslash\'
+  } > parity-machine.txt
+)
+
+# parity_run <name> <command...>
+#
+# Run one converter among the fixtures, keeping its stdout (with the exit status
+# appended) and its stderr apart: how the two interleave in one capture depends
+# on buffering, which is no part of any contract.
+parity_run() {
+  local name="$1"
+  shift
+  (
+    cd "$PARITY" || exit 1
+    status=0
+    "$@" > "$name.stdout" 2> "$name.stderr" || status=$?
+    echo "exit=$status" >> "$name.stdout"
+  )
+}
+parity_run cobertura env DART_COVERAGE_EXCLUDE='*.g.dart lib/?mpty.dart' "$COBERTURA" parity.info cobertura.xml .
+parity_run coverage env DART_COVERAGE_EXCLUDE='*.g.dart,lib/?t?.dart' DART_COVERAGE_MINIMUM=66.665 \
+  "$MD" parity.info coverage.md
+parity_run events "$FILTER" parity-events.raw test-results.json
+parity_run analyze env DART_FATAL_INFOS=true sh -c '"$1" an < parity-machine.txt' sh "$DART_DIR/analyze/analyze-report.sh"
+# The Cobertura timestamp is the one value that differs between two runs.
+sed -E 's/timestamp="[0-9]+"/timestamp="T"/' "$PARITY/cobertura.xml" > "$PARITY/cobertura.normalised.xml"
+
+cat > "$PARITY/expected/cobertura.xml" <<'EOF'
+<?xml version="1.0" ?>
+<!DOCTYPE coverage SYSTEM 'https://cobertura.sourceforge.net/xml/coverage-04.dtd'>
+<coverage line-rate="0.5500" branch-rate="1.0000" lines-covered="11" lines-valid="20" branches-covered="2" branches-valid="2" complexity="0" version="2.0.3" timestamp="T">
+  <sources>
+    <source>.</source>
+  </sources>
+  <packages>
+    <package name="lib" line-rate="0.5625" branch-rate="1.0000" complexity="0">
+      <classes>
+        <class name="absolute.dart" filename="lib/absolute.dart" line-rate="1.0000" branch-rate="0.0000" complexity="0">
+          <methods/>
+          <lines>
+            <line number="1" hits="1"/>
+          </lines>
+        </class>
+        <class name="main.dart" filename="lib/main.dart" line-rate="0.5714" branch-rate="1.0000" complexity="0">
+          <methods/>
+          <lines>
+            <line number="1" hits="1"/>
+            <line number="2" hits="3"/>
+            <line number="3" hits="7"/>
+            <line number="4" hits="10"/>
+            <line number="5" hits="0"/>
+            <line number="6" hits="-1"/>
+            <line number="7" hits="0"/>
+          </lines>
+        </class>
+        <class name="malformed����.dart" filename="lib/malformed����.dart" line-rate="1.0000" branch-rate="0.0000" complexity="0">
+          <methods/>
+          <lines>
+            <line number="1" hits="1"/>
+          </lines>
+        </class>
+        <class name='only"double.dart' filename='lib/only"double.dart' line-rate="1.0000" branch-rate="0.0000" complexity="0">
+          <methods/>
+          <lines>
+            <line number="1" hits="1"/>
+          </lines>
+        </class>
+        <class name="only'single.dart" filename="lib/only'single.dart" line-rate="0.0000" branch-rate="0.0000" complexity="0">
+          <methods/>
+          <lines>
+            <line number="1" hits="0"/>
+          </lines>
+        </class>
+        <class name="q&quot;uote's &amp; &lt;tag&gt;.dart" filename="lib/q&quot;uote's &amp; &lt;tag&gt;.dart" line-rate="1.0000" branch-rate="0.0000" complexity="0">
+          <methods/>
+          <lines>
+            <line number="1" hits="1"/>
+          </lines>
+        </class>
+        <class name="été.dart" filename="lib/été.dart" line-rate="0.2500" branch-rate="0.0000" complexity="0">
+          <methods/>
+          <lines>
+            <line number="1" hits="0"/>
+            <line number="2" hits="0"/>
+            <line number="3" hits="1"/>
+            <line number="5" hits="0"/>
+          </lines>
+        </class>
+      </classes>
+    </package>
+    <package name="lib.a.b" line-rate="0.5000" branch-rate="0.0000" complexity="0">
+      <classes>
+        <class name="dotted.dart" filename="lib/a.b/dotted.dart" line-rate="1.0000" branch-rate="0.0000" complexity="0">
+          <methods/>
+          <lines>
+            <line number="1" hits="1"/>
+          </lines>
+        </class>
+        <class name="nested.dart" filename="lib/a/b/nested.dart" line-rate="0.0000" branch-rate="0.0000" complexity="0">
+          <methods/>
+          <lines>
+            <line number="1" hits="0"/>
+          </lines>
+        </class>
+      </classes>
+    </package>
+    <package name="lib.src" line-rate="0.5000" branch-rate="0.0000" complexity="0">
+      <classes>
+        <class name="util.dart" filename="lib/src/util.dart" line-rate="0.5000" branch-rate="0.0000" complexity="0">
+          <methods/>
+          <lines>
+            <line number="10" hits="2"/>
+            <line number="11" hits="0"/>
+          </lines>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>
+EOF
+cat > "$PARITY/expected/cobertura.stdout" <<'EOF'
+COVERAGE_EXCLUDED=2 of 12 file(s) dropped by DART_COVERAGE_EXCLUDE (*.g.dart lib/?mpty.dart)
+  excluded: lib/empty.dart
+  excluded: lib/gen/catalog.g.dart
+COVERAGE_PERCENT=55.00% (11/20 lines across 10 file(s))
+exit=0
+EOF
+cat > "$PARITY/expected/coverage.md" <<'EOF'
+## Coverage Report
+
+| Status | Category | Percentage | Covered / Total |
+| :---: | :--- | :--- | :--- |
+| 🔴 | Lines | 62.50% (🎯 66.67%) | 10 / 16 |
+| 🔵 | Branches | 100.00% | 2 / 2 |
+
+Measured over 10 file(s). 2 file(s) excluded by `DART_COVERAGE_EXCLUDE` (`*.g.dart lib/?t?.dart`).
+EOF
+cat > "$PARITY/expected/coverage.stdout" <<'EOF'
+Coverage summary written to 'coverage.md'.
+exit=0
+EOF
+cat > "$PARITY/expected/test-results.json" <<'EOF'
+{"type":"start","protocolVersion":"0.1.1"}
+{"type":"print","message":"padded by spaces"}
+{"type":"print","message":"padded by a no-break space"}
+{"type":"print","message":"a lone \ud83d surrogate"}
+{"type":"print","message":"a pair \ud83d\ude00 and \u00e9"}
+{"type":"print","value":NaN}
+{"t\u0079pe":"an escaped key"}
+{"type":1,"type":"the last one wins"}
+{"type":"cr"}
+{"type":"split"}
+{"type":"done","success":true}
+EOF
+cat > "$PARITY/expected/events.stdout" <<'EOF'
+TEST_EVENTS_KEPT=11 (dropped 7 non-event line(s))
+exit=0
+EOF
+cat > "$PARITY/expected/analyze.json" <<'EOF'
+{
+  "tool": "dart analyze",
+  "summary": {
+    "ERROR": 1,
+    "WARNING": 1,
+    "INFO": 3,
+    "total": 5
+  },
+  "diagnostics": [
+    {
+      "severity": "INFO",
+      "type": "LINT",
+      "code": "AVOID_PRINT",
+      "file": "lib/main.dart",
+      "line": 28,
+      "column": 3,
+      "length": 5,
+      "message": "Don't invoke 'print' \"quoted\" & <tagged>."
+    },
+    {
+      "severity": "WARNING",
+      "type": "HINT",
+      "code": "UNUSED",
+      "file": "lib/a|b.dart",
+      "line": 7,
+      "column": 1,
+      "length": 2,
+      "message": "Pipe | escaped and unescaped | surplus | fields"
+    },
+    {
+      "severity": "ERROR",
+      "type": "COMPILE_TIME_ERROR",
+      "code": "E1",
+      "file": "lib/\u00e9t\u00e9.dart",
+      "line": 0,
+      "column": 2,
+      "length": 3,
+      "message": "Unicode \u00e9 \ud83d\ude00 and a control \u0001 char"
+    },
+    {
+      "severity": "INFO",
+      "type": "LINT",
+      "code": "CR",
+      "file": "lib/cr.dart",
+      "line": 9,
+      "column": 9,
+      "length": 9,
+      "message": "carriage return"
+    },
+    {
+      "severity": "INFO",
+      "type": "LINT",
+      "code": "TRAIL",
+      "file": ".dart",
+      "line": 1,
+      "column": 2,
+      "length": 3,
+      "message": "trailing backslash"
+    }
+  ]
+}
+EOF
+# The control character is written into the JUnit report and the summary raw,
+# as it always was -- it is not valid XML 1.0, which is why this report is not
+# given to the XML reader above -- and `@CONTROL@` stands for it here so that
+# this file stays text.
+cat > "$PARITY/expected/junit-analyze.template" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="dart-analyze" tests="5" failures="5">
+  <testsuite name="dart-analyze" tests="5" failures="5">
+    <testcase name="AVOID_PRINT lib/main.dart:28:3" classname="lib.main">
+      <failure message="Don't invoke 'print' &quot;quoted&quot; &amp; &lt;tagged&gt;." type="INFO">INFO LINT AVOID_PRINT: Don't invoke 'print' "quoted" &amp; &lt;tagged&gt;.</failure>
+    </testcase>
+    <testcase name="UNUSED lib/a|b.dart:7:1" classname="lib.a|b">
+      <failure message="Pipe | escaped and unescaped | surplus | fields" type="WARNING">WARNING HINT UNUSED: Pipe | escaped and unescaped | surplus | fields</failure>
+    </testcase>
+    <testcase name="E1 lib/été.dart:0:2" classname="lib.été">
+      <failure message="Unicode é 😀 and a control @CONTROL@ char" type="ERROR">ERROR COMPILE_TIME_ERROR E1: Unicode é 😀 and a control @CONTROL@ char</failure>
+    </testcase>
+    <testcase name="CR lib/cr.dart:9:9" classname="lib.cr">
+      <failure message="carriage return" type="INFO">INFO LINT CR: carriage return</failure>
+    </testcase>
+    <testcase name="TRAIL .dart:1:2" classname="dart">
+      <failure message="trailing backslash" type="INFO">INFO LINT TRAIL: trailing backslash</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
+EOF
+cat > "$PARITY/expected/analyze.template" <<'EOF'
+dart analyze found 5 issue(s): 1 error(s), 1 warning(s), 3 info(s).
+
+ERROR (1, FATAL):
+  - lib/été.dart:0:2 [E1] Unicode é 😀 and a control @CONTROL@ char
+
+WARNING (1, FATAL):
+  - lib/a|b.dart:7:1 [UNUSED] Pipe | escaped and unescaped | surplus | fields
+
+INFO (3, FATAL):
+  - lib/main.dart:28:3 [AVOID_PRINT] Don't invoke 'print' "quoted" & <tagged>.
+  - lib/cr.dart:9:9 [CR] carriage return
+  - .dart:1:2 [TRAIL] trailing backslash
+exit=1
+EOF
+CONTROL="$(printf '\001')"
+sed "s/@CONTROL@/$CONTROL/g" "$PARITY/expected/junit-analyze.template" > "$PARITY/expected/junit-analyze.xml"
+sed "s/@CONTROL@/$CONTROL/g" "$PARITY/expected/analyze.template" > "$PARITY/expected/analyze.stdout"
+cat > "$PARITY/expected/analyze.stderr" <<'EOF'
+
+5 finding(s) at or above the configured severity gate; failing.
+EOF
+
+assert_same_file "parity: the Cobertura report" "$PARITY/expected/cobertura.xml" "$PARITY/cobertura.normalised.xml"
+assert_same_file "parity: the Cobertura converter's log lines and exit status" \
+  "$PARITY/expected/cobertura.stdout" "$PARITY/cobertura.stdout"
+assert_same_file "parity: the Markdown summary" "$PARITY/expected/coverage.md" "$PARITY/coverage.md"
+assert_same_file "parity: the Markdown renderer's log line and exit status" \
+  "$PARITY/expected/coverage.stdout" "$PARITY/coverage.stdout"
+assert_same_file "parity: the filtered event stream" "$PARITY/expected/test-results.json" "$PARITY/test-results.json"
+assert_same_file "parity: the event filter's log line and exit status" \
+  "$PARITY/expected/events.stdout" "$PARITY/events.stdout"
+assert_true "parity: the coverage converters and the event filter print nothing on stderr" \
+  "[[ ! -s '$PARITY/cobertura.stderr' && ! -s '$PARITY/coverage.stderr' && ! -s '$PARITY/events.stderr' ]]"
+assert_same_file "parity: the analyzer's JSON report" "$PARITY/expected/analyze.json" "$PARITY/an/analyze.json"
+assert_same_file "parity: the analyzer's JUnit report" "$PARITY/expected/junit-analyze.xml" "$PARITY/an/junit-analyze.xml"
+assert_same_file "parity: the analyzer's summary and exit status" \
+  "$PARITY/expected/analyze.stdout" "$PARITY/analyze.stdout"
+assert_same_file "parity: the analyzer's verdict on stderr" "$PARITY/expected/analyze.stderr" "$PARITY/analyze.stderr"
 
 # ---------------------------------------------------------------------------
 echo ""
@@ -769,20 +1257,20 @@ EOF
 # Run from inside $WORK_DIR: the helper confines its report directory to the working
 # directory, so the argument is a path relative to it rather than an absolute one.
 STATUS=0
-(cd "$WORK_DIR" && python3 "$DART_DIR/analyze/dart_analyze_report.py" "an" < "machine.txt") > /dev/null 2>&1 || STATUS=$?
+(cd "$WORK_DIR" && "$DART_DIR/analyze/analyze-report.sh" "an" < "machine.txt") > /dev/null 2>&1 || STATUS=$?
 assert_true "the default gate fails on an ERROR" "[[ $STATUS -eq 1 ]]"
 assert_true "the JUnit report is well-formed XML" \
-  "python3 -c \"import xml.dom.minidom as m; m.parse('$WORK_DIR/an/junit-analyze.xml')\""
+  "'$DP' xml '$WORK_DIR/an/junit-analyze.xml'"
 assert_true "the JSON report is valid JSON" \
-  "python3 -c \"import json; json.load(open('$WORK_DIR/an/analyze.json'))\""
+  "jq -e . '$WORK_DIR/an/analyze.json' > /dev/null"
 assert_equals "all four diagnostics are parsed (the progress line is ignored)" \
-  "4" "$(python3 -c "import json;print(json.load(open('$WORK_DIR/an/analyze.json'))['summary']['total'])")"
+  "4" "$(jq -r '.summary.total' "$WORK_DIR/an/analyze.json")"
 assert_equals "an escaped pipe inside a message is unescaped, not treated as a separator" \
   "Use 'a | b' instead of a pipe here." \
-  "$(python3 -c "import json;print(json.load(open('$WORK_DIR/an/analyze.json'))['diagnostics'][3]['message'])")"
+  "$(jq -r '.diagnostics[3].message' "$WORK_DIR/an/analyze.json")"
 assert_equals "the row with the escaped pipe keeps its correct file" \
   "lib/widgets/card.dart" \
-  "$(python3 -c "import json;print(json.load(open('$WORK_DIR/an/analyze.json'))['diagnostics'][3]['file'])")"
+  "$(jq -r '.diagnostics[3].file' "$WORK_DIR/an/analyze.json")"
 # Fatal findings become failures; non-fatal ones stay visible as skipped rather
 # than being dropped from the report entirely.
 assert_true "fatal findings are recorded as JUnit failures" \
@@ -792,18 +1280,42 @@ assert_true "non-fatal findings stay visible as JUnit skips" \
 
 head -1 "$WORK_DIR/machine.txt" > "$WORK_DIR/infos.txt"
 STATUS=0
-(cd "$WORK_DIR" && python3 "$DART_DIR/analyze/dart_analyze_report.py" "an2" < "infos.txt") > /dev/null 2>&1 || STATUS=$?
+(cd "$WORK_DIR" && "$DART_DIR/analyze/analyze-report.sh" "an2" < "infos.txt") > /dev/null 2>&1 || STATUS=$?
 assert_true "INFO findings alone do not fail by default" "[[ $STATUS -eq 0 ]]"
 
 STATUS=0
-(cd "$WORK_DIR" && DART_FATAL_INFOS=true python3 "$DART_DIR/analyze/dart_analyze_report.py" "an3" \
+(cd "$WORK_DIR" && DART_FATAL_INFOS=true "$DART_DIR/analyze/analyze-report.sh" "an3" \
   < "infos.txt") > /dev/null 2>&1 || STATUS=$?
 assert_true "DART_FATAL_INFOS=true makes INFO findings fatal" "[[ $STATUS -eq 1 ]]"
 
 STATUS=0
-(cd "$WORK_DIR" && python3 "$DART_DIR/analyze/dart_analyze_report.py" "an4" < /dev/null) > /dev/null 2>&1 || STATUS=$?
+(cd "$WORK_DIR" && "$DART_DIR/analyze/analyze-report.sh" "an4" < /dev/null) > /dev/null 2>&1 || STATUS=$?
 assert_true "a clean analysis passes and still writes a valid JUnit report" \
-  "[[ $STATUS -eq 0 ]] && python3 -c \"import xml.dom.minidom as m; m.parse('$WORK_DIR/an4/junit-analyze.xml')\""
+  "[[ $STATUS -eq 0 ]] && '$DP' xml '$WORK_DIR/an4/junit-analyze.xml'"
+
+# The report directory comes from argv and is CREATED, so it is confined to the
+# working directory -- after resolving symlinks, so that one cannot step outside
+# after the check -- and a report file left behind as a symlink to elsewhere is
+# refused rather than written through.
+mkdir -p "$WORK_DIR/outside" "$WORK_DIR/inside"
+STATUS=0
+(cd "$WORK_DIR/inside" && "$DART_DIR/analyze/analyze-report.sh" "../escaped" < "../machine.txt") \
+  > "$WORK_DIR/escape.log" 2>&1 || STATUS=$?
+assert_true "a report directory outside the working directory is refused, and not created" \
+  "[[ $STATUS -eq 1 && ! -e '$WORK_DIR/escaped' ]] && grep -q 'resolves outside the working directory' '$WORK_DIR/escape.log'"
+ln -s ../outside "$WORK_DIR/inside/link"
+STATUS=0
+(cd "$WORK_DIR/inside" && "$DART_DIR/analyze/analyze-report.sh" "link/reports" < "../machine.txt") \
+  > "$WORK_DIR/escape.log" 2>&1 || STATUS=$?
+assert_true "a report directory reached through a symlink out of the working directory is refused" \
+  "[[ $STATUS -eq 1 && ! -e '$WORK_DIR/outside/reports' ]]"
+mkdir -p "$WORK_DIR/inside/an5"
+ln -s ../../outside/junit.xml "$WORK_DIR/inside/an5/junit-analyze.xml"
+STATUS=0
+(cd "$WORK_DIR/inside" && "$DART_DIR/analyze/analyze-report.sh" "an5" < "../machine.txt") \
+  > "$WORK_DIR/escape.log" 2>&1 || STATUS=$?
+assert_true "a report file left as a symlink out of the report directory is refused, not written through" \
+  "[[ $STATUS -eq 1 && ! -e '$WORK_DIR/outside/junit.xml' ]] && grep -q \"refusing to write 'junit-analyze.xml'\" '$WORK_DIR/escape.log'"
 
 # ---------------------------------------------------------------------------
 echo ""
@@ -842,14 +1354,10 @@ assert_true "the CodeQL guard is evaluated at recipe time, not at parse time" \
 # while still reporting success.
 assert_true "a first-party Dart Semgrep ruleset is shipped" "[[ -f '$DART_RULES' ]]"
 assert_true "the Dart ruleset is valid YAML" \
-  "python3 -c \"import yaml,sys; yaml.safe_load(open('$DART_RULES'))\""
-assert_true "the Dart ruleset declares rules for the 'dart' language" \
-  "python3 -c \"
-import yaml
-rules = yaml.safe_load(open('$DART_RULES'))['rules']
-assert rules, 'no rules'
-assert all('dart' in r['languages'] for r in rules), 'a rule does not target dart'
-\""
+  "'$DP' yaml '$DART_RULES' > /dev/null"
+assert_equals "the Dart ruleset declares rules for the 'dart' language" \
+  "true" \
+  "$(yaml_query "$DART_RULES" '(.rules | length > 0) and all(.rules[]; any(.languages[]; . == "dart"))')"
 # The TLS-bypass rule is the one that must never be dropped: an unconditional
 # `badCertificateCallback` returning true is the single most common critical
 # defect in Flutter networking code.
@@ -977,21 +1485,13 @@ void web(dynamic controller) {
 EOF
   SEMGREP_JSON="$(semgrep --metrics=off --disable-version-check --no-git-ignore \
     --config "$DART_RULES" --json "$WORK_DIR/dartsrc" 2>/dev/null)"
-  FIRED="$(python3 -c "
-import json,sys
-d = json.loads(sys.stdin.read())
-print(len({r['check_id'].split('.')[-1] for r in d['results']}))
-" <<< "$SEMGREP_JSON")"
-  TOTAL_RULES="$(python3 -c "import yaml;print(len(yaml.safe_load(open('$DART_RULES'))['rules']))")"
+  FIRED="$(jq -r '[.results[].check_id | split(".") | last] | unique | length' <<< "$SEMGREP_JSON")"
+  TOTAL_RULES="$(yaml_query "$DART_RULES" '.rules | length')"
   assert_equals "every shipped Dart rule matches its vulnerable sample" "$TOTAL_RULES" "$FIRED"
 
   # The safe counterparts sit on known lines; a rule firing on them would make
   # the ruleset noise a team disables rather than a gate it trusts.
-  HITS="$(python3 -c "
-import json,sys
-d = json.loads(sys.stdin.read())
-print(' '.join(sorted(str(r['start']['line']) for r in d['results'])))
-" <<< "$SEMGREP_JSON")"
+  HITS="$(jq -r '[.results[].start.line | tostring] | sort | join(" ")' <<< "$SEMGREP_JSON")"
   assert_true "the parameterised SQL query is not flagged" "! grep -qw '27' <<< '$HITS'"
   assert_true "the non-shell Process.run is not flagged" "! grep -qw '22' <<< '$HITS'"
   assert_true "the https:// URL is not flagged" "! grep -qw '11' <<< '$HITS'"
@@ -1036,29 +1536,21 @@ done
 # cannot work around the omission from outside; the only recourse is abandoning
 # the workflow and re-declaring every job locally.
 #
-# Asserted on the PARSED document rather than by grep: YAML 1.1 reads the `on:`
-# key as the boolean `true`, so the input list is not where a reader expects it,
-# and a grep for the name would equally pass on a file that only mentions it in a
-# comment.
+# Asserted on the PARSED document rather than by grep: a grep for the name would
+# equally pass on a file that only mentions it in a comment. The reader keeps
+# `on:` the key `on`, where YAML 1.1 -- and PyYAML, which read these before --
+# takes it for the boolean `true`.
+WF_DART="$SCRIPTS_DIR/.github/workflows/dart.yaml"
+TESTS_ACTION="$SCRIPTS_DIR/github/dart/stages/30-tests/all/action.yaml"
 for workflow in dart dart-docker dart-library flutter-artifacts; do
   assert_equals "GitHub: $workflow.yaml declares the runs_on input" \
     "yes" \
-    "$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/$workflow.yaml'))
-trigger = d.get('on', d.get(True))
-print('yes' if 'runs_on' in trigger['workflow_call']['inputs'] else 'no')
-")"
+    "$(yaml_query "$SCRIPTS_DIR/.github/workflows/$workflow.yaml" \
+      'if .on.workflow_call.inputs | has("runs_on") then "yes" else "no" end')"
   assert_equals "GitHub: $workflow.yaml pins no job to a hardcoded runner" \
     "" \
-    "$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/$workflow.yaml'))
-print(' '.join(sorted(
-    name for name, job in d['jobs'].items()
-    if 'ubuntu-latest' in str(job.get('runs-on', ''))
-)))
-")"
+    "$(yaml_query "$SCRIPTS_DIR/.github/workflows/$workflow.yaml" \
+      '[.jobs | to_entries[] | select(.value["runs-on"] // "" | tostring | contains("ubuntu-latest")) | .key] | sort | join(" ")')"
 done
 
 # A child workflow that declares `runs_on` but forgets to FORWARD it moves its own
@@ -1068,11 +1560,8 @@ done
 for workflow in dart-docker dart-library flutter-artifacts; do
   assert_equals "GitHub: $workflow.yaml forwards runs_on into the dart job" \
     "yes" \
-    "$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/$workflow.yaml'))
-print('yes' if 'runs_on' in d['jobs']['dart'].get('with', {}) else 'no')
-")"
+    "$(yaml_query "$SCRIPTS_DIR/.github/workflows/$workflow.yaml" \
+      'if .jobs.dart.with // {} | has("runs_on") then "yes" else "no" end')"
 done
 
 # The `30-tests/all` action declared `test_args` and `coverage_exclude` long
@@ -1084,32 +1573,22 @@ done
 for input in test_args coverage_exclude; do
   assert_equals "GitHub: dart.yaml declares the $input input" \
     "yes" \
-    "$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
-trigger = d.get('on', d.get(True))
-print('yes' if '$input' in trigger['workflow_call']['inputs'] else 'no')
-")"
+    "$(yaml_query "$WF_DART" \
+      'if .on.workflow_call.inputs | has($input) then "yes" else "no" end' --arg input "$input")"
   assert_equals "GitHub: dart.yaml forwards $input to the 30-tests/all action" \
     "yes" \
-    "$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
-step = d['jobs']['tests-test_all']['steps'][0]
-print('yes' if '$input' in step.get('with', {}) else 'no')
-")"
+    "$(yaml_query "$WF_DART" \
+      'if .jobs["tests-test_all"].steps[0].with // {} | has($input) then "yes" else "no" end' --arg input "$input")"
 done
 
 for pair in 'test_args:DART_TEST_ARGS' 'coverage_exclude:DART_COVERAGE_EXCLUDE' \
             'coverage_diff_base:DART_COVERAGE_DIFF_BASE'; do
   assert_equals "GitHub: the 30-tests/all action maps ${pair%%:*} onto ${pair##*:}" \
     "yes" \
-    "$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$SCRIPTS_DIR/github/dart/stages/30-tests/all/action.yaml'))
-steps = [s for s in d['runs']['steps'] if '${pair##*:}' in s.get('env', {})]
-print('yes' if steps and 'inputs.${pair%%:*}' in steps[0]['env']['${pair##*:}'] else 'no')
-")"
+    "$(yaml_query "$TESTS_ACTION" \
+      '[.runs.steps[] | select(.env // {} | has($var))]
+       | if length > 0 and (.[0].env[$var] | tostring | contains("inputs." + $input)) then "yes" else "no" end' \
+      --arg var "${pair##*:}" --arg input "${pair%%:*}")"
 done
 
 
@@ -1118,12 +1597,9 @@ done
 # pull request, empty on a push, and nothing a caller could usefully override.
 assert_equals "GitHub: dart.yaml hands the pull request's base SHA to the 30-tests/all action" \
   "yes" \
-  "$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
-step = d['jobs']['tests-test_all']['steps'][0]
-print('yes' if 'github.event.pull_request.base.sha' in str(step.get('with', {}).get('coverage_diff_base', '')) else 'no')
-")"
+  "$(yaml_query "$WF_DART" \
+    'if .jobs["tests-test_all"].steps[0].with.coverage_diff_base // "" | tostring
+        | contains("github.event.pull_request.base.sha") then "yes" else "no" end')"
 
 # The comment is the parity the JavaScript pipelines already have, and every
 # clause of the step is load-bearing: `always()` reports on a red suite, which
@@ -1136,42 +1612,25 @@ print('yes' if 'github.event.pull_request.base.sha' in str(step.get('with', {}).
 # than a red test job, which is what makes the change additive for every
 # existing consumer. The posting is a THIRD-PARTY action, so it is pinned like
 # every other one -- test-supply-chain.sh holds that edge.
+STICKY='[.jobs["tests-test_all"].steps[] | select(.uses // "" | startswith("marocchino/sticky-pull-request-comment@"))]'
 assert_equals "GitHub: tests-test_all posts the coverage summary as a sticky pull-request comment" \
   "yes" \
-  "$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
-steps = [s for s in d['jobs']['tests-test_all']['steps']
-         if s.get('uses', '').startswith('marocchino/sticky-pull-request-comment@')]
-ok = (len(steps) == 1
-      and steps[0]['with'].get('path') == 'build/reports/coverage.md'
-      and 'always()' in steps[0].get('if', '')
-      and \"github.event_name == 'pull_request'\" in steps[0].get('if', '')
-      and \"hashFiles('build/reports/coverage.md')\" in steps[0].get('if', ''))
-print('yes' if ok else 'no')
-")"
+  "$(yaml_query "$WF_DART" "$STICKY"'
+      | if length == 1 and .[0].with.path == "build/reports/coverage.md"
+           and (.[0].if // "" | contains("always()") and contains($event) and contains($guard))
+        then "yes" else "no" end' \
+    --arg event "github.event_name == 'pull_request'" --arg guard "hashFiles('build/reports/coverage.md')")"
 assert_equals "GitHub: a refused comment (no grant, or a fork's read-only token) never fails tests-test_all" \
   "yes" \
-  "$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
-steps = [s for s in d['jobs']['tests-test_all']['steps']
-         if s.get('uses', '').startswith('marocchino/sticky-pull-request-comment@')]
-print('yes' if steps and steps[0].get('continue-on-error') is True else 'no')
-")"
+  "$(yaml_query "$WF_DART" "$STICKY"' | if length > 0 and .[0]["continue-on-error"] == true then "yes" else "no" end')"
 assert_equals "GitHub: tests-test_all writes the same summary to the job summary of every run" \
   "yes" \
-  "$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
-steps = [s for s in d['jobs']['tests-test_all']['steps']
-         if 'GITHUB_STEP_SUMMARY' in s.get('run', '')]
-ok = (len(steps) == 1
-      and 'build/reports/coverage.md' in steps[0]['run']
-      and 'always()' in steps[0].get('if', '')
-      and \"hashFiles('build/reports/coverage.md')\" in steps[0].get('if', ''))
-print('yes' if ok else 'no')
-")"
+  "$(yaml_query "$WF_DART" \
+    '[.jobs["tests-test_all"].steps[] | select(.run // "" | contains("GITHUB_STEP_SUMMARY"))]
+     | if length == 1 and (.[0].run | contains("build/reports/coverage.md"))
+          and (.[0].if // "" | contains("always()") and contains($guard))
+       then "yes" else "no" end' \
+    --arg guard "hashFiles('build/reports/coverage.md')")"
 # A consumer that grants no `pull-requests: write` sees the step fail by name.
 # The footer is where every workflow here records what a caller must grant, so
 # the requirement is asserted there rather than assumed.
@@ -1186,21 +1645,16 @@ assert_true "GitHub: dart.yaml's permissions note names pull-requests: write for
 # a check run whatever the caller grants.
 assert_equals "GitHub: tests-test_all publishes the suite as a Test Results check from the filtered stream" \
   "yes" \
-  "$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
-steps = [s for s in d['jobs']['tests-test_all']['steps']
-         if s.get('uses', '').startswith('dorny/test-reporter@')]
-r = steps[0]['with'].get('reporter', '') if steps else ''
-ok = (len(steps) == 1
-      and r.startswith('$' + '{{') and 'steps.tests.outputs.toolchain' in r
-      and \"== 'flutter' && 'flutter-json' || 'dart-json'\" in r
-      and steps[0]['with'].get('path') == 'build/reports/test-results.json'
-      and 'always()' in steps[0].get('if', '')
-      and \"hashFiles('build/reports/test-results.json')\" in steps[0].get('if', '')
-      and steps[0].get('continue-on-error') is True)
-print('yes' if ok else 'no')
-")"
+  "$(yaml_query "$WF_DART" \
+    '[.jobs["tests-test_all"].steps[] | select(.uses // "" | startswith("dorny/test-reporter@"))]
+     | (if length > 0 then .[0].with.reporter // "" else "" end) as $r
+     | if length == 1 and ($r | startswith($open)) and ($r | contains("steps.tests.outputs.toolchain"))
+          and ($r | contains($select)) and .[0].with.path == "build/reports/test-results.json"
+          and (.[0].if // "" | contains("always()") and contains($guard))
+          and .[0]["continue-on-error"] == true
+       then "yes" else "no" end' \
+    --arg open '${{' --arg select "== 'flutter' && 'flutter-json' || 'dart-json'" \
+    --arg guard "hashFiles('build/reports/test-results.json')")"
 assert_true "GitHub: dart.yaml's permissions note names checks: write for the Test Results check" \
   "grep -q \"^#   checks: 'write' # tests-test_all\" '$SCRIPTS_DIR/.github/workflows/dart.yaml'"
 
@@ -1223,12 +1677,8 @@ assert_true "GitHub: dart.yaml's permissions note names checks: write for the Te
 # than a review habit. `test-workflow-composition.sh` cannot cover it: it emits
 # `job-has-permissions` but consumes only `needs`, `environment` and `if`.
 assert_equals "GitHub: tests-test_build is narrowed to contents: read" \
-  "{'contents': 'read'}" \
-  "$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
-print(d['jobs']['tests-test_build'].get('permissions'))
-")"
+  '{"contents":"read"}' \
+  "$(yaml_query "$WF_DART" '.jobs["tests-test_build"].permissions | tojson')"
 
 # THE CONVERSE, and it is not symmetry for its own sake. `tests-test_all` needs
 # `checks: write` and `pull-requests: write`, and a called workflow's job may
@@ -1237,12 +1687,8 @@ print(d['jobs']['tests-test_build'].get('permissions'))
 # permissions error instead of the degraded report that job is written for.
 # The "restore consistency" edit that adds one is exactly what this catches.
 assert_equals "GitHub: tests-test_all deliberately carries no permissions block" \
-  "None" \
-  "$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
-print(d['jobs']['tests-test_all'].get('permissions'))
-")"
+  "null" \
+  "$(yaml_query "$WF_DART" '.jobs["tests-test_all"].permissions | tojson')"
 
 # The reporter follows the toolchain the suite RAN under -- `dorny/test-reporter`
 # reads a Flutter failure's real message and stack frame only under
@@ -1254,40 +1700,28 @@ print(d['jobs']['tests-test_all'].get('permissions'))
 # to the Dart parser.
 assert_equals "GitHub: the 30-tests/all step carries the id its toolchain output is read by" \
   "tests" \
-  "$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$SCRIPTS_DIR/.github/workflows/dart.yaml'))
-print(d['jobs']['tests-test_all']['steps'][0].get('id', ''))
-")"
+  "$(yaml_query "$WF_DART" '.jobs["tests-test_all"].steps[0].id // ""')"
 assert_equals "GitHub: the 30-tests/all action publishes the resolved toolchain as an output" \
   "yes" \
-  "$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$SCRIPTS_DIR/github/dart/stages/30-tests/all/action.yaml'))
-print('yes' if 'steps.toolchain.outputs.toolchain' in d.get('outputs', {}).get('toolchain', {}).get('value', '') else 'no')
-")"
+  "$(yaml_query "$TESTS_ACTION" \
+    'if .outputs.toolchain.value // "" | contains("steps.toolchain.outputs.toolchain") then "yes" else "no" end')"
 assert_equals "GitHub: the toolchain is resolved BEFORE the tests, from the input, by dart_detect_toolchain" \
   "yes" \
-  "$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$SCRIPTS_DIR/github/dart/stages/30-tests/all/action.yaml'))
-steps = d['runs']['steps']
-ids = [s.get('id') for s in steps]
-names = [s.get('name') for s in steps]
-ok = ('toolchain' in ids and 'Run tests with coverage' in names
-      and ids.index('toolchain') < names.index('Run tests with coverage'))
-step = steps[ids.index('toolchain')] if 'toolchain' in ids else {}
-ok = ok and 'inputs.toolchain' in step.get('env', {}).get('DART_TOOLCHAIN', '') \
-        and 'dart_detect_toolchain' in step.get('run', '') and 'GITHUB_OUTPUT' in step.get('run', '')
-print('yes' if ok else 'no')
-")"
+  "$(yaml_query "$TESTS_ACTION" \
+    '.runs.steps as $s
+     | ([$s[] | .id] | index("toolchain")) as $t
+     | ([$s[] | .name] | index("Run tests with coverage")) as $r
+     | if $t != null and $r != null and $t < $r
+          and ($s[$t].env.DART_TOOLCHAIN // "" | contains("inputs.toolchain"))
+          and ($s[$t].run // "" | contains("dart_detect_toolchain") and contains("GITHUB_OUTPUT"))
+       then "yes" else "no" end')"
 
 # The output is the resolution sections 2 to 4 asserted on the argv, run the
 # way the step runs it: sourced `common.sh`, then `dart_detect_toolchain`.
 resolve_toolchain() {
   local project="$1"
   shift
-  (cd "$project" && env "$@" SCRIPTS_DIR="$SCRIPTS_DIR" \
+  (cd "$project" && hermetic "$@" SCRIPTS_DIR="$SCRIPTS_DIR" \
     bash -c '. "$SCRIPTS_DIR/global/scripts/languages/dart/common.sh" && dart_detect_toolchain')
 }
 TC_FLUTTER="$(make_project toolchainflutter flutter)"
@@ -1313,12 +1747,9 @@ done
 # Assert on the PARSED value, since both spellings look identical in the source.
 assert_equals "the build action's artifact path stays newline-separated (not YAML-folded)" \
   "4" \
-  "$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$SCRIPTS_DIR/github/dart/stages/40-delivery/build/action.yaml'))
-path = [s for s in d['runs']['steps'] if s.get('uses', '').startswith('actions/upload-artifact')][0]['with']['path']
-print(len([l for l in path.strip().splitlines() if l.strip()]))
-")"
+  "$(yaml_query "$SCRIPTS_DIR/github/dart/stages/40-delivery/build/action.yaml" \
+    '[.runs.steps[] | select(.uses // "" | startswith("actions/upload-artifact"))][0].with.path
+     | split("\n") | map(select(test("[^ \t]"))) | length')"
 
 # Every `run.sh` path referenced by any Dart template must exist. A renamed
 # script is otherwise discovered only when the job runs.
@@ -1393,40 +1824,21 @@ echo ""
 echo "--- 12. YAML validity of every Dart template ---"
 # ---------------------------------------------------------------------------
 
-YAML_ERRORS="$(python3 - <<PY
-import glob, yaml
-
-class L(yaml.SafeLoader):
-    pass
-
-def ctor(loader, suffix, node):
-    if isinstance(node, yaml.ScalarNode):
-        return loader.construct_scalar(node)
-    if isinstance(node, yaml.SequenceNode):
-        return loader.construct_sequence(node)
-    return loader.construct_mapping(node)
-
-L.add_multi_constructor('!', ctor)
-
-paths = sorted(set(
-    glob.glob('$SCRIPTS_DIR/gitlab/dart/**/*.yaml', recursive=True)
-    + glob.glob('$SCRIPTS_DIR/azure-devops/dart/**/*.yaml', recursive=True)
-    + glob.glob('$SCRIPTS_DIR/github/dart/**/*.yaml', recursive=True)
-    + glob.glob('$SCRIPTS_DIR/.github/workflows/dart*.yaml')
-    + glob.glob('$SCRIPTS_DIR/.github/workflows/flutter*.yaml')
-    + glob.glob('$SCRIPTS_DIR/global/scripts/tools/semgrep/rules/*.yaml')
-    + glob.glob('$SCRIPTS_DIR/.docs/examples/github-flutter-artifacts/**/*.yaml', recursive=True)
-    + glob.glob('$SCRIPTS_DIR/.docs/examples/gitlab-dart-library/*.yml')
-))
-bad = []
-for p in paths:
-    try:
-        yaml.load(open(p), Loader=L)
-    except Exception as exc:
-        bad.append(p)
-print(' '.join(bad))
-PY
-)"
+# GitLab's `!reference` and every other custom tag parse as plain values, as the
+# platforms read them; the examples' own `.github/` workflows are included.
+YAML_FILES=0
+YAML_ERRORS=""
+while IFS= read -r template; do
+  YAML_FILES=$((YAML_FILES + 1))
+  "$DP" yaml "$template" > /dev/null 2>&1 || YAML_ERRORS="$YAML_ERRORS $template"
+done < <({
+  find "$SCRIPTS_DIR/gitlab/dart" "$SCRIPTS_DIR/azure-devops/dart" "$SCRIPTS_DIR/github/dart" \
+    "$SCRIPTS_DIR/.docs/examples/github-flutter-artifacts" -name '*.yaml'
+  find "$SCRIPTS_DIR/.github/workflows" -maxdepth 1 \( -name 'dart*.yaml' -o -name 'flutter*.yaml' \)
+  find "$SCRIPTS_DIR/global/scripts/tools/semgrep/rules" -maxdepth 1 -name '*.yaml'
+  find "$SCRIPTS_DIR/.docs/examples/gitlab-dart-library" -maxdepth 1 -name '*.yml'
+} | LC_ALL=C sort -u)
+assert_true "the YAML sweep found the templates it checks" "[[ $YAML_FILES -ge 30 ]]"
 assert_equals "every Dart template and example is valid YAML" "" "$YAML_ERRORS"
 
 # ---------------------------------------------------------------------------

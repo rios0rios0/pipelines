@@ -36,10 +36,11 @@ include:
   before_script:
     # `xz-utils` unpacks the Flutter tarball, `unzip` the Dart SDK zip, `git` is
     # required by the Flutter SDK itself (it is a git checkout and shells out to
-    # git on almost every invocation), `jq` resolves the current release from the
-    # Flutter manifest, and `python3` runs the report converters.
+    # git on almost every invocation), and `jq` resolves the current release from
+    # the Flutter manifest. The report converters are POSIX sh and awk, which the
+    # base image already carries.
     - apt-get update -qq && apt-get install -y -qq --no-install-recommends
-      ca-certificates curl git jq python3 unzip xz-utils zip
+      ca-certificates curl git jq unzip xz-utils zip
     - !reference [ .scripts-repo, before_script ]
     - $SCRIPTS_DIR/global/scripts/languages/dart/setup/run.sh
     - export PATH="$HOME/.local/bin:$PATH:$PUB_CACHE/bin"

@@ -5,7 +5,8 @@
 # `global/scripts/languages/dart/setup/run.sh` from Google's release archive,
 # and the toolchain (Dart or Flutter) is derived from the project's own
 # `pubspec.yaml`. Microsoft-hosted `ubuntu-latest` agents already carry curl,
-# git, jq, unzip, xz and python3, which is everything that install needs.
+# git, jq, unzip and xz, which is everything that install needs; the report
+# converters are POSIX sh and awk.
 #
 # `Agent.ToolsDirectory` persists across jobs on a self-hosted agent and is
 # wiped between jobs on a hosted one, which is exactly the caching behaviour

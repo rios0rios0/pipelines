@@ -12,11 +12,14 @@ set -e
 #   build/reports/cobertura.xml   -- Cobertura (Azure DevOps + GitLab coverage)
 #   build/reports/lcov.info       -- raw LCOV (SonarQube reads this one directly)
 #   build/reports/coverage.md     -- Markdown summary (the GitHub pull-request
-#                                    comment and job summary; lcov_to_markdown.py)
+#                                    comment and job summary; lcov-to-markdown.sh)
 #   build/reports/test-results.json -- the package:test event stream with pub's
 #                                    and flutter_tools' non-event lines removed
 #                                    (the GitHub `Test Results` check reads it;
-#                                    filter_test_events.py)
+#                                    filter-test-events.sh)
+#
+# The three converters beside this script are POSIX sh and awk, like the rest
+# of the runner, so the job needs no toolchain beyond the SDK.
 #
 # `coverage/lcov.info` is left in place as well, because that is the path
 # SonarQube's `sonar.dart.lcov.reportPaths` and the community `sonar-flutter`
@@ -138,7 +141,7 @@ if [ -s "$EVENTS_FILE" ]; then
   # events removed, for the GitHub `Test Results` check, whose Dart parser fails
   # the whole report on the first line it cannot parse. `tojunit` above keeps
   # reading the raw stream it has always read. A report, never a gate.
-  python3 "$SCRIPTS_DIR/global/scripts/languages/dart/test/filter_test_events.py" \
+  "$SCRIPTS_DIR/global/scripts/languages/dart/test/filter-test-events.sh" \
     "$EVENTS_FILE" "$TEST_RESULTS_FILE" \
     || echo "WARNING: could not filter the test event stream; continuing without it." >&2
 fi
@@ -151,7 +154,7 @@ fi
 COVERAGE_EXIT=0
 if [ -s "$LCOV_FILE" ]; then
   cp "$LCOV_FILE" "$REPORT_ROOT/lcov.info"
-  python3 "$SCRIPTS_DIR/global/scripts/languages/dart/test/lcov_to_cobertura.py" \
+  "$SCRIPTS_DIR/global/scripts/languages/dart/test/lcov-to-cobertura.sh" \
     "$LCOV_FILE" "$COBERTURA_FILE" "." || COVERAGE_EXIT=$?
   # The same tracefile, the same exclusions and the same floor rendered as the
   # Markdown the GitHub workflow posts on a pull request and writes to the job
@@ -159,7 +162,7 @@ if [ -s "$LCOV_FILE" ]; then
   # raw LCOV, so the comment cannot disagree with the gate above it. A report,
   # never a gate: the converter already holds the verdict, and a summary that
   # could not be written must not turn a green suite red.
-  python3 "$SCRIPTS_DIR/global/scripts/languages/dart/test/lcov_to_markdown.py" \
+  "$SCRIPTS_DIR/global/scripts/languages/dart/test/lcov-to-markdown.sh" \
     "$LCOV_FILE" "$MARKDOWN_FILE" \
     || echo "WARNING: could not render the coverage summary; continuing without it." >&2
 else

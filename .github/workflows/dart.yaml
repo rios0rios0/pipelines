@@ -118,15 +118,15 @@ on:
         default: ''
         description: |
           Install Node.js before `test_build_command` when it needs one. Empty installs nothing.
-# `ubuntu-latest` carries `curl`, `unzip`, `xz-utils`, `git`, `python3` and `jq`; a bare
-# self-hosted runner selected through `runs_on` carries none of them and must be provisioned
-# before these jobs will pass. The SDK itself is not among them -- the Dart scripts download it
-# from `storage.googleapis.com` -- but every tool that fetches, unpacks and reports on it is:
-# `curl` retrieves the archive, `jq` resolves the current release from the Flutter manifest,
-# `unzip` and `xz-utils` unpack the Dart zip and the Flutter tarball respectively, `git` is
-# required by the Flutter SDK itself (it is a git checkout and shells out to git on almost every
-# invocation), and `python3` runs the report converters. The GitLab abstract installs exactly
-# this list, for exactly this reason.
+# `ubuntu-latest` carries `curl`, `unzip`, `xz-utils`, `git` and `jq`; a bare self-hosted
+# runner selected through `runs_on` carries none of them and must be provisioned before these
+# jobs will pass. The SDK itself is not among them -- the Dart scripts download it from
+# `storage.googleapis.com` -- but every tool that fetches and unpacks it is: `curl` retrieves the
+# archive, `jq` resolves the current release from the Flutter manifest, `unzip` and `xz-utils`
+# unpack the Dart zip and the Flutter tarball respectively, and `git` is required by the Flutter
+# SDK itself (it is a git checkout and shells out to git on almost every invocation). The report
+# converters are POSIX sh and awk, which every Linux runner has. The GitLab abstract installs
+# exactly this list, for exactly this reason.
 jobs:
   # first stage
   code_check-basic_checks:
@@ -253,7 +253,7 @@ jobs:
       # Flutter failure would say nothing and be annotated at the `testWidgets(` line, greenly.
       # Filtered, because `flutter test --machine` shares
       # stdout with pub's progress lines and flutter_tools' array-shaped events and the parser fails
-      # the whole report on the first line it cannot parse -- `filter_test_events.py` says what it
+      # the whole report on the first line it cannot parse -- `filter-test-events.sh` says what it
       # dropped, and writes nothing when nothing is left, which is what the `hashFiles` guard reads.
       #
       # Needs `checks: write` from the CALLER -- see the permissions note at the foot of this file --
@@ -273,7 +273,7 @@ jobs:
 
       # The coverage table on EVERY run's summary page, pull request or not. The runner writes the
       # Markdown beside its JUnit, Cobertura and LCOV, from the same parse the `coverage_minimum`
-      # gate evaluates -- see `lcov_to_markdown.py` for why it is rendered there rather than by an
+      # gate evaluates -- see `lcov-to-markdown.sh` for why it is rendered there rather than by an
       # action reading the raw tracefile.
       #
       # `always()`, like every reporting step in this repository: a red suite is exactly when

@@ -11,6 +11,16 @@ on:
           JSON array of runner labels (e.g. '["self-hosted"]'); see the `runs_on` input in
           go.yaml for the shape's rationale, and the comment above `jobs:` for what this
           workflow in particular puts on the runner it names.
+      allow_fork_pull_requests:
+        type: 'boolean'
+        required: false
+        default: false
+        description: |
+          Answer `@claude` on pull requests opened from forks. Off by default: the action checks
+          the fork's branch out in a job holding `contents: write` and this repository's secrets,
+          and restores only a fixed list of paths from the base branch first, so the fork's
+          `AGENTS.md` (which the restored `CLAUDE.md` imports) and any nested `CLAUDE.md` become
+          the instructions Claude follows. Read the comment above `jobs:` before turning it on.
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: true
@@ -23,28 +33,37 @@ on:
 # `shell: bash`; `oven-sh/setup-bun` unpacks Bun through `@actions/tool-cache`, which resolves
 # `unzip` and throws when it is absent; Bun installs into `$HOME/.bun/bin`, so `$HOME` must be
 # writable; `bun install --production` then resolves the action's dependencies from the npm
-# registry; and the checkout -- plus the PR branch tag mode fetches below -- needs `git`. So:
-# `bash`, `git` and `unzip` on `PATH`, a writable `$HOME`, and egress to `github.com`,
-# `registry.npmjs.org`, `api.github.com` and `api.anthropic.com`. A missing one does not fail at
-# job selection -- it fails minutes in, inside the action, with an error that never names the
-# runner.
+# registry; and the checkout -- plus the PR branch tag mode fetches below -- needs `git`; the fork
+# check below needs `gh`. So: `bash`, `git`, `gh` and `unzip` on `PATH`, a writable `$HOME`, and
+# egress to `github.com`, `registry.npmjs.org`, `api.github.com` and `api.anthropic.com`. A missing
+# one does not fail at job selection -- it fails minutes in, inside the action, with an error that
+# never names the runner (a missing `gh` instead fails the fork check on every pull request).
 #
-# Unlike `reusable-claude-review.yaml`, this responder carries no same-repository guard, and that
-# is deliberate -- answering `@claude` under a fork's pull request is the point of a mention
-# responder. Know what it puts on the host before naming a persistent one. Two independent things
-# keep an outside contributor out: the `if:` below admits only an OWNER, MEMBER or COLLABORATOR,
-# reading the association of whoever wrote the text it matched on (see the note there -- the third
-# clause needed a guard to make that true), and the action re-checks the actor's write permission
-# itself. But a maintainer's `@claude` on a fork PR runs holding `contents: write` and this
-# repository's secrets, and tag mode then fetches `refs/pull/<n>/head` and checks the FORK's branch
-# out into the workspace (`src/github/operations/branch.ts`). The action restores `.claude/` and
-# `.mcp.json` from the base branch before the CLI reads them, so that injection path is closed --
-# the fork's code itself is still on the runner, and a hosted runner discards it with the VM where
-# a persistent self-hosted one does not. The restored set is wider than those two: `SENSITIVE_PATHS`
-# is `.claude`, `.mcp.json`, `.claude.json`, `.gitmodules`, `.ripgreprc`, `CLAUDE.md`,
-# `CLAUDE.local.md` and `.husky`. `CLAUDE.md` being in it has a consequence worth knowing here --
-# a reviewing agent's working tree carries the BASE branch's instructions, so a pull request that
-# edits `CLAUDE.md` is invisible to the review of that same pull request.
+# A pull request opened from a FORK is refused unless the caller sets `allow_fork_pull_requests`,
+# for the reason `reusable-claude-review.yaml` carries its same-repository guard. Two independent
+# things keep an outside contributor from STARTING this job: the `if:` below admits only an OWNER,
+# MEMBER or COLLABORATOR, reading the association of whoever wrote the text it matched on (see the
+# note there -- the third clause needed a guard to make that true), and the action re-checks the
+# actor's write permission itself. Neither stops a maintainer's `@claude` on a fork's pull request
+# from running under the FORK's instructions. That run holds `contents: write` and this
+# repository's secrets, and tag mode fetches `refs/pull/<n>/head` and checks the fork's branch out
+# inside the action's own step (`src/github/operations/branch.ts`) -- after every step of this job,
+# so no step here can restore anything over it. The action then restores a fixed `SENSITIVE_PATHS`
+# list from the base branch (`src/github/operations/restore-config.ts`): `.claude`, `.mcp.json`,
+# `.claude.json`, `.gitmodules`, `.ripgreprc`, `CLAUDE.md`, `CLAUDE.local.md` and `.husky`, and
+# nothing else. `AGENTS.md` is not in it, and in the `AGENTS.md` layout the restored `CLAUDE.md` is
+# the one line `@AGENTS.md`, which the CLI resolves against the working tree -- so the fork's
+# `AGENTS.md` IS the project instructions, and the action's own template tells the model to follow
+# them. Nested `CLAUDE.md` files were never covered either, and the CLI loads a root `AGENTS.md` by
+# itself wherever the base has no `CLAUDE.md`. The action takes no extra paths
+# (anthropics/claude-code-action#1696), so the check runs before anything of the fork's reaches the
+# runner. It reads `isCrossRepository`, the field tag mode itself branches on, because an
+# `issue_comment` payload names no head repository; the field is fixed when the pull request opens,
+# so a push between the check and the action's fetch cannot change the answer. Pull requests from
+# this repository's own branches are answered as before -- their authors can already push here.
+# What does hold for every pull request: only the ROOT `CLAUDE.md` comes from the base branch, so a
+# pull request that edits `AGENTS.md` or a nested `CLAUDE.md` is answered, and reviewed, under the
+# instructions it changes.
 jobs:
   claude:
     # Each clause admits ONE event shape and reads the association of whoever wrote the text it
@@ -74,12 +93,52 @@ jobs:
       id-token: 'write'
       actions: 'read'
     steps:
+      # The fork check described above `jobs:`. Only an explicit `false` starts Claude: `true`
+      # refuses, and anything else -- an API error, a missing `gh`, a pull request the query
+      # cannot see -- fails this step, so the check fails closed AND visibly. The refusal is
+      # posted where the mention was, because a silent run reads as a crashed one; on a fork's
+      # review event the token is read-only, so there it degrades to a warning.
+      - name: 'Refuse pull requests from forks'
+        id: 'trust'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ALLOW_FORKS: ${{ inputs.allow_fork_pull_requests }}
+          PR_NUMBER: ${{ github.event.pull_request.number || (github.event.issue.pull_request && github.event.issue.number) || '' }}
+          REPOSITORY: ${{ github.repository }}
+          # GraphQL variables, not shell ones: kept out of the script so nothing there is a
+          # single-quoted `$` that reads like a missed expansion.
+          QUERY: 'query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { isCrossRepository } } }'
+          REFUSAL: 'Claude does not run on pull requests opened from a fork here: the action checks out the branch of the fork in a job that holds write access and the secrets of this repository, and an `AGENTS.md` or nested `CLAUDE.md` on that branch would become the instructions it follows. Push the branch to this repository to ask again.'
+        run: |
+          set -euo pipefail
+          if [ -z "${PR_NUMBER}" ] || [ "${ALLOW_FORKS}" = 'true' ]; then
+            echo 'answer=true' >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          cross="$(gh api graphql -f owner="${REPOSITORY%%/*}" -f name="${REPOSITORY#*/}" \
+            -F number="${PR_NUMBER}" -f query="${QUERY}" \
+            --jq '.data.repository.pullRequest.isCrossRepository' 2>/dev/null)" || cross='unknown'
+          if [ "${cross}" = 'false' ]; then
+            echo 'answer=true' >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          echo 'answer=false' >> "${GITHUB_OUTPUT}"
+          if [ "${cross}" != 'true' ]; then
+            echo "::error::could not tell whether #${PR_NUMBER} comes from a fork (isCrossRepository=${cross}); Claude was not started"
+            exit 1
+          fi
+          echo "::notice::#${PR_NUMBER} is a pull request from a fork; Claude was not started"
+          gh api "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="${REFUSAL}" >/dev/null \
+            || echo '::warning::the refusal could not be posted (a fork pull request event gets a read-only token)'
+
       - name: 'Checkout repository'
+        if: steps.trust.outputs.answer == 'true'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
         with:
           fetch-depth: 1
 
       - name: 'Run Claude Code'
+        if: steps.trust.outputs.answer == 'true'
         id: 'claude'
         # The provisioning list in the comment above `jobs:` (and README.md's "Claude Review and
         # Claude Mention" section) describes THIS pin's install chain -- `oven-sh/setup-bun`,

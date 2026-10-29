@@ -423,7 +423,7 @@ anything is built, and a Dockerfile that declares no such `ARG` gets a warning.
 
 `reusable-claude-review.yaml` posts an automated review on pull requests — not on drafts, forks
 or automation branches; `reusable-claude-mention.yaml` answers `@claude` mentions in issues, PR
-comments, and reviews.
+comments, and reviews — on a fork's pull request only when the caller opts in.
 The `reusable-` prefix marks the definition; the file you add to your own repository is the
 caller below, named without it. Both need the
 `CLAUDE_CODE_OAUTH_TOKEN` secret, set either on the repository or on the organization.
@@ -509,23 +509,34 @@ included, so host Node is not the gap. What `anthropics/claude-code-action` shel
 `bash` (every step of that composite declares it), `unzip` (the Bun install unpacks through
 `@actions/tool-cache`, which resolves it and throws when it is absent), `git`, a writable
 `$HOME` (Bun lands in `$HOME/.bun/bin`), and egress to `github.com`, `registry.npmjs.org`,
-`api.github.com` and `api.anthropic.com`. A missing one does not fail at job selection — it
-fails minutes in, inside the action, with an error that never names the runner.
+`api.github.com` and `api.anthropic.com`; the mention responder's fork check also needs `gh`. A
+missing one does not fail at job selection — it fails minutes in, inside the action, with an
+error that never names the runner (a missing `gh` instead fails the fork check on every pull
+request).
 
-**The two workflows differ in what they let onto that host.** `reusable-claude-review.yaml`
-runs only for pull requests opened from the repository itself. `reusable-claude-mention.yaml`
-deliberately does not, because answering `@claude` under a fork's pull request is the point of a
-mention responder. An outside contributor is kept out twice over — the job's `if:` admits only an
-OWNER, MEMBER or COLLABORATOR, reading the association of whoever wrote the text that matched, and
-the action independently re-checks the actor's write permission — but a maintainer's `@claude` on
-a fork PR then runs holding `contents: write` and this repository's secrets, and
-checks the fork's branch out into the workspace. The action restores its `SENSITIVE_PATHS` from the
-base branch first — `.claude`, `.mcp.json`, `.claude.json`, `.gitmodules`, `.ripgreprc`, `CLAUDE.md`,
-`CLAUDE.local.md`, `.husky` — so that injection path is closed; the fork's code itself is still on
-the runner, and a hosted runner discards it with the VM where a persistent self-hosted one does
-not. One consequence of `CLAUDE.md` being in that set is worth knowing before you rely on a review:
-a pull request that edits `CLAUDE.md` is reviewed against the **base** branch's copy, so the
-instructions it changes are not the ones the reviewing agent read.
+**Neither workflow runs for a fork's pull request by default.** `reusable-claude-review.yaml`
+runs only for pull requests opened from the repository itself, and `reusable-claude-mention.yaml`
+refuses a fork's pull request too unless the caller passes `allow_fork_pull_requests: true`. An
+outside contributor cannot start the mention job — its `if:` admits only an OWNER, MEMBER or
+COLLABORATOR, reading the association of whoever wrote the text that matched, and the action
+independently re-checks the actor's write permission — but a maintainer's `@claude` on a fork's
+pull request would run holding `contents: write` and this repository's secrets, with the fork's
+branch checked out by the action inside its own step, after every step a workflow can add. The
+action then restores a fixed `SENSITIVE_PATHS` list from the base branch — `.claude`,
+`.mcp.json`, `.claude.json`, `.gitmodules`, `.ripgreprc`, `CLAUDE.md`, `CLAUDE.local.md`,
+`.husky` — and nothing else. `AGENTS.md` is not in it, and in the `AGENTS.md` layout the restored
+`CLAUDE.md` is the one line `@AGENTS.md`, which Claude Code resolves against the working tree:
+the fork's `AGENTS.md` would become the instructions Claude follows. Nested `CLAUDE.md` files
+come from the pull request too, and Claude Code loads a root `AGENTS.md` on its own wherever the
+base branch has no `CLAUDE.md`. The action takes no list of extra paths
+([anthropics/claude-code-action#1696](https://github.com/anthropics/claude-code-action/issues/1696)),
+so the responder asks the API whether the pull request is cross-repository before anything of
+the fork's reaches the runner, and replies on it instead of starting Claude.
+`allow_fork_pull_requests: true` gives fork answers back to a repository that accepts that
+exposure — and the fork's code then sits on the runner, which a hosted runner discards with the VM
+and a persistent self-hosted one does not. One consequence holds for every pull request, your own
+included: only the **root** `CLAUDE.md` is read from the base branch, so a pull request that edits
+`AGENTS.md` or a nested `CLAUDE.md` is reviewed, and answered, under the instructions it changes.
 
 **The mention responder's caller must stay on the five events below.** It passes
 `track_progress: true`, which is what keeps it in tag mode now that it carries a prompt (a prompt

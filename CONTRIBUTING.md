@@ -34,7 +34,7 @@ development practices, refer to the **[Development Guide](https://github.com/rio
    ```
 6. Validate across platforms (GitHub Actions, GitLab CI, Azure DevOps) when modifying templates
 7. For anything under `.github/workflows/`, read the
-   [Workflow Composition Standard](CLAUDE.md#workflow-composition-standard) first and run:
+   [Workflow Composition Standard](AGENTS.md#workflow-composition-standard) first and run:
    ```bash
    make test-workflow-composition
    ```
@@ -42,7 +42,7 @@ development practices, refer to the **[Development Guide](https://github.com/rio
    ```bash
    chlog new --kind Added --body 'added the thing that was not there before'
    ```
-9. Commit following the [commit conventions](https://github.com/rios0rios0/guide/wiki/Life-Cycle/Git-Flow)
+9. Commit following the [commit conventions](https://github.com/rios0rios0/guide/wiki/Git-Flow)
 10. Open a pull request against `main`
 
 ## Testing Changes in a Real Repository

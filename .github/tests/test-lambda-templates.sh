@@ -19,6 +19,19 @@ cd "$SCRIPT_DIR/../.." || exit 1
 TESTS_PASSED=0
 TESTS_FAILED=0
 
+# The checks are Go test support (`internal/testsuites/lambdatemplates`), built
+# from this checkout for this run. A checker that does not build stops the
+# suite: every check below would otherwise fail for a reason that has nothing
+# to do with the templates.
+TOOL_DIR="$(mktemp -d)" || exit 1
+trap 'rm -rf "$TOOL_DIR"' EXIT
+LAMBDA="$TOOL_DIR/lambdatemplates"
+if ! CGO_ENABLED=0 GOFLAGS=-mod=readonly GOWORK=off \
+  go build -C "$SCRIPT_DIR/../.." -trimpath -o "$LAMBDA" ./internal/testsuites/lambdatemplates; then
+    echo -e "${RED}could not build ./internal/testsuites/lambdatemplates, so no check can run${NC}"
+    exit 1
+fi
+
 # Function to print test results
 print_result() {
     local result=$1
@@ -35,178 +48,24 @@ print_result() {
 # Test 1: Validate YAML syntax
 echo "Test 1: Validating YAML syntax"
 echo "================================"
-python3 << 'EOF'
-import yaml
-import sys
-
-files = [
-    'azure-devops/golang/go-lambda.yaml',
-    'azure-devops/golang/go-lambda-sam.yaml',
-    'azure-devops/golang/stages/40-delivery/lambda.yaml',
-    'azure-devops/golang/stages/50-deployment/lambda.yaml'
-]
-
-exit_code = 0
-for file in files:
-    try:
-        with open(file, 'r') as f:
-            yaml.safe_load(f)
-        print(f'  ✓ {file}')
-    except Exception as e:
-        print(f'  ✗ {file}: {e}')
-        exit_code = 1
-
-sys.exit(exit_code)
-EOF
-TEST_RESULT=$?
+TEST_RESULT=0
+"$LAMBDA" syntax || TEST_RESULT=$?
 print_result $TEST_RESULT "YAML syntax validation"
 
 # Test 2: Validate template structure
 echo ""
 echo "Test 2: Validating template structure"
 echo "======================================="
-python3 << 'EOF'
-import yaml
-import sys
-
-def validate_main_template(path, name):
-    with open(path, 'r') as f:
-        data = yaml.safe_load(f)
-    
-    errors = []
-    
-    # Check required keys
-    if 'stages' not in data:
-        errors.append(f"{name}: Missing 'stages' key")
-    
-    if 'parameters' not in data:
-        errors.append(f"{name}: Missing 'parameters' key (expected for main templates)")
-    
-    # Check stages reference correct templates
-    if 'stages' in data:
-        for i, stage in enumerate(data['stages']):
-            if isinstance(stage, dict) and 'template' in stage:
-                template = stage['template']
-                if not template.endswith('.yaml'):
-                    errors.append(f"{name}: Stage {i+1} template doesn't end with .yaml")
-    
-    return errors
-
-def validate_stage_template(path, name):
-    with open(path, 'r') as f:
-        data = yaml.safe_load(f)
-    
-    errors = []
-    
-    # Check required keys
-    if 'stages' not in data and 'parameters' not in data:
-        errors.append(f"{name}: Missing both 'stages' and 'parameters' keys")
-    
-    return errors
-
-# Validate main templates
-main_templates = {
-    'go-lambda.yaml': 'azure-devops/golang/go-lambda.yaml',
-    'go-lambda-sam.yaml': 'azure-devops/golang/go-lambda-sam.yaml'
-}
-
-all_errors = []
-for name, path in main_templates.items():
-    errors = validate_main_template(path, name)
-    all_errors.extend(errors)
-    if not errors:
-        print(f'  ✓ {name}')
-
-# Validate stage templates
-stage_templates = {
-    'delivery/lambda.yaml': 'azure-devops/golang/stages/40-delivery/lambda.yaml',
-    'deployment/lambda.yaml': 'azure-devops/golang/stages/50-deployment/lambda.yaml'
-}
-
-for name, path in stage_templates.items():
-    errors = validate_stage_template(path, name)
-    all_errors.extend(errors)
-    if not errors:
-        print(f'  ✓ {name}')
-
-if all_errors:
-    print("\nErrors found:")
-    for error in all_errors:
-        print(f"  ✗ {error}")
-    sys.exit(1)
-
-sys.exit(0)
-EOF
-TEST_RESULT=$?
+TEST_RESULT=0
+"$LAMBDA" structure || TEST_RESULT=$?
 print_result $TEST_RESULT "Template structure validation"
 
 # Test 3: Validate parameter consistency
 echo ""
 echo "Test 3: Validating parameter consistency"
 echo "=========================================="
-python3 << 'EOF'
-import yaml
-import re
-import sys
-
-def check_parameter_consistency(path, name):
-    with open(path, 'r') as f:
-        content = f.read()
-        data = yaml.safe_load(content)
-    
-    errors = []
-    warnings = []
-    
-    # Find all parameter references
-    param_refs = re.findall(r'\$\{\{\s*parameters\.(\w+)\s*\}\}', content)
-    
-    if 'parameters' in data:
-        defined_params = {p['name'] for p in data['parameters']}
-        referenced_params = set(param_refs)
-        
-        # Check for undefined parameters being referenced
-        undefined = referenced_params - defined_params
-        if undefined:
-            for param in undefined:
-                errors.append(f"{name}: Parameter '{param}' referenced but not defined")
-        
-        # Check for unused parameters (warning only)
-        unused = defined_params - referenced_params
-        if unused:
-            for param in unused:
-                warnings.append(f"{name}: Parameter '{param}' defined but not used")
-    
-    return errors, warnings
-
-main_templates = [
-    ('go-lambda.yaml', 'azure-devops/golang/go-lambda.yaml'),
-    ('go-lambda-sam.yaml', 'azure-devops/golang/go-lambda-sam.yaml')
-]
-
-all_errors = []
-all_warnings = []
-
-for name, path in main_templates:
-    errors, warnings = check_parameter_consistency(path, name)
-    all_errors.extend(errors)
-    all_warnings.extend(warnings)
-    if not errors and not warnings:
-        print(f'  ✓ {name}')
-
-if all_warnings:
-    print("\nWarnings:")
-    for warning in all_warnings:
-        print(f"  ⚠ {warning}")
-
-if all_errors:
-    print("\nErrors:")
-    for error in all_errors:
-        print(f"  ✗ {error}")
-    sys.exit(1)
-
-sys.exit(0)
-EOF
-TEST_RESULT=$?
+TEST_RESULT=0
+"$LAMBDA" parameters || TEST_RESULT=$?
 print_result $TEST_RESULT "Parameter consistency validation"
 
 # Test 4: Validate example configurations
@@ -218,29 +77,7 @@ EXAMPLES_VALID=0
 # Check template.yaml (SAM/CloudFormation templates use special tags like !Sub, !GetAtt)
 if [ -f ".docs/examples/go-lambda-example/template.yaml" ]; then
     # Just check basic YAML structure and required keys
-    python3 << 'PYEOF'
-import yaml
-import sys
-
-# Add constructors for CloudFormation intrinsic functions
-def cloudformation_constructor(loader, tag_suffix, node):
-    return loader.construct_scalar(node)
-
-yaml.SafeLoader.add_multi_constructor('!', cloudformation_constructor)
-
-try:
-    with open('.docs/examples/go-lambda-example/template.yaml', 'r') as f:
-        data = yaml.safe_load(f)
-    
-    # Check for required SAM template keys
-    if 'AWSTemplateFormatVersion' in data and 'Transform' in data and 'Resources' in data:
-        sys.exit(0)
-    else:
-        sys.exit(1)
-except Exception as e:
-    sys.exit(1)
-PYEOF
-    if [ $? -eq 0 ]; then
+    if "$LAMBDA" sam .docs/examples/go-lambda-example/template.yaml; then
         echo "  ✓ template.yaml is valid SAM template"
     else
         echo "  ✗ template.yaml is invalid"
@@ -267,8 +104,7 @@ fi
 
 # Check azure-pipelines.yml
 if [ -f ".docs/examples/go-lambda-example/azure-pipelines.yml" ]; then
-    python3 -c "import yaml; yaml.safe_load(open('.docs/examples/go-lambda-example/azure-pipelines.yml'))" 2>/dev/null
-    if [ $? -eq 0 ]; then
+    if "$LAMBDA" yaml .docs/examples/go-lambda-example/azure-pipelines.yml 2>/dev/null; then
         echo "  ✓ azure-pipelines.yml is valid"
     else
         echo "  ✗ azure-pipelines.yml is invalid"
@@ -281,8 +117,7 @@ fi
 
 # Check iam-policy-example.json
 if [ -f ".docs/examples/go-lambda-example/iam-policy-example.json" ]; then
-    python3 -c "import json; json.load(open('.docs/examples/go-lambda-example/iam-policy-example.json'))" 2>/dev/null
-    if [ $? -eq 0 ]; then
+    if "$LAMBDA" json .docs/examples/go-lambda-example/iam-policy-example.json 2>/dev/null; then
         echo "  ✓ iam-policy-example.json is valid"
     else
         echo "  ✗ iam-policy-example.json is invalid"

@@ -19,6 +19,17 @@ stages:
       - template: '../../../global/stages/20-security/codeql.yaml'
         parameters:
           CODEQL_LANGUAGE: 'go'
+          # CodeQL's Go extraction builds the module with the `go` on PATH, and this job set none
+          # up: a Microsoft-hosted agent carries Go 1.24 to 1.26 and reaches a newer module only by
+          # downloading its toolchain, and an agent with no Go, or no route to proxy.golang.org,
+          # failed the analysis -- quietly, since that step is `continueOnError`. The same pinned
+          # Go as the other Go jobs here.
+          PRE_STEPS:
+            - task: 'GoTool@0'
+              inputs:
+                version: '1.27.3'
+                architecture: 'amd64'
+              displayName: 'Setup Go'
 
       - template: '../../../global/stages/20-security/hadolint.yaml'
 

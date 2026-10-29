@@ -29,11 +29,12 @@ set -e
 # done again on every future release -- a ratchet running the wrong way. The builder image was
 # raised to the directive, and the Go analysis now installs the toolchain the module asks for
 # (`go_version_file` on `github/global/stages/20-security/codeql`) instead of hoping the runner
-# image already carries it.
+# image already carries it -- and on GitLab CI and Azure DevOps, the pinned Go (section 3c).
 #
-# So there is no version pinned anywhere in this file. What is asserted is the RELATIONSHIP:
-# nothing that has to read a module may be older than the module, and the Go analysis must bring
-# its own toolchain rather than inherit one it cannot choose.
+# So no version is pinned anywhere in this file; the one table, in section 4, records which CodeQL
+# release first read each Go, a fact about upstream rather than a choice. What is asserted is the
+# RELATIONSHIP: nothing that has to read a module may be older than the module, and the Go
+# analysis must bring its own toolchain rather than inherit one it cannot choose.
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
@@ -281,6 +282,27 @@ NAMED_FILE="$(grep -oE "go_version_file: *'[^']+'" "$SELF_WORKFLOW" 2> /dev/null
 assert_true "the go.mod it names is really there ($NAMED_FILE)" \
   "[[ -n '$NAMED_FILE' && -f '$SCRIPTS_DIR/$NAMED_FILE' ]]"
 
+# Autobuild extracts EVERY module here from the repository root, under the one Go set up from that
+# file with `GOTOOLCHAIN=local`. A module whose directive is newer than the named file's could not
+# be extracted at all, so the named file has to carry the newest directive in the repository.
+NEWEST_DIRECTIVE=""
+NEWEST_MODULE=""
+while IFS= read -r gomod; do
+  [[ -z "$gomod" ]] && continue
+  directive="$(grep -oE '^go [0-9]+(\.[0-9]+)*' "$gomod" | head -1 | awk '{print $2}')"
+  [[ -z "$directive" ]] && continue
+  if [[ -z "$NEWEST_DIRECTIVE" ]] || ! version_le "$directive" "$NEWEST_DIRECTIVE"; then
+    NEWEST_DIRECTIVE="$directive"
+    NEWEST_MODULE="${gomod#"$SCRIPTS_DIR"/}"
+  fi
+done < <(find "$SCRIPTS_DIR" -type f -name 'go.mod' -not -path '*/.git/*' | sort)
+NAMED_DIRECTIVE=""
+if [[ -n "$NAMED_FILE" && -f "$SCRIPTS_DIR/$NAMED_FILE" ]]; then
+  NAMED_DIRECTIVE="$(grep -oE '^go [0-9]+(\.[0-9]+)*' "$SCRIPTS_DIR/$NAMED_FILE" | head -1 | awk '{print $2}')"
+fi
+assert_true "the go.mod it names carries the newest directive here, go $NEWEST_DIRECTIVE of $NEWEST_MODULE, so its Go reads every module" \
+  "[[ -n '$NAMED_DIRECTIVE' && -n '$NEWEST_DIRECTIVE' ]] && version_le '$NEWEST_DIRECTIVE' '$NAMED_DIRECTIVE'"
+
 # The action has to be referenced by LOCAL PATH. `@main` resolves to the copy on the default
 # branch, so a pull request changing the action would test the old one and report green on code
 # nobody ran -- and an external `uses:` on a branch name is a high-severity SonarCloud finding
@@ -323,53 +345,102 @@ assert_true "the discovered path is what setup-go is given" \
 echo ""
 
 # ---------------------------------------------------------------------------
-echo "4. The Go waiver expires"
+echo "3c. The Go analysis has a Go on GitLab CI and Azure DevOps too"
 # ---------------------------------------------------------------------------
-# The Go leg is `continue-on-error` because no RELEASED CodeQL bundle can read a `go 1.27`
-# module: the extractor refuses a language version newer than the Go it was itself built with,
-# and `codeql-cli/v2.26.3` -- the newest -- still carries `go 1.26`. Upstream merged the support
-# on 2026-06-25 and `main` reads `go 1.27`, so this is a wait, not a dead end.
+# GitHub Actions sets the module's Go up above. The other two platforms run CodeQL through
+# `run.sh`, and the Go autobuilder builds with whatever `go` is on PATH, so there the JOB decides
+# the toolchain -- and a job without one analyses no Go at all:
 #
-# A waiver nothing revisits is a hole with a comment over it, so it carries a date and this
-# fails the build once that date passes. The alternative -- lowering the module's directive to
-# suit the scanner -- is the thing this whole file exists to argue against.
-WAIVER_DATE="$(grep -oE 'Expires 20[0-9]{2}-[0-9]{2}-[0-9]{2}' "$SELF_WORKFLOW" | head -1 | awk '{print $2}')"
-GO_IN_MATRIX="$(grep -cE "language: *\\[.*'go'" "$SELF_WORKFLOW" || true)"
+#   - GitLab CI's shared `sast:codeql` runs in the pipeline's default `docker:x.y` image, which is
+#     Alpine: the bundle's glibc-linked Java runtime cannot start there (`java: not found`), and
+#     the image has no Go. The Go stage moves the job onto `.go`, the image of every other Go job.
+#   - Azure DevOps' shared CodeQL job set up no Go. A Microsoft-hosted agent carries Go 1.24 to
+#     1.26 and reaches a newer module only by downloading its toolchain; an agent with no Go, or no
+#     route to proxy.golang.org, failed the analysis, and `continueOnError` reported that as passed
+#     with issues. The Go stage hands the template the `GoTool@0` the other Go jobs run.
+GITLAB_GO_SECURITY="$SCRIPTS_DIR/gitlab/golang/stages/20-security/go.yaml"
+# The job's own block: from its key to the next line that starts in column 0 -- the next key, or
+# the comment above it.
+GITLAB_CODEQL_JOB="$(awk '/^sast:codeql:/ { inside = 1; print; next }
+  inside && /^[^[:space:]]/ { exit }
+  inside { print }' "$GITLAB_GO_SECURITY" 2> /dev/null)"
+assert_true "the GitLab CI Go stage overrides the shared sast:codeql job" \
+  "[[ -n \"\$GITLAB_CODEQL_JOB\" ]]"
+assert_true "it runs in the .go image, which carries glibc and the pinned Go" \
+  "grep -qE \"^  extends: .*'\\.go'\" <<< \"\$GITLAB_CODEQL_JOB\""
+assert_true "it installs jq, which the findings gate reads the SARIF with" \
+  "grep -qE 'apt-get install .*[[:space:]]jq([[:space:]]|$)' <<< \"\$GITLAB_CODEQL_JOB\""
+# `.go`'s before_script and cache put GOPATH inside the checkout, and the autobuilder searches the
+# whole source root for go.mod files (skipping only `vendor/`): a module cache there is extracted as
+# hundreds of extra projects. So the job takes `.go`'s image and nothing else of it.
+assert_true "it turns the .go cache off" \
+  "grep -qE '^  cache: *\\[ *\\]' <<< \"\$GITLAB_CODEQL_JOB\""
+assert_empty "it neither runs .go's before_script nor sets a GOPATH of its own" \
+  "$(grep -nE '\.go, *before_script|GOPATH' <<< "$GITLAB_CODEQL_JOB" | grep -vE '^[0-9]+: *#' || true)"
+# Only where the job runs is overridden; what it runs stays the shared runner and gate.
+assert_empty "it keeps the shared job's script rather than a copy of it" \
+  "$(grep -nE '^  script:' <<< "$GITLAB_CODEQL_JOB" || true)"
 
-if [[ "$GO_IN_MATRIX" -ne 0 ]]; then
-  # The waiver is over: Go is analysed again, so nothing here needs a date.
-  assert_true "Go is back in the CodeQL matrix, so no waiver is in force" "true"
-else
-  assert_true "the Go waiver carries an expiry date" "[[ -n '$WAIVER_DATE' ]]"
-  if [[ -n "$WAIVER_DATE" ]]; then
-    TODAY="$(date -u +%Y-%m-%d)"
-    assert_true "the Go waiver has not expired (expires $WAIVER_DATE, today $TODAY) -- re-check whether a released CodeQL bundle now ships a go1.27 extractor" \
-      "[[ '$TODAY' < '$WAIVER_DATE' ]]"
-  fi
+AZURE_CODEQL="$SCRIPTS_DIR/azure-devops/global/stages/20-security/codeql.yaml"
+AZURE_GO_SECURITY="$SCRIPTS_DIR/azure-devops/golang/stages/20-security/go.yaml"
+assert_true "the Azure DevOps CodeQL template takes PRE_STEPS" \
+  "grep -A1 -E \"name: *'PRE_STEPS'\" '$AZURE_CODEQL' | grep -qE \"type: *'stepList'\""
+PRE_STEPS_LINE="$(grep -n 'each step in parameters.PRE_STEPS' "$AZURE_CODEQL" | head -1 | cut -d: -f1)"
+RUNNER_LINE="$(grep -n 'global/scripts/tools/codeql/run.sh' "$AZURE_CODEQL" | head -1 | cut -d: -f1)"
+assert_true "it runs them BEFORE run.sh, so the extractor builds with what they install" \
+  "[[ -n '$PRE_STEPS_LINE' && -n '$RUNNER_LINE' && $PRE_STEPS_LINE -lt $RUNNER_LINE ]]"
+# The Go stage's call of that template: from its `- template:` line to the next list item at the
+# same indentation.
+AZURE_CODEQL_CALL="$(awk '/- template: .*20-security\/codeql\.yaml/ { inside = 1; indent = index($0, "-"); print; next }
+  inside { if (match($0, /^ *- /) && RLENGTH == indent + 1) exit; print }' "$AZURE_GO_SECURITY" 2> /dev/null)"
+assert_true "the Azure DevOps Go stage passes CodeQL a GoTool@0 step" \
+  "grep -q 'PRE_STEPS:' <<< \"\$AZURE_CODEQL_CALL\" && grep -q \"task: 'GoTool@0'\" <<< \"\$AZURE_CODEQL_CALL\""
+CODEQL_GO="$(grep -A3 'GoTool@0' <<< "$AZURE_CODEQL_CALL" | grep -oE "version: *'[0-9.]+'" | grep -oE '[0-9][0-9.]*' | head -1)"
+OTHER_GO="$(grep -A3 'GoTool@0' "$SCRIPTS_DIR/azure-devops/golang/abstracts/go.yaml" | grep -oE "version: *'[0-9.]+'" | grep -oE '[0-9][0-9.]*' | head -1)"
+assert_true "it is the Go the other Go jobs run ($CODEQL_GO; azure-devops/golang/abstracts/go.yaml: $OTHER_GO)" \
+  "[[ -n '$CODEQL_GO' && '$CODEQL_GO' == '$OTHER_GO' ]]"
+echo ""
 
-  # The gap must be DECLARED, not merely absent. A language quietly dropped from a
-  # matrix looks identical to one nobody thought of, and reads as covered on every
-  # dashboard that counts green checks -- which is the whole failure mode here.
-  assert_true "the missing Go analysis is announced by a job of its own" \
-    "grep -q 'go-analysis-waived:' '$SELF_WORKFLOW'"
-  assert_true "that job warns rather than passing silently" \
-    "grep -q '::warning title=Go is not being analysed' '$SELF_WORKFLOW'"
+# ---------------------------------------------------------------------------
+echo "4. Go is analysed"
+# ---------------------------------------------------------------------------
+# From 2026-08-21 the Go leg was waived, in a job of its own that announced the gap: the newest
+# CodeQL bundle then, 2.26.3, carried a Go extractor built with go1.26, and that extractor refuses
+# a newer language version -- `package requires newer Go version go1.27 (application built with
+# go1.26)` -- while `database create` still exits 0 over the broken types. Every bundle from
+# `codeql-bundle-v2.26.4` (2026-08-26) is built with go1.27, and Go is analysed again.
+#
+# These keep it so. A language dropped from a matrix looks identical to one nobody thought of, and
+# reads as covered on every dashboard that counts green checks: leaving Go out again has to be a
+# decision this file is edited for, not a line that goes missing.
+assert_true "Go is in this repository's CodeQL matrix" \
+  "grep -qE \"language: *\\[.*'go'\" '$SELF_WORKFLOW'"
+assert_empty "no waiver job or expiry date is left behind" \
+  "$(grep -nE 'go-analysis-waived|Go is not being analysed|Expires 20[0-9]{2}-' "$SELF_WORKFLOW" || true)"
 
-  # And it must not be papered over with a green `Analyze (go)` check: a leg that runs,
-  # fails and is forgiven is worse than one that is honestly absent.
-  #
-  # Comment lines are dropped before matching, for the reason `test-supply-chain.sh` gives
-  # about its own rules: the workflow explains at length why `continue-on-error` was rejected
-  # here, and a check that forbids a pattern must not be failed by the paragraph forbidding it.
-  assert_empty "no continue-on-error hides a failing analysis" \
-    "$(grep -n 'continue-on-error' "$SELF_WORKFLOW" | grep -vE '^[0-9]+: *#' || true)"
+# A leg that runs, fails and is forgiven is worse than one that is honestly absent. Comment lines
+# are dropped before matching, for the reason `test-supply-chain.sh` gives about its own rules: a
+# check that forbids a pattern must not be failed by a paragraph explaining it.
+assert_empty "no continue-on-error hides a failing analysis" \
+  "$(grep -n 'continue-on-error' "$SELF_WORKFLOW" | grep -vE '^[0-9]+: *#' || true)"
 
-  # The other two languages keep running. Dropping Go must never quietly drop them too.
-  for lang in actions python; do
-    assert_true "'$lang' is still analysed while Go is waived" \
-      "grep -qE \"language: *\\[.*'$lang'\" '$SELF_WORKFLOW'"
-  done
-fi
+# The bundle `run.sh` installs -- GitLab CI, Azure DevOps, `make codeql` -- has to read the newest
+# directive too, and it is the EXTRACTOR that refuses one, not the toolchain: a prebuilt binary, so
+# each Go minor has a first bundle able to read it, the first whose `go/extractor/go.mod` names that
+# Go. A module moving to a minor not listed here fails until someone looks the release up and adds
+# the row:
+#
+#   gh api 'repos/github/codeql/contents/go/extractor/go.mod?ref=codeql-cli/vX.Y.Z' \
+#     --jq .content | base64 -d | grep '^go '
+declare -A FIRST_BUNDLE_FOR_GO=([1.24]='2.20.5' [1.25]='2.22.4' [1.26]='2.24.2' [1.27]='2.26.4')
+NEWEST_MINOR="$(cut -d. -f1,2 <<< "$NEWEST_DIRECTIVE")"
+PINNED_BUNDLE="$(grep -oE '^CODEQL_BUNDLE_PINNED_VERSION="codeql-bundle-v[0-9]+\.[0-9]+\.[0-9]+"' \
+  "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+FIRST_BUNDLE="${FIRST_BUNDLE_FOR_GO[${NEWEST_MINOR:-none}]:-}"
+assert_true "the first CodeQL bundle that reads go $NEWEST_MINOR, the newest directive here, is recorded" \
+  "[[ -n '$FIRST_BUNDLE' ]]"
+assert_true "the pinned bundle ($PINNED_BUNDLE) reads go $NEWEST_MINOR, as every bundle from $FIRST_BUNDLE does" \
+  "[[ -n '$PINNED_BUNDLE' && -n '$FIRST_BUNDLE' ]] && version_le '$FIRST_BUNDLE' '$PINNED_BUNDLE'"
 echo ""
 
 echo "================================"

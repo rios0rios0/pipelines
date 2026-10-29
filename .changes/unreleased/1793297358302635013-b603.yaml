@@ -1,0 +1,3 @@
+kind: 'Security'
+body: 'changed `reusable-claude-mention.yaml` to refuse `@claude` on pull requests opened from forks unless the caller sets `allow_fork_pull_requests`, because the action restores only the root `CLAUDE.md` from the base branch and a fork could otherwise change the instructions Claude follows through `AGENTS.md` or a nested `CLAUDE.md`'
+time: '2026-10-29T18:09:18.302545338Z'

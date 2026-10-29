@@ -192,11 +192,11 @@ dart_sdk_arch() {
 
 # dart_extract_archive <archive> <destination-dir>
 #
-# Unpack a `.zip` or `.tar.xz` without assuming which extractors the runner has.
-# `unzip` in particular is absent from several slim CI images, and its absence
-# used to surface as `unzip: not found` three lines after a successful download.
-# Python 3 is already a hard dependency of the Semgrep tool script, so it is the
-# fallback for both formats.
+# Unpack a `.zip` or `.tar.xz`. `unzip` is absent from several slim CI images,
+# and its absence used to surface as `unzip: not found` three lines after a
+# successful download, so it is checked first and named. Every Dart template
+# provisions it (the GitLab abstract installs it; GitHub's and Azure DevOps'
+# hosted images carry it), which is why no other extractor stands in for it.
 dart_extract_archive() {
   _da_archive="$1"
   _da_dest="$2"
@@ -204,14 +204,12 @@ dart_extract_archive() {
   mkdir -p "$_da_dest"
   case "$_da_archive" in
     *.zip)
-      if command -v unzip > /dev/null 2>&1; then
-        unzip -q "$_da_archive" -d "$_da_dest"
-      elif command -v python3 > /dev/null 2>&1; then
-        python3 -m zipfile -e "$_da_archive" "$_da_dest"
-      else
-        echo "ERROR: cannot unpack '$_da_archive' -- neither 'unzip' nor 'python3' is available." >&2
+      if ! command -v unzip > /dev/null 2>&1; then
+        echo "ERROR: cannot unpack '$_da_archive' -- 'unzip' is not installed." >&2
+        echo "Install it on the runner (the 'unzip' package on Debian and Ubuntu)." >&2
         exit 1
       fi
+      unzip -q "$_da_archive" -d "$_da_dest"
       ;;
     *.tar.xz)
       # BusyBox tar understands `-J`; GNU tar does too. `xz` itself is the part

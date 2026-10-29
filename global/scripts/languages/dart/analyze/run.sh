@@ -19,7 +19,7 @@ set -e
 #
 # The Dart analyzer is therefore the primary source of language-level
 # correctness findings, which is why its severity gate is configurable rather
-# than fixed -- see `dart_analyze_report.py` for `DART_FATAL_WARNINGS` /
+# than fixed -- see `analyze-report.sh` for `DART_FATAL_WARNINGS` /
 # `DART_FATAL_INFOS`.
 
 if [ -z "$SCRIPTS_DIR" ]; then
@@ -83,7 +83,7 @@ fi
 [ -s "$ANALYZE_ERR" ] && cat "$ANALYZE_ERR" >&2
 
 REPORT_EXIT=0
-python3 "$SCRIPTS_DIR/global/scripts/languages/dart/analyze/dart_analyze_report.py" "$DART_TOOL_REPORT_PATH" \
+"$SCRIPTS_DIR/global/scripts/languages/dart/analyze/analyze-report.sh" "$DART_TOOL_REPORT_PATH" \
   < "$ANALYZE_OUT" || REPORT_EXIT=$?
 
 echo ""

@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'rewrote the Dart report converters -- the Cobertura report, the Markdown coverage summary, the test event filter and the `dart analyze` reports -- in POSIX shell and awk with byte-identical output, so the Dart jobs no longer need `python3`: the GitLab `.dart` job stopped installing it, and the Dart SDK download stopped falling back to it when `unzip` is missing'
+time: '2026-10-29T21:17:09.322195739Z'

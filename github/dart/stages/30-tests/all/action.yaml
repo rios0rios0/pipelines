@@ -3,11 +3,11 @@
 # Produces `build/reports/junit.xml`, `build/reports/cobertura.xml`,
 # `build/reports/lcov.info` and `build/reports/coverage.md`. Dart emits coverage
 # as LCOV and nothing else, so the Cobertura report is produced by the runner's
-# own stdlib-Python converter -- see
-# `global/scripts/languages/dart/test/lcov_to_cobertura.py` for why that is a
-# converter here rather than a `pip install` -- and the Markdown summary the
+# own POSIX sh and awk converter -- see
+# `global/scripts/languages/dart/test/lcov-to-cobertura.sh` for why that is a
+# converter here rather than a third-party tool -- and the Markdown summary the
 # reusable workflow posts on a pull request comes from the same parse
-# (`lcov_to_markdown.py`), which is what keeps the comment and the gate from
+# (`lcov-to-markdown.sh`), which is what keeps the comment and the gate from
 # ever disagreeing about what was measured.
 inputs:
   flutter_version:

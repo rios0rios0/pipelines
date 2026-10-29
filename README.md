@@ -805,7 +805,7 @@ on building the real release artifact; this is a check.
 the totals table, the floor it was judged against and the coverage of every source file the change
 touches -- updated in place on every push, and writes the same table to the job summary of every
 run. It is the parity the JavaScript pipelines carry through `vitest-coverage-report-action`. Dart
-emits LCOV only, so the runner's own `lcov_to_markdown.py` renders it from the very parse the
+emits LCOV only, so the runner's own `lcov-to-markdown.sh` renders it from the very parse the
 `coverage_minimum` gate evaluates, which is what keeps the comment and the gate agreeing to the
 decimal and keeps whatever `coverage_exclude` drops out of both. The caller grants
 `pull-requests: write`, as above; without it, or on a pull request from a fork (whose token is

@@ -2007,7 +2007,7 @@ The provider ranking and path exclusions can be overridden per-repo with an opti
 }
 ```
 
-Only `python3` is required (no Terraform binary). The `--fix` rewriter is round-trip-safe: it only reorders existing blocks and leaves any file it cannot parse cleanly untouched. Dead inputs are the one exception to `--fix` — they are reported but never deleted, since removing content would break that invariant.
+Only Go 1.25 or newer is required (no Terraform binary): the checker is a Go helper built from the pipelines checkout on every run, and the CI templates provision Go for its job. The `--fix` rewriter is round-trip-safe: it only reorders existing blocks and leaves any file it cannot parse cleanly untouched. Dead inputs are the one exception to `--fix` — they are reported but never deleted, since removing content would break that invariant.
 
 ### Usage Examples
 

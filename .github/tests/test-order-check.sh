@@ -3,7 +3,7 @@
 set -e
 
 # Test script for the Terragrunt file-ordering checker/fixer.
-# Exercises check_order.py against synthetic Terragrunt layouts and asserts
+# Exercises the checker against synthetic Terragrunt layouts and asserts
 # both the detection (check mode) and the safe reordering (--fix mode) of:
 #   * root.hcl dependency blocks + inputs grouping
 #   * stacks/*/variables.tf .HCL/.ENV sections
@@ -11,7 +11,6 @@ set -e
 #   * stacks/*/outputs.tf main.tf declaration ordering
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-OC="$SCRIPTS_DIR/global/scripts/languages/terraform/order-check/check_order.py"
 RUN_SH="$SCRIPTS_DIR/global/scripts/languages/terraform/order-check/run.sh"
 TEST_DIR="$(mktemp -d)" || exit 1
 
@@ -37,10 +36,20 @@ assert_true() {
 cleanup() { rm -rf "$TEST_DIR"; }
 trap cleanup EXIT
 
+# The checker is Go. It is built ONCE for the suite, with the same pinned
+# environment `global/scripts/shared/go-helper.sh` builds it with, rather than
+# on every call the way `run.sh` does -- Test 23 drives `run.sh` itself.
+OC="$TEST_DIR/order-check"
+if ! CGO_ENABLED=0 GOFLAGS=-mod=readonly GOWORK=off \
+  go -C "$SCRIPTS_DIR" build -trimpath -o "$OC" ./global/scripts/languages/terraform/order-check; then
+  echo -e "${RED}FAIL: could not build the order-check checker (it needs Go 1.25 or newer)${NC}"
+  exit 1
+fi
+
 # A RELATIVE REPORT_PATH, because the checker confines its report directory to the
 # repository it was pointed at: `build/reports` resolves under `--repo-dir`, which is a
 # throwaway tree per test, and is also what every runner in this repo passes.
-oc() { REPORT_PATH="build/reports" python3 "$OC" "$@"; }
+oc() { REPORT_PATH="build/reports" "$OC" "$@"; }
 
 # Build a correct, in-standard repo at $1.
 make_clean_repo() {
@@ -163,7 +172,7 @@ echo "TEST 1: in-standard repo passes with no errors"
 R1="$TEST_DIR/clean"
 make_clean_repo "$R1"
 # when
-OUT1="$(REPORT_PATH="$R1/build/reports" python3 "$OC" --repo-dir "$R1" 2>&1)"; RC1=$?
+OUT1="$(REPORT_PATH="$R1/build/reports" "$OC" --repo-dir "$R1" 2>&1)"; RC1=$?
 # then
 assert_true "exit code 0 on clean repo" "[ $RC1 -eq 0 ]"
 assert_true "prints 'no ordering errors'" "echo \"\$OUT1\" | grep -q 'no ordering errors'"
@@ -585,7 +594,8 @@ assert_true "run.sh uses #!/usr/bin/env sh" \
 assert_true "run.sh avoids bash-only BASH_SOURCE" "! grep -q 'BASH_SOURCE' '$RUN_SH'"
 assert_true "run.sh avoids bash-only pipefail" "! grep -q 'pipefail' '$RUN_SH'"
 assert_true "run.sh is executable" "[ -x '$RUN_SH' ]"
-assert_true "check_order.py is executable" "[ -x '$OC' ]"
+assert_true "run.sh builds and runs the Go checker" \
+  "grep -q 'go_helper_run global/scripts/languages/terraform/order-check' '$RUN_SH'"
 
 # =============================================================================
 # Test 13: a non-Terragrunt repo (no environments/stacks) passes cleanly.
@@ -931,6 +941,41 @@ set +e; OUT22="$(oc --repo-dir "$R22" 2>&1)"; RC22=$?; set -e
 assert_true "cross-file variable is not flagged dead" \
   "! echo \"\$OUT22\" | grep -q 'dead-inputs'"
 assert_true "repo passes (exit 0)" "[ $RC22 -eq 0 ]"
+
+# =============================================================================
+# Test 23: run.sh drives the checker end to end, flags and exit code included.
+# =============================================================================
+echo "TEST 23: run.sh builds the checker, passes its flags and its exit code"
+# given -- a clean repository whose dependency blocks are out of order
+R23="$TEST_DIR/run-sh"
+make_clean_repo "$R23"
+cat > "$R23/environments/04_app/root.hcl" << 'HCL'
+dependency "kubernetes" {
+  config_path = "${get_path_to_repo_root()}//environments/03_kubernetes/x"
+}
+
+dependency "shared_common" {
+  config_path = "${get_path_to_repo_root()}//environments/01_shared/02_common"
+}
+
+terraform {
+  source = "${get_path_to_repo_root()}//stacks/04_app"
+}
+
+inputs = {
+  tags     = local.tags
+  registry = dependency.shared_common.outputs.registry
+  kube     = dependency.kubernetes.outputs.kube
+  image    = "app:1.0.0"
+}
+HCL
+# when
+set +e; OUT23="$(REPORT_PATH="build/reports" "$RUN_SH" --repo-dir "$R23" 2>&1)"; RC23=$?; set -e
+set +e; REPORT_PATH="build/reports" "$RUN_SH" --repo-dir "$R23" --fix > /dev/null 2>&1; RC23B=$?; set -e
+# then
+assert_true "run.sh reports the error and exits 1" "[ $RC23 -eq 1 ] && echo \"\$OUT23\" | grep -q 'root-hcl-deps'"
+assert_true "run.sh --fix rewrites the file and exits 0" "[ $RC23B -eq 0 ]"
+assert_true "run.sh wrote the JUnit report" "[ -f '$R23/build/reports/junit-order-check.xml' ]"
 
 # =============================================================================
 # Summary

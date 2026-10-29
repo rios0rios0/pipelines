@@ -61,14 +61,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The three default setup was configured with. `go` was waived from 2026-08-21, in a job
-        # of its own that announced the gap: the newest CodeQL bundle then, 2.26.3, carried a Go
-        # extractor built with go1.26, and that extractor refuses a newer language version --
-        # `package requires newer Go version go1.27 (application built with go1.26)` -- while
-        # `database create` still exits 0 over the broken types. Every bundle from
-        # `codeql-bundle-v2.26.4` (2026-08-26) is built with go1.27, so Go is analysed again, and
-        # `make test-go-module-toolchain` (section 4) fails if it leaves this list.
-        language: [ 'actions', 'go', 'python' ]
+        # `actions` and `go`. `python` left the list on 2026-10-29 with the last Python file here:
+        # the helpers are Go or POSIX shell, `make test-no-python` keeps it that way, and a Python
+        # leg with no Python to extract fails rather than reporting nothing.
+        #
+        # `go` was waived from 2026-08-21, in a job of its own that announced the gap: the newest
+        # CodeQL bundle then, 2.26.3, carried a Go extractor built with go1.26, and that extractor
+        # refuses a newer language version -- `package requires newer Go version go1.27
+        # (application built with go1.26)` -- while `database create` still exits 0 over the broken
+        # types. Every bundle from `codeql-bundle-v2.26.4` (2026-08-26) is built with go1.27, so Go
+        # is analysed again, and `make test-go-module-toolchain` (section 4) fails if it leaves
+        # this list.
+        language: [ 'actions', 'go' ]
     steps:
       - uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 

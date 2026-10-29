@@ -256,9 +256,9 @@ GOLANGCI_LINT_SHA256_ARM64="b4d8f17068b35ee6060cc2f69a16fb48740d706fbba81661c318
 # upstream: github-release maratori/golangci-lint-config ceiling=GOLANGCI_LINT
 # vendored: global/scripts/languages/golang/golangci-lint/.golangci.yml
 # osv: none
-GOLANGCI_LINT_CONFIG_PINNED_VERSION="2.14.0"
+GOLANGCI_LINT_CONFIG_PINNED_VERSION="2.15.0"
 # asset: https://raw.githubusercontent.com/maratori/golangci-lint-config/v{version}/.golangci.yml
-GOLANGCI_LINT_CONFIG_SHA256="8a16368d593e301d1391e4261b8bb4b89bf430802d64d9e71c944bb3035754ba"
+GOLANGCI_LINT_CONFIG_SHA256="eea4d8fed758ad1e0c4ca70064f1148f7bd167079a8e1ac12504d18f1a7a866a"
 
 # Guardsquare publishes no checksum manifest, so this digest rests on the asset
 # alone.
@@ -464,7 +464,7 @@ UNEARTH_SPEC="${UNEARTH_SPEC:-unearth==0.18.3}"
 # upstream: pypi vulture
 VULTURE_SPEC="${VULTURE_SPEC:-vulture==2.16}"
 # upstream: pypi semgrep
-SEMGREP_SPEC="${SEMGREP_SPEC:-semgrep==1.182.0}"
+SEMGREP_SPEC="${SEMGREP_SPEC:-semgrep==1.182.1}"
 # upstream: rubygems bundler-audit
 BUNDLER_AUDIT_SPEC="${BUNDLER_AUDIT_SPEC:-bundler-audit:0.9.3}"
 # upstream: rubygems debride

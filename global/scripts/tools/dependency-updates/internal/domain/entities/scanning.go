@@ -193,6 +193,12 @@ func InlineCopies() []InlineCopy {
 		{"TERRAGRUNT_SHA256_AMD64", `TERRAGRUNT_SHA256="([0-9a-f]{64})"`},
 		{"STOML_PINNED_VERSION", `STOML_VERSION="([0-9][^"]*)"`},
 		{"STOML_SHA256_AMD64", `STOML_SHA256="([0-9a-f]{64})"`},
+		// The `version:` of an Azure DevOps `UseNode@1` task, looked for within
+		// the task's own lines, and the step name repeating it. Only an exact
+		// release is a copy: `NodeTool@0`'s `versionSpec: '22.x'` in the
+		// deployment templates is a range the task resolves on every run.
+		{"NODE_PINNED_VERSION", `UseNode@1'?[ \t]*\r?\n(?:[ \t]+[^\n]*\n){0,8}?[ \t]+version:[ \t]*'(\d+\.\d+\.\d+)'`},
+		{"NODE_PINNED_VERSION", `displayName:[ \t]*'Use Node\.js (\d+\.\d+\.\d+)'`},
 	}
 	copies := make([]InlineCopy, 0, len(rows))
 	for _, row := range rows {

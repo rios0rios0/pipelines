@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed `--apply` writing a pin whose image it had just refused: when an image that follows a pin -- a `golang:` image, or one an `# image:` pin names -- could not move to the new release, because the registry had no tag for it, its scan found a vulnerability the new image introduces or its lookup failed, the pin and its inline copies moved anyway and the image stayed behind, so the scheduled pull request failed its own verification and held every other update back; the pin now stays with its images and copies, listed under "needs a person" with the reason, as the SonarQube scanner''s move from 12.1 to 12.2 would have been on its first run'
+time: '2026-10-30T01:38:08.282303987Z'

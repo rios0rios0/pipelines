@@ -210,9 +210,9 @@ privately and fix them.
 
   | Platform | Where | Before | After |
   |---|---|---|---|
-  | GitLab CI | `.npm`: `report:dependency-track` | `node:16.20.2-bookworm`: Node 16.20.2, npm 8.19.4, Yarn 1.22.19, corepack 0.17.0 | `node:24.22.2-trixie` (Debian 13), by digest: Node 24.22.2, npm 11.19.1, Yarn 1.22.22, corepack 0.36.0 |
+  | GitLab CI | `.npm`: `report:dependency-track` | `node:16.20.2-bookworm`: Node 16.20.2, npm 8.19.4, Yarn 1.22.19, corepack 0.17.0 | `node:24.22.1-trixie` (Debian 13), by digest: Node 24.22.1, npm 11.19.1, Yarn 1.22.22, corepack 0.36.0 |
   | GitLab CI | `.yarn`: code check, tests, audit, `report:sonarqube` | `node:18.17.1-bookworm`: Node 18.17.1, npm 9.6.7, Yarn 1.22.19, corepack 0.18.0 | the same image, as the `node` user |
-  | Azure DevOps | `corepack-node-no-cache.yaml` and the CodeQL `PRE_STEPS` | `UseNode@1` 20.20.2: npm 10.8.2, corepack 0.34.6 | `UseNode@1` 24.22.2: npm 11.19.1, corepack 0.36.0 |
+  | Azure DevOps | `corepack-node-no-cache.yaml` and the CodeQL `PRE_STEPS` | `UseNode@1` 20.20.2: npm 10.8.2, corepack 0.34.6 | `UseNode@1` 24.22.1: npm 11.19.1, corepack 0.36.0 |
   | GitHub Actions | the CodeQL composite's `setup-node` | `node-version: '20'` | `node-version: '24'` |
   | GitHub Actions | the `node_version` default of `npm.yaml`, `yarn.yaml`, `yarn-cloudflare.yaml` and the `format` and `knip` composites | `'20'` | `'24'` |
 
@@ -227,6 +227,15 @@ privately and fix them.
   `yarn.yaml` and `yarn-cloudflare.yaml`, and the `format` and `knip` composites, so a consumer who
   leaves the input unset now builds on Node 24 and one who needs another major names it. Left as
   they were: the deployment templates' Node 22, supported until 2027-04-30.
+  The release is 24.22.1 rather than the newer 24.22.2: 24.22.1 (2026-10-21) is the security
+  release that fixed the eight advisories 24.22.0 carries, and 24.22.2 fixes nothing more and was
+  published on 2026-10-28, inside the dependency update's 7-day cooldown.
+  And the pins no longer stay where this left them. A tag naming one release stops being rebuilt
+  once the next ships, so its digest never moves again and the digest check has nothing to report:
+  that is how `.npm` stayed on Node 16.14.0. The GitLab CI images and the Azure DevOps `UseNode@1`
+  inputs now follow `NODE_PINNED_VERSION` in `global/scripts/shared/pinned-versions.sh`, held to
+  the 24 line, which the scheduled dependency update moves: to a new release once it is a week
+  old, and at once to one fixing a known vulnerability (advisories from OSV's Bitnami feed).
 - **What a consumer may notice:** a project's own scripts now run on Node 24. One that runs the
   test runner over a directory, `node --test test/`, stops working: Node 21 and later read the
   arguments as files and glob patterns, and load `test/` as a module (`Cannot find module
@@ -246,4 +255,7 @@ privately and fix them.
     4.18.1), then the `quality:knip` install and knip, `yarn npm audit`, lint, tests and build.
   - Section 8 of `make test-codeql-runtime` fails on any Node.js a template names that is past its
     end of life, on an odd line, or on a line with no recorded date.
+  - These runs used 24.22.2, the newest release when they were made. The pins name 24.22.1, whose
+    image ships the same npm 11.19.1, Yarn 1.22.22 and corepack 0.36.0 on the same Debian 13.7, so
+    only Node's own fixes differ.
 - **Status:** Fixed in #775.

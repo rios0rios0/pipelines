@@ -1,10 +1,13 @@
 # The Node runtime of the Azure JavaScript stages. The version lives here -- not in the
 # filename, so a bump is an edit with no new file and no forwarding stub -- and in one
 # copy, the `PRE_STEPS` of the CodeQL job (`stages/20-security/yarn.yaml`), which
-# `make test-codeql-runtime` holds to this one. `corepack-node20.18.3*.yaml` are the
-# historical names kept for consumers that include them by path.
+# `make test-codeql-runtime` holds to this one. Both are copies of `NODE_PINNED_VERSION` in
+# global/scripts/shared/pinned-versions.sh, which the scheduled dependency update moves to
+# each new Node 24 release once it is a week old, or at once for a security fix.
+# `corepack-node20.18.3*.yaml` are the historical names kept for consumers that include
+# them by path.
 #
-# 24.22.2 is the newest Node 24 (Krypton) release, supported until 2028-04-30. Not Node 26,
+# Node 24 (Krypton) is supported until 2028-04-30. Not Node 26,
 # LTS since 2026-10-28: Node 25 dropped corepack from its distribution, and the step below
 # needs it. Node 20, which this ran until then, reached its end of life on 2026-04-30.
 # And never below 20.19: `quality:knip` runs the knip pinned in
@@ -15,8 +18,8 @@
 steps:
   - task: 'UseNode@1'
     inputs:
-      version: '24.22.2'
-    displayName: 'Use Node.js 24.22.2'
+      version: '24.22.1'
+    displayName: 'Use Node.js 24.22.1'
 
   - script: |
       corepack enable

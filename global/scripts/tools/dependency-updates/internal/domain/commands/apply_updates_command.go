@@ -58,6 +58,9 @@ func (c *ApplyUpdatesCommand) Execute(check CheckResult) ApplyResult {
 	result := ApplyResult{Refused: check.Refused()}
 	proposals := check.Proposals()
 	parallel(c.jobs, proposals, c.prepare)
+	// Every task of the check, not only its proposals and refusals: an image whose
+	// lookup failed in the check is neither, and holds its pin all the same.
+	held := heldPins(check.Tasks)
 
 	before := entities.ManifestValues(check.Manifest)
 	targets := maps.Clone(before)
@@ -66,6 +69,11 @@ func (c *ApplyUpdatesCommand) Execute(check CheckResult) ApplyResult {
 			if task.Refused != "" {
 				result.Refused = append(result.Refused, task)
 			}
+			continue
+		}
+		if err := movesWithItsImages(task, held); err != nil {
+			task.Refused = err.Error()
+			result.Refused = append(result.Refused, task)
 			continue
 		}
 		if err := followsWrittenPin(task, targets); err != nil {
@@ -90,9 +98,47 @@ func (c *ApplyUpdatesCommand) Execute(check CheckResult) ApplyResult {
 	return result
 }
 
+// heldPins maps each pin to an image following it that this run cannot move: one
+// the registry has no tag for, one whose scan refused it, one whose lookup
+// failed. A pin written without all its images would leave a copy behind on the
+// release it left -- the drift its pull request's own verification then fails,
+// holding every other update of the run back with it.
+func heldPins(tasks []*entities.Task) map[*entities.ManifestEntry]*entities.Task {
+	held := make(map[*entities.ManifestEntry]*entities.Task)
+	for _, task := range tasks {
+		if task.Follows == nil || (task.Refused == "" && task.Error == "") {
+			continue
+		}
+		if _, found := held[task.Follows]; !found {
+			held[task.Follows] = task
+		}
+	}
+	return held
+}
+
+// movesWithItsImages refuses to write a pin one of whose images cannot move with
+// it, so the pin, its inline copies and its images stay together on the release
+// they share, and a person is handed the reason.
+func movesWithItsImages(task *entities.Task, held map[*entities.ManifestEntry]*entities.Task) error {
+	if task.Group != entities.GroupManifest {
+		return nil
+	}
+	image, isHeld := held[task.Entry]
+	if !isHeld {
+		return nil
+	}
+	reason := image.Refused
+	if reason == "" {
+		reason = image.Error
+	}
+	return entities.Refuse("`%s` cannot move with it (%s), so the pin stays at `%s` with every copy of it",
+		image.Label, reason, task.Current)
+}
+
 // followsWrittenPin refuses to move an image that follows a pin to a release its
 // pin is not moving to. The images are written after the pins, so a pin whose own
-// update was refused keeps its images where they are.
+// update was refused -- or held by `movesWithItsImages` -- keeps its images where
+// they are.
 func followsWrittenPin(task *entities.Task, targets map[string]string) error {
 	if task.Retag == "" {
 		return nil

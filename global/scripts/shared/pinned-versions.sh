@@ -429,6 +429,24 @@ NETLIFY_CLI_SPEC="${NETLIFY_CLI_SPEC:-netlify-cli@27}"
 # image: sonarsource/sonar-scanner-cli
 SONAR_SCANNER_CLI_PINNED_VERSION="12.1.0.3233_8.0.1"
 
+# Node.js, as the GitLab CI JavaScript images (`node:<release>-trixie` in
+# `gitlab/javascript/abstracts/`) and the Azure DevOps `UseNode@1` inputs name
+# it: one exact release. Docker stops rebuilding a release's tag once the next
+# one ships, so the digest check alone would leave those images on it for good
+# -- KI-05 found `.npm` on Node 16.14.0 that way -- and nothing reads a
+# `UseNode@1` input at all without this pin. Held to the 24 line: Node 25 and
+# later ship no corepack, which every Yarn job enables. Bitnami's feed is the
+# one OSV indexes Node.js itself in, so a release in use with a known
+# vulnerability is forced out without waiting for the cooldown. GitHub Actions
+# asks `setup-node` for `24` and gets the newest 24.x on every run, so it needs
+# no copy here. Images of another line are left to the digest check while
+# their tag is rolling (`node:22-alpine`, the deployment templates'); an exact
+# tag of a line no pin holds is reported, since nothing would ever move it.
+# upstream: github-release nodejs/node track=24
+# osv: Bitnami node
+# image: node
+NODE_PINNED_VERSION="24.22.1"
+
 # --- Miscellaneous -----------------------------------------------------------
 
 # GitLab's own secure-files installer, used by the GitLab Go binary delivery

@@ -304,6 +304,61 @@ func TestApplyUpdatesCommandGoToolchain(t *testing.T) {
 		assert.Equal(t, "GO_PINNED_VERSION", result.Fixes[0].Var)
 	})
 
+	t.Run("should hold the pin and its inputs where they are when one of its images cannot move", func(t *testing.T) {
+		t.Parallel()
+		// given
+		scenario := applyCase{
+			files:    goPinned("1.27.1", "1.27.1", oldImage),
+			releases: goReleases(map[string]string{oldImage: goDigest("a"), "golang:1.27.2-bookworm": goDigest("c")}),
+			merger:   &doubles.StubMerger{},
+			scanner: &doubles.StubImageScanner{Scans: map[string]entities.ImageScan{
+				oldImage: {},
+				newImage: {Findings: []entities.ImageFinding{finding("glibc", "CVE-2026-9", "CRITICAL")}},
+			}},
+		}
+
+		// when
+		result, workspace := scenario.run()
+
+		// then
+		assert.Empty(t, result.Applied)
+		assert.Empty(t, result.Fixes, "no inline copy moves to a release the pin does not")
+		image := labelled(t, result.Refused, "golang:1.27.1-bookworm")
+		assert.Contains(t, image.Refused, "the rebuild introduces glibc 1 CVE-2026-9 (CRITICAL)")
+		pin := labelled(t, result.Refused, "GO")
+		assert.Contains(t, pin.Refused, "`golang:1.27.1-bookworm` cannot move with it")
+		assert.Contains(t, pin.Refused, "the pin stays at `1.27.1`")
+		assert.Contains(t, workspace.Text(entities.ManifestPath), `GO_PINNED_VERSION="1.27.1"`)
+		assert.Contains(t, workspace.Text(goWorkflow), "go-version: '1.27.1'")
+		assert.Contains(t, workspace.Text(goWorkflow), "image: '"+oldImage+"'")
+	})
+
+	t.Run("should hold the pin where it is when the lookup of an image's new tag fails", func(t *testing.T) {
+		t.Parallel()
+		// given
+		releases := goReleases(map[string]string{oldImage: goDigest("a")})
+		releases.Errors = map[string]error{
+			"golang:1.27.2-bookworm": repositories.NewLookupError("golang:1.27.2-bookworm -> HTTP 503"),
+		}
+		scenario := applyCase{
+			files:    goPinned("1.27.1", "1.27.1", oldImage),
+			releases: releases,
+			merger:   &doubles.StubMerger{},
+			scanner:  scanner(),
+		}
+
+		// when
+		result, workspace := scenario.run()
+
+		// then
+		assert.Empty(t, result.Applied)
+		pin := labelled(t, result.Refused, "GO")
+		assert.Contains(t, pin.Refused, "`golang:1.27.1-bookworm` cannot move with it")
+		assert.Contains(t, pin.Refused, "HTTP 503")
+		assert.Contains(t, workspace.Text(entities.ManifestPath), `GO_PINNED_VERSION="1.27.1"`)
+		assert.Contains(t, workspace.Text(goWorkflow), "go-version: '1.27.1'")
+	})
+
 	t.Run("should keep the image where it is when its pin's own update is refused", func(t *testing.T) {
 		t.Parallel()
 		// given

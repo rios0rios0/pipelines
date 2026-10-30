@@ -74,8 +74,8 @@ jobs:
         with:
           codeql_language: 'java-kotlin'
           upload: "${{ inputs.codeql_upload }}"
-    needs: [ 'code_check-style_checkstyle', 'code_check-quality_proguard' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-style_checkstyle', 'code_check-quality_proguard' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sast_semgrep:
     name: 'security > sast:semgrep'
@@ -84,25 +84,25 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/semgrep@main'
         with:
           semgrep_lang: 'java'
-    needs: [ 'code_check-style_checkstyle', 'code_check-quality_proguard' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-style_checkstyle', 'code_check-quality_proguard' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sast_gitleaks:
     name: 'security > sast:gitleaks'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/gitleaks@main'
-    needs: [ 'code_check-style_checkstyle', 'code_check-quality_proguard' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-style_checkstyle', 'code_check-quality_proguard' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sast_hadolint:
     name: 'security > sast:hadolint'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
-    needs: [ 'code_check-style_checkstyle', 'code_check-quality_proguard' ]
+    needs: [ 'code_check-basic_checks', 'code_check-style_checkstyle', 'code_check-quality_proguard' ]
     continue-on-error: true
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sca_dependency_check:
     name: 'security > sca:dependency-check'
@@ -112,7 +112,7 @@ jobs:
         with:
           nvd_api_key: ${{ secrets.NVD_API_KEY }}
           build_tool: 'gradle'
-    needs: [ 'code_check-style_checkstyle', 'code_check-quality_proguard' ]
+    needs: [ 'code_check-basic_checks', 'code_check-style_checkstyle', 'code_check-quality_proguard' ]
     continue-on-error: true
     # Building the CVE database is the only slow path left, and it is bounded rather than trusted. A
     # cold build now bootstraps from the rate-limit-free NVD datafeed rather than paginating the API,
@@ -121,7 +121,7 @@ jobs:
     # could have saved it. 45 minutes leaves headroom for the H2 load and the scan itself while still
     # killing a pathological download instead of burning the account's Actions minutes on it.
     timeout-minutes: 45
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
 
   # third stage
@@ -161,7 +161,7 @@ jobs:
         # the report is evidence, and the step above already decided pass or fail.
         continue-on-error: true
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_dependency_check' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
 
   # management stage (optional)
@@ -171,7 +171,7 @@ jobs:
     container:
       image: 'sonarsource/sonar-scanner-cli:12.1.0.3233_8.0.1@sha256:23ca0f137965d9dff2198074043fd48d386280bc5d0ccac8c8349cea4cf096a9'
     needs: [ 'tests-test_all' ]
-    if: "inputs.sonar_host != '' && !startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && !failure() && inputs.sonar_host != '' && !startsWith(github.ref, 'refs/tags/')"
     continue-on-error: true
     steps:
       - name: 'Checkout code'

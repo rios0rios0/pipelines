@@ -1,0 +1,35 @@
+name: 'Go Test Command'
+description: |
+  Runs one test command against the module, as a job of its own in the tests stage: the race
+  detector, the suite on another operating system, packages the coverage run of `30-tests/all` does
+  not reach. That job owns the coverage and the published reports; this one only passes or fails.
+
+inputs:
+  command:
+    description: 'Test command, run in bash from the repository root (e.g. `go test -race -count=1 ./...`).'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Checkout code'
+      uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
+
+    - name: 'Setup Go'
+      uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
+      with:
+        go-version-file: 'go.mod'
+        cache-dependency-path: 'go.sum'
+        # Skipped on a self-hosted runner, where GOMODCACHE and GOCACHE persist on local disk and a
+        # restore untars over files that already exist: see `10-code-check/golangci-lint`.
+        # `!= 'self-hosted'` rather than `== 'github-hosted'` so an empty context keeps the cache.
+        cache: ${{ runner.environment != 'self-hosted' }}
+
+    # The command crosses through `env:`, so it is never a fragment of the script. It is shell by
+    # contract, and `eval` runs it in this step's own `bash -e -o pipefail` shell -- Git Bash on a
+    # Windows runner -- as `openapi-sync` runs its command.
+    - name: 'Run the tests'
+      shell: 'bash'
+      env:
+        TEST_COMMAND: "${{ inputs.command }}"
+      run: eval "$TEST_COMMAND"

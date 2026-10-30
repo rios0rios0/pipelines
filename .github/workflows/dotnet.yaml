@@ -56,8 +56,8 @@ jobs:
         with:
           codeql_language: 'csharp'
           upload: "${{ inputs.codeql_upload }}"
-    needs: [ 'code_check-quality_resharper' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-quality_resharper' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sast_semgrep:
     name: 'security > sast:semgrep'
@@ -66,25 +66,25 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/semgrep@main'
         with:
           semgrep_lang: 'csharp'
-    needs: [ 'code_check-quality_resharper' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-quality_resharper' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sast_gitleaks:
     name: 'security > sast:gitleaks'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/gitleaks@main'
-    needs: [ 'code_check-quality_resharper' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-quality_resharper' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sast_hadolint:
     name: 'security > sast:hadolint'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
-    needs: [ 'code_check-quality_resharper' ]
+    needs: [ 'code_check-basic_checks', 'code_check-quality_resharper' ]
     continue-on-error: true
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
 
   # third stage
@@ -107,7 +107,7 @@ jobs:
         run: dotnet test --no-restore --collect:"XPlat Code Coverage"
         shell: 'bash'
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
 
 

@@ -320,3 +320,83 @@ func TestCheckPackagesGrant(t *testing.T) {
 		}, found)
 	})
 }
+
+// stagedWorkflow is a two-stage workflow whose security job needs `needs` and gates on `condition`,
+// behind a changelog gate that runs on pull requests only.
+func stagedWorkflow(needs, condition string) string {
+	return "jobs:\n" +
+		"  basic:\n    name: 'code-check > quality:basic-checks'\n    if: \"github.event_name == 'pull_request'\"\n" +
+		"  lint:\n    name: 'code-check > style:lint'\n" +
+		"  scan:\n    name: 'security > sast:scan'\n    needs: " + needs + "\n    if: \"" + condition + "\"\n"
+}
+
+func TestCheckStageBarrier(t *testing.T) {
+	t.Parallel()
+
+	tolerant, implicit := "!cancelled() && !failure()", "!startsWith(github.ref, 'refs/tags/')"
+	cases := []struct {
+		name     string
+		files    map[string]string
+		expected []string
+	}{
+		{
+			name:  "should report nothing when every stage waits for the whole stage before it",
+			files: map[string]string{"go.yaml": stagedWorkflow("[ basic, lint ]", tolerant)},
+		},
+		{
+			name:  "should report a job that can start before part of the stage before it finishes",
+			files: map[string]string{"go.yaml": stagedWorkflow("[ lint ]", tolerant)},
+			expected: []string{"go.yaml: job scan (security > sast:scan) can start before basic " +
+				"(code-check > quality:basic-checks) finishes -- add it to `needs:`, so each stage waits for the " +
+				"whole stage before it"},
+		},
+		{
+			name:  "should report a job behind a skippable check that keeps the implicit success()",
+			files: map[string]string{"go.yaml": stagedWorkflow("[ basic, lint ]", implicit)},
+			expected: []string{"go.yaml: job scan needs basic, which can be skipped, and its `if:` calls no status " +
+				"function, so GitHub skips it too whenever basic is skipped -- gate it on " +
+				"`!cancelled() && !failure() && (...)`"},
+		},
+		{
+			name: "should report a delivery job that does not wait for the pipeline it ships",
+			files: map[string]string{"go-docker.yaml": "jobs:\n" +
+				"  go:\n    uses: 'rios0rios0/pipelines/.github/workflows/go.yaml@main'\n" +
+				"  docker:\n    name: 'delivery > docker'\n"},
+			expected: []string{"go-docker.yaml: job docker (delivery > docker) can start before go () finishes -- " +
+				"add it to `needs:`, so each stage waits for the whole stage before it"},
+		},
+		{
+			name: "should let a skip below the checking stages propagate on purpose",
+			files: map[string]string{"release.yaml": "jobs:\n" +
+				"  release:\n    name: 'delivery > release'\n    if: \"github.event_name == 'push'\"\n" +
+				"  tag:\n    name: 'delivery > tag'\n    needs: [ release ]\n"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			// given
+			directory := workflows(t, tc.files)
+
+			// when
+			found := findings(t, checkStageBarrier, directory)
+
+			// then
+			assert.Equal(t, tc.expected, found)
+		})
+	}
+
+	t.Run("should report a scan that read no staged job", func(t *testing.T) {
+		t.Parallel()
+		// given
+		directory := workflows(t, map[string]string{"empty.yaml": "jobs:\n  a:\n    runs-on: ubuntu-latest\n"})
+
+		// when
+		found := findings(t, checkStageBarrier, directory)
+
+		// then
+		assert.Equal(t, []string{
+			"no job under " + directory + " is named for a stage -- the scan read nothing",
+		}, found)
+	})
+}

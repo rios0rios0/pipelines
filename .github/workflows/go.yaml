@@ -7,7 +7,9 @@ on:
         type: 'boolean'
         required: false
         default: false
-        description: 'Enable cross-compilation check for 6 OS/arch targets (runs in parallel via matrix)'
+        description: |
+          Enable the cross-compilation check for 6 OS/arch targets, type-checked in parallel inside
+          ONE job (`code-check > quality:cross-compile`) rather than one runner per target.
       sonar_host:
         description: 'SonarQube/SonarCloud host URL (leave empty to skip SonarQube)'
         required: false
@@ -129,6 +131,34 @@ on:
         required: false
         default: 'make swagger'
         description: 'Command that regenerates the document named by `openapi_sync_path`.'
+      extra_test_command:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          A test command run as a job of its own in the tests stage, beside `test:all` and gated
+          like it (e.g. 'go test -race -count=1 ./...'). Empty, the default, adds no job. Shell by
+          contract, like `openapi_sync_command`: it runs in bash, from the repository root, after
+          the checkout and the module's Go.
+
+          It is the GitHub Actions answer to a consumer that needs one more test run -- the race
+          detector, the suite on Windows, packages the coverage run does not reach. Declared as a
+          job in the caller instead, such a run starts at once, beside the first stage, because a
+          caller's job can only `needs:` this workflow as a WHOLE, and the whole includes delivery.
+          GitLab CI and Azure DevOps need no such input: a consumer adds its own job to the stage.
+      extra_test_name:
+        type: 'string'
+        required: false
+        default: 'extra'
+        description: 'Names the extra test job `tests > test:<extra_test_name>` (e.g. `race`, `windows`).'
+      extra_test_runs_on:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          JSON array of runner labels for the extra test job alone (e.g. '["windows-latest"]').
+          Empty, the default, runs it wherever `runs_on` says. `runs-on` is a hard selector, like
+          `runs_on`.
     secrets:
       sonar_token:
         description: 'SonarQube authentication token'
@@ -170,34 +200,27 @@ jobs:
           path: "${{ inputs.openapi_sync_path }}"
     if: "inputs.openapi_sync_path != '' && !startsWith(github.ref, 'refs/tags/')"
 
+  # One job for the six targets, not a matrix of six. Each target is a `go vet` of the same module
+  # that takes seconds, so a runner per target spent more on checkout, Go and the module download
+  # than on the check, and put six checks in front of a reviewer for one question. The runner
+  # type-checks the targets in parallel processes and names every one that fails.
   code_check-cross_compile:
-    name: "code-check > quality:cross-compile (${{ matrix.goos }}/${{ matrix.goarch }})"
+    name: 'code-check > quality:cross-compile'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - goos: 'linux'
-            goarch: 'amd64'
-          - goos: 'linux'
-            goarch: 'arm64'
-          - goos: 'darwin'
-            goarch: 'amd64'
-          - goos: 'darwin'
-            goarch: 'arm64'
-          - goos: 'windows'
-            goarch: 'amd64'
-          - goos: 'windows'
-            goarch: 'arm64'
     steps:
       - uses: 'rios0rios0/pipelines/github/golang/stages/10-code-check/cross-compile@main'
-        with:
-          goos: ${{ matrix.goos }}
-          goarch: ${{ matrix.goarch }}
     if: "inputs.cross_compile && !startsWith(github.ref, 'refs/tags/')"
 
 
   # second stage
+  #
+  # Every stage waits for the WHOLE stage before it, so a run reads code-check -> security ->
+  # tests -> management, each stage's jobs in parallel and nothing starting beside the stage it
+  # follows: this stage needs every code-check job, `basic-checks` and the optional ones included.
+  # Those can be skipped -- `basic-checks` runs only on a pull request, the optional ones only when
+  # asked for -- and GitHub skips every job downstream of a skipped one unless its `if:` calls a
+  # status function, so every job from here on gates on `!cancelled() && !failure()` rather than
+  # on the implicit `success()`. `make test-workflow-composition` (Test 18) holds both halves.
   security-sast_codeql:
     name: 'security > sast:codeql'
     # Its own selector, falling back to the pipeline's: see `codeql_runs_on`. An empty string is
@@ -209,8 +232,8 @@ jobs:
           codeql_language: 'go'
           upload: "${{ inputs.codeql_upload }}"
           go_version_file: "${{ inputs.go_version_file }}"
-    needs: [ 'code_check-style_golangci_lint' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-style_golangci_lint', 'code_check-docs_openapi_sync', 'code_check-cross_compile' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sast_semgrep:
     name: 'security > sast:semgrep'
@@ -219,16 +242,16 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/semgrep@main'
         with:
           semgrep_lang: 'golang'
-    needs: [ 'code_check-style_golangci_lint' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-style_golangci_lint', 'code_check-docs_openapi_sync', 'code_check-cross_compile' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sast_gitleaks:
     name: 'security > sast:gitleaks'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/gitleaks@main'
-    needs: [ 'code_check-style_golangci_lint' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-style_golangci_lint', 'code_check-docs_openapi_sync', 'code_check-cross_compile' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   # Blocking, unlike the `sast:hadolint` of the other toolchains' workflows: see the note on
   # `style:golangci-lint` above.
@@ -237,16 +260,16 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
-    needs: [ 'code_check-style_golangci_lint' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-style_golangci_lint', 'code_check-docs_openapi_sync', 'code_check-cross_compile' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sca_govulncheck:
     name: 'security > sca:govulncheck'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/golang/stages/20-security/govulncheck@main'
-    needs: [ 'code_check-style_golangci_lint' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-style_golangci_lint', 'code_check-docs_openapi_sync', 'code_check-cross_compile' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
 
   # third stage
@@ -284,7 +307,23 @@ jobs:
         # the report is evidence, and the step above already decided pass or fail.
         continue-on-error: true
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_govulncheck' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
+
+  # The consumer's one extra test run (see `extra_test_command`), in this stage and behind the
+  # same gate as `test:all`, so delivery waits for it too.
+  tests-test_extra:
+    name: "tests > test:${{ inputs.extra_test_name }}"
+    # Its own selector, falling back to the pipeline's, like `security > sast:codeql`.
+    runs-on: ${{ fromJSON(inputs.extra_test_runs_on || inputs.runs_on) }}
+    # Bounded, as the consumer jobs it replaces were (20 minutes each): a hung test on a Windows
+    # runner otherwise holds it for the platform's six hours while delivery waits.
+    timeout-minutes: 30
+    steps:
+      - uses: 'rios0rios0/pipelines/github/golang/stages/30-tests/command@main'
+        with:
+          command: "${{ inputs.extra_test_command }}"
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_govulncheck' ]
+    if: "!cancelled() && !failure() && inputs.extra_test_command != '' && !startsWith(github.ref, 'refs/tags/')"
 
 
   # management stage (optional)
@@ -293,8 +332,8 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     container:
       image: 'sonarsource/sonar-scanner-cli:12.1.0.3233_8.0.1@sha256:23ca0f137965d9dff2198074043fd48d386280bc5d0ccac8c8349cea4cf096a9'
-    needs: [ 'tests-test_all' ]
-    if: "inputs.sonar_host != '' && !startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'tests-test_all', 'tests-test_extra' ]
+    if: "!cancelled() && !failure() && inputs.sonar_host != '' && !startsWith(github.ref, 'refs/tags/')"
     continue-on-error: true
     steps:
       - name: 'Checkout code'

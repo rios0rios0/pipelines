@@ -38,7 +38,7 @@ privately and fix them.
     merges were not deployed until the stuck run was cancelled.
 - **Why it matters:** other jobs here bound themselves. The Java dependency-check job sets
   `timeout-minutes: 45` (`gradle.yaml` and `maven.yaml`, around line 121, with the reasoning in the
-  comment above it), and CodeQL sets 30 (`codeql.yaml`, around line 56). The Dart test job is the
+  comment above it), and CodeQL sets 30 (`security > sast:codeql` in `ci.yaml`). The Dart test job is the
   long-running job that does not.
 - **The fix:**
   - Set `timeout-minutes` on `tests-test_all`, and on `tests-test_build` if its slowest healthy run

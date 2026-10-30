@@ -1,6 +1,6 @@
 // Command workflowcomposition runs the checks `.github/tests/test-workflow-composition.sh` cannot
 // express as line shapes: the fact table its first nine tests look up, and the assertions that
-// read a PARSED pipeline file (Tests 10 to 17). It is test support, built by that suite from this
+// read a PARSED pipeline file (Tests 10 to 18). It is test support, built by that suite from this
 // checkout and never shipped to a consumer.
 //
 // Usage:
@@ -46,6 +46,7 @@ func checks() map[string]check {
 		"advisory-job":   checkAdvisoryJobs,  // BAD_ADVISORY_JOB, Test 16
 		"advisory-twin":  checkAdvisoryTwins, // BAD_ADVISORY_TWIN, Test 16
 		"packages-grant": checkPackagesGrant, // BAD_PACKAGES_GRANT, Test 17
+		"stage-barrier":  checkStageBarrier,  // BAD_STAGE_BARRIER, Test 18
 	}
 }
 

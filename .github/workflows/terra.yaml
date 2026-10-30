@@ -266,25 +266,25 @@ jobs:
         with:
           semgrep_lang: 'terraform'
           pre_script: ${{ inputs.pre_script }}
-    needs: [ 'code_check-style_terra_format' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-style_terra_format', 'code_check-style_tflint', 'code_check-style_order_check' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sast_gitleaks:
     name: 'security > sast:gitleaks'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/gitleaks@main'
-    needs: [ 'code_check-style_terra_format' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-style_terra_format', 'code_check-style_tflint', 'code_check-style_order_check' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sast_hadolint:
     name: 'security > sast:hadolint'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
-    needs: [ 'code_check-style_terra_format' ]
+    needs: [ 'code_check-basic_checks', 'code_check-style_terra_format', 'code_check-style_tflint', 'code_check-style_order_check' ]
     continue-on-error: true
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   # The IaC misconfiguration scanner: a public bucket, an encryption setting left off, an IAM
   # statement wider than it needs. This tier had none since Trivy was removed, and Semgrep's
@@ -304,8 +304,8 @@ jobs:
         with:
           blocking: ${{ inputs.checkov_blocking }}
           directories: ${{ inputs.checkov_directories }}
-    needs: [ 'code_check-style_terra_format' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-style_terra_format', 'code_check-style_tflint', 'code_check-style_order_check' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
 
   # third stage
@@ -477,7 +477,7 @@ jobs:
         # the report is evidence, and the step above already decided pass or fail.
         continue-on-error: true
     needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_checkov' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   # Fourth tier — the only one that RESOLVES references rather than
   # parsing them. `terra-test` covers reusable modules that carry a test
@@ -575,7 +575,7 @@ jobs:
         # the report is evidence, and the step above already decided pass or fail.
         continue-on-error: true
     needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_checkov' ]
-    if: "inputs.enable_validate && !startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && !failure() && inputs.enable_validate && !startsWith(github.ref, 'refs/tags/')"
 
   # Third tier — repo-convention assertions the consumer owns. Runs
   # `tests/structural.sh` if it exists and uploads the resulting JUnit.
@@ -666,7 +666,7 @@ jobs:
         # the report is evidence, and the step above already decided pass or fail.
         continue-on-error: true
     needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sast_checkov' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
 
 # 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations

@@ -335,9 +335,10 @@ node_line() {
 
 # named_nodes -- every Node.js a template names, one `<file>: <version>` per line: the tag of a
 # GitLab CI `node` image, the input of an Azure DevOps `UseNode@1` or `NodeTool@0`, the
-# `node-version:` of a GitHub Actions `setup-node`. Literals only: a value that names an input or a
-# variable is the consumer's to choose. The GitHub `npm.yaml` and `yarn.yaml` default their
-# `node_version` input to 20, on purpose, so that leaving it unset changes nothing (KI-05).
+# `node-version:` of a GitHub Actions `setup-node`, and the default of a GitHub Actions input
+# carrying a Node.js version (`node_version`, `test_build_node_version`) on a reusable workflow or
+# a composite action -- a default is the version this library picks for every consumer who leaves
+# the input unset. Literals only: a value that names an input or a variable is the consumer's.
 named_nodes() {
   local file value
   while IFS= read -r file; do
@@ -355,6 +356,11 @@ named_nodes() {
     while IFS= read -r value; do
       [[ -n "$value" && "$value" != *'$'* ]] && printf '%s: %s\n' "${file#"$SCRIPTS_DIR/"}" "$value"
     done < <("$YQ" eval '.. | select(tag == "!!map") | select((.uses // "") | test("^actions/setup-node@")) | .with."node-version" | select(tag == "!!str")' "$file" 2> /dev/null)
+  done < <(find "$SCRIPTS_DIR/github" "$SCRIPTS_DIR/.github/workflows" -name '*.yaml' -type f | sort)
+  while IFS= read -r file; do
+    while IFS= read -r value; do
+      [[ -n "$value" && "$value" != *'$'* ]] && printf '%s: %s\n' "${file#"$SCRIPTS_DIR/"}" "$value"
+    done < <("$YQ" eval '((.on.workflow_call.inputs // {}), (.inputs // {})) | to_entries | .[] | select(.key | test("node")) | .value.default | select((tag == "!!str") or (tag == "!!int"))' "$file" 2> /dev/null)
   done < <(find "$SCRIPTS_DIR/github" "$SCRIPTS_DIR/.github/workflows" -name '*.yaml' -type f | sort)
 }
 

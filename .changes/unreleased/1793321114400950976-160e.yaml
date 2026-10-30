@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'moved the GitHub Actions `node_version` default of `npm.yaml`, `yarn.yaml` and `yarn-cloudflare.yaml`, and of the `format` and `knip` composites, from Node `20`, past its end of life, to `24`, which GitLab CI and Azure DevOps run too; a project that needs another major names it in `node_version`, and `test-codeql-runtime.sh` now fails on an input default past its end of life as it does on a literal'
+time: '2026-10-30T00:45:14.400810943Z'

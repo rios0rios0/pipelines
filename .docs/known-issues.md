@@ -214,6 +214,7 @@ privately and fix them.
   | GitLab CI | `.yarn`: code check, tests, audit, `report:sonarqube` | `node:18.17.1-bookworm`: Node 18.17.1, npm 9.6.7, Yarn 1.22.19, corepack 0.18.0 | the same image, as the `node` user |
   | Azure DevOps | `corepack-node-no-cache.yaml` and the CodeQL `PRE_STEPS` | `UseNode@1` 20.20.2: npm 10.8.2, corepack 0.34.6 | `UseNode@1` 24.22.2: npm 11.19.1, corepack 0.36.0 |
   | GitHub Actions | the CodeQL composite's `setup-node` | `node-version: '20'` | `node-version: '24'` |
+  | GitHub Actions | the `node_version` default of `npm.yaml`, `yarn.yaml`, `yarn-cloudflare.yaml` and the `format` and `knip` composites | `'20'` | `'24'` |
 
   Yarn is whatever each project pins: the images' Yarn 1 hands a project's `yarnPath` release its
   commands, and on Azure DevOps `corepack prepare yarn@stable --activate` installs the newest
@@ -222,10 +223,10 @@ privately and fix them.
   distribution, and neither the `node:26.13.0-trixie` image nor the 26.13.0 tarball `UseNode@1`
   installs ships it -- the image ships no `yarn` either -- so every `.yarn` job and Azure DevOps'
   `corepack enable` would fail on it.
-  Left as they were: the GitHub `npm.yaml`, `yarn.yaml` and `yarn-cloudflare.yaml` `node_version`
-  input, which still defaults to `20`, deliberately, so that a consumer who leaves it unset gets the
-  build it always had (its description says Node 20 is past its end of life); and the deployment
-  templates' Node 22, supported until 2027-04-30.
+  The GitHub Actions `node_version` input defaults moved too, from `20` to `24`: `npm.yaml`,
+  `yarn.yaml` and `yarn-cloudflare.yaml`, and the `format` and `knip` composites, so a consumer who
+  leaves the input unset now builds on Node 24 and one who needs another major names it. Left as
+  they were: the deployment templates' Node 22, supported until 2027-04-30.
 - **What a consumer may notice:** a project's own scripts now run on Node 24. One that runs the
   test runner over a directory, `node --test test/`, stops working: Node 21 and later read the
   arguments as files and glob patterns, and load `test/` as a module (`Cannot find module

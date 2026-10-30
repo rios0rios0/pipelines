@@ -279,15 +279,14 @@ instead of falling back. A project declaring its version anywhere else (`.tool-v
 
 **Node version.** `npm.yaml` and `yarn.yaml` also take `node_version`, which is handed to
 `actions/setup-node` by every job in those pipelines -- ESLint, Prettier, Knip, the audit, the
-tests and the build. It defaults to `'20'`, the value each of those jobs hardcoded before the
-input existed, so a consumer that does not set it sees no change at all -- but Node 20 reached
-end of life on 30 April 2026, so the default is an unsupported runtime and a project on a
-supported major should name it. npm makes the mismatch quiet rather than loud: a project whose
-`engines` say `>=24` still installs on Node 20, because `npm ci` only WARNS `EBADENGINE` unless
-`engine-strict` is set, so it surfaces two jobs later as a test run that dies on an API the
-runtime does not have. The composed variants -- `npm-library.yaml`, `npm-docker.yaml`,
-`yarn-library.yaml`, `yarn-docker.yaml` -- do not expose the input and run the base pipeline on
-its default.
+tests and the build. It defaults to `'24'`, the LTS line the GitLab CI and Azure DevOps JavaScript
+pipelines run too, supported until 30 April 2028; it was `'20'` until that line reached its end of
+life. A project on another major names it, or pins an earlier tag of this repository. npm makes a
+mismatch quiet rather than loud: a project whose `engines` say `>=24` still installs on an older
+Node, because `npm ci` only WARNS `EBADENGINE` unless `engine-strict` is set, so it surfaces two
+jobs later as a test run that dies on an API the runtime does not have. The composed variants --
+`npm-library.yaml`, `npm-docker.yaml`, `yarn-library.yaml`, `yarn-docker.yaml` -- do not expose the
+input and run the base pipeline on its default.
 
 **Coverage and SonarQube.** The coverage artifact is uploaded and unpacked at
 `<working_directory>/coverage/`, so a `sonar-project.properties` naming

@@ -438,3 +438,146 @@ func TestApplyCommandLineGoToolchain(t *testing.T) {
 		assert.Contains(t, result.stdout, "UPDATE  golang:1.27.1-bookworm")
 	})
 }
+
+func TestApplyCommandLineImageForms(t *testing.T) {
+	t.Parallel()
+
+	scanner := "sonarsource/sonar-scanner-cli:12.1.0.3233_8.0.1@sha256:"
+	node := "node:18.17.1-bookworm@sha256:"
+	// imageForms writes one image the way each platform does -- a scalar under
+	// GitHub's `container:` and Azure DevOps' `containers:`, a block and a flow
+	// mapping under GitLab CI -- and a second only GitLab CI's mapping names.
+	imageForms := func(scannerDigest, nodeDigest string) map[string]string {
+		scalar := "jobs:\n  sonarqube:\n    container:\n      image: '" + scanner + scannerDigest + "'\n"
+		return map[string]string{
+			".changes/unreleased/.gitkeep": "",
+			"global/scripts/shared/pinned-versions.sh": "#!/usr/bin/env sh\n" +
+				"# upstream: github-release example/binary\n# osv: none\nBINARY_PINNED_VERSION=\"1.2.3\"\n",
+			".github/workflows/go.yaml":  scalar,
+			".github/workflows/npm.yaml": scalar,
+			"azure-devops/sonarqube.yaml": "resources:\n  containers:\n    - container: 'sonar'\n" +
+				"      image: '" + scanner + scannerDigest + "'\n",
+			"gitlab/abstracts.yaml": ".sonarqube:\n  image:\n    name: '" + scanner + scannerDigest + "'\n" +
+				"    entrypoint: ['']\n",
+			"gitlab/flow.yaml": ".sonarqube-flow:\n  image: { name: '" + scanner + scannerDigest + "', entrypoint: [''] }\n",
+			"gitlab/yarn.yaml": ".yarn:\n  image:\n    name: '" + node + nodeDigest + "'\n" +
+				"    docker:\n      user: 'node'\n",
+		}
+	}
+
+	t.Run("should move every copy of an image with one update, in whichever form each is written", func(t *testing.T) {
+		t.Parallel()
+		// given
+		workdir := t.TempDir()
+		before, after := imageForms(repeat("a", 64), repeat("b", 64)), imageForms(repeat("c", 64), repeat("d", 64))
+		writeFiles(t, filepath.Join(workdir, "repo"), before)
+		clean := map[string]any{"findings": []any{}}
+		writeJSON(t, filepath.Join(workdir, "fixture.json"), map[string]any{
+			"osv:*":                              []any{},
+			"github-release:example/binary":      "v1.2.3",
+			"image:" + scanner + repeat("a", 64): "sha256:" + repeat("c", 64),
+			"image:" + node + repeat("b", 64):    "sha256:" + repeat("d", 64),
+			"scan:" + scanner + repeat("a", 64):  clean,
+			"scan:" + "sonarsource/sonar-scanner-cli:12.1.0.3233_8.0.1@sha256:" + repeat("c", 64): clean,
+			"scan:" + node + repeat("b", 64): clean,
+			"scan:" + node + repeat("d", 64): clean,
+		})
+
+		// when
+		result := run(t, workdir, "--repo-dir", "repo", "--report", "out", "--fixture", "fixture.json", "--apply",
+			"--timestamp", "2026-10-08T06:00:00Z", "--now", "2026-10-10T06:00:00Z")
+
+		// then
+		require.Equal(t, 0, result.exit, result.output())
+		for path, want := range after {
+			if strings.HasSuffix(path, ".yaml") {
+				assert.Equal(t, want, read(t, filepath.Join(workdir, "repo", filepath.FromSlash(path))), path)
+			}
+		}
+		assert.Equal(t, 2, strings.Count(result.stdout, "APPLIED"), "one update per image, not one per copy")
+		assert.Contains(t, result.stdout, "node:18.17.1-bookworm", "an image only a mapping names is maintained")
+	})
+}
+
+func TestApplyCommandLineImagePin(t *testing.T) {
+	t.Parallel()
+
+	const repository = "sonarsource/sonar-scanner-cli"
+	oldImage := repository + ":12.1.0.3233_8.0.1@sha256:" + repeat("a", 64)
+	newImage := repository + ":12.2.0.4256_8.1.0@sha256:" + repeat("c", 64)
+	copies := func(reference string) map[string]string {
+		return map[string]string{
+			".github/workflows/go.yaml": "jobs:\n  sonarqube:\n    container:\n      image: '" + reference + "'\n",
+			"azure-devops/sonarqube.yaml": "resources:\n  containers:\n    - container: 'sonar'\n" +
+				"      image: '" + reference + "'\n",
+			"gitlab/abstracts.yaml": ".sonarqube:\n  image:\n    name: '" + reference + "'\n    entrypoint: ['']\n",
+		}
+	}
+	// answers are SonarSource's own releases, dated as they were published.
+	answers := func() map[string]any {
+		release := func(version, published string) map[string]any {
+			return map[string]any{"version": version, "published": published}
+		}
+		return map[string]any{
+			"osv:*": []any{},
+			"github-release:SonarSource/sonar-scanner-cli-docker": map[string]any{
+				"latest": "12.3.0.4285_8.1.0", "releases": []any{
+					release("12.3.0.4285_8.1.0", "2026-10-23T18:12:18Z"),
+					release("12.2.0.4256_8.1.0", "2026-09-17T12:52:28Z"),
+					release("12.1.0.3233_8.0.1", "2026-05-20T14:33:41Z"),
+				},
+			},
+			"image:" + oldImage:                          "sha256:" + repeat("a", 64),
+			"image:" + repository + ":12.2.0.4256_8.1.0": "sha256:" + repeat("c", 64),
+			"scan:" + oldImage:                           map[string]any{"findings": []any{}},
+			"scan:" + newImage:                           map[string]any{"findings": []any{}},
+		}
+	}
+	apply := func(t *testing.T, answers map[string]any) (string, outcome) {
+		t.Helper()
+		workdir := t.TempDir()
+		files := copies(oldImage)
+		files[".changes/unreleased/.gitkeep"] = ""
+		files["global/scripts/shared/pinned-versions.sh"] = "#!/usr/bin/env sh\n" +
+			"# upstream: github-release SonarSource/sonar-scanner-cli-docker\n# osv: none\n" +
+			"# image: " + repository + "\nSONAR_SCANNER_CLI_PINNED_VERSION=\"12.1.0.3233_8.0.1\"\n"
+		writeFiles(t, filepath.Join(workdir, "repo"), files)
+		writeJSON(t, filepath.Join(workdir, "fixture.json"), answers)
+		return workdir, run(t, workdir, "--repo-dir", "repo", "--report", "out", "--fixture", "fixture.json",
+			"--apply", "--timestamp", "2026-10-29T06:00:00Z", "--now", "2026-10-29T06:00:00Z")
+	}
+
+	t.Run("should move the pin and every copy to the newest release past the cooldown", func(t *testing.T) {
+		t.Parallel()
+		// given / when
+		workdir, result := apply(t, answers())
+
+		// then
+		require.Equal(t, 0, result.exit, result.output())
+		repo := filepath.Join(workdir, "repo")
+		assert.Contains(t, read(t, filepath.Join(repo, "global/scripts/shared/pinned-versions.sh")),
+			`SONAR_SCANNER_CLI_PINNED_VERSION="12.2.0.4256_8.1.0"`, "12.3.0.4285_8.1.0 is six days old")
+		for path, want := range copies(newImage) {
+			assert.Equal(t, want, read(t, filepath.Join(repo, filepath.FromSlash(path))), path)
+		}
+		assert.Contains(t, read(t, filepath.Join(workdir, "out", "pull-request.md")),
+			"`"+repository+":12.1.0.3233_8.0.1 -> "+repository+":12.2.0.4256_8.1.0`")
+	})
+
+	t.Run("should hand the move to a person when the registry has no image for the release", func(t *testing.T) {
+		t.Parallel()
+		// given
+		missing := answers()
+		missing["image:"+repository+":12.2.0.4256_8.1.0"] = nil
+
+		// when
+		workdir, result := apply(t, missing)
+
+		// then
+		assert.NotEqual(t, 0, result.exit, result.output())
+		assert.Contains(t, result.output(), "the registry has no `"+repository+":12.2.0.4256_8.1.0`")
+		for path, want := range copies(oldImage) {
+			assert.Equal(t, want, read(t, filepath.Join(workdir, "repo", filepath.FromSlash(path))), path)
+		}
+	})
+}

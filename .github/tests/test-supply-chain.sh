@@ -233,6 +233,32 @@ UNPINNED_IMAGES="$(
 )"
 assert_empty "every 'image:' in a CI template is digest-pinned" "$UNPINNED_IMAGES"
 
+# The match above reads `image:` lines that carry their value. An image given as a mapping -- how a
+# GitLab CI job sets an entrypoint or a user -- names it on a `name:` line beneath, or inside braces
+# on the same line, so neither form reached it: `.yarn`'s `node:18.17.1-bullseye` and
+# `.sonarqube`'s `sonar-scanner-cli:latest` both sat unpinned in that form while this suite passed.
+# A `name:` counts while its line is indented deeper than the `image:` key it follows.
+UNPINNED_IMAGE_NAMES="$(
+  yaml_files -print0 2>/dev/null | xargs -0 awk '
+    FNR == 1 { inside = 0 }
+    {
+      if (inside) {
+        if ($0 ~ /^[[:space:]]*(#.*)?$/) next
+        match($0, /^[[:space:]]*/)
+        if (RLENGTH <= base) inside = 0
+        else if ($0 ~ /^[[:space:]]*name:/ && $0 !~ /@sha256:/) print FILENAME ":" FNR ":" $0
+      }
+      if (!inside && $0 ~ /^[[:space:]]*(-[[:space:]]*)?image:[[:space:]]*(#.*)?$/) {
+        match($0, /^[[:space:]]*(-[[:space:]]*)?/)
+        base = RLENGTH
+        inside = 1
+      }
+      if ($0 ~ /^[[:space:]]*(-[[:space:]]*)?image:[[:space:]]*\{/ && $0 !~ /@sha256:/) print FILENAME ":" FNR ":" $0
+    }' 2>/dev/null \
+    || true
+)"
+assert_empty "every 'image:' given as a mapping names a digest-pinned image" "$UNPINNED_IMAGE_NAMES"
+
 UNPINNED_FROM="$(
   find . -type f -name 'Dockerfile*' -not -path './.git/*' -print0 2>/dev/null \
     | xargs -0 grep -Hn '^FROM' 2>/dev/null \

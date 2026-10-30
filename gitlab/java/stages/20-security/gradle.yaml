@@ -11,6 +11,25 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/gitleaks.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/codeql.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/hadolint.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/java/abstracts/gradle.yaml'
+
+# The shared `sast:codeql` (included above) keeps its script and report; only WHERE it runs is
+# overridden, because CodeQL's Java extraction builds the project: the autobuilder runs Gradle and
+# extracts what `javac` compiles. It runs where the other Gradle jobs run (`.gradle`'s runner tags),
+# but not in `.gradle`'s image, which is Alpine: the bundle's glibc Java runtime cannot start there
+# (`codeql/tools/linux64/java/bin/java: not found`), and with the image's own JDK the build still
+# cannot, because CodeQL's build tracer, `preload_tracer`, is a glibc program too. The image is the
+# glibc build of the same Gradle and JDK. `.gradle`'s cache stays off,
+# because a restored `build/` or Gradle build cache can mark the compilation up to date, and a
+# compilation that does not run is a compilation the extractor never sees. `jq` is installed because
+# the findings gate reads the SARIF with it.
+sast:codeql:
+  extends: [ '.gradle', '.scripts-repo' ]
+  image: 'gradle:8.7.0-jdk21@sha256:afba668dbed80665ed2cee8b16010c51e9639be3424c3f897637701bdd89371b'
+  cache: []
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends jq
+    - !reference [ .scripts-repo, before_script ]
 
 sca:dependency-check:
   extends: '.dependency-check'

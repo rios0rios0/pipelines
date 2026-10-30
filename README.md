@@ -279,15 +279,14 @@ instead of falling back. A project declaring its version anywhere else (`.tool-v
 
 **Node version.** `npm.yaml` and `yarn.yaml` also take `node_version`, which is handed to
 `actions/setup-node` by every job in those pipelines -- ESLint, Prettier, Knip, the audit, the
-tests and the build. It defaults to `'20'`, the value each of those jobs hardcoded before the
-input existed, so a consumer that does not set it sees no change at all -- but Node 20 reached
-end of life on 30 April 2026, so the default is an unsupported runtime and a project on a
-supported major should name it. npm makes the mismatch quiet rather than loud: a project whose
-`engines` say `>=24` still installs on Node 20, because `npm ci` only WARNS `EBADENGINE` unless
-`engine-strict` is set, so it surfaces two jobs later as a test run that dies on an API the
-runtime does not have. The composed variants -- `npm-library.yaml`, `npm-docker.yaml`,
-`yarn-library.yaml`, `yarn-docker.yaml` -- do not expose the input and run the base pipeline on
-its default.
+tests and the build. It defaults to `'24'`, the LTS line the GitLab CI and Azure DevOps JavaScript
+pipelines run too, supported until 30 April 2028; it was `'20'` until that line reached its end of
+life. A project on another major names it, or pins an earlier tag of this repository. npm makes a
+mismatch quiet rather than loud: a project whose `engines` say `>=24` still installs on an older
+Node, because `npm ci` only WARNS `EBADENGINE` unless `engine-strict` is set, so it surfaces two
+jobs later as a test run that dies on an API the runtime does not have. The composed variants --
+`npm-library.yaml`, `npm-docker.yaml`, `yarn-library.yaml`, `yarn-docker.yaml` -- do not expose the
+input and run the base pipeline on its default.
 
 **Coverage and SonarQube.** The coverage artifact is uploaded and unpacked at
 `<working_directory>/coverage/`, so a `sonar-project.properties` naming
@@ -390,12 +389,32 @@ was built with, and the scan still reports success over the broken types. Every 
 Before, GitLab CI ran the job in the pipeline's default Alpine image, where CodeQL cannot start
 (`java: not found`) and there is no Go, so no Go project was analysed there. Azure DevOps took
 whatever Go the agent carried, 1.24 to 1.26 on a Microsoft-hosted one, and on an agent without one
-the analysis failed as "succeeded with issues". GitLab CI's other languages still run in that image:
-see [KI-02](.docs/known-issues.md#ki-02--gitlab-ci-cannot-start-codeql-in-the-default-image).
+the analysis failed as "succeeded with issues". The other languages are below.
 
 Wherever a Makefile exists, CodeQL's Go autobuilder runs `make` with no target before it builds the
 module itself, so your default goal runs inside the analysis:
 [KI-03](.docs/known-issues.md#ki-03--the-go-autobuild-runs-the-default-goal-of-a-consumer-makefile).
+
+#### CodeQL on GitLab CI and Azure DevOps, Per Language
+
+Until 2026-10-29 GitLab CI analysed nothing: every language's `sast:codeql` ran in the pipeline's
+default Alpine image, where the bundle could neither be downloaded nor started
+([KI-02](.docs/known-issues.md#ki-02--gitlab-ci-cannot-start-codeql-in-the-default-image)). Each
+language's job now runs where its extractor has what it needs, and Azure DevOps hands each one the
+toolchain its other jobs set up, so the analysis no longer depends on what the agent happens to carry:
+
+| Language | GitLab CI `sast:codeql` runs in | Azure DevOps sets up first |
+|----------|---------------------------------|----------------------------|
+| Go | `.go`'s Go image | the pinned Go (`GoTool@0`) |
+| Python | the shared default, `python:3.13-slim` | Python 3.14 (`UsePythonVersion@0`) |
+| JavaScript / TypeScript | the shared default, with Node.js installed for TypeScript | Node.js 24.22.2 (`UseNode@1`) |
+| Java, Gradle | `gradle:8.7.0-jdk21`, the glibc build of `.gradle`'s Gradle and JDK | JDK 25 (`JavaToolInstaller@0`) |
+| Java, Maven | `.maven`'s `maven:3.8.8-eclipse-temurin-11` | no Maven template |
+| C# | `.sdk`, without building the project | .NET SDK 6.x (`UseDotNet@2`) |
+
+C# is extracted without a build on GitLab CI because its .NET templates build .NET Framework
+projects on Windows runners, which CodeQL's Linux autobuilder cannot build. On GitHub Actions a
+JavaScript analysis sets up Node.js before CodeQL starts, for a self-hosted runner without one.
 
 #### Usage Example (Go with Docker)
 
@@ -1346,6 +1365,7 @@ merged for you: the pull request is how you see the updates and decide.
 | Vendored files | is there a newer upstream release of a file copied here? | the file, upstream's change re-merged onto this repository's adjustments |
 | Inline copies | do the two copies of a value still agree? | every copy, so a template that cannot read the manifest is not left behind |
 | Go toolchain | is there a newer patch of the pinned Go line, and is the Go in use vulnerable? | the pin, every `go-version:` and `GoTool@0` input, and every `golang:<release>` image -- moved to the new release's tag at its digest, after a scan against the old image |
+| Image tags a pin names | is there a newer release of an image whose tag names one exact build, such as the SonarQube scanner? | the pin, and every copy of the image -- moved to the new release's tag at its digest, after a scan against the old image |
 
 **Nothing known to be unsafe is ever proposed.** Every pin here runs in every
 repository that consumes this library, so a bad update is not one repository's
@@ -1383,7 +1403,16 @@ switches on or off, because that changes what every Go consumer's lint job repor
 Images are checked by **digest, not tag**, because that is the question worth
 asking of a container: `python:3.13-slim` is rebuilt with patched system packages
 under the same tag, so "is there a newer tag" would miss every security rebuild.
-Moving to a different tag stays your decision; the workflow never makes it.
+Moving to a different tag stays your decision; the workflow never makes it,
+except for an image `pinned-versions.sh` names with `# image:`. The SonarQube
+scanner is one: SonarSource publishes each release as one exact tag and never
+rebuilds it, so its digest never moves and only a pin can say a newer release
+exists. The pin's newest release past the cooldown decides that image's tag,
+and every copy moves with it.
+An image is read in every form it can be pinned in -- a scalar `image:`, the
+`name:` of an `image:` mapping (GitLab CI's form for an image that carries an
+`entrypoint:` or a `docker: user:`), a Dockerfile `FROM` -- and one reference is
+one update however many files hold it.
 A rebuild is usually a security refresh, but not always, so each one is
 **scanned against the image it replaces**: both digests are exported straight
 from the registry (no Docker daemon; every layer checked against its digest) and
@@ -2387,6 +2416,7 @@ out exactly as on CI.
 |-----------------------|---------------|-------------------|------------------------------------------------------------------------|
 | `CODEQL_SOURCE_SCOPE` | `tree`        | `git`             | `git` scans the copy; `tree` scans the directory as it is              |
 | `CODEQL_THREADS`      | `1`           | `0` (every core)  | Threads for `database create` and `database analyze`                  |
+| `CODEQL_BUILD_MODE`   | unset         | unset             | `none` extracts C# or Java without building it; unset, the CLI builds a compiled language |
 
 CI is recognised by `CI` (GitHub Actions, GitLab CI) or `TF_BUILD` (Azure DevOps). If a project's
 build needs a file `.gitignore` keeps out of the repository, scan it with
@@ -2583,7 +2613,9 @@ Two mechanisms guard against this:
 - **Go:** Go 1.18+ (automatically installed in CI)
 - **Python:** Python 3.8+ (automatically managed in CI)
 - **Java:** JDK 11+ (automatically managed in CI)
-- **Node.js:** Node 16+ (automatically managed in CI)
+- **Node.js:** a project that runs on Node 24, which the GitLab CI and Azure DevOps JavaScript jobs
+  install (automatically managed in CI); on GitHub Actions the `node_version` input picks it, and
+  its default, 20, is past its end of life
 
 ### Performance Expectations
 

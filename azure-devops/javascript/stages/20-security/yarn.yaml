@@ -19,6 +19,17 @@ stages:
       - template: '../../../global/stages/20-security/codeql.yaml'
         parameters:
           CODEQL_LANGUAGE: 'javascript'
+          # The JavaScript extractor parses TypeScript by running the TypeScript compiler on the
+          # `node` on PATH, which the CodeQL bundle does not ship, and this job set none up: on an
+          # agent without one the extraction stops at `Could not start Node.js. It is required for
+          # TypeScript extraction.` -- quietly, since that step is `continueOnError`. The same
+          # pinned Node.js as the other JavaScript jobs here
+          # (`abstracts/corepack-node-no-cache.yaml`).
+          PRE_STEPS:
+            - task: 'UseNode@1'
+              inputs:
+                version: '24.22.2'
+              displayName: 'Use Node.js 24.22.2'
 
       - template: '../../../global/stages/20-security/hadolint.yaml'
 

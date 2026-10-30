@@ -89,6 +89,21 @@
 # three-way merge -- `git merge-file` from that verified base to the new
 # release -- and refuses on any conflict, so a person resolves it.
 #
+# THE `# image:` ANNOTATION
+#
+#   # image: <image repository>      the container image whose TAG this pin is
+#
+# An image is pinned by digest where it is written, and the scheduled check
+# asks of it only whether its tag still resolves to that digest -- the question
+# that catches a rebuild. It never asks whether a newer tag exists, so an image
+# whose tag names one exact build that is never rebuilt is never moved at all.
+# Naming the image here hands its tag to the pin: every image of that
+# repository, in every file and in every form, follows the pin, and moving the
+# pin moves each of them to the new release's tag, at the digest that tag
+# resolves to, after the scan a rebuild gets. A copy tagged anything else is
+# drift. Such a pin has no override and no digest: nothing sources it, and the
+# digests live beside each copy.
+#
 # THE `# asset:` AND `# checksums:` ANNOTATIONS
 #
 # A digest describes one file, so bumping a version means re-deriving every
@@ -391,6 +406,28 @@ WRANGLER_CLI_SPEC="${WRANGLER_CLI_SPEC:-wrangler@4}"
 VERCEL_CLI_SPEC="${VERCEL_CLI_SPEC:-vercel@65}"
 # upstream: npm netlify-cli
 NETLIFY_CLI_SPEC="${NETLIFY_CLI_SPEC:-netlify-cli@27}"
+
+# --- Container images whose tag a release decides ----------------------------
+# The SonarQube scanner image, written seven times: the `container:` of the
+# five GitHub workflows that run it, the Azure DevOps `sonarqube.yaml` resource
+# and GitLab CI's `.sonarqube` abstract. SonarSource publishes each scanner
+# release as ONE exact tag (`<image version>_<scanner CLI version>`) and does
+# not rebuild it -- `12.1.0.3233_8.0.1` has resolved to one digest since
+# 2026-05-20 -- so the digest check alone kept this image on 12.1 while 12.2
+# (2026-09-17) and 12.3 (2026-10-23) shipped, and reported nothing. The GitHub
+# releases of the image's own repository carry exactly those tags, with the
+# dates the cooldown reads. No advisory database indexes the image's versions;
+# the image itself is scanned against the one it replaces before it moves.
+# Reviewing a bump: a new scanner CLI can reword the messages that
+# `global/scripts/tools/sonarqube/run.sh` reads to tell a server that was away
+# from a broken analysis, which `make test-sonarqube` pins one shape at a time.
+# Tags have disappeared before (`6.2.1`, which these pipelines once pulled, no
+# longer exists); should the pinned one go, its lookup fails, and with it the
+# whole scheduled run, until this pin is moved by hand.
+# upstream: github-release SonarSource/sonar-scanner-cli-docker
+# osv: none
+# image: sonarsource/sonar-scanner-cli
+SONAR_SCANNER_CLI_PINNED_VERSION="12.1.0.3233_8.0.1"
 
 # --- Miscellaneous -----------------------------------------------------------
 

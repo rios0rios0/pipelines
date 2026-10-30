@@ -52,6 +52,15 @@ func deciding() []string {
 	}
 }
 
+// followedPin names what a retagged image follows: its Go pin, or the pin a
+// `# image:` hands its tag to.
+func followedPin(task *entities.Task) string {
+	if _, isGo := entities.ParseGoImage(task.Retag); isGo {
+		return "Go pin"
+	}
+	return "pin"
+}
+
 // Title is the pull request's title and the commit's subject. An update that
 // fixes a known vulnerability is a `fix`, so it reads as one in every list it
 // appears in.
@@ -63,8 +72,8 @@ func Title(applied []*entities.Task, fixes []entities.CopyChange) string {
 	if len(applied) == 1 && len(fixes) == 0 {
 		task := applied[0]
 		if task.Retag != "" {
-			return fmt.Sprintf("%s(deps): moved `%s` to `%s`, the release its Go pin names",
-				kind, task.Label, task.Retag)
+			return fmt.Sprintf("%s(deps): moved `%s` to `%s`, the release its %s names",
+				kind, task.Label, task.Retag, followedPin(task))
 		}
 		if task.Group == entities.GroupImage {
 			return fmt.Sprintf("%s(deps): re-pinned `%s` to the digest its tag resolves to now", kind, task.Label)

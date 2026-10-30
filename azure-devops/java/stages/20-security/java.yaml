@@ -12,6 +12,18 @@ stages:
         - template: '../../../global/stages/20-security/codeql.yaml'
           parameters:
             CODEQL_LANGUAGE: 'java'
+            # CodeQL's Java extraction builds the project, with a JDK it finds on the agent, and
+            # this job set none up: the analysis depended on whichever JDKs the agent happened to
+            # carry, and an agent with none failed it -- quietly, since that step is
+            # `continueOnError`. The same JDK as every other Java job here
+            # (`abstracts/gradle.yaml`).
+            PRE_STEPS:
+              - task: 'JavaToolInstaller@0'
+                inputs:
+                  versionSpec: '25'
+                  jdkArchitectureOption: 'x64'
+                  jdkSourceOption: 'PreInstalled'
+                displayName: 'Install JDK'
 
         - template: '../../../global/stages/20-security/hadolint.yaml'
 

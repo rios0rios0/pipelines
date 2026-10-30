@@ -67,7 +67,7 @@ on:
       node_version:
         type: 'string'
         required: false
-        default: '20'
+        default: '24'
         description: |
           Node version for both `yarn.yaml` and the deployment build below.
 

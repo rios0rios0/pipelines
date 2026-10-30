@@ -1,6 +1,13 @@
+# Node 24 (Krypton) on Debian 13, the image `.npm` runs, as its unprivileged `node` user: npm
+# 11.19.1, corepack 0.36.0, and the Yarn 1.22.22 launcher that hands a project's `yarnPath` release
+# (`.yarnrc.yml`) its commands. Not Node 26: `node:26.13.0-trixie` ships no `yarn` and no
+# `corepack` at all. Node 18, which this ran until then, reached its end of life on 2025-04-30, and
+# `quality:knip` could not start on it: knip 6 requires `^20.19.0 || >=22.12.0` (KI-05 in
+# `.docs/known-issues.md`). Pinned by digest, in the mapping form `docker: user:` needs, which
+# `dependency-updates` reads and re-pins like any other.
 .yarn:
   image:
-    name: 'node:18.17.1-bullseye'
+    name: 'node:24.22.2-trixie@sha256:8c761eca2bf7eec965f946cf47b8090143cb41f45f2f8699af0cc0298d2d2d19'
     docker:
       user: 'node'
   cache: # relative to the project directory ($CI_PROJECT_DIR)

@@ -83,12 +83,12 @@ on:
       node_version:
         type: 'string'
         required: false
-        default: '20'
+        default: '24'
         description: |
-          Node.js version handed to `actions/setup-node`. The default is the version every job
-          here hardcoded before this input existed, so leaving it unset changes nothing -- but
-          Node 20 reached end of life on 30 April 2026, so a consumer on the default is building
-          on an unsupported runtime and should name a supported major.
+          Node.js version handed to `actions/setup-node`. Defaults to Node 24, the LTS line the
+          GitLab CI and Azure DevOps JavaScript pipelines run too, supported until 30 April 2028.
+          A project that needs another major names it here, or pins an earlier tag of this
+          repository: the default moved from Node 20 when that reached its end of life.
       working_directory:
         type: 'string'
         required: false

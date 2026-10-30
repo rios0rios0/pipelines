@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the dependency-updates tool, which read an `image:` only as a one-line scalar: an image pinned as a mapping -- the `name:` under `image:`, or `image: { name: ... }`, the form GitLab CI takes for an image that carries an `entrypoint:` or a `docker: user:` -- was never discovered, so the scheduled pull request never re-pinned the `.yarn` abstract''s Node image and the verification passed a pull request re-pinning it to any digest as one that moves no pin; every form is read now, and one update moves every copy of an image, as one run re-pins all seven copies of the SonarQube scanner'
+time: '2026-10-29T23:52:34.54548272Z'

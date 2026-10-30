@@ -79,7 +79,11 @@ type ManifestEntry struct {
 	// adjusted here; bumping the pin re-applies those adjustments to the new
 	// upstream release with a three-way merge.
 	Vendored string
-	Digests  []Digest
+	// Image is the repository of a container image whose TAG is this pin: every
+	// image of it, in any file, follows the pin -- moved to the pin's new
+	// version, at the digest that tag resolves to, when the pin moves.
+	Image   string
+	Digests []Digest
 }
 
 // Line shapes of `pinned-versions.sh`, each matched against one line.
@@ -89,6 +93,7 @@ var (
 	assetAnnotation     = regexp.MustCompile(`^#\s*asset:\s*(\S+)\s*$`)
 	osvAnnotation       = regexp.MustCompile(`^#\s*osv:\s*(\S+)((?:\s+\S+)*)\s*$`)
 	vendoredAnnotation  = regexp.MustCompile(`^#\s*vendored:\s*(\S+)\s*$`)
+	imageAnnotation     = regexp.MustCompile(`^#\s*image:\s*(\S+)\s*$`)
 	pinLine             = regexp.MustCompile(`^([A-Z0-9_]+)_PINNED_VERSION="([^"]*)"`)
 	specLine            = regexp.MustCompile(`^([A-Z0-9_]+)_SPEC="\$\{[A-Z0-9_]+:-([^}"]*)\}"`)
 	// digestLine matches any `NAME="<64 hex>"`; that the name carries `_SHA256`
@@ -116,6 +121,7 @@ func SpecVersion(value string) string {
 //	# checksums: <url with {version}>       the publisher's checksum manifest
 //	# osv:       <ecosystem> <package>...|none  where advisories are looked up
 //	# vendored:  <repository path>           a file copied from the release
+//	# image:     <image repository>          the image whose tag this pin is
 //	# asset:     <url with {version}>       above a digest -- the file it is of
 //
 // The pin annotations may come in any order: a `# checksums:` line dropped for
@@ -140,6 +146,7 @@ type manifestParser struct {
 	checksums  string
 	advisories *AdvisorySource
 	vendored   string
+	image      string
 	asset      string
 }
 
@@ -186,6 +193,10 @@ func (p *manifestParser) annotation(stripped string) bool {
 	}
 	if match := vendoredAnnotation.FindStringSubmatch(stripped); match != nil {
 		p.vendored = match[1]
+		return true
+	}
+	if match := imageAnnotation.FindStringSubmatch(stripped); match != nil {
+		p.image = match[1]
 		return true
 	}
 	if match := assetAnnotation.FindStringSubmatch(stripped); match != nil {
@@ -248,6 +259,7 @@ func (p *manifestParser) addPin(name, value string, style PinStyle) {
 		entry.Checksums = p.checksums
 		entry.Advisories = p.advisories
 		entry.Vendored = p.vendored
+		entry.Image = p.image
 	}
 	p.entries = append(p.entries, entry)
 	p.resetPin()
@@ -258,6 +270,7 @@ func (p *manifestParser) resetPin() {
 	p.checksums = ""
 	p.advisories = nil
 	p.vendored = ""
+	p.image = ""
 }
 
 // ManifestValues maps every manifest variable an inline copy can mirror to its

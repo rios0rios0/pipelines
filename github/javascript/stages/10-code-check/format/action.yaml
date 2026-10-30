@@ -22,7 +22,7 @@ inputs:
     description: 'Package manager to use (npm or yarn)'
   node_version:
     required: false
-    default: '20'
+    default: '24'
     description: 'Node.js version handed to actions/setup-node.'
   working_directory:
     required: false

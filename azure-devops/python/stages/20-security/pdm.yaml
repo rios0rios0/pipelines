@@ -19,6 +19,15 @@ stages:
       - template: '../../../global/stages/20-security/codeql.yaml'
         parameters:
           CODEQL_LANGUAGE: 'python'
+          # The Python extractor runs on the `python3` it finds on PATH, and this job set none up:
+          # an agent without one failed the analysis -- quietly, since that step is
+          # `continueOnError`. The same pinned Python as the other Python jobs here.
+          PRE_STEPS:
+            - task: 'UsePythonVersion@0'
+              inputs:
+                versionSpec: '3.14'
+                architecture: 'x64'
+              displayName: 'Use Python 3.14'
 
       - template: '../../../global/stages/20-security/hadolint.yaml'
 

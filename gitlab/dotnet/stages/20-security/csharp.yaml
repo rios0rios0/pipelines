@@ -7,3 +7,28 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/gitleaks.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/codeql.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/hadolint.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dotnet/abstracts/sdk.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
+
+# The shared `sast:codeql` (included above) keeps its script and report; WHERE it runs and how it
+# builds the database are overridden.
+#
+# How: without building (`CODEQL_BUILD_MODE: 'none'`). These pipelines build .NET Framework
+# projects on Windows runners with MSBuild, and the C# autobuilder cannot on Linux: an old-style
+# project stops it at `MSB3644: The reference assemblies for .NETFramework,Version=v4.8 were not
+# found`, then `Could not auto-detect a suitable build method`, and nothing is analysed. An
+# SDK-style project is analysed without a build too, with the finding the autobuild reported.
+# GitHub Actions and Azure DevOps keep the autobuild.
+#
+# Where: `.sdk`, the .NET SDK image the code-check jobs run in, because the extractor restores the
+# project's NuGet dependencies with its `dotnet` (glibc, and `git` for `.scripts-repo`). `.sdk`'s
+# own restore into `packages/` and its cache are left out, as the extractor restores what it reads.
+# `jq` is installed because the findings gate reads the SARIF with it.
+sast:codeql:
+  extends: [ '.sdk', '.scripts-repo' ]
+  variables:
+    CODEQL_BUILD_MODE: 'none'
+  cache: []
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends jq
+    - !reference [ .scripts-repo, before_script ]

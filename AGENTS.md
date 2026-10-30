@@ -42,6 +42,7 @@ make test-hadolint-discovery  # Test which files the Hadolint runner lints as Do
 make test-checkov      # Test the Checkov IaC scanner tier (verified install, report verdict, advisory default, wiring on every platform) only
 make test-codeql-scope  # Test that a local CodeQL scan builds from the files git would ship, on every core, only
 make test-codeql-gate   # Test that CodeQL fails on findings `.codeql-false-positives` does not list, on every platform, and that the GitHub upload cannot fail the job, only
+make test-codeql-runtime  # Test where each language's CodeQL analysis runs and with what (GitLab CI images and installs, run.sh's report and build mode, the Azure DevOps and GitHub Actions toolchains, every Node.js the templates name against its end of life) only
 make test-dependency-check  # Test the OWASP Dependency-Check NVD cache / API-key contract only
 make test-dependency-track  # Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, retry of a briefly unreachable server, cross-platform wiring) only
 make test-python-cyclonedx  # Test static/non-distribution and dynamic Python SBOM versions, including resolution failures
@@ -150,22 +151,22 @@ explicitly; `secrets: inherit` fails Semgrep's
 
 ### Supply-Chain Pinning
 
-**Enforced by `.github/tests/test-supply-chain.sh` (`make test-supply-chain`), 28 assertions, every one of
+**Enforced by `.github/tests/test-supply-chain.sh` (`make test-supply-chain`), 29 assertions, every one of
 them proven to fire against a deliberate violation.** Read this before adding an action, an image, or
 anything that downloads a binary.
 
 | What | Pinned to | Enforced by |
 |------|-----------|-------------|
 | Third-party GitHub Actions | 40-character commit SHA + trailing `# vX.Y.Z` comment | assertions 1-4 |
-| Container images (`image:`, `FROM`) | `tag@sha256:<digest>` | assertions 5-6 |
-| Downloaded binaries | exact version **and** a committed SHA-256 | assertions 8-15 |
-| `go install` / `pip` / `gem` / `npx` | exact version | assertions 16-19 |
+| Container images (`image:` -- a scalar, or the `name:` of a mapping -- and `FROM`) | `tag@sha256:<digest>` | assertions 5-7 |
+| Downloaded binaries | exact version **and** a committed SHA-256 | assertions 9-16 |
+| `go install` / `pip` / `gem` / `npx` | exact version | assertions 17-20 |
 
 `global/scripts/shared/pinned-versions.sh` holds every version and digest; `verify-download.sh` is the
 only sanctioned way to fetch a binary, and it DELETES an artifact whose checksum does not match rather
 than merely reporting it — a later step that only tests for existence would otherwise install the thing
 just rejected. Every `download_verified` call is handed a digest its own script resolved through
-`pinned_digest` (assertion 15): `SKIP` or a digest typed into an installer would pass through the
+`pinned_digest` (assertion 16): `SKIP` or a digest typed into an installer would pass through the
 verifier and verify nothing this repository decided. The Dart and Flutter SDKs are the one named
 exception, because their version is the consumer's to choose.
 
@@ -202,17 +203,20 @@ pin, from its diff — see Verifying a Dependency Pull Request below.
 | Surface | Question asked | Discovered from | `--apply` writes |
 |---------|----------------|-----------------|------------------|
 | Actions | is there a newer release for `owner/repo`? | `uses: '…@<sha>' # vX.Y.Z` in every YAML | the commit the new tag points at (annotated tags dereferenced) and its comment |
-| Images | does the pinned tag still resolve to this digest? | `image:` and Dockerfile `FROM` | the digest the tag resolves to now, once a scan shows the rebuild introduces no known vulnerability |
+| Images | does the pinned tag still resolve to this digest? | `image:` -- a scalar, the `name:` of a block mapping, a flow mapping, each also a list item -- and Dockerfile `FROM` | the digest the tag resolves to now, at every copy of the reference, once a scan shows the rebuild introduces no known vulnerability |
 | Binaries / packages | is there a newer version upstream? | `# upstream:` annotations in `pinned-versions.sh` | the version, and every `*_SHA256*` from the new release's assets |
 | Vendored files | is there a newer upstream release of a copied file? | `# vendored:` annotations (the golden golangci-lint config) | the file re-merged three-way onto this repository's adjustments, and its base digest |
 | Inline copies | do the two copies of a value still agree? | `InlineCopies` in `internal/domain/entities/scanning.go` (versions AND digests, YAML and Dockerfiles) | the value its manifest variable now holds |
 | Go toolchain | is there a newer patch of the pinned Go line, and is the one in use vulnerable? | `# upstream: go-toolchain` pins, one per release line, and their copies (`internal/domain/entities/toolchain.go`): `go-version:`, the `GoTool@0` `version:`, `golang:<release>[-<variant>]` images | the pin; every input; every image moved to the new release's tag at the digest it resolves to, scanned against the old image |
+| Image tags a pin names | is there a newer release of an image whose tag names one exact build? | `# image: <repository>` pins in `pinned-versions.sh` (the SonarQube scanner's), and every image of that repository (`internal/domain/entities/followers.go`) | the pin; every copy moved to the new release's tag at the digest it resolves to, scanned against the old image |
 
-Twenty decisions shape it; do not "simplify" any of them away:
+Twenty-two decisions shape it; do not "simplify" any of them away:
 
 | Decision | Why |
 |----------|-----|
-| **Images are checked by DIGEST, not by tag** | `python:3.13-slim` is rebuilt with patched system packages under the SAME tag, so "is there a newer tag" misses every security rebuild. "Does this tag still resolve to the bytes we pinned" catches all of them. Moving `3.13` → `3.14` is a decision, not an update, so no newest-tag search is attempted |
+| **Images are checked by DIGEST, not by tag** | `python:3.13-slim` is rebuilt with patched system packages under the SAME tag, so "is there a newer tag" misses every security rebuild. "Does this tag still resolve to the bytes we pinned" catches all of them. Moving `3.13` → `3.14` is a decision, not an update, so no newest-tag search is attempted -- unless a pin's `# image:` hands the tag to a release (next row but one) |
+| **An image is read in every form the supply-chain suite pins** | `test-supply-chain.sh` holds an `image:` given as a mapping to a digest, and GitLab CI writes one whenever the image carries more than its name -- the `.yarn` abstract's `docker: user:`, the `.sonarqube` abstract's `entrypoint:`. Reading only the scalar form left the `.yarn` Node image, which has no other copy, maintained by nothing: never re-pinned, and invisible to the verification, which passed a pull request re-pinning it to a rebuild with a critical CVE as one that moves no pin. One reference is one update however many copies hold it: the SonarQube scanner is written seven times, in three forms, and moves in one |
+| **An image whose tag names one exact build follows a pin** | SonarSource publishes each scanner release as one tag (`12.1.0.3233_8.0.1`) and never rebuilds it, so "does the tag still resolve to the pinned digest" can never fire: the scanner sat on 12.1 while 12.2 and 12.3 shipped, reported by nothing. A pin annotated `# image: sonarsource/sonar-scanner-cli` makes the release decide the tag -- resolved from the GitHub releases of the image's own repository, which carry exactly those tags and the dates the cooldown reads -- and every image of that repository follows it the way a `golang:` image follows its Go pin: retagged at the digest the new tag resolves to, scanned against the image it replaces, refused to a person when the tag is not published, and drift when tagged anything else. A tag the publisher deletes still fails its lookup and with it the run (exit 2, no pull request) until the pin is moved by hand |
 | **A failed lookup exits 2 and is never "up to date"** | ~40 of the lookups hit `api.github.com`, which allows 60 requests/hour unauthenticated. Treating a 403 as "current" would turn the whole check into a green light that inspected nothing — worse than not running it. After one, the pull request is left exactly as it was: a partial result is not a smaller set of updates. A gateway error (500/502/503/504) or a dropped connection is asked twice more first, 2s and then 4s later, so a blip is not an outage; a rate limit, an untrusted certificate and a refused redirect never are |
 | **A pin with no `# upstream:` annotation FAILS** | Otherwise coverage shrinks one forgotten annotation at a time while the job stays green. The annotation lives next to the pin so adding one without the other is visible in review. A `*_SHA256*` with no `# asset:` fails the same way, because nothing could ever bump its pin |
 | **`track=<line>` exists for deliberately-held pins** | GoReleaser is on 1.x because 2.x is a breaking config change. Without it the check would report that migration as an update on every run, forever, until somebody muted the job. A line is a major (`track=1`) or a minor line (`track=1.27`): Go is held to its minor line, because moving every consumer's builds to a new Go is a decision, while its patches are where its security fixes ship |
@@ -277,7 +281,7 @@ pull request, a commit pushed onto it, and a hand-written bump alike. Make
 | registry | an image digest is not a manifest of the repository it is pinned under |
 | scan | the re-pinned image carries a known vulnerability, or a malicious package, that the image it replaces did not (OSV-Scanner over both, see below) |
 | bounds | a pin leaves its `track=` line, its `ceiling=`, or its release line |
-| copies | a moved `golang:` image's tag names another release than its Go pin; and, on every pull request, any copy the head leaves out of step with its pin that the base had in step -- read from the files alone, so it asks the network nothing |
+| copies | a moved `golang:` image's tag names another release than its Go pin, or an image's tag is not the version its `# image:` pin holds; and, on every pull request, any copy the head leaves out of step with its pin that the base had in step -- read from the files alone, so it asks the network nothing |
 
 Five constraints shape it:
 
@@ -1048,13 +1052,47 @@ Four constraints shape it; do not "simplify" any of them away:
 | Constraint | Why |
 |------------|-----|
 | **The extractor's refusal is silent, so it is checked by table** | CLI 2.26.3 logs `package requires newer Go version go1.27 (application built with go1.26)` over a `go 1.27` module and still creates the database, exit 0, with broken types. That is why this repository waived Go from 2026-08-21. Every bundle from `codeql-bundle-v2.26.4` (2026-08-26) is built with go1.27. Section 4 records the first bundle for each Go minor, and fails when a module here moves to a minor it does not list or the pin falls below it |
-| **GitLab's shared job cannot start CodeQL, so the Go stage moves it** | It runs in the pipeline's default `docker:x.y` image, which is Alpine: the bundle's glibc-linked Java fails with `java: not found`, and there is no Go. The override takes `.go`'s IMAGE only. `.go`'s before_script and cache put GOPATH in the checkout, and the autobuilder searches every `go.mod` under the source root (it skips only `vendor/`), so a module cache there would be extracted as hundreds of projects. The other languages still fail there: `.docs/known-issues.md`, KI-02 |
+| **GitLab's shared job has no Go, so the Go stage moves it** | The shared job ran in the pipeline's default `docker:x.y` image, which is Alpine: the bundle's glibc-linked Java failed with `java: not found`, and there is no Go. Its default image is glibc now, but carries no Go either. The override takes `.go`'s IMAGE only. `.go`'s before_script and cache put GOPATH in the checkout, and the autobuilder searches every `go.mod` under the source root (it skips only `vendor/`), so a module cache there would be extracted as hundreds of projects. Every other language's job is covered under "Every Language's CodeQL Has What Its Extractor Needs" below |
 | **Azure's failure would not be red** | The `run.sh` step is `continueOnError`, by the shared-SAST decision recorded under "A Failing Check Fails the Run", so a missing Go reads as "succeeded with issues". Hosted images carry Go 1.24 to 1.26 only (Ubuntu 24.04 defaults to 1.24, 26.04 to 1.26), so the pinned `GoTool@0` is what makes the result independent of the agent |
 | **The autobuilder runs `make` first, with no target** | It does so wherever a Makefile exists, and offers no switch. Here the default goal is `login`, a `docker login` that fails without a terminal and is skipped. In a consumer whose Makefile includes `common.mk` before its own targets, under the `SCRIPTS_DIR` that `run.sh` exports, it is `setup`, which clones or fast-forwards `PIPELINES_HOME`: KI-03 |
 
 This repository's self-scan extracts two modules under one Go, the helpers at the root and the
 tor-proxy health probe, so `go_version_file` names the newer directive; section 3 fails if another
 module overtakes it.
+
+### Every Language's CodeQL Has What Its Extractor Needs
+
+**Enforced by `.github/tests/test-codeql-runtime.sh` (`make test-codeql-runtime`).** Until 2026-10-29
+no GitLab CI analysis ran at all, for any language (KI-02 in `.docs/known-issues.md`), and nothing
+was red for the right reason: the image a job runs in is rarely written on the job, so the suite
+resolves each GitLab CI entry template the way GitLab does (`include:`, `extends:`, `!reference`)
+before asserting on it. What an image ships cannot be read from a template, so `IMAGE_FACTS` there
+records what each one was observed to carry, and an image with no row fails until somebody looks.
+
+| Language | Its extractor needs | GitLab CI `sast:codeql` runs in | Azure DevOps `PRE_STEPS` | GitHub Actions |
+|----------|---------------------|---------------------------------|--------------------------|----------------|
+| Go | the module's Go: it builds | `.go`'s `golang:<pinned>-bookworm` | `GoTool@0`, as the Go jobs | `setup-go` from `go_version_file` |
+| Python | a Python 3 | the shared default, `python:3.13-slim` | `UsePythonVersion@0`, as the Python jobs | a GitHub-hosted runner |
+| JavaScript / TypeScript | Node.js, which parses TypeScript | the shared default, with `nodejs` installed | `UseNode@1`, as the JavaScript jobs | `setup-node`, before `init` |
+| Java, Gradle | a JDK and Gradle: it builds | `gradle:8.7.0-jdk21`, on `.gradle`'s runner tags | `JavaToolInstaller@0`, as the Java jobs | a GitHub-hosted runner |
+| Java, Maven | a JDK and Maven: it builds | `.maven`'s `maven:3.8.8-eclipse-temurin-11` | no Maven template | a GitHub-hosted runner |
+| C# | the .NET SDK | `.sdk`, without building (`CODEQL_BUILD_MODE: 'none'`) | `UseDotNet@2`, as the .NET jobs | a GitHub-hosted runner |
+
+Eight constraints shape it; do not "simplify" any of them away:
+
+| Constraint | Why |
+|------------|-----|
+| **The shared default sits on `.codeql-runtime`, not on `sast:codeql`** | An `image:` on the job outranks the image an override takes through `extends`, so with the default on the job every override would analyse in it: Go with no Go. Overrides replace `extends` and keep the shared script, report and stage |
+| **No GitLab CI image is Debian 11** | Debian 11's security updates left the Debian mirrors when its LTS ended: the index still lists them and the packages answer 404, so `apt-get install` fails before a job does any work. `.npm`, `.yarn` and `.maven` were Debian 11, which cost `report:dependency-track` and the Maven `sca:dependency-check` their installs (KI-04) and kept the CodeQL jobs off them; they are Debian 13 and Ubuntu 22.04 now. Section 7 of the suite fails on any GitLab CI image `IMAGE_FACTS` marks `debian11`, and the `apt` fact keeps `sast:codeql` and those two jobs on an image where `apt-get` works |
+| **No template names a Node.js past its end of life** | GitLab CI's JavaScript jobs ran Node 16 and Node 18 long after their end of life, and Azure DevOps' ran Node 20 past its, with nothing red (KI-05): nothing anywhere knew the dates. Section 8 reads every Node.js a template names -- a GitLab CI `node` image, an Azure DevOps `UseNode@1` or `NodeTool@0` input, a GitHub Actions `setup-node` `node-version:`, the default of a GitHub Actions input carrying a Node.js version (`node_version`, `test_build_node_version`) -- and fails on a line past its end of life on the day it runs, on an odd line, and on a line with no date in `NODE_END_OF_LIFE`. It is meant to go red the day a line in use ends: 22, which the deployment templates install, does on 2027-04-30. Node 26 is no way out of it for the JavaScript jobs: Node 25 dropped corepack, and `node:26` ships neither corepack nor Yarn. Only literal values are read, input defaults included: a value that names an input or a variable is the consumer's |
+| **Gradle runs in the glibc twin of `.gradle`'s image** | `.gradle` is Alpine. With the image's musl JDK as `CODEQL_JAVA_HOME` the CLI starts, but the build cannot: CodeQL's build tracer, `preload_tracer`, is glibc too |
+| **`run.sh` recreates the report directory after the build** | The Java autobuilder runs Gradle's `clean`, which deletes `build/`, including the `build/reports/codeql/` that `cleanup.sh` made. On a CI runner the build runs in the checkout, and `database analyze` ended in `Could not write SARIF file` |
+| **GitLab CI extracts C# without building it** | Its .NET templates build .NET Framework projects on Windows runners, and on Linux the C# autobuilder stops at `MSB3644` and `Could not auto-detect a suitable build method`. `CODEQL_BUILD_MODE` is unset everywhere else, which keeps the CLI's default: the autobuild every other platform relies on |
+| **The job restores no cache** | A Go module cache in the checkout is extracted as hundreds of extra projects, and a restored Java `build/` or build cache can mark the compilation up to date, so the extractor sees nothing compiled |
+| **Every language and every Azure stage has a row** | A stage that includes the shared job without a row in `EXTRACTOR_NEEDS`, or an Azure stage without one in `AZURE_TOOLCHAINS`, fails, and so does a row nothing reaches: a language that stops being analysed looks exactly like one nobody thought of |
+
+The findings gate reads the SARIF with `jq`. GitHub-hosted runners and Microsoft-hosted agents carry
+it, and no job installs it on a self-hosted one, where the gate fails closed without it.
 
 ### Report Uploads Never Gate a Job
 

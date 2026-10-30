@@ -12,5 +12,14 @@ stages:
       - template: '../../../global/stages/20-security/codeql.yaml'
         parameters:
           CODEQL_LANGUAGE: 'csharp'
+          # CodeQL's C# extraction builds the project with the `dotnet` on PATH, and this job set
+          # none up: the analysis depended on whichever SDK the agent happened to carry, and an
+          # agent with none failed it -- quietly, since that step is `continueOnError`. The same SDK
+          # as every other .NET job here (`abstracts/core-sdk6.x.yaml`).
+          PRE_STEPS:
+            - task: 'UseDotNet@2'
+              inputs:
+                version: '6.x'
+              displayName: 'Install .NET Core SDK'
 
       - template: '../../../global/stages/20-security/hadolint.yaml'

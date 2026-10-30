@@ -5,9 +5,12 @@ include:
   # already includes it pays nothing.
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
 
+# The scanner every other platform here runs, pinned by digest. It was `latest`, which could change
+# under every job extending this abstract unseen: given as a mapping, it sat where the
+# supply-chain suite's `image:` match did not look.
 .sonarqube:
   image:
-    name: 'sonarsource/sonar-scanner-cli:latest'
+    name: 'sonarsource/sonar-scanner-cli:12.1.0.3233_8.0.1@sha256:23ca0f137965d9dff2198074043fd48d386280bc5d0ccac8c8349cea4cf096a9'
     entrypoint: [ '' ]
   stage: 'management'
   variables:

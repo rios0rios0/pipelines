@@ -44,8 +44,8 @@ type Finding struct {
 type VerifiedChange struct {
 	Group entities.Group
 	Label string
-	// Retagged is, for an image moved to another tag, the name it had: a
-	// `golang:` image following its Go pin to a new release.
+	// Retagged is, for an image moved to another tag, the name it had: an image
+	// following its pin to a new release.
 	Retagged string
 	From     string
 	To       string
@@ -167,7 +167,7 @@ func (c *VerifyPullRequestCommand) Execute() VerifyResult {
 
 	changes := c.manifestChanges(baseManifest, headManifest, untracked)
 	changes = append(changes, c.actionChanges(baseTasks)...)
-	changes = append(changes, c.imageChanges()...)
+	changes = append(changes, c.imageChanges(headManifest)...)
 
 	result := VerifyResult{Untracked: untracked, Drift: c.introducedDrift(baseManifest, headManifest)}
 	// A pull request that moves no pin has nothing to prove, so it asks nothing.
@@ -308,7 +308,7 @@ func findTask(tasks []*entities.Task, group entities.Group, label string) *entit
 }
 
 // imageChanges are the digest-pinned references of the head the base lacks.
-func (c *VerifyPullRequestCommand) imageChanges() []*change {
+func (c *VerifyPullRequestCommand) imageChanges(headManifest []entities.ManifestEntry) []*change {
 	baseImages, headImages := images(c.deps.Base), images(c.deps.Head)
 	var changes []*change
 	for _, reference := range sortedKeys(headImages) {
@@ -320,7 +320,7 @@ func (c *VerifyPullRequestCommand) imageChanges() []*change {
 			reference: reference,
 			result:    VerifiedChange{Group: entities.GroupImage, Label: label, To: digest},
 		}
-		if base := replacedImage(baseImages, reference); base != "" {
+		if base := replacedImage(baseImages, reference, headManifest); base != "" {
 			baseLabel, baseDigest, _ := strings.Cut(base, "@")
 			item.baseReference, item.result.From = base, baseDigest
 			if baseLabel != label {
@@ -335,16 +335,22 @@ func (c *VerifyPullRequestCommand) imageChanges() []*change {
 // replacedImage is the base reference an image of the head replaces: the same
 // name at another digest or -- for a `golang:` image its Go pin moved to the
 // tag of another release -- the same variant on the same release line, or,
-// failing that, the base's only image of that variant. Empty for an image the
-// base has nothing like, which is reviewed as a new dependency.
-func replacedImage(baseImages map[string]string, reference string) string {
+// failing that, the base's only image of that variant; and for an image whose
+// repository a pin's `# image:` names, the base's image of that repository.
+// Empty for an image the base has nothing like, which is reviewed as a new
+// dependency.
+func replacedImage(baseImages map[string]string, reference string, manifest []entities.ManifestEntry) string {
 	label, _, _ := strings.Cut(reference, "@")
 	image, isGo := entities.ParseGoImage(reference)
-	var sameLine, sameVariant []string
+	pin := entities.ImagePin(manifest, reference)
+	var sameLine, sameVariant, sameRepository []string
 	for _, base := range sortedKeys(baseImages) {
 		baseLabel, _, _ := strings.Cut(base, "@")
 		if baseLabel == label {
 			return base
+		}
+		if pin != nil && entities.ImagePin(manifest, base) == pin {
+			sameRepository = append(sameRepository, base)
 		}
 		if previous, wasGo := entities.ParseGoImage(base); isGo && wasGo && previous.Variant == image.Variant {
 			sameVariant = append(sameVariant, base)
@@ -358,6 +364,8 @@ func replacedImage(baseImages map[string]string, reference string) string {
 		return sameLine[0]
 	case len(sameVariant) == 1:
 		return sameVariant[0]
+	case len(sameRepository) > 0:
+		return sameRepository[0]
 	default:
 		return ""
 	}
@@ -466,6 +474,9 @@ func (c *VerifyPullRequestCommand) verify(
 			item.result.Findings = append(item.result.Findings, c.scanFinding(item))
 		}
 		if finding, isGo := goImageFinding(item.reference, headManifest); isGo {
+			item.result.Findings = append(item.result.Findings, finding)
+		}
+		if finding, pinned := imagePinFinding(item.reference, headManifest); pinned {
 			item.result.Findings = append(item.result.Findings, finding)
 		}
 		return
@@ -698,4 +709,21 @@ func (c *VerifyPullRequestCommand) newImageFinding(reference string) Finding {
 	return Finding{Verdict: VerdictWarn, Check: CheckScan, Detail: fmt.Sprintf(
 		"a new image, with nothing pinned before to compare it with: it carries %d known vulnerabilities (%s) -- "+
 			"review it as a new dependency", len(scan.Findings), entities.DescribeFindings(scan.Findings, maxListed))}
+}
+
+// imagePinFinding holds a re-pinned image of a repository a pin's `# image:`
+// names to that pin: its tag must be the version the pin holds. Not a finding at
+// all for an image no pin names.
+func imagePinFinding(reference string, manifest []entities.ManifestEntry) (Finding, bool) {
+	pin := entities.ImagePin(manifest, reference)
+	if pin == nil {
+		return Finding{}, false
+	}
+	tag := entities.FollowerRelease(reference)
+	if !entities.SameValue(pin.Var, tag, pin.Current) {
+		return Finding{Verdict: VerdictFail, Check: CheckCopies, Detail: fmt.Sprintf(
+			"is tagged `%s`, but `%s` pins `%s`", tag, pin.Name, pin.Current)}, true
+	}
+	return Finding{Verdict: VerdictPass, Check: CheckCopies, Detail: fmt.Sprintf(
+		"is tagged `%s`, the release `%s` pins", tag, pin.Name)}, true
 }

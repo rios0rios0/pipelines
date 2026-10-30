@@ -1,5 +1,12 @@
+# Node 24 (Krypton), supported until 2028-04-30, on Debian 13. Not the Node 26 that became LTS on
+# 2026-10-28: Node 25 dropped corepack from its distribution, and `node:26.13.0-trixie` ships
+# neither corepack nor the Yarn 1 launcher the jobs that extend `.yarn` call. This ran Node 16,
+# past its end of life since 2023-09-11 (KI-05 in `.docs/known-issues.md`): first on Debian 11,
+# whose security updates left the mirrors when its LTS ended (KI-04), then on Debian 12. Moving it
+# is a decision for the JavaScript pipeline, never a digest bump: it is the Node every consumer's
+# SBOM is built on. `.yarn` runs the same image.
 .npm:
-  image: 'node:16.14.0-bullseye@sha256:56a3030a46e1956a8c12725235210db2ef76c18ab5dcdaf3eab3a3fc80b447ee'
+  image: 'node:24.22.2-trixie@sha256:8c761eca2bf7eec965f946cf47b8090143cb41f45f2f8699af0cc0298d2d2d19'
   cache: # relative to the project directory ($CI_PROJECT_DIR)
     key: "$CI_JOB_NAME"
     paths:

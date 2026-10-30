@@ -90,15 +90,15 @@ func (c *ApplyUpdatesCommand) Execute(check CheckResult) ApplyResult {
 	return result
 }
 
-// followsWrittenPin refuses to move a `golang:` image to a release its pin is
-// not moving to. The images are written after the pins, so a pin whose own
+// followsWrittenPin refuses to move an image that follows a pin to a release its
+// pin is not moving to. The images are written after the pins, so a pin whose own
 // update was refused keeps its images where they are.
 func followsWrittenPin(task *entities.Task, targets map[string]string) error {
 	if task.Retag == "" {
 		return nil
 	}
-	image, _ := entities.ParseGoImage(task.Retag)
-	if want := targets[task.Follows.Var]; !entities.SameValue(task.Follows.Var, image.Release, want) {
+	want := targets[task.Follows.Var]
+	if !entities.SameValue(task.Follows.Var, entities.FollowerRelease(task.Retag), want) {
 		return entities.Refuse("`%s` follows `%s`, which this run leaves at `%s`, so it stays where it is",
 			task.Label, task.Follows.Name, want)
 	}

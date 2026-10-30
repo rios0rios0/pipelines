@@ -9,6 +9,9 @@ include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/20-security/hadolint.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/python/abstracts/pdm.yaml'
 
+# `sast:codeql` runs as the shared job defines it, with no override: the Python extractor reads the
+# sources with the Python 3 it runs on and builds nothing, and the shared job's image carries one.
+
 sca:safety:
   extends: '.pdm'
   stage: 'security (sca/sast)'

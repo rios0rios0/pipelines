@@ -117,13 +117,11 @@ func boundsFindings(item *change, headManifest []entities.ManifestEntry) []Findi
 // and cross-check the publisher's checksum manifest.
 func (c *VerifyPullRequestCommand) integrityFindings(task *entities.Task) []Finding {
 	if len(task.Entry.Digests) == 0 {
-		return []Finding{
-			{
-				Verdict: VerdictPass,
-				Check:   CheckIntegrity,
-				Detail:  "no digest: installed by exact version from its registry",
-			},
+		detail := "no digest: installed by exact version from its registry"
+		if task.Entry.Image != "" {
+			detail = "no digest: each copy of `" + task.Entry.Image + "` carries its own, checked against the registry"
 		}
+		return []Finding{{Verdict: VerdictPass, Check: CheckIntegrity, Detail: detail}}
 	}
 	var findings []Finding
 	for _, check := range NewVerifyAssetsCommand(c.deps.Artifacts).Entry(*task.Entry, task.Current) {

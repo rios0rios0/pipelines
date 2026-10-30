@@ -607,3 +607,100 @@ func TestVerifyPullRequestCommandGoToolchain(t *testing.T) {
 		assert.Equal(t, 1, result.Exit())
 	})
 }
+
+func TestVerifyPullRequestCommandImagePin(t *testing.T) {
+	t.Parallel()
+
+	const repository = "sonarsource/sonar-scanner-cli"
+	oldReference := repository + ":12.1.0.3233_8.0.1@sha256:" + strings.Repeat("a", 64)
+	newReference := repository + ":12.2.0.4256_8.1.0@sha256:" + strings.Repeat("c", 64)
+	// side is the pin at `version` and two copies of the image: GitHub's scalar
+	// and GitLab CI's block mapping.
+	side := func(version, github, gitlab string) map[string]string {
+		files := manifest(
+			"# upstream: github-release SonarSource/sonar-scanner-cli-docker",
+			"# osv: none",
+			"# image: "+repository,
+			`SONAR_SCANNER_CLI_PINNED_VERSION="`+version+`"`,
+		)
+		files[".github/workflows/sonar.yaml"] = "    container:\n      image: '" + github + "'\n"
+		files["gitlab/abstracts.yaml"] = ".sonarqube:\n  image:\n    name: '" + gitlab + "'\n    entrypoint: ['']\n"
+		return files
+	}
+	bump := func(head map[string]string) verifyCase {
+		return verifyCase{
+			base: side("12.1.0.3233_8.0.1", oldReference, oldReference),
+			head: head,
+			releases: &doubles.StubReleases{Lists: map[string][]entities.Release{
+				"SonarSource/sonar-scanner-cli-docker": {{Version: "12.2.0.4256_8.1.0", Published: daysAgo(40)}},
+			}},
+			images: &doubles.StubImages{Existing: []string{newReference}},
+			scanner: &doubles.StubImageScanner{
+				Scans: map[string]entities.ImageScan{oldReference: {}, newReference: {}},
+			},
+		}
+	}
+	imageChange := func(t *testing.T, result commands.VerifyResult) commands.VerifiedChange {
+		t.Helper()
+		for _, change := range result.Changes {
+			if change.Group == entities.GroupImage {
+				return change
+			}
+		}
+		require.Failf(t, "no image change", "%+v", result.Changes)
+		return commands.VerifiedChange{}
+	}
+
+	t.Run("should verify a scanner bump that takes every copy of its image with it", func(t *testing.T) {
+		t.Parallel()
+		// given
+		scenario := bump(side("12.2.0.4256_8.1.0", newReference, newReference))
+
+		// when
+		result := scenario.run()
+
+		// then
+		image := imageChange(t, result)
+		assert.Equal(t, repository+":12.1.0.3233_8.0.1", image.Retagged, "paired with the copy it replaces")
+		assert.Equal(t, commands.VerdictPass, findingOf(t, image, commands.CheckCopies).Verdict)
+		assert.Equal(t, commands.VerdictPass, findingOf(t, image, commands.CheckScan).Verdict)
+		assert.Empty(t, result.Drift)
+		for _, change := range result.Changes {
+			if change.Group == entities.GroupManifest {
+				integrity := findingOf(t, change, commands.CheckIntegrity)
+				assert.Contains(t, integrity.Detail, "each copy of `"+repository+"`")
+			}
+		}
+		assert.Zero(t, result.Exit(), "%+v", result.Changes)
+	})
+
+	t.Run("should fail a bump that leaves a copy of its image behind", func(t *testing.T) {
+		t.Parallel()
+		// given
+		scenario := bump(side("12.2.0.4256_8.1.0", newReference, oldReference))
+
+		// when
+		result := scenario.run()
+
+		// then
+		require.Len(t, result.Drift, 1)
+		assert.Equal(t, "gitlab/abstracts.yaml", result.Drift[0].File)
+		assert.Equal(t, 1, result.Exit())
+	})
+
+	t.Run("should fail an image re-tagged away from the release its pin holds", func(t *testing.T) {
+		t.Parallel()
+		// given
+		scenario := bump(side("12.1.0.3233_8.0.1", newReference, newReference))
+
+		// when
+		result := scenario.run()
+
+		// then
+		copies := findingOf(t, imageChange(t, result), commands.CheckCopies)
+		assert.Equal(t, commands.VerdictFail, copies.Verdict)
+		assert.Contains(t, copies.Detail,
+			"is tagged `12.2.0.4256_8.1.0`, but `SONAR_SCANNER_CLI` pins `12.1.0.3233_8.0.1`")
+		assert.Equal(t, 1, result.Exit())
+	})
+}

@@ -129,23 +129,24 @@ func (c *CheckUpdatesCommand) Execute(result CheckResult) CheckResult {
 	return result
 }
 
-// retag moves a `golang:` image whose tag names another release than its pin
-// proposes -- or holds, when it proposes none -- to the tag naming that
+// retag moves an image that follows a pin -- a `golang:` image, or one of a
+// repository a pin's `# image:` names -- whose tag names another release than
+// its pin proposes, or holds when it proposes none, to the tag naming that
 // release, at the digest the tag resolves to now. A tag that does not exist is
-// handed to a person: a variant is not always published for every release.
+// handed to a person: a variant is not always published for every release, and
+// a publisher may name a release before it pushes the image.
 func (c *CheckUpdatesCommand) retag(task, pin *entities.Task) {
 	if task.Error != "" {
 		return
 	}
-	image, _ := entities.ParseGoImage(task.Coord)
 	release := task.Follows.Current
 	if pin != nil && pin.Error == "" && pin.Target() != "" {
 		release = pin.Proposed()
 	}
-	if entities.SameValue(task.Follows.Var, image.Release, release) {
+	if entities.SameValue(task.Follows.Var, entities.FollowerRelease(task.Coord), release) {
 		return
 	}
-	name := image.Name(release)
+	name := entities.FollowerName(task.Coord, release)
 	digest, err := c.releases.Latest(&entities.Task{
 		Group: entities.GroupImage, Label: name, Kind: entities.KindImage, Coord: name,
 	})

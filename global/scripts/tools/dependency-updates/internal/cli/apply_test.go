@@ -498,3 +498,86 @@ func TestApplyCommandLineImageForms(t *testing.T) {
 		assert.Contains(t, result.stdout, "node:18.17.1-bookworm", "an image only a mapping names is maintained")
 	})
 }
+
+func TestApplyCommandLineImagePin(t *testing.T) {
+	t.Parallel()
+
+	const repository = "sonarsource/sonar-scanner-cli"
+	oldImage := repository + ":12.1.0.3233_8.0.1@sha256:" + repeat("a", 64)
+	newImage := repository + ":12.2.0.4256_8.1.0@sha256:" + repeat("c", 64)
+	copies := func(reference string) map[string]string {
+		return map[string]string{
+			".github/workflows/go.yaml": "jobs:\n  sonarqube:\n    container:\n      image: '" + reference + "'\n",
+			"azure-devops/sonarqube.yaml": "resources:\n  containers:\n    - container: 'sonar'\n" +
+				"      image: '" + reference + "'\n",
+			"gitlab/abstracts.yaml": ".sonarqube:\n  image:\n    name: '" + reference + "'\n    entrypoint: ['']\n",
+		}
+	}
+	// answers are SonarSource's own releases, dated as they were published.
+	answers := func() map[string]any {
+		release := func(version, published string) map[string]any {
+			return map[string]any{"version": version, "published": published}
+		}
+		return map[string]any{
+			"osv:*": []any{},
+			"github-release:SonarSource/sonar-scanner-cli-docker": map[string]any{
+				"latest": "12.3.0.4285_8.1.0", "releases": []any{
+					release("12.3.0.4285_8.1.0", "2026-10-23T18:12:18Z"),
+					release("12.2.0.4256_8.1.0", "2026-09-17T12:52:28Z"),
+					release("12.1.0.3233_8.0.1", "2026-05-20T14:33:41Z"),
+				},
+			},
+			"image:" + oldImage:                          "sha256:" + repeat("a", 64),
+			"image:" + repository + ":12.2.0.4256_8.1.0": "sha256:" + repeat("c", 64),
+			"scan:" + oldImage:                           map[string]any{"findings": []any{}},
+			"scan:" + newImage:                           map[string]any{"findings": []any{}},
+		}
+	}
+	apply := func(t *testing.T, answers map[string]any) (string, outcome) {
+		t.Helper()
+		workdir := t.TempDir()
+		files := copies(oldImage)
+		files[".changes/unreleased/.gitkeep"] = ""
+		files["global/scripts/shared/pinned-versions.sh"] = "#!/usr/bin/env sh\n" +
+			"# upstream: github-release SonarSource/sonar-scanner-cli-docker\n# osv: none\n" +
+			"# image: " + repository + "\nSONAR_SCANNER_CLI_PINNED_VERSION=\"12.1.0.3233_8.0.1\"\n"
+		writeFiles(t, filepath.Join(workdir, "repo"), files)
+		writeJSON(t, filepath.Join(workdir, "fixture.json"), answers)
+		return workdir, run(t, workdir, "--repo-dir", "repo", "--report", "out", "--fixture", "fixture.json",
+			"--apply", "--timestamp", "2026-10-29T06:00:00Z", "--now", "2026-10-29T06:00:00Z")
+	}
+
+	t.Run("should move the pin and every copy to the newest release past the cooldown", func(t *testing.T) {
+		t.Parallel()
+		// given / when
+		workdir, result := apply(t, answers())
+
+		// then
+		require.Equal(t, 0, result.exit, result.output())
+		repo := filepath.Join(workdir, "repo")
+		assert.Contains(t, read(t, filepath.Join(repo, "global/scripts/shared/pinned-versions.sh")),
+			`SONAR_SCANNER_CLI_PINNED_VERSION="12.2.0.4256_8.1.0"`, "12.3.0.4285_8.1.0 is six days old")
+		for path, want := range copies(newImage) {
+			assert.Equal(t, want, read(t, filepath.Join(repo, filepath.FromSlash(path))), path)
+		}
+		assert.Contains(t, read(t, filepath.Join(workdir, "out", "pull-request.md")),
+			"`"+repository+":12.1.0.3233_8.0.1 -> "+repository+":12.2.0.4256_8.1.0`")
+	})
+
+	t.Run("should hand the move to a person when the registry has no image for the release", func(t *testing.T) {
+		t.Parallel()
+		// given
+		missing := answers()
+		missing["image:"+repository+":12.2.0.4256_8.1.0"] = nil
+
+		// when
+		workdir, result := apply(t, missing)
+
+		// then
+		assert.NotEqual(t, 0, result.exit, result.output())
+		assert.Contains(t, result.output(), "the registry has no `"+repository+":12.2.0.4256_8.1.0`")
+		for path, want := range copies(oldImage) {
+			assert.Equal(t, want, read(t, filepath.Join(workdir, "repo", filepath.FromSlash(path))), path)
+		}
+	})
+}

@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added the `# image:` annotation to `pinned-versions.sh`, which hands an image''s tag to a pin, and a pin for the SonarQube scanner image: SonarSource publishes each release as one exact tag and never rebuilds it, so the digest check never moved `12.1.0.3233_8.0.1` while 12.2 and 12.3 shipped; the scheduled pull request now proposes the newest release past the cooldown (`12.2.0.4256_8.1.0` today) and moves every copy of the image with the pin, at the new tag''s digest and after a scan against the image it replaces, and the verification fails a copy left on another tag'
+time: '2026-10-30T00:05:07.528658279Z'

@@ -103,7 +103,8 @@ func actionTasks(workspace repositories.WorkspaceRepository) []*entities.Task {
 }
 
 // imageTasks are the digest-pinned images. A `golang:` image naming a release
-// follows the Go pin of that release's line, when the manifest pins Go.
+// follows the Go pin of that release's line, when the manifest pins Go, and an
+// image of a repository a pin's `# image:` names follows that pin.
 func imageTasks(workspace repositories.WorkspaceRepository, manifest []entities.ManifestEntry) []*entities.Task {
 	images := make(map[string]string)
 	for _, path := range workspace.YAMLFiles() {
@@ -122,9 +123,7 @@ func imageTasks(workspace repositories.WorkspaceRepository, manifest []entities.
 			Coord:   reference,
 			Current: images[reference],
 		}
-		if image, isGo := entities.ParseGoImage(reference); isGo {
-			task.Follows = entities.GoPin(manifest, image.Release)
-		}
+		task.Follows = entities.FollowedPin(manifest, reference)
 		tasks = append(tasks, task)
 	}
 	return tasks
@@ -136,11 +135,13 @@ func InlineFiles(workspace repositories.WorkspaceRepository) []string {
 }
 
 // FindDrift lists every inline copy that disagrees with the manifest: the
-// copies of a pin's value, and the copies of a Go release.
+// copies of a pin's value, the copies of a Go release, and the images whose
+// tag a pin names.
 func FindDrift(workspace repositories.WorkspaceRepository, manifest []entities.ManifestEntry) []entities.Drift {
 	files := sourceTexts(workspace)
 	drift := entities.FindDrift(files, entities.ManifestValues(manifest))
-	return append(drift, entities.FindGoDrift(files, manifest)...)
+	drift = append(drift, entities.FindGoDrift(files, manifest)...)
+	return append(drift, entities.FindImagePinDrift(files, manifest)...)
 }
 
 func sourceTexts(workspace repositories.WorkspaceRepository) []entities.SourceText {

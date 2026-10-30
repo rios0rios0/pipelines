@@ -1366,6 +1366,7 @@ merged for you: the pull request is how you see the updates and decide.
 | Vendored files | is there a newer upstream release of a file copied here? | the file, upstream's change re-merged onto this repository's adjustments |
 | Inline copies | do the two copies of a value still agree? | every copy, so a template that cannot read the manifest is not left behind |
 | Go toolchain | is there a newer patch of the pinned Go line, and is the Go in use vulnerable? | the pin, every `go-version:` and `GoTool@0` input, and every `golang:<release>` image -- moved to the new release's tag at its digest, after a scan against the old image |
+| Image tags a pin names | is there a newer release of an image whose tag names one exact build, such as the SonarQube scanner? | the pin, and every copy of the image -- moved to the new release's tag at its digest, after a scan against the old image |
 
 **Nothing known to be unsafe is ever proposed.** Every pin here runs in every
 repository that consumes this library, so a bad update is not one repository's
@@ -1403,7 +1404,12 @@ switches on or off, because that changes what every Go consumer's lint job repor
 Images are checked by **digest, not tag**, because that is the question worth
 asking of a container: `python:3.13-slim` is rebuilt with patched system packages
 under the same tag, so "is there a newer tag" would miss every security rebuild.
-Moving to a different tag stays your decision; the workflow never makes it.
+Moving to a different tag stays your decision; the workflow never makes it,
+except for an image `pinned-versions.sh` names with `# image:`. The SonarQube
+scanner is one: SonarSource publishes each release as one exact tag and never
+rebuilds it, so its digest never moves and only a pin can say a newer release
+exists. The pin's newest release past the cooldown decides that image's tag,
+and every copy moves with it.
 An image is read in every form it can be pinned in -- a scalar `image:`, the
 `name:` of an `image:` mapping (GitLab CI's form for an image that carries an
 `entrypoint:` or a `docker: user:`), a Dockerfile `FROM` -- and one reference is

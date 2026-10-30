@@ -796,7 +796,7 @@ Test scripts are located in `.github/tests/`; the Quick Reference above covers t
 ### Environment Requirements
 - Docker (for container builds; the security tools install natively)
 - Go 1.25+ (for GoLang pipelines, to build and test the Go helpers such as the dependency-update checker, and to build the test support several suites in `.github/tests/` run)
-- Python 3 (for script dependencies and Python pipelines)
+- Python 3 only for the Python pipelines and the Semgrep and Checkov installs: nothing else here runs Python, and `make test-no-python` keeps it so
 - Make (for build automation)
 - Network access (for downloading tools and dependencies)
 

@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added `make test-no-python`, which fails on any Python source, shebang or interpreter call outside the Python pipelines and the Semgrep and Checkov installs, and with the last Python helper gone this repository''s CI stopped installing `python3` and PyYAML'
+time: '2026-10-29T22:31:41.248886477Z'

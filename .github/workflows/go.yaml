@@ -47,6 +47,33 @@ on:
 
           `runs-on` is a hard selector, like `runs_on`: set this only once a runner carrying
           every one of these labels exists, or the job queues until GitHub times it out.
+      lint_runs_on:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          JSON array of runner labels for the golangci-lint job alone (e.g. '["self-hosted","heavy"]').
+          Empty, the default, runs it wherever `runs_on` says.
+
+          Capping CodeQL at one analysis per host is not enough on its own: what the OOM killer
+          ends there is any two heavy jobs that land together, and golangci-lint is one of them --
+          it type-checks the whole module in one process and holds several GB doing so. Pointed
+          at the same label as `codeql_runs_on` and `tests_runs_on`, it keeps those jobs to one per
+          host. `runs-on` is a hard selector, like `runs_on`.
+      tests_runs_on:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          JSON array of runner labels for the `tests > test:all` job alone (e.g. '["self-hosted","heavy"]').
+          Empty, the default, runs it wherever `runs_on` says.
+
+          The test build instruments every package of the module for coverage (`-coverpkg`), and
+          the compiler holds a whole package in memory at once: several GB for one with thousands
+          of tests. Beside CodeQL or golangci-lint on a shared host, that compile is what the OOM
+          killer ends, and the job reports it as `compile: signal: killed` followed by a coverage
+          drop rather than as a lack of memory. See `lint_runs_on`. `runs-on` is a hard selector,
+          like `runs_on`.
       go_version_file:
         type: 'string'
         required: false
@@ -185,7 +212,8 @@ jobs:
   # check tolerates, at the upload step itself. `make test ONLY=workflow-composition` (Test 16) holds it.
   code_check-style_golangci_lint:
     name: 'code-check > style:golangci-lint'
-    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    # Its own selector, falling back to the pipeline's: see `lint_runs_on`.
+    runs-on: ${{ fromJSON(inputs.lint_runs_on || inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/golang/stages/10-code-check/golangci-lint@main'
     if: "!startsWith(github.ref, 'refs/tags/')"
@@ -275,7 +303,8 @@ jobs:
   # third stage
   tests-test_all:
     name: 'tests > test:all'
-    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    # Its own selector, falling back to the pipeline's: see `tests_runs_on`.
+    runs-on: ${{ fromJSON(inputs.tests_runs_on || inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/golang/stages/30-tests/all@main'
         with:

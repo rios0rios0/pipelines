@@ -20,7 +20,7 @@ privately and fix them.
 | [KI-02](#ki-02--gitlab-ci-cannot-start-codeql-in-the-default-image) | `gitlab/global/stages/20-security/codeql.yaml`, `sast:codeql` | GitLab CI cannot start CodeQL in the default image | Fixed in #<PR> |
 | [KI-03](#ki-03--the-go-autobuild-runs-the-default-goal-of-a-consumer-makefile) | `global/scripts/tools/codeql/run.sh` and the `20-security/codeql` action, Go | The Go autobuild runs the default goal of a consumer Makefile | Won't fix |
 | [KI-04](#ki-04--gitlab-cis-debian-11-images-can-no-longer-install-packages) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml`, `gitlab/java/abstracts/maven.yaml` | GitLab CI's Debian 11 images can no longer install packages | Fixed in #<PR> |
-| [KI-05](#ki-05--gitlab-cis-javascript-images-run-a-nodejs-past-its-end-of-life) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml` | GitLab CI's JavaScript images run a Node.js past its end of life | Open |
+| [KI-05](#ki-05--gitlab-cis-javascript-images-run-a-nodejs-past-its-end-of-life) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml` | GitLab CI's JavaScript images run a Node.js past its end of life | Fixed in #<PR> |
 
 ## KI-01 — The Dart test job has no timeout
 
@@ -86,8 +86,8 @@ privately and fix them.
     extraction.` The JavaScript jobs' own images could not be used: `.yarn` and `.npm` were Debian 11,
     whose security updates left the Debian mirrors when its LTS ended (the index still lists them,
     the packages answer 404, `archive.debian.org` serves them), so `apt-get install jq` failed there
-    (KI-04 has since moved them to Debian 12; `.yarn` still runs as an unprivileged user, and both
-    carry a Node past its end of life, KI-05).
+    (KI-04 has since moved them off Debian 11, and KI-05 to Node 24; `.yarn` still runs as an
+    unprivileged user).
   - Gradle moves to `gradle:8.7.0-jdk21`, the glibc build of `.gradle`'s Gradle and JDK, keeping
     `.gradle`'s runner tags. `.gradle`'s own image is Alpine; with the image's musl JDK as
     `CODEQL_JAVA_HOME` the CLI starts, but the build cannot, because CodeQL's build tracer
@@ -205,7 +205,44 @@ privately and fix them.
   - `quality:knip` cannot run on Node 18: knip 6.42.1 requires `^20.19.0 || >=22.12.0`, so `npx`
     stops at `EBADENGINE` and the job fails, on the old image and the new one alike. It is
     `allow_failure: true`, so nothing shows it.
-- **The fix it needs:** move both abstracts to a supported Node major. That changes the Node every
-  consumer's lint, tests and build run on, so it is a decision for the JavaScript pipeline, not a
-  digest bump.
-- **Status:** Open.
+- **Fixed:** every Node.js these templates choose moved to Node 24 ("Krypton"), supported until
+  2028-04-30:
+
+  | Platform | Where | Before | After |
+  |---|---|---|---|
+  | GitLab CI | `.npm`: `report:dependency-track` | `node:16.20.2-bookworm`: Node 16.20.2, npm 8.19.4, Yarn 1.22.19, corepack 0.17.0 | `node:24.22.2-trixie` (Debian 13), by digest: Node 24.22.2, npm 11.19.1, Yarn 1.22.22, corepack 0.36.0 |
+  | GitLab CI | `.yarn`: code check, tests, audit, `report:sonarqube` | `node:18.17.1-bookworm`: Node 18.17.1, npm 9.6.7, Yarn 1.22.19, corepack 0.18.0 | the same image, as the `node` user |
+  | Azure DevOps | `corepack-node-no-cache.yaml` and the CodeQL `PRE_STEPS` | `UseNode@1` 20.20.2: npm 10.8.2, corepack 0.34.6 | `UseNode@1` 24.22.2: npm 11.19.1, corepack 0.36.0 |
+  | GitHub Actions | the CodeQL composite's `setup-node` | `node-version: '20'` | `node-version: '24'` |
+
+  Yarn is whatever each project pins: the images' Yarn 1 hands a project's `yarnPath` release its
+  commands, and on Azure DevOps `corepack prepare yarn@stable --activate` installs the newest
+  stable release (4.18.1 on 2026-10-30) before and after alike.
+  Not Node 26, although it became LTS on 2026-10-28: Node 25 dropped corepack from its
+  distribution, and neither the `node:26.13.0-trixie` image nor the 26.13.0 tarball `UseNode@1`
+  installs ships it -- the image ships no `yarn` either -- so every `.yarn` job and Azure DevOps'
+  `corepack enable` would fail on it.
+  Left as they were: the GitHub `npm.yaml`, `yarn.yaml` and `yarn-cloudflare.yaml` `node_version`
+  input, which still defaults to `20`, deliberately, so that a consumer who leaves it unset gets the
+  build it always had (its description says Node 20 is past its end of life); and the deployment
+  templates' Node 22, supported until 2027-04-30.
+- **What a consumer may notice:** a project's own scripts now run on Node 24. One that runs the
+  test runner over a directory, `node --test test/`, stops working: Node 21 and later read the
+  arguments as files and glob patterns, and load `test/` as a module (`Cannot find module
+  '/builds/project/test'`). `node --test test/*.test.mjs`, which the shell expands, works on every
+  Node.
+- **How it was proven:** each job run in Docker in the new image, with its own commands as
+  `.github/tests/test-codeql-runtime.sh` resolves them, for `yarn-docker.yaml` and
+  `yarn-docker-k8s-deployment.yaml` alike:
+  - `style:eslint`, `style:format`, `sca:yarn-audit`, `test:build`, `report:sonarqube` (its
+    `yarn sonar` a stub, since the scanner needs a server) and `report:dependency-track` (the SBOM of an
+    npm project uploaded to a stub server) exit 0 over a Yarn 4 project.
+  - `quality:knip` now runs: on Node 18 it stopped at `EBADENGINE` before reading anything; on
+    Node 24 it reports a project's unused file and dependency (exit 1) and passes a clean one
+    (exit 0). `test:all` passes once the project's test script names its files.
+  - Azure DevOps: the official 24.22.2 tarball, checked against `SHASUMS256.txt`, on Ubuntu 24.04
+    as an unprivileged user, ran the abstract's `corepack enable` and `corepack prepare` (Yarn
+    4.18.1), then the `quality:knip` install and knip, `yarn npm audit`, lint, tests and build.
+  - Section 8 of `make test-codeql-runtime` fails on any Node.js a template names that is past its
+    end of life, on an odd line, or on a line with no recorded date.
+- **Status:** Fixed in #<PR>.

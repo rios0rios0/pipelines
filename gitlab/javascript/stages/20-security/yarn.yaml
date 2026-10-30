@@ -13,10 +13,10 @@ include:
 # extractor parses TypeScript by running the TypeScript compiler on Node.js, which the CodeQL bundle
 # does not ship, so the job installs Node.js from the image's own distribution as well. It needs a
 # Node, not the project's: nothing is built and no dependency is installed (the GitHub Actions job
-# installs none either). Not the Node images of the other JavaScript jobs: `.yarn` runs as the
-# unprivileged `node` user, so `apt-get` cannot install `jq` there, and both carry a Node past its
-# end of life (KI-05 in `.docs/known-issues.md`), where the distribution's own Node.js is
-# maintained.
+# installs none either). Not the Node image of the other JavaScript jobs: `.yarn` runs it as the
+# unprivileged `node` user, so `apt-get` cannot install `jq` there. Debian 13's own `nodejs`
+# (20.19.2) has the distribution's regular security support -- it is not on the
+# `debian-security-support` list of packages whose support is limited or ends early.
 sast:codeql:
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends git jq curl nodejs

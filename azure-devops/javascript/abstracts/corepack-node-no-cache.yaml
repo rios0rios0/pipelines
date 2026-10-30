@@ -1,19 +1,22 @@
-# The Node runtime of the Azure JavaScript stages. The version lives here and only
-# here -- not in the filename -- so a bump is a one-line edit with no new file and
-# no forwarding stub; `corepack-node20.18.3*.yaml` are the historical names kept
-# for consumers that include them by path.
+# The Node runtime of the Azure JavaScript stages. The version lives here -- not in the
+# filename, so a bump is an edit with no new file and no forwarding stub -- and in one
+# copy, the `PRE_STEPS` of the CodeQL job (`stages/20-security/yarn.yaml`), which
+# `make test-codeql-runtime` holds to this one. `corepack-node20.18.3*.yaml` are the
+# historical names kept for consumers that include them by path.
 #
-# 20.20.2 is the newest Node 20 release, not an arbitrary patch: `quality:knip` runs the knip
-# pinned in global/scripts/shared/pinned-versions.sh on this runtime, and knip 6
-# requires `^20.19.0 || >=22.12.0`. On 20.18.3 npm only WARNED `EBADENGINE` and
-# then failed to load knip's native parser binding, so the job died on every run
-# with an error that pointed at npm's optional-dependency bug rather than at the
-# runtime. Moving this pin below 20.19 breaks that job again.
+# 24.22.2 is the newest Node 24 (Krypton) release, supported until 2028-04-30. Not Node 26,
+# LTS since 2026-10-28: Node 25 dropped corepack from its distribution, and the step below
+# needs it. Node 20, which this ran until then, reached its end of life on 2026-04-30.
+# And never below 20.19: `quality:knip` runs the knip pinned in
+# global/scripts/shared/pinned-versions.sh on this runtime, and knip 6 requires
+# `^20.19.0 || >=22.12.0`. On 20.18.3 npm only WARNED `EBADENGINE` and then failed to load
+# knip's native parser binding, so the job died on every run with an error that pointed at
+# npm's optional-dependency bug rather than at the runtime.
 steps:
   - task: 'UseNode@1'
     inputs:
-      version: '20.20.2'
-    displayName: 'Use Node.js 20.20.2'
+      version: '24.22.2'
+    displayName: 'Use Node.js 24.22.2'
 
   - script: |
       corepack enable

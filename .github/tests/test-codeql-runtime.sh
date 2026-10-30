@@ -70,6 +70,7 @@ IMAGE_FACTS=(
   'maven:3.8-jdk-11-slim|glibc|root java mvn curl debian11'
   '*bullseye*|glibc|debian11'
   'node:*-bookworm|glibc|root apt node git curl'
+  'node:*-trixie|glibc|root apt node git curl'
   'python:*-slim*|glibc|root apt python3'
   'golang:*-bookworm|glibc|root apt go git curl'
   'maven:*-eclipse-temurin-*|glibc|root apt java mvn git curl'
@@ -120,6 +121,24 @@ ABSTRACTS_OFF_DEBIAN_11=(
 INSTALLING_JOBS=(
   'gitlab/javascript/yarn-docker.yaml|report:dependency-track'
   'gitlab/java/maven-docker.yaml|sca:dependency-check'
+)
+
+# Node.js release lines and the day each reaches its end of life, from the Node.js release schedule
+# (https://github.com/nodejs/Release/blob/main/schedule.json, read 2026-10-29). Only an even line
+# becomes LTS; an odd one is supported for six months and is never a line to pin. A line missing
+# here fails section 8 until its date is added -- after looking, as with IMAGE_FACTS.
+declare -A NODE_END_OF_LIFE=(
+  [16]='2023-09-11' [18]='2025-04-30' [20]='2026-04-30' [22]='2027-04-30' [24]='2028-04-30'
+  [26]='2029-04-30'
+)
+# The day section 8 judges against: today, unless a run names another (a mutation proving the date
+# check fires does).
+NODE_EOL_TODAY="${NODE_EOL_TODAY:-$(date -u +%F)}"
+# The abstracts every GitLab CI JavaScript job runs on (`<file>|<abstract>`), held to the official
+# `node` image by name, so moving one to another repository cannot step outside the check.
+NODE_ABSTRACTS=(
+  'gitlab/javascript/abstracts/npm.yaml|.npm'
+  'gitlab/javascript/abstracts/yarn.yaml|.yarn'
 )
 
 RED='\033[0;31m'
@@ -306,6 +325,37 @@ gitlab_job_user() {
   local resolved
   resolved="$(gitlab_job "$1" "$2")"
   "$YQ" eval '.image.docker.user // ""' "$resolved" 2> /dev/null
+}
+
+# node_line <version> -- the Node.js release line a version or image tag names (`24.22.2-trixie`,
+# `v24`, `22.x`, `22-alpine` -> 24, 24, 22, 22), or nothing for one that names none (`lts/*`).
+node_line() {
+  [[ "$1" =~ ^v?([0-9]+)([.x-]|@|$) ]] && printf '%s' "${BASH_REMATCH[1]}"
+}
+
+# named_nodes -- every Node.js a template names, one `<file>: <version>` per line: the tag of a
+# GitLab CI `node` image, the input of an Azure DevOps `UseNode@1` or `NodeTool@0`, the
+# `node-version:` of a GitHub Actions `setup-node`. Literals only: a value that names an input or a
+# variable is the consumer's to choose. The GitHub `npm.yaml` and `yarn.yaml` default their
+# `node_version` input to 20, on purpose, so that leaving it unset changes nothing (KI-05).
+named_nodes() {
+  local file value
+  while IFS= read -r file; do
+    while IFS= read -r value; do
+      [[ "$value" == *'$'* ]] && continue
+      [[ "$value" =~ ^((docker\.io/)?library/)?node:(.*)$ ]] && printf '%s: %s\n' "${file#"$SCRIPTS_DIR/"}" "${BASH_REMATCH[3]}"
+    done < <("$YQ" eval '.. | select(tag == "!!map") | select(has("image")) | .image | ((select(tag == "!!map") | .name) // .) | select(tag == "!!str")' "$file" 2> /dev/null)
+  done < <(find "$SCRIPTS_DIR/gitlab" -name '*.yaml' -type f | sort)
+  while IFS= read -r file; do
+    while IFS= read -r value; do
+      [[ -n "$value" && "$value" != *'$'* ]] && printf '%s: %s\n' "${file#"$SCRIPTS_DIR/"}" "$value"
+    done < <("$YQ" eval '.. | select(tag == "!!map") | select(.task == "UseNode@1" or .task == "NodeTool@0") | .inputs | (.version // .versionSpec) | select(tag == "!!str")' "$file" 2> /dev/null)
+  done < <(find "$SCRIPTS_DIR/azure-devops" -name '*.yaml' -type f | sort)
+  while IFS= read -r file; do
+    while IFS= read -r value; do
+      [[ -n "$value" && "$value" != *'$'* ]] && printf '%s: %s\n' "${file#"$SCRIPTS_DIR/"}" "$value"
+    done < <("$YQ" eval '.. | select(tag == "!!map") | select((.uses // "") | test("^actions/setup-node@")) | .with."node-version" | select(tag == "!!str")' "$file" 2> /dev/null)
+  done < <(find "$SCRIPTS_DIR/github" "$SCRIPTS_DIR/.github/workflows" -name '*.yaml' -type f | sort)
 }
 
 # image_facts <image> -- `<libc>|<carries>` from IMAGE_FACTS, or nothing when no row matches.
@@ -744,6 +794,53 @@ STUB
     done < <("$YQ" eval '.. | select(tag == "!!map") | select(has("image")) | .image | ((select(tag == "!!map") | .name) // .) | select(tag == "!!str")' "$file" 2> /dev/null)
   done < <(find "$SCRIPTS_DIR/gitlab" -name '*.yaml' -type f | sort)
   assert_empty "no GitLab CI template names a Debian 11 image" "$debian11"
+
+  # -------------------------------------------------------------------------
+  echo ""
+  echo "8. No pipeline runs a Node.js past its end of life"
+  # -------------------------------------------------------------------------
+  # GitLab CI's JavaScript jobs ran Node 16 and Node 18, both past their end of life, and Azure
+  # DevOps' Node 20 (KI-05): nothing reported any of it, because nothing anywhere knew the dates.
+  # This judges every Node.js a template names against them, on the day it runs, so it also turns
+  # red the day a line still in use reaches its end -- which is the point: 22, which the deployment
+  # templates install, does on 2027-04-30. Odd lines are refused outright, and a line with no date
+  # here fails until somebody adds one.
+  local node_abstract node_document node_image node_line_of node_eol named_line where version
+  local unknown_lines='' odd_lines='' ended_lines='' named
+  for entry in "${NODE_ABSTRACTS[@]}"; do
+    IFS='|' read -r abstract_file node_abstract <<< "$entry"
+    node_document="$(gitlab_document "$abstract_file")"
+    node_image="$(gitlab_job_image "$node_document" "$node_abstract")"
+    node_line_of="$(node_line "${node_image#node:}")"
+    node_eol="${NODE_END_OF_LIFE[${node_line_of:-none}]:-}"
+    assert_true "$node_abstract runs the official node image (${node_image%%@*})" "[[ '$node_image' == node:* ]]"
+    assert_true "...on a line still supported on $NODE_EOL_TODAY (Node ${node_line_of:-?}, end of life ${node_eol:-unknown})" \
+      "[[ -n '$node_eol' && '$node_eol' > '$NODE_EOL_TODAY' ]] && (( ${node_line_of:-1} % 2 == 0 ))"
+  done
+  named="$(named_nodes)"
+  while IFS= read -r named_line; do
+    [[ -z "$named_line" ]] && continue
+    where="${named_line%%: *}"
+    version="${named_line#*: }"
+    node_line_of="$(node_line "$version")"
+    node_eol="${NODE_END_OF_LIFE[${node_line_of:-none}]:-}"
+    if [[ -z "$node_eol" ]]; then
+      unknown_lines="${unknown_lines}${where}: ${version%%@*}"$'\n'
+    elif ((node_line_of % 2)); then
+      odd_lines="${odd_lines}${where}: ${version%%@*}"$'\n'
+    elif [[ ! "$node_eol" > "$NODE_EOL_TODAY" ]]; then
+      ended_lines="${ended_lines}${where}: ${version%%@*} (end of life ${node_eol})"$'\n'
+    fi
+  done <<< "$named"
+  local on_gitlab on_azure on_github
+  on_gitlab="$(grep -c '^gitlab/' <<< "$named")"
+  on_azure="$(grep -c '^azure-devops/' <<< "$named")"
+  on_github="$(grep -cE '^(github/|\.github/)' <<< "$named")"
+  assert_true "the templates name a Node.js on every platform (GitLab CI ${on_gitlab}, Azure DevOps ${on_azure}, GitHub Actions ${on_github})" \
+    "((on_gitlab > 0 && on_azure > 0 && on_github > 0))"
+  assert_empty "every Node.js the templates name is on a line whose end of life is recorded here" "$unknown_lines"
+  assert_empty "...an LTS line, never a six-month odd one" "$odd_lines"
+  assert_empty "...and none is past its end of life on $NODE_EOL_TODAY" "$ended_lines"
 
   echo ""
   echo "================================"

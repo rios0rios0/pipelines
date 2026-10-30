@@ -407,7 +407,7 @@ toolchain its other jobs set up, so the analysis no longer depends on what the a
 |----------|---------------------------------|----------------------------|
 | Go | `.go`'s Go image | the pinned Go (`GoTool@0`) |
 | Python | the shared default, `python:3.13-slim` | Python 3.14 (`UsePythonVersion@0`) |
-| JavaScript / TypeScript | the shared default, with Node.js installed for TypeScript | Node.js 24.22.2 (`UseNode@1`) |
+| JavaScript / TypeScript | the shared default, with Node.js installed for TypeScript | Node.js 24, the release `NODE_PINNED_VERSION` names (`UseNode@1`) |
 | Java, Gradle | `gradle:8.7.0-jdk21`, the glibc build of `.gradle`'s Gradle and JDK | JDK 25 (`JavaToolInstaller@0`) |
 | Java, Maven | `.maven`'s `maven:3.8.8-eclipse-temurin-11` | no Maven template |
 | C# | `.sdk`, without building the project | .NET SDK 6.x (`UseDotNet@2`) |
@@ -1407,8 +1407,13 @@ Moving to a different tag stays your decision; the workflow never makes it,
 except for an image `pinned-versions.sh` names with `# image:`. The SonarQube
 scanner is one: SonarSource publishes each release as one exact tag and never
 rebuilds it, so its digest never moves and only a pin can say a newer release
-exists. The pin's newest release past the cooldown decides that image's tag,
-and every copy moves with it.
+exists. Node.js is another: Docker stops rebuilding `node:24.22.1-trixie` the
+day 24.22.2 ships, so the GitLab CI JavaScript images, and the Azure DevOps
+`UseNode@1` inputs beside them, follow `NODE_PINNED_VERSION`. The pin's newest
+release past the cooldown decides that image's tag, keeping the variant the tag
+carries (`-trixie`), and every copy moves with it. A pin held to a line with
+`track=` takes only the images of that line, so the deployment templates'
+rolling `node:22-alpine` stays with the digest check, which keeps it current.
 An image is read in every form it can be pinned in -- a scalar `image:`, the
 `name:` of an `image:` mapping (GitLab CI's form for an image that carries an
 `entrypoint:` or a `docker: user:`), a Dockerfile `FROM` -- and one reference is

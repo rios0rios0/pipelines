@@ -16,6 +16,12 @@ func scannerPin(version string) []entities.ManifestEntry {
 		"SONAR_SCANNER_CLI_PINNED_VERSION=\"" + version + "\"\n")
 }
 
+// nodePin is the manifest a Node.js pin held to the 24 line parses to.
+func nodePin(version string) []entities.ManifestEntry {
+	return entities.ParseManifest("# upstream: github-release nodejs/node track=24\n" +
+		"# osv: Bitnami node\n# image: node\nNODE_PINNED_VERSION=\"" + version + "\"\n")
+}
+
 func TestParseManifestImage(t *testing.T) {
 	t.Parallel()
 
@@ -66,6 +72,31 @@ func TestImagePin(t *testing.T) {
 		assert.Nil(t, mirror)
 		assert.Nil(t, longer)
 	})
+
+	t.Run("should find the pin of an image on its track= line, whatever variant the tag carries", func(t *testing.T) {
+		t.Parallel()
+		// given
+		manifest := nodePin("24.22.1")
+
+		// when
+		pin := entities.ImagePin(manifest, "node:24.22.2-bookworm-slim@sha256:"+sha("a"))
+
+		// then
+		require.NotNil(t, pin)
+		assert.Equal(t, "NODE_PINNED_VERSION", pin.Var)
+	})
+
+	t.Run("should leave an image of another line to the digest check", func(t *testing.T) {
+		t.Parallel()
+		// given
+		manifest := nodePin("24.22.1")
+
+		// when
+		pin := entities.ImagePin(manifest, "node:22-alpine@sha256:"+sha("a"))
+
+		// then
+		assert.Nil(t, pin)
+	})
 }
 
 func TestFollowerName(t *testing.T) {
@@ -111,6 +142,19 @@ func TestFollowerName(t *testing.T) {
 		assert.Equal(t, "golang:1.27.2-bookworm", moved)
 		assert.Equal(t, "1.27.1", entities.FollowerRelease(image))
 	})
+
+	t.Run("should keep the variant the tag of an image pin's copy carries", func(t *testing.T) {
+		t.Parallel()
+		// given
+		image := "node:24.22.1-trixie@sha256:" + sha("a")
+
+		// when
+		moved := entities.FollowerName(image, "24.22.2")
+
+		// then
+		assert.Equal(t, "node:24.22.2-trixie", moved)
+		assert.Equal(t, "24.22.1", entities.FollowerRelease(image))
+	})
 }
 
 func TestFindImagePinDrift(t *testing.T) {
@@ -150,5 +194,29 @@ func TestFindImagePinDrift(t *testing.T) {
 
 		// then
 		assert.Empty(t, drifts)
+	})
+
+	t.Run("should report a copy behind its pin and an exact tag no pin holds, never a rolling one", func(t *testing.T) {
+		t.Parallel()
+		// given
+		image := func(reference string) string { return "  image: '" + reference + "@sha256:" + sha("a") + "'\n" }
+		files := []entities.SourceText{
+			{Path: "gitlab/npm.yaml", Text: image("node:24.22.0-trixie")},
+			{Path: "gitlab/yarn.yaml", Text: image("node:24.22.1-trixie")},
+			{Path: "gitlab/deploy.yaml", Text: image("node:22-alpine")},
+			{Path: "gitlab/legacy.yaml", Text: image("node:20.19.0-bookworm")},
+		}
+
+		// when
+		drifts := entities.FindImagePinDrift(files, nodePin("24.22.1"))
+
+		// then
+		assert.Equal(t, []entities.Drift{
+			{Name: "NODE_PINNED_VERSION", File: "gitlab/npm.yaml", Inline: "node:24.22.0-trixie", Manifest: "24.22.1"},
+			{
+				Name: "NODE_PINNED_VERSION", File: "gitlab/legacy.yaml",
+				Inline: "node:20.19.0-bookworm", Manifest: "no pin on major 20",
+			},
+		}, drifts)
 	})
 }

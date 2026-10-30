@@ -327,7 +327,7 @@ gitlab_job_user() {
   "$YQ" eval '.image.docker.user // ""' "$resolved" 2> /dev/null
 }
 
-# node_line <version> -- the Node.js release line a version or image tag names (`24.22.2-trixie`,
+# node_line <version> -- the Node.js release line a version or image tag names (`24.22.1-trixie`,
 # `v24`, `22.x`, `22-alpine` -> 24, 24, 22, 22), or nothing for one that names none (`lts/*`).
 node_line() {
   [[ "$1" =~ ^v?([0-9]+)([.x-]|@|$) ]] && printf '%s' "${BASH_REMATCH[1]}"

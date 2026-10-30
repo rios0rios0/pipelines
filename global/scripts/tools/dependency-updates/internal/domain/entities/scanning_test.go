@@ -46,6 +46,29 @@ func TestFindDrift(t *testing.T) {
 		// then
 		assert.Empty(t, drifts)
 	})
+
+	t.Run("should read a UseNode@1 version and its step name against the Node pin, never a range", func(t *testing.T) {
+		t.Parallel()
+		// given
+		files := []entities.SourceText{{
+			Path: "corepack-node-no-cache.yaml",
+			Text: "steps:\n  - task: 'UseNode@1'\n    inputs:\n      version: '24.22.0'\n" +
+				"    displayName: 'Use Node.js 24.22.0'\n" +
+				"  - task: 'NodeTool@0'\n    inputs:\n      versionSpec: '22.x'\n",
+		}}
+		expected := map[string]string{"NODE_PINNED_VERSION": "24.22.1"}
+
+		// when
+		drifts := entities.FindDrift(files, expected)
+
+		// then
+		require.Len(t, drifts, 2)
+		for _, drift := range drifts {
+			assert.Equal(t, "NODE_PINNED_VERSION", drift.Name)
+			assert.Equal(t, "24.22.0", drift.Inline)
+			assert.Equal(t, "24.22.1", drift.Manifest)
+		}
+	})
 }
 
 func TestScanImages(t *testing.T) {

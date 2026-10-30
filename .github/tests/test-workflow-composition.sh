@@ -517,7 +517,7 @@ echo "Test 16: a check job fails the run when its check fails"
 # The rule: a `code-check >` or `security >` job carries no job-level `continue-on-error` -- a
 # literal `true`, or an expression that can become one -- unless it is listed below with the
 # reason it may stay advisory. The one failure a check tolerates is a refused report upload, and
-# that belongs at the upload STEP (`make test-report-uploads` holds that half), so step-level
+# that belongs at the upload STEP (`make test ONLY=report-uploads` holds that half), so step-level
 # flags are outside this rule.
 #
 # Two lists, because they mean different things:

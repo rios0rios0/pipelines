@@ -11,7 +11,7 @@ name: 'CI - Pipeline Templates Validation'
 # a failed scan stops the suites. These were four lanes that started together -- the validation job
 # with `make test` in it, ShellCheck, and CodeQL's two analyses in `codeql.yaml` -- and a run read
 # as one wide column. The scheduled run is CodeQL's alone: the checking jobs skip it, so every job
-# after them gates on `!cancelled() && !failure()` (Test 18 of `make test-workflow-composition`).
+# after them gates on `!cancelled() && !failure()` (Test 18 of `make test ONLY=workflow-composition`).
 #
 # `security > verify:dependency-updates` stays in `dependency-updates-verify.yaml`, a workflow of
 # its own: the default branch's ruleset requires that check by its exact name, and consumers call
@@ -158,10 +158,10 @@ jobs:
       fail-fast: false
       matrix:
         # `actions` and `go`. `python` left the list on 2026-10-29 with the last Python file here:
-        # the helpers are Go or POSIX shell, `make test-no-python` keeps it that way, and a Python
+        # the helpers are Go or POSIX shell, `make test ONLY=no-python` keeps it that way, and a Python
         # leg with no Python to extract fails rather than reporting nothing. Every CodeQL bundle
         # from `codeql-bundle-v2.26.4` carries a Go extractor built with go1.27, and
-        # `make test-go-module-toolchain` (section 4) fails if `go` leaves this list.
+        # `make test ONLY=go-module-toolchain` (section 4) fails if `go` leaves this list.
         language: [ 'actions', 'go' ]
     steps:
       - uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
@@ -172,7 +172,7 @@ jobs:
           # Two Go modules live here: the Go helpers at the root and the tor-proxy health probe.
           # Autobuild extracts both from the repository root under ONE Go, set up from this file
           # with `GOTOOLCHAIN=local`, so it must be the module with the newer `go` directive --
-          # the health probe's, whose Go reads the root module too. `make test-go-module-toolchain`
+          # the health probe's, whose Go reads the root module too. `make test ONLY=go-module-toolchain`
           # (section 3) fails if another module's directive overtakes the one named here.
           #
           # Autobuild runs `make` first, as CodeQL's Go autobuilder does wherever a Makefile

@@ -38,8 +38,8 @@ stages:
       #
       # No-op when `tests/*.tftest.hcl` is missing so modules onboard
       # incrementally; the makefile target from `makefiles/terraform.mk`
-      # emits a matching "skipping" message. Run `make test-gen` locally
-      # to bootstrap a baseline suite.
+      # emits a matching "skipping" message. Bootstrap a baseline suite once
+      # with the tftest-gen generator (see `makefiles/terraform.mk`).
       - job: 'test_smoke'
         displayName: 'test:smoke (plan-time)'
         steps:
@@ -56,7 +56,7 @@ stages:
               set -eu
               if [ ! -d tests ] || ! ls tests/*.tftest.hcl >/dev/null 2>&1; then
                 echo "No tests/*.tftest.hcl in this module; skipping plan-time smoke."
-                echo "Run 'make test-gen' locally to bootstrap a smoke suite."
+                echo "Bootstrap a smoke suite once with the pipelines repository's tftest-gen generator, and commit it."
                 # With no tests the job never creates $(REPORT_PATH), so the
                 # publish steps below must no-op. Otherwise
                 # PublishPipelineArtifact@1 aborts the job with "Path does

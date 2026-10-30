@@ -73,12 +73,12 @@ global/containers/     shared container definitions
 makefiles/             the Makefile targets consumers import
 ```
 
-- **Supply-chain pinning is non-negotiable, and `make test-supply-chain` enforces it.** GitHub Actions are pinned to a full 40-character commit SHA with a trailing `# vX.Y.Z` comment — never a bare tag. First-party references are the exception, in two forms that `test-workflow-composition.sh` (Test 7) holds: `rios0rios0/pipelines/…@main`, which moves on purpose, and `$/path/to/action`, which resolves at the exact commit of the running workflow and is **required** in the Yarn Semgrep chain. Replacing `$/` with `@main` is a finding.
+- **Supply-chain pinning is non-negotiable, and `make test ONLY=supply-chain` enforces it.** GitHub Actions are pinned to a full 40-character commit SHA with a trailing `# vX.Y.Z` comment — never a bare tag. First-party references are the exception, in two forms that `test-workflow-composition.sh` (Test 7) holds: `rios0rios0/pipelines/…@main`, which moves on purpose, and `$/path/to/action`, which resolves at the exact commit of the running workflow and is **required** in the Yarn Semgrep chain. Replacing `$/` with `@main` is a finding.
 - **Container images are pinned as `tag@sha256:<digest>`**, in `image:` keys and in Dockerfile `FROM` lines alike.
 - **Downloaded binaries carry a version and a SHA-256** in `global/scripts/shared/pinned-versions.sh` and are fetched through `download_verified` from `verify-download.sh`. **Never `curl | sh`**, and never an unverified `curl`/`wget` of a release artefact. This is a **Critical** finding every time.
 - **Packages are version-pinned**: `go install …@<version>`, `pip install "pkg==<version>"`, `gem install pkg -v <version>`, `npx --yes pkg@<version>`. Never `@latest`, never a bare package name.
-- **Every pin carries a `# upstream: <kind> <coordinate>` annotation.** A pin without one fails `make test-dependency-updates` — deliberately, because coverage otherwise shrinks one forgotten annotation at a time while the job stays green.
-- **Bumping a tool means three things together**: change its `*_PINNED_VERSION`, replace every `*_SHA256_*` from the upstream checksum manifest (never carry an old digest forward), and run `make test-supply-chain`.
+- **Every pin carries a `# upstream: <kind> <coordinate>` annotation.** A pin without one fails `make test ONLY=dependency-updates` — deliberately, because coverage otherwise shrinks one forgotten annotation at a time while the job stays green.
+- **Bumping a tool means three things together**: change its `*_PINNED_VERSION`, replace every `*_SHA256_*` from the upstream checksum manifest (never carry an old digest forward), and run `make test ONLY=supply-chain`.
 - **A weakened gate is worse than a failing one.** Lowering a severity threshold, adding a blanket exclusion, or making a scanner non-blocking silently disables the check for every consuming repository. Reject it unless the pull request argues the case and narrows the scope.
 - **Templates must stay vendor-consistent.** A capability added to the GitHub template but not to the GitLab and Azure DevOps equivalents leaves consumers on those platforms behind — say so explicitly in the review.
 - **Shell scripts run in strangers' CI.** `set -euo pipefail`, quoted expansions, no unvalidated `eval`, and no secret echoed into the log. ShellCheck findings are fixed, not disabled.
@@ -87,10 +87,10 @@ makefiles/             the Makefile targets consumers import
 ### Commands a reviewer should be able to quote
 
 ```bash
-make test-supply-chain          # pinning gate — must pass
-make test-dependency-updates    # upstream annotation coverage
+make test ONLY=supply-chain          # pinning gate — must pass
+make test ONLY=dependency-updates    # upstream annotation coverage
 make test                       # the full test-* script suite
-make test-workflow-composition  # the @main and $/ self-reference rules
+make test ONLY=workflow-composition  # the @main and $/ self-reference rules
 ```
 
 ### YAML

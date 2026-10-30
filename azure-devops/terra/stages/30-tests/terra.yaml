@@ -107,6 +107,8 @@ stages:
             displayName: 'Run Terraform tests (terra-test + terratest)'
             env:
               REPORT_PATH: $(REPORT_PATH)
+              # The two heavy tiers only: structural and validate run as jobs of their own.
+              TERRA_TEST_TIERS: 'terra-test terratest'
               ${{ if ne(parameters.TERRA_TEST_ROOTS, '') }}:
                 TERRA_TEST_ROOTS: ${{ parameters.TERRA_TEST_ROOTS }}
 

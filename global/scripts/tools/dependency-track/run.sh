@@ -144,7 +144,7 @@ dt_is_release_ref() {
 # is the single largest contributor to portfolio sprawl and it is gated HERE,
 # in the one shared script, rather than in each platform's YAML: a consumer
 # pinned to an older template revision still gets the fix, and it is the only
-# form of the rule that `make test-dependency-track` can exercise offline.
+# form of the rule that `make test ONLY=dependency-track` can exercise offline.
 #
 # Only a POSITIVELY identified pull request is skipped. A branch build that
 # cannot be classified still uploads, because "I could not tell" must not

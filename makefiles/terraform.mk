@@ -1,19 +1,19 @@
-# terraform.mk -- Terraform pipeline targets (lint, test, test-gen).
+# terraform.mk -- Terraform pipeline targets (lint, test).
 #
 # Usage: Add the following to your project's Makefile:
 #   SCRIPTS_DIR ?= $(HOME)/Development/github.com/rios0rios0/pipelines
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #   -include $(SCRIPTS_DIR)/makefiles/terraform.mk
 #
-# Targets provided: lint, test, test-gen
+# Targets provided: lint, test
 # Also sets SEMGREP_LANGUAGE=terraform for the common.mk sast target, and adds
 # common.mk's `checkov` (IaC misconfiguration scanning) to that suite.
 # Note: CodeQL does not support Terraform; CODEQL_LANGUAGE is left unset.
 #
 # Prerequisites: Terraform CLI >= 1.11 (required for `terraform test
 # -junit-xml` output). `terra-cli install` pins a compatible version.
-# `test-gen` also needs Go 1.25 or newer: the generator is built from the
-# pipelines checkout on every run (`global/scripts/shared/go-helper.sh`).
+# The smoke-suite generator named below needs Go 1.25 or newer: it is built from
+# the pipelines checkout on every run (`global/scripts/shared/go-helper.sh`).
 
 SEMGREP_LANGUAGE ?= terraform
 
@@ -26,7 +26,7 @@ SAST_TOOLS_EXTRA += checkov
 # a single well-known path.
 REPORT_PATH ?= build/reports
 
-.PHONY: lint test test-gen
+.PHONY: lint test
 
 lint:
 	@terraform fmt -recursive -check
@@ -39,20 +39,17 @@ lint:
 #
 # If `tests/` is missing, exits 0 cleanly so modules onboard incrementally
 # (matches the opt-in contract used by `terra-test/run.sh` and
-# `terratest/run.sh`). Run `make test-gen` first to bootstrap a baseline
-# suite via the tftest-gen generator.
+# `terratest/run.sh`). To bootstrap a baseline suite, run the tftest-gen
+# generator once and commit what it writes -- generating tests is not testing,
+# so it is a script rather than a target:
+#   "$(SCRIPTS_DIR)/global/scripts/languages/terraform/tftest-gen/run.sh"
+# It writes `tests/smoke.tftest.hcl` and never touches a hand-written test.
 test:
 	@if [ ! -d tests ] || ! ls tests/*.tftest.hcl >/dev/null 2>&1; then \
 		echo "No tests/*.tftest.hcl found; skipping terraform test."; \
-		echo "(Run 'make test-gen' to bootstrap a plan-time smoke suite.)"; \
+		echo "(Bootstrap a plan-time smoke suite with \"$(SCRIPTS_DIR)/global/scripts/languages/terraform/tftest-gen/run.sh\".)"; \
 	else \
 		mkdir -p "$(REPORT_PATH)" && \
 		terraform init -backend=false -input=false -upgrade=false >/dev/null && \
 		terraform test -junit-xml="$(REPORT_PATH)/junit-terra-tests.xml"; \
 	fi
-
-# `test-gen` generates a baseline `tests/smoke.tftest.hcl` for the current
-# module via the shared tftest-gen script. Idempotent — respects
-# hand-written tests (marker on line 1).
-test-gen:
-	@sh "$(SCRIPTS_DIR)/global/scripts/languages/terraform/tftest-gen/run.sh"

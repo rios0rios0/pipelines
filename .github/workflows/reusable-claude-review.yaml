@@ -144,7 +144,7 @@ jobs:
           # The prompt below RESTATES this list, and names the toolchains it deliberately
           # excludes, because the action's own template instructs the model to install
           # dependencies, run builds and then report the resulting denials as a permissions
-          # problem. Keep the two in step when editing either: `make test-workflow-composition`
+          # problem. Keep the two in step when editing either: `make test ONLY=workflow-composition`
           # (Test 13) fails when a granted command is missing from the prompt, or when the
           # prompt calls a granted command denied.
           claude_args: |

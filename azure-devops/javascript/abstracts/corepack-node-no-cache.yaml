@@ -1,7 +1,7 @@
 # The Node runtime of the Azure JavaScript stages. The version lives here -- not in the
 # filename, so a bump is an edit with no new file and no forwarding stub -- and in one
 # copy, the `PRE_STEPS` of the CodeQL job (`stages/20-security/yarn.yaml`), which
-# `make test-codeql-runtime` holds to this one. Both are copies of `NODE_PINNED_VERSION` in
+# `make test ONLY=codeql-runtime` holds to this one. Both are copies of `NODE_PINNED_VERSION` in
 # global/scripts/shared/pinned-versions.sh, which the scheduled dependency update moves to
 # each new Node 24 release once it is a week old, or at once for a security fix.
 # `corepack-node20.18.3*.yaml` are the historical names kept for consumers that include

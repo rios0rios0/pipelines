@@ -8,11 +8,18 @@ if [ -z "${SCRIPTS_DIR:-}" ]; then
   export SCRIPTS_DIR
 fi
 
-# Unified Terraform/Terra test runner. Orchestrates the two existing tiers
-# (`terra-test` over `modules/*/tests/*.tftest.hcl`, plus the root modules
-# `TERRA_TEST_ROOTS` opts in, and `terratest` over `tests/terratest/*.go`)
-# behind a single entry point so every platform can publish one JUnit and one
-# coverage artifact per build.
+# Unified Terraform/Terra test runner: every test tier behind one entry point, which
+# `make test` (terra.mk) runs. The tiers, in order:
+#   terra-test  `terraform test` over `modules/*/tests/*.tftest.hcl`, plus the root modules
+#               `TERRA_TEST_ROOTS` opts in
+#   terratest   the Go suite under `tests/terratest/*.go`
+#   structural  the repository's own `tests/structural.sh`
+#   validate    `terraform validate` over the root modules -- only with ENABLE_VALIDATE=true,
+#               because unlike the others it needs the network and, for private module
+#               sources, credentials
+# TERRA_TEST_TIERS, a space-separated list of those names, runs only those (`make test
+# ONLY=structural`). CI's `test:all` job sets it to `terra-test terratest`: structural and
+# validate run in jobs of their own there, beside it in the tests stage.
 #
 # Behavior:
 #   1. Detect which tiers the consumer actually has.
@@ -40,6 +47,27 @@ fi
 # overwrites the first. The merged file is the portable contract.
 
 REPORT_PATH="${REPORT_PATH:-build/reports}"
+
+TIERS="${TERRA_TEST_TIERS:-terra-test terratest structural}"
+if [ -z "${TERRA_TEST_TIERS:-}" ] && [ "${ENABLE_VALIDATE:-false}" = 'true' ]; then
+  TIERS="${TIERS} validate"
+fi
+for tier in ${TIERS}; do
+  case "${tier}" in
+    terra-test | terratest | structural | validate) ;;
+    *)
+      echo "ERROR: unknown test tier '${tier}' (terra-test, terratest, structural, validate)" >&2
+      exit 2
+      ;;
+  esac
+done
+# wants TIER: whether this run includes TIER.
+wants() {
+  case " ${TIERS} " in
+    *" $1 "*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 # Honor the same `TESTS_DIR` override that `terratest/run.sh` exposes so
 # consumers with a non-standard Terratest location (e.g., `test/terratest/`
 # or `e2e/terratest/`) get consistent detection + execution from both the
@@ -99,6 +127,8 @@ TERRATEST_JUNIT="${REPORT_PATH}/junit-terratest.xml"
 
 TERRA_TEST_RUNNER="${SCRIPTS_DIR}/global/scripts/languages/terraform/terra-test/run.sh"
 TERRATEST_RUNNER="${SCRIPTS_DIR}/global/scripts/languages/terraform/terratest/run.sh"
+STRUCTURAL_RUNNER="${SCRIPTS_DIR}/global/scripts/languages/terraform/structural/run.sh"
+VALIDATE_RUNNER="${SCRIPTS_DIR}/global/scripts/languages/terraform/validate/run.sh"
 
 # ---------- Detect which tiers have tests ----------
 has_terra_tests=0
@@ -134,7 +164,11 @@ fi
 
 mkdir -p "${REPORT_PATH}"
 
-if [ "${has_terra_tests}" -eq 0 ] && [ "${has_terratest}" -eq 0 ]; then
+# A tier left out of TIERS runs as if it had nothing to run.
+wants terra-test || has_terra_tests=0
+wants terratest || has_terratest=0
+
+if [ "${has_terra_tests}" -eq 0 ] && [ "${has_terratest}" -eq 0 ] && ! wants structural && ! wants validate; then
   echo "No Terraform tests detected:"
   echo "  - no modules/*/tests/*.tftest.hcl files"
   if [ -n "${TERRA_TEST_ROOTS:-}" ]; then
@@ -149,7 +183,9 @@ fi
 
 # ---------- Run tier 1: terra-test ----------
 rc_terra_test=0
-if [ "${has_terra_tests}" -eq 1 ]; then
+if ! wants terra-test; then
+  :
+elif [ "${has_terra_tests}" -eq 1 ]; then
   echo "=== Tier 1: terraform test (terra-test) ==="
   REPORT_PATH="${REPORT_PATH}" sh "${TERRA_TEST_RUNNER}" || rc_terra_test=$?
 elif [ -n "${TERRA_TEST_ROOTS:-}" ]; then
@@ -160,12 +196,36 @@ fi
 
 # ---------- Run tier 2: terratest ----------
 rc_terratest=0
-if [ "${has_terratest}" -eq 1 ]; then
+if ! wants terratest; then
+  :
+elif [ "${has_terratest}" -eq 1 ]; then
   echo
   echo "=== Tier 2: terratest (Go suite under ${TESTS_DIR}/) ==="
   REPORT_PATH="${REPORT_PATH}" TESTS_DIR="${TESTS_DIR}" sh "${TERRATEST_RUNNER}" || rc_terratest=$?
 else
   echo "Tier 2 skipped: no ${TESTS_DIR}/*.go detected."
+fi
+
+# ---------- Run tier 3: structural ----------
+# No-op, with an empty-but-valid junit-structural.xml, when tests/structural.sh is absent.
+rc_structural=0
+STRUCTURAL_JUNIT=''
+if wants structural; then
+  echo
+  echo "=== Tier 3: structural (tests/structural.sh) ==="
+  REPORT_PATH="${REPORT_PATH}" sh "${STRUCTURAL_RUNNER}" || rc_structural=$?
+  STRUCTURAL_JUNIT="${REPORT_PATH}/junit-structural.xml"
+fi
+
+# ---------- Run tier 4: validate ----------
+# No-op, with an empty-but-valid junit-validate.xml, when VALIDATE_ROOTS (default `stacks`) is absent.
+rc_validate=0
+VALIDATE_JUNIT=''
+if wants validate; then
+  echo
+  echo "=== Tier 4: terraform validate (root modules under ${VALIDATE_ROOTS:-stacks}) ==="
+  REPORT_PATH="${REPORT_PATH}" sh "${VALIDATE_RUNNER}" || rc_validate=$?
+  VALIDATE_JUNIT="${REPORT_PATH}/junit-validate.xml"
 fi
 
 # ---------- Merge JUnit files ----------
@@ -175,8 +235,8 @@ fi
 # every remaining `<testsuite>` block in one outer `<testsuites>` root.
 {
   printf '<?xml version="1.0" encoding="UTF-8"?>\n<testsuites name="terra-all">\n'
-  for f in "${TERRA_JUNIT}" "${TERRATEST_JUNIT}"; do
-    if [ -f "${f}" ]; then
+  for f in "${TERRA_JUNIT}" "${TERRATEST_JUNIT}" "${STRUCTURAL_JUNIT}" "${VALIDATE_JUNIT}"; do
+    if [ -n "${f}" ] && [ -f "${f}" ]; then
       sed -e '/<?xml/d' \
           -e 's|<testsuites[^>]*>||g' \
           -e 's|</testsuites>||g' \
@@ -197,10 +257,14 @@ echo "  merged JUnit          : ${MERGED_JUNIT}"
   echo "  coverage (Sonar)      : ${REPORT_PATH}/terra-coverage-generic.xml"
 echo "  tier 1 (terra-test)   : exit=${rc_terra_test} (ran=${has_terra_tests})"
 echo "  tier 2 (terratest)    : exit=${rc_terratest} (ran=${has_terratest})"
+wants structural && echo "  tier 3 (structural)   : exit=${rc_structural}"
+wants validate && echo "  tier 4 (validate)     : exit=${rc_validate}"
 
 # Preserve the original failure code from whichever tier failed first so the
 # CI surface shows a meaningful exit status instead of a generic 1.
-if [ "${rc_terra_test}" -ne 0 ]; then
-  exit "${rc_terra_test}"
-fi
-exit "${rc_terratest}"
+for rc in "${rc_terra_test}" "${rc_terratest}" "${rc_structural}" "${rc_validate}"; do
+  if [ "${rc}" -ne 0 ]; then
+    exit "${rc}"
+  fi
+done
+exit 0

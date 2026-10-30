@@ -24,20 +24,20 @@ development practices, refer to the **[Development Guide](https://github.com/rio
    ```
 5. For Go script changes specifically:
    ```bash
-   make test-go-script
+   make test ONLY=go-validation
    ```
    and for the Go helpers (the root `go.mod`, such as `global/scripts/tools/dependency-updates/` and the
    Terraform helpers under `global/scripts/languages/terraform/`) -- new helpers are written in Go or POSIX
-   shell, never Python (`make test-no-python` fails on Python outside the Python pipelines and the Semgrep and Checkov installs):
+   shell, never Python (`make test ONLY=no-python` fails on Python outside the Python pipelines and the Semgrep and Checkov installs):
    ```bash
-   make test-go-helpers
-   make lint-go-helpers
+   make test ONLY=go-helpers
+   make lint
    ```
 6. Validate across platforms (GitHub Actions, GitLab CI, Azure DevOps) when modifying templates
 7. For anything under `.github/workflows/`, read the
    [Workflow Composition Standard](AGENTS.md#workflow-composition-standard) first and run:
    ```bash
-   make test-workflow-composition
+   make test ONLY=workflow-composition
    ```
 8. Add a changelog fragment — never edit `CHANGELOG.md`, which is generated from them:
    ```bash

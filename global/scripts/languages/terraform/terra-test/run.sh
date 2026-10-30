@@ -56,8 +56,8 @@ TERRA_TEST_ROOTS="${TERRA_TEST_ROOTS:-}"
 # `kubernetes`, `helm`, etc. into `modules/<name>/.terraform/providers/...`
 # and fills the runner disk. `test-all/run.sh` exports the same defaults,
 # so this block is a no-op when this script is invoked via the orchestrator
-# — it exists so the `test-terra-test` escape hatch still gets the cache
-# when operators bypass `test-all`. See `test-all/run.sh` for the rationale
+# — it exists so a direct call of this tier, bypassing `test-all`, still
+# gets the cache. See `test-all/run.sh` for the rationale
 # behind `TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE`.
 if [ -z "${TF_PLUGIN_CACHE_DIR:-}" ]; then
   # Guard `HOME` so `set -u` doesn't abort on minimal CI/container images

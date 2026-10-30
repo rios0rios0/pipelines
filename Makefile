@@ -2,7 +2,7 @@ TAG := latest
 ROOT := global/containers
 CONTAINER_REGISTRY = ghcr.io/rios0rios0/pipelines
 
-.PHONY: login setup-buildx build build-and-push test-go-helpers lint-go-helpers test-dependency-track test-go-script test-govulncheck-verdict test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-cross-compile test-go-integration-scope test-lambda test-yaml-merge test-sonarqube test-release-tag-idempotency test-tftest-gen test-terra-coverage test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-terra-test-roots test-terra-install test-docker-multi-arch test-build-version test-containers-detect test-basic-checks test-gitignore test-sast-gate test-hadolint-discovery test-checkov test-codeql-scope test-codeql-gate test-codeql-runtime test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-deploy-providers test-memory-detection test-dart-pipeline test-javascript-pipeline test-phpmd test-terra-pipeline test-workflow-composition test-working-directory test-supply-chain test-runner-cache-gating test-azure-step-names test-azure-secret-env test-dependency-updates test-go-module-toolchain test-report-uploads test-golangci-scanner-markers test-build-env-vars test-no-python check-dependency-updates apply-dependency-updates test
+.PHONY: login setup-buildx build build-and-push test lint check-dependency-updates apply-dependency-updates
 
 login:
 	docker login $(CONTAINER_REGISTRY)
@@ -39,262 +39,24 @@ build-and-push:
 build: BUILD_OUTPUT = --output=type=cacheonly
 build: build-and-push
 
-# Test targets
-test-go-script:
-	@echo "Running Go test script validation..."
-	@./.github/tests/test-go-validation.sh
+# Every validation suite in .github/tests, then the Go helpers' unit tests, through one runner that
+# finds the suites itself. `ONLY` runs the named ones: `make test ONLY="workflow-composition
+# supply-chain"` (a suite's name is its script's, `test-<name>.sh`, or `go-helpers`).
+test:
+	@./.github/tests/run.sh $(ONLY)
 
-test-cyclonedx-main:
-	@echo "Running Go CycloneDX entry-point detection validation..."
-	@./.github/tests/test-cyclonedx-main-detection.sh
-
-.PHONY: test-python-cyclonedx
-test-python-cyclonedx:
-	@echo "Running Python CycloneDX version resolution validation..."
-	@./.github/tests/test-python-cyclonedx.sh
-
-test: test-python-cyclonedx
-
-test-go-cache-trim:
-	@echo "Running Go build-cache disk guard validation..."
-	@./.github/tests/test-go-cache-trim.sh
-
-test-go-tmpdir-modcache:
-	@echo "Running Go module cache placement validation..."
-	@./.github/tests/test-go-tmpdir-modcache.sh
-
-test-go-cross-compile:
-	@echo "Running Go cross-compile runner validation..."
-	@./.github/tests/test-go-cross-compile.sh
-
-test-go-integration-scope:
-	@echo "Running Go integration phase scope validation..."
-	@./.github/tests/test-go-integration-scope.sh
-
-test-go-tool-staleness:
-	@echo "Running Go source-built tool staleness validation..."
-	@./.github/tests/test-go-tool-staleness.sh
-
-test-govulncheck-verdict:
-	@echo "Running govulncheck verdict validation..."
-	@./.github/tests/test-govulncheck-verdict.sh
-
-test-lambda:
-	@echo "Running Lambda template validation..."
-	@./.github/tests/test-lambda-templates.sh
-
-test-yaml-merge:
-	@echo "Running golangci-lint run.sh validation (config merge, binary resolution, toolchain guard)..."
-	@./.github/tests/test-yaml-merge.sh
-
-test-golangci-scanner-markers:
-	@echo "Running golangci-lint scanner marker preservation validation..."
-	@./.github/tests/test-golangci-scanner-markers.sh
-
-test-sonarqube:
-	@echo "Running SonarQube auto-derivation validation..."
-	@./.github/tests/test-sonarqube-auto-derive.sh
-
-test-release-tag-idempotency:
-	@echo "Running release tag idempotency validation..."
-	@./.github/tests/test-release-tag-idempotency.sh
-
-test-tftest-gen:
-	@echo "Running tftest-gen generator validation..."
-	@./.github/tests/test-tftest-gen.sh
-
-test-terra-coverage:
-	@echo "Running Terraform generic coverage report validation..."
-	@./.github/tests/test-terra-coverage.sh
-
-test-order-check:
-	@echo "Running terraform order-check validation..."
-	@./.github/tests/test-order-check.sh
-
-test-var-catalog:
-	@echo "Running terraform var-catalog generator validation..."
-	@./.github/tests/test-var-catalog.sh
-
-test-terraform-validate:
-	@echo "Running terraform validate tier validation..."
-	@./.github/tests/test-terraform-validate.sh
-
-test-terraform-provider-mirror:
-	@echo "Running Terraform provider mirror validation..."
-	@./.github/tests/test-terraform-provider-mirror.sh
-
-test-terra-test-roots:
-	@echo "Running terra-test root-module (TERRA_TEST_ROOTS) validation..."
-	@./.github/tests/test-terra-test-roots.sh
-
-test-terra-install:
-	@echo "Running terra CLI installer (pin check, concurrent installs) validation..."
-	@./.github/tests/test-terra-install.sh
-
-test-docker-multi-arch:
-	@echo "Running 40-delivery/docker multi-arch contract validation..."
-	@./.github/tests/test-docker-multi-arch.sh
-
-test-build-version:
-	@echo "Running build version (image ARG) validation..."
-	@./.github/tests/test-build-version.sh
-
-test-containers-detect:
-	@echo "Running Container Images change-detection validation..."
-	@./.github/tests/test-containers-detect.sh
-
-test-basic-checks:
-	@echo "Running basic-checks changelog validation..."
-	@./.github/tests/test-basic-checks.sh
-
-test-fixture-isolation:
-	@echo "Running fixture isolation validation..."
-	@./.github/tests/test-fixture-isolation.sh
-
-test-gitignore:
-	@echo "Running shared .gitignore block generator tests..."
-	@./.github/tests/test-gitignore.sh
-
-test-sast-gate:
-	@echo "Running SAST gate exit-code propagation validation..."
-	@./.github/tests/test-sast-gate.sh
-
-test-hadolint-discovery:
-	@echo "Running Hadolint Dockerfile discovery validation..."
-	@./.github/tests/test-hadolint-discovery.sh
-
-test-checkov:
-	@echo "Running Checkov (IaC misconfiguration scanner) validation..."
-	@./.github/tests/test-checkov.sh
-
-test-codeql-scope:
-	@echo "Running CodeQL source scope and thread default validation..."
-	@./.github/tests/test-codeql-scope.sh
-
-test-codeql-gate:
-	@echo "Running CodeQL findings gate validation..."
-	@./.github/tests/test-codeql-gate.sh
-
-test-codeql-runtime:
-	@echo "Running CodeQL runtime validation (where each language's analysis runs, and with what)..."
-	@./.github/tests/test-codeql-runtime.sh
-
-test-dependency-check:
-	@echo "Running OWASP Dependency-Check NVD cache/API-key validation..."
-	@./.github/tests/test-dependency-check.sh
-
-test-dependency-track:
-	@echo "Running Dependency-Track BOM uploader validation..."
-	@./.github/tests/test-dependency-track.sh
-
-test-goreleaser-prepare:
-	@echo "Running GoReleaser main package detection validation..."
-	@./.github/tests/test-goreleaser-prepare.sh
-
-test-release-version-extraction:
-	@echo "Running release version extraction validation..."
-	@./.github/tests/test-release-version-extraction.sh
-
-test-release-reconcile:
-	@echo "Running release reconciliation validation..."
-	@./.github/tests/test-release-reconcile.sh
-
-test-release-promotion:
-	@echo "Running release promotion validation..."
-	@./.github/tests/test-release-promotion.sh
-
-test-deploy-providers:
-	@echo "Running MVP hosting deployment provider validation..."
-	@./.github/tests/test-deploy-providers.sh
-
-test-memory-detection:
-	@echo "Running memory ceiling detection validation..."
-	@./.github/tests/test-memory-detection.sh
-
-test-dart-pipeline:
-	@echo "Running Dart/Flutter pipeline validation..."
-	@./.github/tests/test-dart-pipeline.sh
-
-test-terra-pipeline:
-	@echo "Running Terraform pipeline validation..."
-	@./.github/tests/test-terra-pipeline.sh
-
-test-javascript-pipeline:
-	@echo "Running JavaScript formatting-gate validation..."
-	@./.github/tests/test-javascript-pipeline.sh
-
-test-phpmd:
-	@echo "Running PHPMD runner validation..."
-	@./.github/tests/test-phpmd.sh
-
-test-workflow-composition:
-	@echo "Running workflow composition standard validation..."
-	@./.github/tests/test-workflow-composition.sh
-
-test-working-directory:
-	@echo "Running working_directory threading validation..."
-	@./.github/tests/test-working-directory.sh
-
-test-supply-chain:
-	@echo "Running supply-chain pinning validation..."
-	@./.github/tests/test-supply-chain.sh
-
-test-runner-cache-gating:
-	@echo "Running self-hosted runner cache gating validation..."
-	@./.github/tests/test-runner-cache-gating.sh
-
-test-build-env-vars:
-	@echo "Running build_env_vars resolution (Cloudflare deployments) validation..."
-	@./.github/tests/test-build-env-vars.sh
-
-test-no-python:
-	@echo "Running no-Python validation (no .py file, no interpreter outside the Python pipelines)..."
-	@./.github/tests/test-no-python.sh
-
-# The Go helpers' own unit tests: every package of the root module. Offline --
-# the network-facing code is tested against local TLS servers and fixtures.
-test-go-helpers:
-	@echo "Running the Go helpers' unit tests..."
-	@go test -count=1 ./...
-
-# Lints the Go helpers with the golden configuration every Go consumer of this
-# library is held to. Not part of `make test`: it downloads the pinned
-# golangci-lint, which a test target must not do.
-lint-go-helpers:
+# Lints the Go helpers with the golden configuration every Go consumer of this library is held to.
+# Not part of `make test`: it downloads the pinned golangci-lint, which a test target must not do.
+lint:
 	@./global/scripts/languages/golang/golangci-lint/run.sh
 
-test-dependency-updates:
-	@echo "Running dependency-update checker validation..."
-	@./.github/tests/test-dependency-updates.sh
-
-# Not part of `make test`: it talks to ~40 upstreams over the network, which a
-# unit-test target must not do. The scheduled workflow runs it; this target is
-# for running the same check by hand.
+# Not part of `make test`: it talks to ~40 upstreams over the network, which a unit-test target
+# must not do. The scheduled workflow runs it; this target is for running the same check by hand.
 check-dependency-updates:
 	@./global/scripts/tools/dependency-updates/run.sh
 
-# The same lookups, then every outdated pin rewritten in this working tree --
-# the change the scheduled workflow opens as a pull request, digests and inline
-# copies included -- plus a changelog fragment. Commits nothing; review it with
-# `git diff`. Network, like the target above.
+# The same lookups, then every outdated pin rewritten in this working tree -- the change the
+# scheduled workflow opens as a pull request, digests and inline copies included -- plus a
+# changelog fragment. Commits nothing; review it with `git diff`. Network, like the target above.
 apply-dependency-updates:
 	@./global/scripts/tools/dependency-updates/run.sh --apply
-
-test-azure-step-names:
-	@echo "Running Azure DevOps step-name uniqueness validation..."
-	@./.github/tests/test-azure-step-names.sh
-
-test-go-module-toolchain:
-	@echo "Running Go module/builder toolchain agreement validation..."
-	@./.github/tests/test-go-module-toolchain.sh
-
-test-azure-secret-env:
-	@echo "Running Azure DevOps secret-passing validation..."
-	@./.github/tests/test-azure-secret-env.sh
-
-test-report-uploads:
-	@echo "Running GitHub Actions report-upload contract validation..."
-	@./.github/tests/test-report-uploads.sh
-
-test: test-dependency-track test-go-helpers test-go-module-toolchain test-go-script test-cyclonedx-main test-go-cache-trim test-go-tmpdir-modcache test-go-cross-compile test-go-integration-scope test-go-tool-staleness test-govulncheck-verdict test-lambda test-yaml-merge test-golangci-scanner-markers test-sonarqube test-release-tag-idempotency test-tftest-gen test-terra-coverage test-order-check test-var-catalog test-terraform-validate test-terraform-provider-mirror test-terra-test-roots test-terra-install test-docker-multi-arch test-build-version test-basic-checks test-fixture-isolation test-gitignore test-sast-gate test-hadolint-discovery test-checkov test-codeql-scope test-codeql-gate test-codeql-runtime test-dependency-check test-goreleaser-prepare test-release-version-extraction test-release-reconcile test-release-promotion test-deploy-providers test-memory-detection test-dart-pipeline test-javascript-pipeline test-phpmd test-terra-pipeline test-workflow-composition test-working-directory test-supply-chain test-runner-cache-gating test-azure-step-names test-azure-secret-env test-dependency-updates test-containers-detect test-report-uploads test-build-env-vars test-no-python
-	@echo "All tests completed successfully!"

@@ -24,6 +24,8 @@ test:all:
   stage: 'tests'
   variables:
     REPORT_PATH: 'build/reports'
+    # The two heavy tiers only: structural and validate run as jobs of their own beside this one.
+    TERRA_TEST_TIERS: 'terra-test terratest'
   script:
     - "$SCRIPTS_DIR/global/scripts/languages/terraform/test-all/run.sh"
   artifacts:

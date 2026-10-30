@@ -9,73 +9,81 @@ A CI/CD pipeline templates library providing reusable workflows for **GitHub Act
 ## Commands
 
 ```bash
-make test              # Run every validation suite; the prerequisites of the Makefile's `test` target are the authoritative list
-make test-go-script    # Test Go validation script only
-make test-cyclonedx-main  # Test the Go CycloneDX entry-point detection only
-make test-go-cache-trim   # Test the Go build-cache disk guard (threshold parsing, trim decision) only
-make test-go-module-toolchain  # Test that every go.mod toolchain directive is readable by the images/analysers/workflows that consume it only
-make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves only
-make test-govulncheck-verdict  # Test that govulncheck fails on a vulnerability the code calls, read from its report rather than the `-json` exit code only
-make test-go-tmpdir-modcache   # Test that the Go module cache stays out of $TMPDIR only
-make test-go-cross-compile     # Test the Go cross-compile runner (every target in one job, at most CROSS_COMPILE_JOBS at once, a failing target named) only
-make test-go-integration-scope  # Test which packages the Go runner's integration phase selects only
-make test-lambda       # Test Lambda template validation only
-make test-yaml-merge   # Test golangci-lint/run.sh (config merge, binary reuse and install, toolchain guard) only
-make test-golangci-scanner-markers  # Test that `golangci-lint/run.sh --fix` keeps other scanners' allow markers (e.g. `//gitleaks:allow`) only
-make test-sonarqube    # Test SonarQube auto-derivation and the retry of a scanner run the server broke only
-make test-release-tag-idempotency  # Test release tag idempotency only
-make test-tftest-gen   # Test tftest-gen generator only
-make test-terra-coverage  # Test the Terraform generic coverage report generator only
-make test-order-check  # Test the Terragrunt file-ordering checker/fixer only
-make test-var-catalog  # Test the shared variable-declaration generator only
-make test-terraform-validate  # Test the root-module `terraform validate` tier only
-make test-terraform-provider-mirror  # Test the local Terraform provider mirror only
-make test-terra-test-roots  # Test the terra-test tier's opt-in root-module run (`TERRA_TEST_ROOTS`) only
-make test-terra-install  # Test the terra CLI installer (pin check, installs that run together on one HOME, Azure DevOps step stops at a failed install) only
-make test-docker-multi-arch  # Test 40-delivery/docker multi-arch contract only
-make test-build-version  # Test the version build argument (shared helper, GitHub image delivery, Fly.io deploy, Go workflow wiring) and the delivered image's way to the Fly.io deploy only
-make test-containers-detect  # Test the Container Images change detection (deleted/renamed folders, dispatch inputs) only
-make test-basic-checks # Test basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) only
-make test-fixture-isolation  # Test that every suite builds its fixtures in mktemp space and guards every cd only
-make test-gitignore    # Test the shared .gitignore block generator only
-make test-sast-gate    # Test that the SAST targets propagate tool failures only
-make test-hadolint-discovery  # Test which files the Hadolint runner lints as Dockerfiles (every name the delivery templates build) only
-make test-checkov      # Test the Checkov IaC scanner tier (verified install, report verdict, advisory default, wiring on every platform) only
-make test-codeql-scope  # Test that a local CodeQL scan builds from the files git would ship, on every core, only
-make test-codeql-gate   # Test that CodeQL fails on findings `.codeql-false-positives` does not list, on every platform, and that the GitHub upload cannot fail the job, only
-make test-codeql-runtime  # Test where each language's CodeQL analysis runs and with what (GitLab CI images and installs, run.sh's report and build mode, the Azure DevOps and GitHub Actions toolchains, every Node.js the templates name against its end of life) only
-make test-dependency-check  # Test the OWASP Dependency-Check NVD cache / API-key contract only
-make test-dependency-track  # Test the Dependency-Track BOM uploader (identity, isLatest gating, PR skip, retry of a briefly unreachable server, cross-platform wiring) only
-make test-python-cyclonedx  # Test static/non-distribution and dynamic Python SBOM versions, including resolution failures
-make test-goreleaser-prepare  # Test the GoReleaser main package detection only
-make test-release-version-extraction  # Test release version extraction (tag ref + bump commit) only
-make test-release-reconcile  # Test release reconciliation gap detection only
-make test-release-promotion  # Test release promotion (the tag run a bump merge now starts) only
-make test-deploy-providers   # Test the MVP hosting deployment providers (Cloudflare, Vercel, Render, Netlify, Fly.io) only
-make test-build-env-vars   # Test the step that resolves `build_env_vars` in the three Cloudflare deployment workflows (one identical step, what it writes, no Python) only
-make test-no-python    # Test that the repository runs no Python of its own: no `.py` file, and no interpreter outside the Python pipelines and the Semgrep/Checkov installs, only
-make test-memory-detection  # Test the cgroup-aware memory ceiling detection only
-make test-dart-pipeline # Test the Dart/Flutter pipeline (scripts, report converters, Semgrep rules, cross-platform wiring) only
-make test-terra-pipeline # Test the Terraform/terra pipeline's CodeQL tool gap (GitHub, GitLab, Azure, terra.mk, terraform.mk) only
-make test-javascript-pipeline  # Test the JavaScript formatting gate (Prettier runner + cross-platform wiring) only
-make test-phpmd        # Test the PHPMD runner (the command line each major takes, the verdict, a report that stays JSON) only
-make test-workflow-composition  # Test the GitHub Actions workflow composition standard only
-make test-working-directory  # Test the `working_directory` threading contract (bundler/npm/yarn and their variants) only
-make test-supply-chain # Test the supply-chain pinning contract (actions, images, binaries, packages) only
-make test-runner-cache-gating  # Test that no GitHub Actions cache restores into $HOME on a self-hosted runner only
-make test-dependency-updates  # Test the dependency-update tool's wiring (run.sh, report isolation, both workflows) only
-make test-go-helpers         # Run the Go helpers' unit tests (`go test ./...`; the dependency-update tool's behaviour, policy and command line)
-make lint-go-helpers         # Lint the Go helpers with the shared golden golangci-lint configuration (downloads the pinned golangci-lint)
-make check-dependency-updates # Report which pinned dependencies have a newer release (network)
-make apply-dependency-updates # Rewrite every stale pin in the working tree, digests included -- what the scheduled pull request carries (network)
-make test-azure-step-names  # Test Azure DevOps step-name uniqueness across expanded templates only
-make test-azure-secret-env  # Test that every Azure step consuming a credential maps it through `env:` only
-make test-report-uploads  # Test that no GitHub Actions report upload can fail its job or ask to be kept longer than the repository keeps artifacts, while mandatory reports stay enforced, only
+make test                       # every validation suite in .github/tests, then the Go helpers' unit tests
+make test ONLY="supply-chain"   # the named suites only: a script's name without `test-` and `.sh`, or `go-helpers`
+make lint                       # Lint the Go helpers with the shared golden golangci-lint configuration (downloads the pinned golangci-lint)
+make check-dependency-updates   # Report which pinned dependencies have a newer release (network)
+make apply-dependency-updates   # Rewrite every stale pin in the working tree, digests included -- what the scheduled pull request carries (network)
 make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
 make build NAME=<image> TAG=<tag>           # Build both architectures, publish nothing (verification)
 ```
 
-Test scripts live in `.github/tests/`. The CI workflow (`.github/workflows/ci.yaml`) validates YAML syntax, script permissions, and runs ShellCheck on all shell scripts. A suite whose checks parse YAML or read files structurally keeps them as Go test support under `internal/testsuites/<suite>/`, which the suite builds from the checkout for its run (`go build -C "$SCRIPTS_DIR" ...`) and stops on if the build fails; `make test-go-helpers` runs their unit tests.
+`make test` runs `.github/tests/run.sh`, which finds every `test-<name>.sh` beside it, keeps going
+after a failure and fails at the end, naming every suite that failed. A new suite is a new script:
+there is no target to add and no list to keep in step.
+
+| Suite (`make test ONLY=<name>`) | What it checks |
+|---|---|
+| `azure-secret-env` | That every Azure step consuming a credential maps it through `env:` |
+| `azure-step-names` | Azure DevOps step-name uniqueness across expanded templates |
+| `basic-checks` | Basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) |
+| `build-env-vars` | The step that resolves `build_env_vars` in the three Cloudflare deployment workflows (one identical step, what it writes, no Python) |
+| `build-version` | The version build argument (shared helper, GitHub image delivery, Fly.io deploy, Go workflow wiring) and the delivered image's way to the Fly.io deploy |
+| `checkov` | The Checkov IaC scanner tier (verified install, report verdict, advisory default, wiring on every platform) |
+| `codeql-gate` | That CodeQL fails on findings `.codeql-false-positives` does not list, on every platform, and that the GitHub upload cannot fail the job, |
+| `codeql-runtime` | Where each language's CodeQL analysis runs and with what (GitLab CI images and installs, run.sh's report and build mode, the Azure DevOps and GitHub Actions toolchains, every Node.js the templates name against its end of life) |
+| `codeql-scope` | That a local CodeQL scan builds from the files git would ship, on every core, |
+| `containers-detect` | The Container Images change detection (deleted/renamed folders, dispatch inputs) |
+| `cyclonedx-main-detection` | The Go CycloneDX entry-point detection |
+| `dart-pipeline` | The Dart/Flutter pipeline (scripts, report converters, Semgrep rules, cross-platform wiring) |
+| `dependency-check` | The OWASP Dependency-Check NVD cache / API-key contract |
+| `dependency-track` | The Dependency-Track BOM uploader (identity, isLatest gating, PR skip, retry of a briefly unreachable server, cross-platform wiring) |
+| `dependency-updates` | The dependency-update tool's wiring (run.sh, report isolation, both workflows) |
+| `deploy-providers` | The MVP hosting deployment providers (Cloudflare, Vercel, Render, Netlify, Fly.io) |
+| `docker-multi-arch` | 40-delivery/docker multi-arch contract |
+| `fixture-isolation` | That every suite builds its fixtures in mktemp space and guards every cd |
+| `gitignore` | The shared .gitignore block generator |
+| `go-cache-trim` | The Go build-cache disk guard (threshold parsing, trim decision) |
+| `go-cross-compile` | The Go cross-compile runner (every target in one job, at most CROSS_COMPILE_JOBS at once, a failing target named) |
+| `go-helpers` | Run the Go helpers' unit tests (`go test ./...`; the dependency-update tool's behaviour, policy and command line) |
+| `go-integration-scope` | Which packages the Go runner's integration phase selects |
+| `go-module-toolchain` | That every go.mod toolchain directive is readable by the images/analysers/workflows that consume it |
+| `go-tmpdir-modcache` | That the Go module cache stays out of $TMPDIR |
+| `go-tool-staleness` | That a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves |
+| `go-validation` | Go validation script |
+| `golangci-scanner-markers` | That `golangci-lint/run.sh --fix` keeps other scanners' allow markers (e.g. `//gitleaks:allow`) |
+| `goreleaser-prepare` | The GoReleaser main package detection |
+| `govulncheck-verdict` | That govulncheck fails on a vulnerability the code calls, read from its report rather than the `-json` exit code |
+| `hadolint-discovery` | Which files the Hadolint runner lints as Dockerfiles (every name the delivery templates build) |
+| `javascript-pipeline` | The JavaScript formatting gate (Prettier runner + cross-platform wiring) |
+| `lambda-templates` | Lambda template validation |
+| `memory-detection` | The cgroup-aware memory ceiling detection |
+| `no-python` | That the repository runs no Python of its own: no `.py` file, and no interpreter outside the Python pipelines and the Semgrep/Checkov installs, |
+| `order-check` | The Terragrunt file-ordering checker/fixer |
+| `phpmd` | The PHPMD runner (the command line each major takes, the verdict, a report that stays JSON) |
+| `python-cyclonedx` | Static/non-distribution and dynamic Python SBOM versions, including resolution failures |
+| `release-promotion` | Release promotion (the tag run a bump merge now starts) |
+| `release-reconcile` | Release reconciliation gap detection |
+| `release-tag-idempotency` | Release tag idempotency |
+| `release-version-extraction` | Release version extraction (tag ref + bump commit) |
+| `report-uploads` | That no GitHub Actions report upload can fail its job or ask to be kept longer than the repository keeps artifacts, while mandatory reports stay enforced, |
+| `runner-cache-gating` | That no GitHub Actions cache restores into $HOME on a self-hosted runner |
+| `sast-gate` | That the SAST targets propagate tool failures |
+| `sonarqube-auto-derive` | SonarQube auto-derivation and the retry of a scanner run the server broke |
+| `supply-chain` | The supply-chain pinning contract (actions, images, binaries, packages) |
+| `terra-coverage` | The Terraform generic coverage report generator |
+| `terra-install` | The terra CLI installer (pin check, installs that run together on one HOME, Azure DevOps step stops at a failed install) |
+| `terra-pipeline` | The Terraform/terra pipeline's CodeQL tool gap (GitHub, GitLab, Azure, terra.mk, terraform.mk) |
+| `terra-test-roots` | The terra-test tier's opt-in root-module run (`TERRA_TEST_ROOTS`) |
+| `terraform-provider-mirror` | The local Terraform provider mirror |
+| `terraform-validate` | The root-module `terraform validate` tier |
+| `tftest-gen` | Tftest-gen generator |
+| `var-catalog` | The shared variable-declaration generator |
+| `workflow-composition` | The GitHub Actions workflow composition standard |
+| `working-directory` | The `working_directory` threading contract (bundler/npm/yarn and their variants) |
+| `yaml-merge` | Golangci-lint/run.sh (config merge, binary reuse and install, toolchain guard) |
+
+Test scripts live in `.github/tests/`. The CI workflow (`.github/workflows/ci.yaml`) validates YAML syntax, script permissions, and runs ShellCheck on all shell scripts. A suite whose checks parse YAML or read files structurally keeps them as Go test support under `internal/testsuites/<suite>/`, which the suite builds from the checkout for its run (`go build -C "$SCRIPTS_DIR" ...`) and stops on if the build fails; `make test ONLY=go-helpers` runs their unit tests.
 
 ## Architecture
 
@@ -99,10 +107,10 @@ All platforms follow consistent numbered stages:
   - `dart/` — Dart and Flutter runners: `setup`, `format`, `analyze`, `test`, `unused`, `sca`, `build`, `publish`, plus a sourced `common.sh` (not executable — it is sourced, never run). All honour `DART_DRY_RUN=true`, which resolves and records commands without installing or executing anything; that is what makes the whole family testable offline. The report converters beside two of them — `test/lcov-to-cobertura.sh`, `test/lcov-to-markdown.sh`, `test/filter-test-events.sh` and `analyze/analyze-report.sh` — are POSIX sh around awk programs (`*.awk`, loaded with `awk -f` after the shared `common.awk`, so they carry no executable bit), and a Dart job needs no Python. See Dart & Flutter Support below
   - `terraform/terra-test/` — `terraform test` runner over `modules/*/tests/*.tftest.hcl` (emits JUnit + Markdown/JSON/Cobertura coverage under `build/reports/`, plus `terra-coverage-generic.xml` from the Go generator in `terra-test/coverage/`, a soft step that warns and skips when Go is absent). `TERRA_TEST_ROOTS` (space-separated, **empty by default**, e.g. `stacks` as for `VALIDATE_ROOTS`) adds every root module under those directories, at any depth, that owns a `tests/*.tftest.hcl`: read from the environment, which each template sets from its own option (GitHub Actions `terra_test_roots` input, since a called workflow's jobs never see the caller's environment; Azure DevOps `TERRA_TEST_ROOTS` parameter, mapped into the step only when non-empty so a pipeline variable of that name is never shadowed by an empty `env:` entry; GitLab CI a variable of that name, deliberately undeclared on the job because a job-level variable outranks the consumer's top-level one), initialised `-backend=false` and deliberately **without** the modules' `-upgrade` so a root's committed lock file decides its providers, one JUnit per root named after its path, kept out of the module breadth figures. The selection lives in the sourced `roots.sh`, which `test-all` asks too, so the two cannot disagree. A root is **refused**, never run, when a test file `terraform test` would read there (`*.tftest.hcl` beside its `.tf` files as well as in `tests/`) holds a `run` block that resolves to apply — no `command`, or `command = apply` — in a file with no `mock_provider`: a root carries its real provider configuration, and under `-backend=false` a cancelled job would orphan whatever the apply created. `roots.sh`'s `terra_test_root_apply_runs` decides it by tokenizing the files in POSIX `awk` (comments, strings, heredocs and brace depth honoured, so only a `command` at the run block's own top level counts), a `*.tftest.json` is refused as unreadable, and the refusal is written as a JUnit failure so every report agrees with the exit code. Module tests are never checked
   - `terraform/terratest/` — Go Terratest runner over `tests/terratest/*.go` (emits JUnit under `build/reports/`)
-  - `terraform/test-all/` — unified orchestrator for the first two tiers; runs both when present (a root under `TERRA_TEST_ROOTS` counts toward tier 1), merges JUnits into `build/reports/junit-terra-all.xml`, exits `0` when neither tier has tests (stack-only repos)
-  - `terraform/structural/` — third tier runner for `tests/structural.sh` (repo-convention assertions the consumer owns); emits `build/reports/junit-structural.xml` (empty-but-valid on skip). Runs on its own parallel job (`test:structural`) instead of through `test-all` because the shell tier is offline and light and shouldn't block on the heavier tiers. Every platform's job still provisions Go: a consumer's `tests/structural.sh` runs this repository's Go helpers (`var-catalog/run.sh --check` is the CI gate for a generated `variables-shared.tf`), a call `make test-go-module-toolchain` cannot discover because it sits in the consumer's repository, so that suite lists the runner as a helper entry by hand
+  - `terraform/test-all/` — the one runner for every test tier, which `make test` (`terra.mk`) calls: terra-test, terratest, structural and, with `ENABLE_VALIDATE=true`, validate; `TERRA_TEST_TIERS` (`make test ONLY=...`) picks some, and CI's `test:all` job pins `terra-test terratest` because the other two run as jobs of their own there. Runs the first two when present (a root under `TERRA_TEST_ROOTS` counts toward tier 1), merges JUnits into `build/reports/junit-terra-all.xml`, exits `0` when neither tier has tests (stack-only repos)
+  - `terraform/structural/` — third tier runner for `tests/structural.sh` (repo-convention assertions the consumer owns); emits `build/reports/junit-structural.xml` (empty-but-valid on skip). Runs on its own parallel job (`test:structural`) instead of through `test-all` because the shell tier is offline and light and shouldn't block on the heavier tiers. Every platform's job still provisions Go: a consumer's `tests/structural.sh` runs this repository's Go helpers (`var-catalog/run.sh --check` is the CI gate for a generated `variables-shared.tf`), a call `make test ONLY=go-module-toolchain` cannot discover because it sits in the consumer's repository, so that suite lists the runner as a helper entry by hand
   - `terraform/validate/` — fourth tier runner: `terraform init -backend=false` + `terraform validate` over every root module under `VALIDATE_ROOTS` (default `stacks`); emits `build/reports/junit-validate.xml` (empty-but-valid on skip). The only tier that RESOLVES references — the other three parse — so it is the only one that can see `Reference to undeclared module` / `Unsupported argument` in a root module. Runs on its own **opt-in** parallel job (`test:validate`), off by default because unlike its siblings it needs the network for provider downloads and, for private module sources, credentials
-  - `terraform/tftest-gen/` — Go generator (`main.go` + `internal/`, run through `go_helper_run`; `make test-gen` in `terraform.mk` calls it) that emits `tests/smoke.tftest.hcl` for single-module repos; parses `variables.tf` + `main.tf` / `providers.tf` and emits `mock_provider` blocks plus validation-rejection runs
+  - `terraform/tftest-gen/` — Go generator (`main.go` + `internal/`, run through `go_helper_run`; run by hand, once, to bootstrap a module's suite -- generating tests is not testing, so no make target runs it) that emits `tests/smoke.tftest.hcl` for single-module repos; parses `variables.tf` + `main.tf` / `providers.tf` and emits `mock_provider` blocks plus validation-rejection runs
   - `terraform/tflint/install.sh` and `terraform/terra/install.sh` — pinned, checksum-verified installers that replaced the vendors' `curl … | sh` one-liners on all three platforms
   - `terraform/order-check/` — checks (and with `--fix` rewrites) the file-ordering standard across `environments/**/root.hcl`, `stacks/*/{variables,providers,outputs}.tf`, and `**/providers.tf`, and additionally reports **dead terragrunt inputs** (an `inputs = {}` key with no matching `variable` in the target stack — reported only, never auto-deleted); emits `build/reports/junit-order-check.xml`. Runs as the `order-check` / `style:order-check` job in the `10-code-check` stage. A standard-library-only Go helper (`main.go` + `internal/`, run through `go_helper_run`, so the job needs Go and nothing else); the `--fix` rewriter is round-trip-safe (parses to exact substrings, then only permutes). See Terraform Ordering Standard below
   - `terraform/var-catalog/` — a standard-library-only Go generator (`main.go` + `internal/`, run through `go_helper_run`) that keeps ONE canonical body per shared `variable` in a per-repo `.terraform-var-catalog.hcl` and writes the subset each stack actually uses into `stacks/<stack>/variables-shared.tf` (the same generic-script/repo-data split as `order-check`). Output is **committed**, not emitted by a Terragrunt `generate` block, because the order-check dead-input scan, the `terraform validate` tier, and AST-based tests all read `stacks/**/*.tf` from the source tree without invoking Terragrunt. It writes a sibling file rather than appending to `variables.tf` (so generated content is exempt from the `// SET ON` marker rule yet still seen by the dead-input glob) and **never overwrites a hand-written declaration** — a stack that already declares a catalogued name keeps its body and is reported. `run.sh --check` is the CI gate (fails if the committed output is stale); `--report` prints changes without writing
@@ -153,7 +161,7 @@ explicitly; `secrets: inherit` fails Semgrep's
 
 ### Supply-Chain Pinning
 
-**Enforced by `.github/tests/test-supply-chain.sh` (`make test-supply-chain`), 29 assertions, every one of
+**Enforced by `.github/tests/test-supply-chain.sh` (`make test ONLY=supply-chain`), 29 assertions, every one of
 them proven to fire against a deliberate violation.** Read this before adding an action, an image, or
 anything that downloads a binary.
 
@@ -297,7 +305,7 @@ Five constraints shape it:
 
 ### Caches on a Self-Hosted Runner
 
-**Enforced by `.github/tests/test-runner-cache-gating.sh` (`make test-runner-cache-gating`).** Read this
+**Enforced by `.github/tests/test-runner-cache-gating.sh` (`make test ONLY=runner-cache-gating`).** Read this
 before adding an `actions/cache` step or an `actions/setup-*` that takes a `cache:` input.
 
 GitHub's cache service is designed for a runner that starts empty. A self-hosted runner does not:
@@ -347,7 +355,7 @@ is a large part of why the rule is a test rather than a review habit.
 
 ### Workflow Composition Standard
 
-**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), nineteen
+**Enforced by `.github/tests/test-workflow-composition.sh` (`make test ONLY=workflow-composition`), nineteen
 assertions, every one of them proven to fire against a deliberate violation.** Read this section
 before writing anything under `.github/workflows/`, and before writing a pipeline in a repository
 that consumes this one.
@@ -462,7 +470,7 @@ whose every check had passed. A reusable workflow reports `success` when some of
 skipped and the rest passed, and `cancelled` when one was cancelled; both were read off public runs
 that print `toJSON(needs)`. So on a tag, where the checks are skipped and delivery still runs, that
 `success` proves nothing, and the tag reads the check runs the default-branch push left.
-`make test-deploy-providers` holds both halves, and discovers the wiring in every workflow that runs
+`make test ONLY=deploy-providers` holds both halves, and discovers the wiring in every workflow that runs
 the gate.
 
 **A `STANDALONE` workflow is exempt from the composition rules, not from every rule.** The two Claude
@@ -728,7 +736,7 @@ Because the tools run directly on the host, the consuming CI job only needs the 
 
 ### No Python of Its Own
 
-**Enforced by `.github/tests/test-no-python.sh` (`make test-no-python`).** This repository's scripts
+**Enforced by `.github/tests/test-no-python.sh` (`make test ONLY=no-python`).** This repository's scripts
 run in every consumer's CI, so a helper here is code every consumer executes. The helpers that used
 to be Python -- the Terraform ordering, coverage, smoke-test and variable-catalog generators, the
 Dart report converters, and the Python inside the test suites -- are Go (the root module, built from
@@ -783,7 +791,7 @@ that READS a project back: `ACTIVE` became `INACTIVE_SINCE` (nullable timestamp)
 derived accessor. The v5 tree also moved to `apiserver/src/main/java/...`, which is why those files look
 absent at the 4.x path.
 
-Eight constraints shape this; `make test-dependency-track` asserts all of them:
+Eight constraints shape this; `make test ONLY=dependency-track` asserts all of them:
 
 | Constraint | Why |
 |------------|-----|
@@ -810,7 +818,7 @@ it out, because a failed gate is the analysis working. The shapes it keys on are
 prints: `Call to URL [...] failed: Connection reset`, `... failed: null` for a refused connection (the JDK's
 `ConnectException` has no message), `GET ... failed with HTTP 500`, and the engine's
 `HttpException: Error 521 on ...`. A scanner upgrade that rewords them turns a retry back into a plain
-failure without any error, which is why `make test-sonarqube` pins each one. The budget matches the
+failure without any error, which is why `make test ONLY=sonarqube-auto-derive` pins each one. The budget matches the
 Dependency-Track upload: `SONARQUBE_ATTEMPTS` (default `5`) and `SONARQUBE_RETRY_DELAY` (default `30`,
 multiplied by the attempt number). The knobs are not named `SONAR_SCANNER_*` on purpose: that prefix belongs
 to the scanner's own environment.
@@ -858,7 +866,7 @@ were verified against the engine rather than assumed: patterns containing
 otherwise), and interpolation must be detected with `metavariable-regex` — the
 `"...$..."` string-ellipsis idiom is **not implemented for Dart**, so a rule
 written with it loads cleanly and then matches nothing. When editing that file,
-re-run `make test-dart-pipeline` with Semgrep installed; the suite asserts every
+re-run `make test ONLY=dart-pipeline` with Semgrep installed; the suite asserts every
 rule still matches its vulnerable sample and none matches the safe counterpart.
 
 **Terraform has the same CodeQL gap, handled the same way.** CodeQL ships no HCL extractor,
@@ -871,7 +879,7 @@ fails if the job reappears on any platform. Do not "restore consistency" here ei
 
 ### Terra Test Tiers
 
-The Terra CLI pipeline test stage exposes three parallel jobs on every platform (Azure DevOps, GitLab CI, GitHub Actions) — two always on, one opt-in:
+The Terra CLI pipeline test stage exposes three parallel jobs on every platform (Azure DevOps, GitLab CI, GitHub Actions) — two always on, one opt-in. Locally there is one target: `make test` runs every tier through `test-all/run.sh` (validate only with `ENABLE_VALIDATE=true`), and `make test ONLY=<tier>` runs some:
 
 1. **`test:all`** — the unified test job, delegates to `global/scripts/languages/terraform/test-all/run.sh` which orchestrates the two heavier tiers:
 
@@ -914,7 +922,7 @@ The `order-check` job (`global/scripts/languages/terraform/order-check/`, in the
 | `stacks/*/outputs.tf` | outputs ordered to follow the declaration position of the first `module`/`resource` their value references in `main*.tf` |
 | `inputs = {}` in `root.hcl` / leaf `terragrunt.hcl` | every input key must be declared as a `variable` in the target stack; an undeclared input is **dead code** (Terraform silently drops the `TF_VAR_` Terragrunt exports for it, so the value is passed and never read) and is reported so it can be deleted before pushing. The target stack is resolved from the file's literal `source` (or, for a leaf, its included `root.hcl`'s), falling back to path convention (`environments/<p>` → `stacks/<p>`) when the source path is interpolated; a container dir with no `*.tf` of its own is skipped. This rule is **check-only — `--fix` never deletes a dead input** (deleting would break the "only ever permute" invariant, and the stack is resolved heuristically), so the finding names the exact keys for a human to remove |
 
-Check mode is a CI gate (emits `build/reports/junit-order-check.xml`); `run.sh --fix` rewrites files into order (except dead inputs, which are only reported). The checker is a standard-library-only Go helper built from the pipelines checkout, so its job needs Go and nothing else -- each template provisions Go 1.25 or newer, the root `go.mod`'s directive, which `make test-go-module-toolchain` holds per job -- and running `--fix` locally needs the same. Missing `SET ON` markers, providers absent from the ranking, and files whose target stack cannot be resolved are **warnings/skips** (non-fatal). The provider ranking and path ignores are overridable per-repo via an optional `.terraform-order.json` (`{"provider_order": [...], "ignore": ["glob", ...]}`). The `--fix` rewriter parses each region into exact substrings, verifies a byte-for-byte round-trip, then only permutes those substrings — so it can never drop or corrupt content (it leaves any file it cannot parse cleanly untouched and reports it). Reordering `root.hcl` inputs changes `=` alignment, so run `terra format` / `terragrunt hcl format` after `--fix`; the `.tf` reordering is already `fmt`-clean.
+Check mode is a CI gate (emits `build/reports/junit-order-check.xml`); `run.sh --fix` rewrites files into order (except dead inputs, which are only reported). The checker is a standard-library-only Go helper built from the pipelines checkout, so its job needs Go and nothing else -- each template provisions Go 1.25 or newer, the root `go.mod`'s directive, which `make test ONLY=go-module-toolchain` holds per job -- and running `--fix` locally needs the same. Missing `SET ON` markers, providers absent from the ranking, and files whose target stack cannot be resolved are **warnings/skips** (non-fatal). The provider ranking and path ignores are overridable per-repo via an optional `.terraform-order.json` (`{"provider_order": [...], "ignore": ["glob", ...]}`). The `--fix` rewriter parses each region into exact substrings, verifies a byte-for-byte round-trip, then only permutes those substrings — so it can never drop or corrupt content (it leaves any file it cannot parse cleanly untouched and reports it). Reordering `root.hcl` inputs changes `=` alignment, so run `terra format` / `terragrunt hcl format` after `--fix`; the `.tf` reordering is already `fmt`-clean.
 
 ### MVP Hosting Providers
 
@@ -933,12 +941,12 @@ Nine constraints shape this family; do not "simplify" any of them away:
 | Constraint | Why |
 |------------|-----|
 | **A credential is never passed on argv** | Argv is world-readable through `ps` for the process's lifetime on a shared or self-hosted runner, AND `deploy_run` records the resolved command line into `command.txt`, which all three platforms publish as a downloadable artifact — so a token on argv is exfiltrated into that artifact and kept for its retention period. Every CLI here reads its token from the environment; Render uses `curl --config -` (stdin). Its deploy hook URL embeds a secret in the query string, so the whole URL is redacted rather than recorded. Same reasoning as `-DnvdApiKeyEnvironmentVariable` above |
-| **`DEPLOY_DRY_RUN=true` installs nothing and touches no network** | It is the only reason `make test-deploy-providers` can exercise all five providers offline, with no credentials and no Node.js toolchain. A dry run that installed a CLI would add ~100 MB per provider and make the suite need npm |
+| **`DEPLOY_DRY_RUN=true` installs nothing and touches no network** | It is the only reason `make test ONLY=deploy-providers` can exercise all five providers offline, with no credentials and no Node.js toolchain. A dry run that installed a CLI would add ~100 MB per provider and make the suite need npm |
 | **Render's API key is preferred over its deploy hook** | A deploy hook is fire-and-forget: Render returns success for "request accepted", so the job goes **green even when the build that follows fails**, making the job's status meaningless. The API path returns a deploy id the script polls to a terminal state. The hook path warns about exactly this |
 | **A Fly app that is not safe to run twice needs a CEILING, and `fly.toml` has none** | `min_machines_running` is a floor. Fly's deploy adds a spare machine the first time it fills a process group, and an app with an in-process event bus, an in-memory rate limiter or unelected background workers is then silently WRONG rather than broken -- duplicated workers, split state, halved rate budgets, and nothing to report it. `FLY_MACHINE_COUNT` enforces the ceiling with `flyctl scale count` after a successful deploy, and `1` also passes `--ha=false` so the spare is never created. The value is VALIDATED before anything is deployed, because the two enforcement points fail asymmetrically: `1 ` (trailing space) is not equal to `1`, so `--ha=false` is skipped and Fly creates the spare, and then the deploy SUCCEEDS and `scale count` is rejected once the release is already live -- leaving the app on the two machines the ceiling exists to refuse |
 | **Fly app names are GLOBALLY unique, so a create failure is classified** | The name space is shared by every Fly customer, not scoped to an organisation, so `Name has already been taken` after the lookup already proved the app absent from your org means the name is held and no permission change can obtain it. flyctl cannot tell WHOSE, so the message names both: a stranger, or the operator's own account under an organisation `FLY_ORG` does not name (`apps list` only shows what the token can reach) — the second is fixed by pointing `FLY_ORG` at that org, and asserting the first would tell that operator to rename a running application. Reported as its own cause, because the obvious guess -- an app-scoped token, which genuinely cannot create apps -- sends the operator to mint a wider credential that still fails. Every role-shaped name (`api-staging`, `web`, `api`) is long gone; consumers prefix with their org or product |
 | **Fly.io app auto-creation is opt-in, via `FLY_ORG`** | `flyctl deploy` does not create an app, so a brand-new environment's first pipeline is always red and the fix lives in someone's shell history. Setting `FLY_ORG` makes the script create the app when `apps list` does not show it. It is opt-in rather than automatic because an APP-SCOPED deploy token cannot create apps: auto-creation forces an ORG-SCOPED token that manages every app in the organisation, which is a real widening of blast radius and the consumer's trade to make, not this library's. Existence is checked before creating rather than "create and ignore the error", because Fly app names are globally unique and the duplicate-name error is identical whether the app is ours or an unrelated organisation's. Two shapes of "opted in and got nothing" are closed by design: the app name is resolved from `fly.toml` as well as `FLY_APP_NAME` (gating on the variable alone made `FLY_ORG` a silent no-op for the configuration `go-flyio.yaml` documents as making it optional), and an unresolvable name warns rather than skipping. `flyctl`'s exit status is read separately from `grep`'s, so a FAILED lookup is never read as "the app is absent" — that would announce a creation of an app that exists, fail on the name being taken, and advise widening a token that was never the problem |
-| **The Fly.io version build argument is opt-in, by naming the `ARG`** | `--remote-only` builds from source on Fly's builder, so a Dockerfile that compiles its version in (`ARG VERSION=dev`, then `-ldflags -X`) reported its default on every deploy: nothing passed the argument. `FLY_VERSION_BUILD_ARG` names the `ARG`; the value is `FLY_APP_VERSION`, else the tag, else the commit's first 7 characters, resolved by `global/scripts/shared/build-version.sh` -- the helper the GitHub image delivery uses too, so one commit built in both places reports one version (asserted by running both, in `make test-build-version`). Opt-in because a name this library chose would override a project's unrelated `ARG VERSION`. The name and the value are VALIDATED before anything is deployed, because nothing downstream refuses either: a build argument no `ARG` declares is ignored, and a newline in the value would add a second argument to the newline-separated `build-args` list. A valid name the Dockerfile never declares warns rather than fails -- the check reads the file line by line, and a false alarm must not cost a deploy. With `FLY_IMAGE` there is no build to pass it to: the image was built with its version in it, so the name is neither passed nor validated |
+| **The Fly.io version build argument is opt-in, by naming the `ARG`** | `--remote-only` builds from source on Fly's builder, so a Dockerfile that compiles its version in (`ARG VERSION=dev`, then `-ldflags -X`) reported its default on every deploy: nothing passed the argument. `FLY_VERSION_BUILD_ARG` names the `ARG`; the value is `FLY_APP_VERSION`, else the tag, else the commit's first 7 characters, resolved by `global/scripts/shared/build-version.sh` -- the helper the GitHub image delivery uses too, so one commit built in both places reports one version (asserted by running both, in `make test ONLY=build-version`). Opt-in because a name this library chose would override a project's unrelated `ARG VERSION`. The name and the value are VALIDATED before anything is deployed, because nothing downstream refuses either: a build argument no `ARG` declares is ignored, and a newline in the value would add a second argument to the newline-separated `build-args` list. A valid name the Dockerfile never declares warns rather than fails -- the check reads the file line by line, and a false alarm must not cost a deploy. With `FLY_IMAGE` there is no build to pass it to: the image was built with its version in it, so the name is neither passed nor validated |
 | **A Fly.io deploy ships the image the pipeline delivered, by digest** | `FLY_IMAGE` names an image already pushed -- `go-flyio.yaml` passes the one `delivery > docker` pushed to GHCR, which is its default. Rebuilding the Dockerfile on Fly's builder took about two of the two and a half minutes a deploy spent, shipped an image with another digest than the one CI pushed, and put a deploy at the mercy of the remote builder: one stalled for 51 minutes and failed the deploy. The image's linux/amd64 build (the platform Fly machines run) is resolved to a digest FIRST, copied with `crane` -- registry to registry, no Docker daemon -- into `registry.fly.io/<app>` under a tag named after that digest, and deployed as `registry.fly.io/<app>@sha256:...`. Fly's registry, not GHCR, because machines pull again on every restart and migration and the GHCR credential is a job token that expires with the job. By digest, because a tag is mutable -- a re-run of a commit is a new build with a new digest -- and flyctl 0.4.118 hands a digest-pinned reference to Fly's API unchanged, then configures the machines with what the API resolves, where a tag would reach them as the tag. `crane` is pinned and checksum-verified like `flyctl`, nothing is installed or copied on a dry run, the credentials go into a throwaway `DOCKER_CONFIG` (never `$HOME/.docker`, which a persistent runner keeps) and reach `crane` on stdin -- the Fly token as flyctl hands it to its registry, `Tokens.Docker()`: no `FlyV1 ` scheme, macaroons only -- and both the credentials and the source registry's password are gone before flyctl runs, removed as soon as the copy is done and on any exit before it. A missing app name fails before anything is installed, since the copy names the app. `fly_build_from_source` restores the build on Fly's builder. GitLab CI and Azure DevOps take `FLY_IMAGE` too but keep building from source by default: their deploy templates are included on their own rather than composed after a delivery job, and their delivery templates push tags without recording a digest, so they have no image to hand over |
 | **`flyctl` comes from the GitHub release archive, never `curl \| sh`** | Piping a remote script into a shell hands the runner's credentials to whatever that URL returns at that moment — the supply-chain shape this repository's own SAST stage exists to flag. Matches the gitleaks/hadolint/shellcheck install pattern |
 
@@ -1066,7 +1074,7 @@ end to end against a stub `codeql`, and the composite's step order and flags.
 This repository's own scan (`security > sast:codeql` in `.github/workflows/ci.yaml`) is a consumer of the same rules, from
 its own root. `codeql-config.yml` excludes `actions/unpinned-tag`, which reports every
 `rios0rios0/pipelines/...@main` self-reference -- moving by design, see Test 7 of
-`make test-workflow-composition` -- while `make test-supply-chain` already holds every other `uses:`
+`make test ONLY=workflow-composition` -- while `make test ONLY=supply-chain` already holds every other `uses:`
 to a commit SHA, more strictly than the query, which exempts trusted owners. `.codeql-false-positives`
 lists the findings triaged as false positives, each with a dated rationale. Both files are read from
 the root of the repository being scanned, so neither reaches a consumer; the default
@@ -1087,7 +1095,7 @@ child `sh -c` would drop, so it behaves exactly as the expression did.
 ### CodeQL Reads Go Only Under a Go as New as the Module
 
 Two things have to read a module's `go` directive before CodeQL can analyse it, and either one
-failing loses the analysis. `make test-go-module-toolchain` (sections 3, 3c and 4) holds both:
+failing loses the analysis. `make test ONLY=go-module-toolchain` (sections 3, 3c and 4) holds both:
 
 | What | Why it must reach the module's Go | Where it comes from |
 |------|-----------------------------------|---------------------|
@@ -1109,7 +1117,7 @@ module overtakes it.
 
 ### Every Language's CodeQL Has What Its Extractor Needs
 
-**Enforced by `.github/tests/test-codeql-runtime.sh` (`make test-codeql-runtime`).** Until 2026-10-29
+**Enforced by `.github/tests/test-codeql-runtime.sh` (`make test ONLY=codeql-runtime`).** Until 2026-10-29
 no GitLab CI analysis ran at all, for any language (KI-02 in `.docs/known-issues.md`), and nothing
 was red for the right reason: the image a job runs in is rarely written on the job, so the suite
 resolves each GitLab CI entry template the way GitLab does (`include:`, `extends:`, `!reference`)
@@ -1193,9 +1201,9 @@ The Go pipeline blocks on its checks on every platform:
 | govulncheck   | blocking (was advisory) | blocking (was `allow_failure`) | blocking (was a job-level `continueOnError`) |
 | Hadolint      | blocking (was advisory) | blocking (already was)         | advisory: a shared template, see below       |
 
-For govulncheck, removing the advisory flags was not enough. The script runs `govulncheck -json` so the report is machine-readable, and with `-json` govulncheck exits 0 whatever it finds: the job could only fail when the scan itself broke, so no Go pipeline ever failed on a vulnerability. The verdict now comes from the report. `global/scripts/languages/golang/govulncheck/run.sh` replays it through `govulncheck -mode convert`, which prints the findings into the log and exits 3 when the code calls a vulnerable symbol. A vulnerability only in a package the code imports, or a module it requires, is listed but does not fail the job, which is govulncheck's own default. The scan's stderr goes to the log, never into the report, so the report stays JSON `convert` can read. `make test-govulncheck-verdict` pins all of it, with `go` and `govulncheck` stubbed. When the fix was written, none of the 17 GitHub repositories that use the Go pipeline called a vulnerable symbol on its default branch, so the change turned none of them red.
+For govulncheck, removing the advisory flags was not enough. The script runs `govulncheck -json` so the report is machine-readable, and with `-json` govulncheck exits 0 whatever it finds: the job could only fail when the scan itself broke, so no Go pipeline ever failed on a vulnerability. The verdict now comes from the report. `global/scripts/languages/golang/govulncheck/run.sh` replays it through `govulncheck -mode convert`, which prints the findings into the log and exits 3 when the code calls a vulnerable symbol. A vulnerability only in a package the code imports, or a module it requires, is listed but does not fail the job, which is govulncheck's own default. The scan's stderr goes to the log, never into the report, so the report stays JSON `convert` can read. `make test ONLY=govulncheck-verdict` pins all of it, with `go` and `govulncheck` stubbed. When the fix was written, none of the 17 GitHub repositories that use the Go pipeline called a vulnerable symbol on its default branch, so the change turned none of them red.
 
-`make test-workflow-composition` (Test 16) holds the rule with two lists. It fails on a job that is
+`make test ONLY=workflow-composition` (Test 16) holds the rule with two lists. It fails on a job that is
 advisory without being listed, and on a listed job that no longer is:
 
 - **`ADVISORY`**: advisory on purpose, each entry with the reason its users read. Today that is

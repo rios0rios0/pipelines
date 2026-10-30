@@ -1068,7 +1068,7 @@ assert_true "flyio: GitLab template documents FLY_IMAGE and its registry credent
 
 # `go-flyio.yaml` deploys the delivered image unless the caller opts out (the
 # image's path from the delivery job to this deploy is held by
-# `make test-build-version`), and a run with no image to deploy fails rather than
+# `make test ONLY=build-version`), and a run with no image to deploy fails rather than
 # quietly building one: falling back to Fly's builder would ship an image this run
 # never pushed.
 assert_true "flyio: the reusable workflow declares the fly_build_from_source opt-out, off by default" \

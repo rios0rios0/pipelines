@@ -1,11 +1,11 @@
-# terra.mk -- Terra CLI pipeline targets (lint, test, coverage).
+# terra.mk -- Terra CLI pipeline targets (format, lint, test).
 #
 # Usage: Add the following to your project's Makefile:
 #   SCRIPTS_DIR ?= $(HOME)/Development/github.com/rios0rios0/pipelines
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #   -include $(SCRIPTS_DIR)/makefiles/terra.mk
 #
-# Targets provided: format, lint, test, test-terra-test, test-terratest, test-structural, test-validate, coverage, validate
+# Targets provided: format, lint, test
 # Also sets SEMGREP_LANGUAGE=terraform for the common.mk sast target, and adds
 # common.mk's `checkov` (IaC misconfiguration scanning) to that suite.
 # Note: CodeQL does not support Terraform; CODEQL_LANGUAGE is left unset.
@@ -20,7 +20,7 @@ SEMGREP_LANGUAGE ?= terraform
 SAST_TOOLS_EXTRA += checkov
 REPORT_PATH ?= build/reports
 
-.PHONY: format lint test test-terra-test test-terratest test-structural test-validate coverage validate
+.PHONY: format lint test
 
 format:
 	@echo "Formatting Terraform files with Terra..."
@@ -34,65 +34,21 @@ lint:
 	@tflint --chdir . --recursive
 	@echo "Lint check passed."
 
-# `test` delegates to the unified runner, which orchestrates both tiers
-# (`terra-test` over modules + `terratest` over `tests/terratest/`) behind a
-# single entry point. Emits per-tier artifacts plus a merged JUnit at
-# $(REPORT_PATH)/junit-terra-all.xml, a Cobertura breadth summary at
-# $(REPORT_PATH)/terra-coverage.xml and a SonarQube generic coverage report at
-# $(REPORT_PATH)/terra-coverage-generic.xml. Exits 0 cleanly when neither tier
-# has tests, so stack-only repos don't need a bespoke opt-out.
+# `test` runs every test tier through one script, `terraform/test-all/run.sh`:
+#   terra-test  `terraform test` over `modules/*/tests/*.tftest.hcl`
+#   terratest   the Go suite under `tests/terratest/`
+#   structural  the repository's own `tests/structural.sh`
+#   validate    `terraform validate` over the root modules under `VALIDATE_ROOTS` (default
+#               `stacks`), only with `ENABLE_VALIDATE=true`: unlike the other tiers it needs the
+#               network for providers and, for private module sources, credentials
+# `ONLY` runs some of them: `make test ONLY=structural`. A tier with nothing to run passes, so a
+# stack-only repository needs no opt-out. Reports land in $(REPORT_PATH): a merged JUnit at
+# junit-terra-all.xml, and the coverage of the terra-test tier as terra-coverage.{md,json,xml} and,
+# for SonarQube, terra-coverage-generic.xml.
 #
-# Set `TERRA_TEST_ROOTS` (space-separated, empty by default, e.g. `stacks`) to
-# also run the root modules' own `tests/*.tftest.hcl`: `make test
-# TERRA_TEST_ROOTS=stacks`. A root's run blocks must set `command = plan`, or
-# the file declare a `mock_provider`, since a run block otherwise APPLIES with
-# the root's real providers; a root whose tests would apply is refused and
-# fails the target. Applies to `test-terra-test` too.
+# Set `TERRA_TEST_ROOTS` (space-separated, empty by default, e.g. `stacks`) to also run the root
+# modules' own `tests/*.tftest.hcl`: `make test TERRA_TEST_ROOTS=stacks`. A root's run blocks must
+# set `command = plan`, or the file declare a `mock_provider`, since a run block otherwise APPLIES
+# with the root's real providers; a root whose tests would apply is refused and fails the target.
 test:
-	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/test-all/run.sh
-
-# `test-terra-test` and `test-terratest` still work as escape hatches for
-# operators who want to exercise one tier at a time (e.g., during debugging
-# of a misbehaving terratest suite without re-running the full `terraform
-# test` matrix). The default `test` target covers both tiers.
-test-terra-test:
-	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/terra-test/run.sh
-
-test-terratest:
-	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/terratest/run.sh
-
-# `test-structural` runs the consumer's `tests/structural.sh` (if any) and
-# emits `$(REPORT_PATH)/junit-structural.xml`. The script is consumer-owned
-# because repo conventions vary — the runner is just the glue. No-op when
-# `tests/structural.sh` is absent, so stack-only / convention-free repos
-# don't need a bespoke opt-out.
-test-structural:
-	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/structural/run.sh
-
-# `test-validate` runs `terraform validate` over every root module and emits
-# `$(REPORT_PATH)/junit-validate.xml`. It is the only tier that RESOLVES a
-# reference: the other three parse, and a parser cannot tell whether an
-# identifier exists. Deliberately not part of `test`, because unlike the other
-# tiers it needs the network (providers) and, for private module sources,
-# credentials -- so it stays an explicit opt-in rather than silently changing
-# what `make test` requires. Set `VALIDATE_ROOTS` to search somewhere other than
-# `stacks`. No-op when the roots are absent.
-test-validate:
-	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/validate/run.sh
-
-coverage:
-	@REPORT_PATH=$(REPORT_PATH) $(SCRIPTS_DIR)/global/scripts/languages/terraform/test-all/run.sh || true
-	@artifacts=""; \
-	for report in "$(REPORT_PATH)/terra-coverage.md" "$(REPORT_PATH)/terra-coverage.xml" "$(REPORT_PATH)/terra-coverage-generic.xml" "$(REPORT_PATH)/terra-coverage.json" "$(REPORT_PATH)/junit-terra-all.xml"; do \
-		if [ -f "$$report" ]; then \
-			artifacts="$$artifacts $$report"; \
-		fi; \
-	done; \
-	if [ -n "$$artifacts" ]; then \
-		echo "Coverage reports:$$artifacts"; \
-	else \
-		echo "Coverage reports: none generated"; \
-	fi
-
-validate: format lint test
-	@echo "All validations passed (format, lint, test)."
+	@REPORT_PATH=$(REPORT_PATH) TERRA_TEST_TIERS="$(ONLY)" $(SCRIPTS_DIR)/global/scripts/languages/terraform/test-all/run.sh

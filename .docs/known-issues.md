@@ -112,7 +112,7 @@ privately and fix them.
   the network, and checked by `run.sh` against the committed digest): a project with a planted
   finding fails the gate (exit 1) and a clean one passes it (exit 0), for Go, Python, JavaScript
   (TypeScript), Java with Gradle and with Maven, and C#, SDK-style and .NET Framework.
-  `make test-codeql-runtime` holds the templates to it.
+  `make test ONLY=codeql-runtime` holds the templates to it.
 - **Status:** Fixed in #775.
 
 ## KI-03 — The Go autobuild runs the default goal of a consumer Makefile
@@ -188,7 +188,7 @@ privately and fix them.
   - The abstracts' other jobs pass on them: the Maven `test:all` (tests, the JaCoCo summary,
     `mvn verify`), the Yarn `style:eslint`, `style:format`, `test:all`, `test:build` and
     `sca:yarn-audit` over a Yarn 4 project, and the Maven `sast:codeql`.
-  - Section 7 of `make test-codeql-runtime` fails on any GitLab CI image marked Debian 11, and keeps
+  - Section 7 of `make test ONLY=codeql-runtime` fails on any GitLab CI image marked Debian 11, and keeps
     the two jobs on an image where `apt-get` works.
 - **Status:** Fixed in #775.
 
@@ -253,7 +253,7 @@ privately and fix them.
   - Azure DevOps: the official 24.22.2 tarball, checked against `SHASUMS256.txt`, on Ubuntu 24.04
     as an unprivileged user, ran the abstract's `corepack enable` and `corepack prepare` (Yarn
     4.18.1), then the `quality:knip` install and knip, `yarn npm audit`, lint, tests and build.
-  - Section 8 of `make test-codeql-runtime` fails on any Node.js a template names that is past its
+  - Section 8 of `make test ONLY=codeql-runtime` fails on any Node.js a template names that is past its
     end of life, on an odd line, or on a line with no recorded date.
   - These runs used 24.22.2, the newest release when they were made. The pins name 24.22.1, whose
     image ships the same npm 11.19.1, Yarn 1.22.22 and corepack 0.36.0 on the same Debian 13.7, so

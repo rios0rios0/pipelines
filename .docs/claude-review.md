@@ -253,7 +253,7 @@ themselves instead of discovering the gap by denial.
   (`autoupdate_branch_prefix`) because `startsWith` takes one prefix and the expression language
   cannot iterate a list. Emptying that input reviews autoupdate pull requests; it must never be
   read without the accompanying `!= ''` check, since `startsWith(ref, '')` is true and would skip
-  every pull request in the repository. `make test-workflow-composition` (Test 14) evaluates the
+  every pull request in the repository. `make test ONLY=workflow-composition` (Test 14) evaluates the
   expression rather than matching it, against ten pull requests whose verdict is known.
 - Copilot's automatic code review has no equivalent filter — `copilot_code_review` takes only
   `review_draft_pull_requests` and `review_on_push`, and a ruleset's `ref_name` targets the base

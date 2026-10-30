@@ -138,7 +138,7 @@
 #   1. Change the *_VERSION value.
 #   2. Replace every *_SHA256_* value for that tool. Take them from the
 #      upstream checksum manifest; do not carry an old digest forward.
-#   3. Run `make test-supply-chain`, which re-asserts the shape of every entry.
+#   3. Run `make test ONLY=supply-chain`, which re-asserts the shape of every entry.
 #
 # `make check-dependency-updates` reports which of them currently have a newer
 # release without changing anything.
@@ -420,7 +420,7 @@ NETLIFY_CLI_SPEC="${NETLIFY_CLI_SPEC:-netlify-cli@27}"
 # the image itself is scanned against the one it replaces before it moves.
 # Reviewing a bump: a new scanner CLI can reword the messages that
 # `global/scripts/tools/sonarqube/run.sh` reads to tell a server that was away
-# from a broken analysis, which `make test-sonarqube` pins one shape at a time.
+# from a broken analysis, which `make test ONLY=sonarqube-auto-derive` pins one shape at a time.
 # Tags have disappeared before (`6.2.1`, which these pipelines once pulled, no
 # longer exists); should the pinned one go, its lookup fails, and with it the
 # whole scheduled run, until this pin is moved by hand.

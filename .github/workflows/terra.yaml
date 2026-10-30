@@ -460,11 +460,14 @@ jobs:
           terra install
         shell: 'bash'
 
+      # The two heavy tiers only: structural and validate run as jobs of their own beside this one.
       - name: 'Run Terraform tests (terra-test + terratest)'
         run: |
           export SCRIPTS_DIR="$GITHUB_WORKSPACE/.pipelines"
           "$SCRIPTS_DIR/global/scripts/languages/terraform/test-all/run.sh"
         shell: 'bash'
+        env:
+          TERRA_TEST_TIERS: 'terra-test terratest'
 
       - name: 'Publish test results'
         if: 'always()'

@@ -9,8 +9,8 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 **Essential Commands:**
 - `make test` - Run every validation suite; the prerequisites of the root `Makefile`'s `test` target are the authoritative list
 - `make test-<suite>` - Run one suite; each target runs one script in `.github/tests/` (`AGENTS.md` lists every target with what it covers)
-- `make test-go-helpers` - Run the Go helpers' unit tests (`go test ./...` over the root module; offline)
-- `make lint-go-helpers` - Lint the Go helpers with the shared golden golangci-lint configuration (downloads the pinned golangci-lint)
+- `make test ONLY=go-helpers` - Run the Go helpers' unit tests (`go test ./...` over the root module; offline)
+- `make lint` - Lint the Go helpers with the shared golden golangci-lint configuration (downloads the pinned golangci-lint)
 - `make check-dependency-updates` - Report which pinned dependencies have a newer release (hits the network)
 - `make apply-dependency-updates` - Rewrite every stale pin in the working tree, digests and inline copies included -- what the scheduled pull request carries (hits the network; commits nothing)
 - `bash global/scripts/shared/cleanup.sh` - Clean up build reports
@@ -28,7 +28,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 
 ## Supply-Chain Pinning (non-negotiable)
 
-Everything the pipelines execute is pinned, and `make test-supply-chain` fails the build if it is not:
+Everything the pipelines execute is pinned, and `make test ONLY=supply-chain` fails the build if it is not:
 
 - **GitHub Actions** — full 40-character commit SHA plus a trailing `# vX.Y.Z` comment. Never a bare tag.
   First-party references are the exception, in two forms that `test-workflow-composition.sh` (Test 7)
@@ -43,14 +43,14 @@ Everything the pipelines execute is pinned, and `make test-supply-chain` fails t
   `npx --yes pkg@<version>`. Never `@latest` and never a bare package name.
 
 To bump a tool: change its `*_PINNED_VERSION`, replace every `*_SHA256_*` from the upstream checksum
-manifest (never carry an old digest forward), and run `make test-supply-chain`. The scheduled
+manifest (never carry an old digest forward), and run `make test ONLY=supply-chain`. The scheduled
 `dependency-updates.yaml` workflow does exactly this twice a week and opens a pull request with the
 result; it merges nothing.
 
 Every pin carries a `# upstream: <kind> <coordinate>` annotation naming where its releases come from,
 and every `*_SHA256*` an `# asset: <url with {version}>` annotation naming the file it is of (plus a
 `# checksums:` manifest where the publisher ships one). Adding a pin or digest without its annotation
-FAILS `make test-dependency-updates` — that is deliberate, because coverage otherwise shrinks one
+FAILS `make test ONLY=dependency-updates` — that is deliberate, because coverage otherwise shrinks one
 forgotten annotation at a time while the job stays green, and a digest with no `# asset:` could never
 be bumped. Write the `# asset:` URL exactly as the installer composes its download, then run
 `./global/scripts/tools/dependency-updates/run.sh --verify-assets`: the automated bump refuses a pin
@@ -118,7 +118,7 @@ connection refused.
   ```
 
 ### Scripts That Require Environment Variables
-- **codeql/run.sh** - Requires language argument (e.g., go, python, java, javascript, csharp). For `go`, the `go` on PATH must be at least the module's `go` directive, because the autobuilder builds the module with it: the GitLab CI Go stage runs `sast:codeql` in the `.go` image, and the Azure DevOps Go stage passes the pinned `GoTool@0` through the CodeQL template's `PRE_STEPS`. The pinned bundle's extractor must read that directive too (every bundle from `codeql-bundle-v2.26.4` reads `go 1.27`); `make test-go-module-toolchain` holds both. `CODEQL_BUILD_MODE` (`none` or `autobuild`; unset by default, which keeps the CLI's autobuild) is passed to `database create` as `--build-mode`; GitLab CI's C# job sets `none`, because its .NET templates build .NET Framework projects that the Linux autobuilder cannot. Every language's GitLab CI `sast:codeql` runs in a glibc image with what its extractor needs, and every Azure DevOps language stage passes its toolchain through `PRE_STEPS`: see AGENTS.md, "Every Language's CodeQL Has What Its Extractor Needs", held by `make test-codeql-runtime`
+- **codeql/run.sh** - Requires language argument (e.g., go, python, java, javascript, csharp). For `go`, the `go` on PATH must be at least the module's `go` directive, because the autobuilder builds the module with it: the GitLab CI Go stage runs `sast:codeql` in the `.go` image, and the Azure DevOps Go stage passes the pinned `GoTool@0` through the CodeQL template's `PRE_STEPS`. The pinned bundle's extractor must read that directive too (every bundle from `codeql-bundle-v2.26.4` reads `go 1.27`); `make test ONLY=go-module-toolchain` holds both. `CODEQL_BUILD_MODE` (`none` or `autobuild`; unset by default, which keeps the CLI's autobuild) is passed to `database create` as `--build-mode`; GitLab CI's C# job sets `none`, because its .NET templates build .NET Framework projects that the Linux autobuilder cannot. Every language's GitLab CI `sast:codeql` runs in a glibc image with what its extractor needs, and every Azure DevOps language stage passes its toolchain through `PRE_STEPS`: see AGENTS.md, "Every Language's CodeQL Has What Its Extractor Needs", held by `make test ONLY=codeql-runtime`
 - **hadolint/run.sh** - Auto-discovers Dockerfiles (`Dockerfile`, `Dockerfile.*`, `*.Dockerfile`, `*.dockerfile`), skips gracefully if none found
 - **dependency-track/run.sh** - Requires `DEPENDENCY_TRACK_TOKEN` and `DEPENDENCY_TRACK_HOST_URL`; retries an upload the server answered with no response, `408`, `429` or `5xx`, waiting longer each time (`DEPENDENCY_TRACK_ATTEMPTS`, default 5; `DEPENDENCY_TRACK_RETRY_DELAY`, default 30 seconds), and fails at once on any other answer
 - **sonarqube/run.sh** - Requires `sonar-scanner` installed and SonarQube environment; derives project key/name and the `githubactions:S7637` ignore rules for first-party workflow references (owners from `SONAR_FIRST_PARTY_OWNERS`, else the owner of `GITHUB_REPOSITORY`) for every key absent from `sonar-project.properties`, plus the test classification (`sonar.sources`, `sonar.tests`, `sonar.test.inclusions`, `sonar.exclusions`) as one unit, only when the file declares none of the four -- they are a partition, and an overlap aborts the scanner with "can't be indexed twice"; runs `sonar-scanner` again when its output shows the server was unreachable or answered 5xx, never after a quality gate verdict (`SONARQUBE_ATTEMPTS`, default 5; `SONARQUBE_RETRY_DELAY`, default 30 seconds, growing per attempt)
@@ -220,7 +220,7 @@ The Terra CLI pipeline test stage exposes parallel jobs on every platform (Azure
 | **var-catalog**          | Generates `stacks/<stack>/variables-shared.tf` from one canonical body per shared `variable` in a per-repo `.terraform-var-catalog.hcl`; output is committed (not a Terragrunt `generate` block) and hand-written declarations are never overwritten. `--check` is the CI gate | `global/scripts/languages/terraform/var-catalog/run.sh`  |
 | **Terraform CycloneDX**  | SBOM generation for Terraform projects             | `global/scripts/languages/terraform/cyclonedx/run.sh`   |
 
-`order-check`, `tftest-gen`, `var-catalog` and the terra-test tier's generic coverage report (`terra-test/coverage/`) are standard-library-only Go helpers, built from the pipelines checkout on every run through `global/scripts/shared/go-helper.sh`: they need Go 1.25 or newer, the `go` directive of the root `go.mod`, and nothing else. Every template that runs one provisions that Go (`make test-go-module-toolchain` holds it per job), `test:structural` included, since a consumer's `tests/structural.sh` is where `var-catalog --check` runs; running one locally -- `run.sh --fix`, `make test-gen` -- needs Go on `PATH`.
+`order-check`, `tftest-gen`, `var-catalog` and the terra-test tier's generic coverage report (`terra-test/coverage/`) are standard-library-only Go helpers, built from the pipelines checkout on every run through `global/scripts/shared/go-helper.sh`: they need Go 1.25 or newer, the `go` directive of the root `go.mod`, and nothing else. Every template that runs one provisions that Go (`make test ONLY=go-module-toolchain` holds it per job), `test:structural` included, since a consumer's `tests/structural.sh` is where `var-catalog --check` runs; running one locally -- `run.sh --fix`, the `tftest-gen` generator -- needs Go on `PATH`.
 
 ### Container Images
 
@@ -365,12 +365,12 @@ Two rules govern this family and must not be relaxed:
   uses `curl --config -` (stdin). Argv is readable via `ps` on shared runners AND the resolved
   command line is recorded into `command.txt`, which is published as a job artifact.
 - **`DEPLOY_DRY_RUN=true` must stay hermetic** — no CLI install, no network. That is what lets
-  `make test-deploy-providers` exercise all five offline.
+  `make test ONLY=deploy-providers` exercise all five offline.
 
 On GitHub Actions each provider also gets a **composed workflow**, `<toolchain>-<provider>.yaml`,
 so a consumer calls one `uses:` and writes no deployment job at all — `go-render.yaml`,
 `dart-cloudflare.yaml`, `yarn-cloudflare.yaml`, `npm-cloudflare.yaml`. See the next section for the
-rules those files follow; `make test-workflow-composition` enforces them.
+rules those files follow; `make test ONLY=workflow-composition` enforces them.
 
 ### Workflow Composition Standard
 
@@ -782,7 +782,7 @@ way.
 ### Test Suite Usage
 ```bash
 make test                       # every suite (the Makefile's `test` prerequisites)
-make test-workflow-composition  # one suite, e.g. before touching .github/workflows/
+make test ONLY=workflow-composition  # one suite, e.g. before touching .github/workflows/
 ```
 
 Test scripts are located in `.github/tests/`; the Quick Reference above covers the target families.
@@ -796,7 +796,7 @@ Test scripts are located in `.github/tests/`; the Quick Reference above covers t
 ### Environment Requirements
 - Docker (for container builds; the security tools install natively)
 - Go 1.25+ (for GoLang pipelines, to build and test the Go helpers such as the dependency-update checker, and to build the test support several suites in `.github/tests/` run)
-- Python 3 only for the Python pipelines and the Semgrep and Checkov installs: nothing else here runs Python, and `make test-no-python` keeps it so
+- Python 3 only for the Python pipelines and the Semgrep and Checkov installs: nothing else here runs Python, and `make test ONLY=no-python` keeps it so
 - Make (for build automation)
 - Network access (for downloading tools and dependencies)
 

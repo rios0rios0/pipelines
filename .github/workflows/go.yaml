@@ -182,7 +182,7 @@ jobs:
   # nothing: a consumer's lint stayed red on its default branch for about seven hours, every run
   # green, while a golangci-lint built with an older Go than the code's could not load the
   # standard library and no linter ran at all. A refused report upload is the only failure a
-  # check tolerates, at the upload step itself. `make test-workflow-composition` (Test 16) holds it.
+  # check tolerates, at the upload step itself. `make test ONLY=workflow-composition` (Test 16) holds it.
   code_check-style_golangci_lint:
     name: 'code-check > style:golangci-lint'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
@@ -220,7 +220,7 @@ jobs:
   # Those can be skipped -- `basic-checks` runs only on a pull request, the optional ones only when
   # asked for -- and GitHub skips every job downstream of a skipped one unless its `if:` calls a
   # status function, so every job from here on gates on `!cancelled() && !failure()` rather than
-  # on the implicit `success()`. `make test-workflow-composition` (Test 18) holds both halves.
+  # on the implicit `success()`. `make test ONLY=workflow-composition` (Test 18) holds both halves.
   security-sast_codeql:
     name: 'security > sast:codeql'
     # Its own selector, falling back to the pipeline's: see `codeql_runs_on`. An empty string is

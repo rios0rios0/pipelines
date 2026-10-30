@@ -5,7 +5,7 @@
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #   -include $(SCRIPTS_DIR)/makefiles/dart.mk
 #
-# Targets provided: lint, analyze, test, unused, sca, build, setup-dart
+# Targets provided: lint, format, test, sca, build, setup-dart
 #
 # CODEQL_LANGUAGE IS DELIBERATELY NOT SET, and `common.mk`'s `sast` target is
 # narrowed below because of it. CodeQL has no Dart extractor at all
@@ -25,7 +25,7 @@ SEMGREP_LANGUAGE ?= dart
 export PREFIX ?= .
 export REPORT_PATH ?= ./reports
 
-.PHONY: setup-dart lint format analyze test unused sca build
+.PHONY: setup-dart lint format test sca build
 
 setup-dart:
 	@$(SCRIPTS_DIR)/global/scripts/languages/dart/setup/run.sh
@@ -41,14 +41,8 @@ lint:
 format:
 	@$(SCRIPTS_DIR)/global/scripts/languages/dart/format/run.sh --fix
 
-analyze:
-	@$(SCRIPTS_DIR)/global/scripts/languages/dart/analyze/run.sh
-
 test:
 	@$(SCRIPTS_DIR)/global/scripts/languages/dart/test/run.sh
-
-unused:
-	-@$(SCRIPTS_DIR)/global/scripts/languages/dart/unused/run.sh
 
 sca:
 	@$(SCRIPTS_DIR)/global/scripts/languages/dart/sca/run.sh

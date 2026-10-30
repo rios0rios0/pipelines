@@ -304,7 +304,7 @@ Azure DevOps templates; a subfolder project expresses the path there
 (`build_command: 'cd app && npm ci && npm run build'`, `output_directory: 'app/dist'`) until that
 contract is changed on its own.
 
-`make test-working-directory` fails if any of the above regresses.
+`make test ONLY=working-directory` fails if any of the above regresses.
 
 #### CodeQL on Its Own Runners (`codeql_runs_on`)
 
@@ -339,7 +339,7 @@ labels exists, or the job queues until GitHub times it out.
 `yarn-library.yaml` and `yarn-cloudflare.yaml`.
 
 It is GitHub Actions only, as `runs_on` is: the GitLab CI and Azure DevOps CodeQL jobs take no
-runner selector of their own. `make test-workflow-composition` fails if a composed workflow stops
+runner selector of their own. `make test ONLY=workflow-composition` fails if a composed workflow stops
 forwarding it, or if the CodeQL job's fallback can no longer reach `runs_on`.
 
 #### Stages Run One After Another
@@ -362,7 +362,7 @@ OS/arch targets in parallel processes, as many at once as the runner has CPUs. I
 matrix of six jobs, one per target, each spending more on checkout, Go and the module download
 than on its seconds of `go vet`.
 
-`make test-workflow-composition` (Test 18) fails on a job that can start before the stage it
+`make test ONLY=workflow-composition` (Test 18) fails on a job that can start before the stage it
 follows has finished, and on one behind a skippable check that keeps the implicit `success()`.
 
 #### One More Test Run in the Tests Stage (`extra_test_command`)
@@ -410,7 +410,7 @@ Before, the GitHub job passed whatever CodeQL found: `github/codeql-action/analy
 the analysis does, and GitHub acts on findings through code scanning -- so with `codeql_upload:
 'never'`, or an upload code scanning refused, nothing read the report at all. GitHub consumers
 can now see findings fail a job that used to pass; `make codeql` reports the same ones locally.
-`make test-codeql-gate` holds the contract.
+`make test ONLY=codeql-gate` holds the contract.
 
 On a pull request the job judges only the change. `github/codeql-action` analyses a pull request
 diff-informed, so a dataflow query such as `actions/code-injection` reports only the findings in
@@ -506,7 +506,7 @@ both builds resolve it through `global/scripts/shared/build-version.sh`, so a de
 release wherever it was built. Empty, the default, passes nothing, because the name is the project's to choose: a
 project may already use `ARG VERSION` for something else. A malformed name fails the job before
 anything is built, and a Dockerfile that declares no such `ARG` gets a warning.
-`make test-build-version` covers it.
+`make test ONLY=build-version` covers it.
 
 #### Usage Example (Claude Review and Claude Mention)
 
@@ -555,7 +555,7 @@ tool surface they actually have, name the toolchains they exclude (`go`, `node`,
 build step is planned, a denied command is not retried or mentioned, and no verification caveat is
 written. The review adds the rule that makes it consistent — a finding that could only be
 established by running something is dropped with its score rather than posted with a disclaimer.
-`make test-workflow-composition` keeps each prompt in step with the tools its job grants.
+`make test ONLY=workflow-composition` keeps each prompt in step with the tools its job grants.
 
 **The review skips the pull requests automation opens.** A `chore/bump-*` or `bump/*` release
 pull request moves a version number and folds the pending changelog fragments into
@@ -1075,7 +1075,7 @@ A `.checkov.yaml` at the repository root is passed as Checkov's configuration. I
 
 #### Terra Test Stage
 
-Every Terra pipeline (Azure DevOps, GitLab CI, GitHub Actions) exposes a single unified `test:all` job that delegates to `global/scripts/languages/terraform/test-all/run.sh`. The runner orchestrates two tiers:
+Every Terra pipeline (Azure DevOps, GitLab CI, GitHub Actions) exposes a single unified `test:all` job that delegates to `global/scripts/languages/terraform/test-all/run.sh`, narrowed there to its two heavy tiers (`TERRA_TEST_TIERS: 'terra-test terratest'`) because the structural and validate tiers run as jobs of their own beside it. Locally, `make test` (`terra.mk`) runs every tier through the same script -- the two below, `tests/structural.sh`, and `terraform validate` with `ENABLE_VALIDATE=true` -- and `make test ONLY=structural` runs one. The two heavy tiers:
 
 | Tier         | Inputs                           | Tooling                             | Outputs (under `build/reports/`)                    |
 |--------------|----------------------------------|-------------------------------------|-----------------------------------------------------|
@@ -1148,7 +1148,7 @@ It is **opt-in** rather than on by default, because unlike its siblings it needs
 | GitLab CI      | `ENABLE_VALIDATE: "true"` (variable) | `VALIDATE_ROOTS` (variable)   | `VALIDATE_PRE_SCRIPT`           |
 | GitHub Actions | `enable_validate: true` (input)      | `validate_roots` (input)      | `pre_script`                    |
 
-Locally: `make test-validate`. Vendored copies under `.terraform/` are excluded, and the runner no-ops with a valid empty report when the roots are absent.
+Locally: `ENABLE_VALIDATE=true make test`, or `make test ONLY=validate` for this tier alone. Vendored copies under `.terraform/` are excluded, and the runner no-ops with a valid empty report when the roots are absent.
 
 ##### Coverage to SonarQube (`DOWNLOAD_COVERAGE_ARTIFACT`, opt-in, Azure DevOps only)
 
@@ -1357,7 +1357,7 @@ Create these variable groups in Azure DevOps Library:
 
 Every credential above may be stored as a **secret** variable. Azure Pipelines
 withholds secret variables from a step's process environment, so each template
-that consumes one maps it explicitly through `env:` -- `make test-azure-secret-env`
+that consumes one maps it explicitly through `env:` -- `make test ONLY=azure-secret-env`
 holds that contract across the repository.
 
 **AWS Lambda Deployment Variables (Optional):**
@@ -1378,8 +1378,8 @@ Third-party GitHub actions and container images are content-pinned, direct tool
 installs declare an exact version, and standalone binary downloads are verified
 against committed checksums. First-party GitHub actions declare whether they
 intentionally follow `@main` or must follow the exact running workflow commit
-through `$/path/to/action`. `make test-supply-chain` and
-`make test-workflow-composition` enforce these guarantees and that distinction.
+through `$/path/to/action`. `make test ONLY=supply-chain` and
+`make test ONLY=workflow-composition` enforce these guarantees and that distinction.
 
 | What | Pinned to | Where |
 |------|-----------|-------|
@@ -1645,7 +1645,7 @@ deliberately:
 1. Change the `*_PINNED_VERSION` value in `global/scripts/shared/pinned-versions.sh`.
 2. Replace every `*_SHA256_*` for that tool, taken from the upstream checksum
    manifest. Never carry an old digest forward.
-3. Run `make test-supply-chain`, and `./global/scripts/tools/dependency-updates/run.sh --verify-assets`
+3. Run `make test ONLY=supply-chain`, and `./global/scripts/tools/dependency-updates/run.sh --verify-assets`
    if you touched an `# asset:` or `# checksums:` annotation. The pull request is then held to the
    same verification as the scheduled one (see above), so a version with a known vulnerability, or
    one younger than the cooldown, fails it.
@@ -1853,7 +1853,7 @@ The Python CycloneDX generator keeps the static `[project].version` read from
 When CycloneDX has no root version, it resolves a dynamic version with
 `pdm show --version`. Failed or empty version resolution stops the report with
 an explicit error; PDM's original diagnostic remains visible. Validate this
-contract locally with `make test-python-cyclonedx`.
+contract locally with `make test ONLY=python-cyclonedx`.
 
 The uploader is driven entirely by environment variables. Only the first two are required.
 
@@ -2047,7 +2047,7 @@ since that is where every lint lands).
 | **terra-test**   | `terraform test` runner over module test suites      | `global/scripts/languages/terraform/terra-test/`      |
 | **validate**     | `terraform validate` over root modules (opt-in)      | `global/scripts/languages/terraform/validate/`        |
 
-`order-check`, `tftest-gen`, `var-catalog` and the terra-test tier's generic coverage report (`terra-test/coverage/`) are standard-library-only Go helpers, built from the pipelines checkout on every run through `global/scripts/shared/go-helper.sh`: they need Go 1.25 or newer, the `go` directive of the root `go.mod`, and nothing else. Every template that runs one provisions that Go (`make test-go-module-toolchain` holds it per job), `test:structural` included, since a consumer's `tests/structural.sh` is where `var-catalog --check` runs; running one locally -- `run.sh --fix`, `make test-gen` -- needs Go on `PATH`.
+`order-check`, `tftest-gen`, `var-catalog` and the terra-test tier's generic coverage report (`terra-test/coverage/`) are standard-library-only Go helpers, built from the pipelines checkout on every run through `global/scripts/shared/go-helper.sh`: they need Go 1.25 or newer, the `go` directive of the root `go.mod`, and nothing else. Every template that runs one provisions that Go (`make test ONLY=go-module-toolchain` holds it per job), `test:structural` included, since a consumer's `tests/structural.sh` is where `var-catalog --check` runs; running one locally -- `run.sh --fix`, the `tftest-gen` generator -- needs Go on `PATH`.
 
 #### MVP Hosting Providers
 
@@ -2320,7 +2320,7 @@ an API key the script polls the deploy to a terminal state, and the job's status
 
 Set `DEPLOY_ENVIRONMENT` to anything other than `production` to get a preview/draft deploy where the
 provider supports one. Set `DEPLOY_DRY_RUN=true` to resolve and record the deploy command without
-performing it — this is how `make test-deploy-providers` exercises all five offline.
+performing it — this is how `make test ONLY=deploy-providers` exercises all five offline.
 
 ## Container Images
 

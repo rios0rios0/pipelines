@@ -33,6 +33,9 @@ set -e
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RUN_SH="$SCRIPTS_DIR/global/scripts/languages/terraform/terra-test/run.sh"
 TEST_ALL_SH="$SCRIPTS_DIR/global/scripts/languages/terraform/test-all/run.sh"
+# The tier-1 cases run test-all as CI's `test:all` job does: the two heavy tiers, since structural and
+# validate have jobs of their own there. The suite's last section covers what `make test` adds.
+CI_TIERS="TERRA_TEST_TIERS=terra-test terratest"
 TEST_DIR="$(mktemp -d)" || exit 1
 TEST_HOME="$TEST_DIR/home"
 mkdir -p "$TEST_HOME"
@@ -293,7 +296,7 @@ echo "== test-all detects a repository whose only tests are under the roots =="
 ALL_REPO="$TEST_DIR/all"
 make_config "$ALL_REPO/stacks/app" all_root pass
 ALL_RC=0
-ALL_OUT="$(run_tier "$ALL_REPO" "$TEST_ALL_SH" TERRA_TEST_ROOTS=stacks 2>&1)" || ALL_RC=$?
+ALL_OUT="$(run_tier "$ALL_REPO" "$TEST_ALL_SH" TERRA_TEST_ROOTS=stacks "$CI_TIERS" 2>&1)" || ALL_RC=$?
 ALL_MERGED="$ALL_REPO/build/reports/junit-terra-all.xml"
 assert_true "exits 0" "[ $ALL_RC -eq 0 ]"
 assert_true "runs tier 1" '[[ "$ALL_OUT" == *"=== Tier 1: terraform test (terra-test) ==="* ]]'
@@ -304,7 +307,7 @@ assert_true "the merged JUnit is well-formed XML" \
 
 ALL_UNSET_RC=0
 rm -rf "$ALL_REPO/build"
-ALL_UNSET_OUT="$(run_tier "$ALL_REPO" "$TEST_ALL_SH" 2>&1)" || ALL_UNSET_RC=$?
+ALL_UNSET_OUT="$(run_tier "$ALL_REPO" "$TEST_ALL_SH" "$CI_TIERS" 2>&1)" || ALL_UNSET_RC=$?
 assert_true "unset, the same repository still has no tests" \
   '[ $ALL_UNSET_RC -eq 0 ] && [[ "$ALL_UNSET_OUT" == *"No Terraform tests detected"* ]]'
 assert_true "and still emits the empty JUnit" "grep -q '<testsuites name=\"terra-all\"/>' '$ALL_MERGED'"
@@ -312,7 +315,7 @@ assert_true "and still emits the empty JUnit" "grep -q '<testsuites name=\"terra
 ALL_FAIL_REPO="$TEST_DIR/all-fail"
 make_config "$ALL_FAIL_REPO/stacks/app" all_fail_root fail
 ALL_FAIL_RC=0
-ALL_FAIL_OUT="$(run_tier "$ALL_FAIL_REPO" "$TEST_ALL_SH" TERRA_TEST_ROOTS=stacks 2>&1)" || ALL_FAIL_RC=$?
+ALL_FAIL_OUT="$(run_tier "$ALL_FAIL_REPO" "$TEST_ALL_SH" TERRA_TEST_ROOTS=stacks "$CI_TIERS" 2>&1)" || ALL_FAIL_RC=$?
 assert_true "a failing root fails test-all" "[ $ALL_FAIL_RC -ne 0 ]"
 assert_true "and is blamed on tier 1" '[[ "$ALL_FAIL_OUT" == *"tier 1 (terra-test)   : exit=1 (ran=1)"* ]]'
 
@@ -335,7 +338,7 @@ assert_true "vendored copies are not roots" \
 SELECT_ALL_REPO="$TEST_DIR/select-all"
 make_stray_test "$SELECT_ALL_REPO/stacks/e2e-only/tests/e2e/apply.tftest.hcl"
 SELECT_ALL_RC=0
-SELECT_ALL_OUT="$(run_tier "$SELECT_ALL_REPO" "$TEST_ALL_SH" TERRA_TEST_ROOTS=stacks 2>&1)" || SELECT_ALL_RC=$?
+SELECT_ALL_OUT="$(run_tier "$SELECT_ALL_REPO" "$TEST_ALL_SH" TERRA_TEST_ROOTS=stacks "$CI_TIERS" 2>&1)" || SELECT_ALL_RC=$?
 assert_true "test-all agrees: tests/e2e/ alone is nothing to run" \
   '[ $SELECT_ALL_RC -eq 0 ] && [[ "$SELECT_ALL_OUT" == *"No Terraform tests detected"* ]]'
 
@@ -652,7 +655,7 @@ EOF
 
 # when
 ALL_REFUSE_RC=0
-ALL_REFUSE_OUT="$(run_tier "$ALL_REFUSE_REPO" "$TEST_ALL_SH" TERRA_TEST_ROOTS=stacks 2>&1)" || ALL_REFUSE_RC=$?
+ALL_REFUSE_OUT="$(run_tier "$ALL_REFUSE_REPO" "$TEST_ALL_SH" TERRA_TEST_ROOTS=stacks "$CI_TIERS" 2>&1)" || ALL_REFUSE_RC=$?
 ALL_REFUSE_MERGED="$ALL_REFUSE_REPO/build/reports/junit-terra-all.xml"
 
 # then
@@ -662,6 +665,49 @@ assert_true "the merged JUnit carries the refusal" "grep -q '<failure' '$ALL_REF
 assert_true "the merged JUnit is well-formed XML" \
   "'$REPORTS' well-formed '$ALL_REFUSE_MERGED'"
 assert_true "and nothing was applied" "[ ! -f '$ALL_REFUSE_REPO/stacks/app/applied.marker' ]"
+
+echo ""
+echo "--- test-all runs every tier, and TERRA_TEST_TIERS picks some ---"
+# `make test` (terra.mk) is one target running this one script, so a local run must reach every
+# tier -- the repository's own tests/structural.sh included -- while CI's `test:all` job, which
+# pins `terra-test terratest` because structural and validate have jobs of their own there, must
+# behave exactly as before. A structural script that records its run tells the two apart.
+# given
+TIERS_REPO="$TEST_DIR/tiers"
+mkdir -p "$TIERS_REPO/tests" || exit 1
+printf '#!/usr/bin/env bash\ntouch structural.ran\n' > "$TIERS_REPO/tests/structural.sh"
+chmod +x "$TIERS_REPO/tests/structural.sh"
+
+# when -- no tier list: what `make test` runs
+TIERS_DEFAULT_RC=0
+TIERS_DEFAULT_OUT="$(run_tier "$TIERS_REPO" "$TEST_ALL_SH" 2>&1)" || TIERS_DEFAULT_RC=$?
+
+# then
+assert_true "the default run passes" "[ $TIERS_DEFAULT_RC -eq 0 ]"
+assert_true "and runs the structural tier" "[ -f '$TIERS_REPO/structural.ran' ]"
+assert_true "and reports it" '[[ "$TIERS_DEFAULT_OUT" == *"tier 3 (structural)   : exit=0"* ]]'
+assert_true "but not validate, which needs ENABLE_VALIDATE=true" '[[ "$TIERS_DEFAULT_OUT" != *"Tier 4"* ]]'
+
+# when -- the tier list CI's `test:all` job pins
+rm -f "$TIERS_REPO/structural.ran"
+TIERS_CI_RC=0
+TIERS_CI_OUT="$(run_tier "$TIERS_REPO" "$TEST_ALL_SH" TERRA_TEST_TIERS='terra-test terratest' 2>&1)" || TIERS_CI_RC=$?
+
+# then
+assert_true "the pinned run passes" "[ $TIERS_CI_RC -eq 0 ]"
+assert_true "and leaves structural to its own job" "[ ! -f '$TIERS_REPO/structural.ran' ]"
+assert_true "and keeps the message CI always printed" '[[ "$TIERS_CI_OUT" == *"Emitting an empty JUnit"* ]]'
+
+# when -- a failing tier, and a tier that does not exist
+printf '#!/usr/bin/env bash\nexit 3\n' > "$TIERS_REPO/tests/structural.sh"
+TIERS_FAIL_RC=0
+run_tier "$TIERS_REPO" "$TEST_ALL_SH" TERRA_TEST_TIERS='structural' > /dev/null 2>&1 || TIERS_FAIL_RC=$?
+TIERS_UNKNOWN_RC=0
+run_tier "$TIERS_REPO" "$TEST_ALL_SH" TERRA_TEST_TIERS='nope' > /dev/null 2>&1 || TIERS_UNKNOWN_RC=$?
+
+# then
+assert_true "a failing tier fails the run with its own code" "[ $TIERS_FAIL_RC -eq 3 ]"
+assert_true "an unknown tier is refused" "[ $TIERS_UNKNOWN_RC -eq 2 ]"
 
 echo ""
 echo "Passed: $TESTS_PASSED, Failed: $TESTS_FAILED"

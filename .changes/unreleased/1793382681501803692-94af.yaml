@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added the `integration_timeout` input to `go.yaml`, `go-docker.yaml`, `go-flyio.yaml` and `go-render.yaml`, which the Go test action hands to `run.sh` as `GO_TEST_INTEGRATION_TIMEOUT`: that limit is `go test -timeout` for each integration test binary, and a GitHub consumer could not raise it, because a reusable workflow receives no `env:` from its caller, so a flow-suite package that had grown to 22-28 minutes failed a release with `panic: test timed out after 30m0s` on a busy runner with nothing hung. The default stays `30m`'
+time: '2026-10-30T17:51:21.501703967Z'

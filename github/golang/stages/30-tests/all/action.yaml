@@ -27,6 +27,16 @@ inputs:
       `secrets` cross that boundary, so an `env:` at the call site would silently never arrive.
     required: false
     default: '1'
+  integration_timeout:
+    description: |
+      `go test`'s `-timeout` for the integration phase, as a Go duration (`45m`, `1h`); `0` removes
+      the limit. It bounds EACH test binary, not the phase, so the package whose suites drive a
+      real database through hundreds of flows is the one that reaches it, and it should sit well
+      above that package's normal run. The runner reads it as `GO_TEST_INTEGRATION_TIMEOUT`, and
+      an empty value keeps the runner's own default; an input for the same reason as
+      `integration_parallel` above.
+    required: false
+    default: '30m'
 
 runs:
   using: 'composite'
@@ -121,6 +131,7 @@ runs:
       shell: 'bash'
       env:
         GO_TEST_INTEGRATION_PARALLEL: "${{ inputs.integration_parallel }}"
+        GO_TEST_INTEGRATION_TIMEOUT: "${{ inputs.integration_timeout }}"
 
     # The test runner prints coverage but never fails on it, so without this the number can
     # drift down one merge at a time and nothing notices.

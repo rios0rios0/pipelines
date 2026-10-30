@@ -104,6 +104,18 @@ on:
           the phase serial, which is what a suite sharing one fixture requires. Raise it only when
           the fixtures allocate per-instance resources -- an embedded database on an OS-assigned
           port rather than a fixed one.
+      integration_timeout:
+        type: 'string'
+        required: false
+        default: '30m'
+        description: |
+          `go test`'s `-timeout` for the integration phase, as a Go duration (`45m`, `1h`). It is the
+          limit on EACH test binary, not on the phase, so one package that drives a real database
+          through hundreds of flows can outgrow it while every other package finishes in seconds,
+          and then fails as `panic: test timed out after 30m0s` on the first busy runner with
+          nothing hung. Set it well above that package's normal run: it exists to stop a hang and to
+          print the goroutine dump that tells one from a slow run. `0` disables the limit, which
+          leaves only the job's own timeout to stop a hung test.
       openapi_sync_path:
         type: 'string'
         required: false
@@ -248,6 +260,7 @@ jobs:
           database_url_env: "${{ inputs.database_url_env }}"
           coverage_threshold: "${{ inputs.coverage_threshold }}"
           integration_parallel: "${{ inputs.integration_parallel }}"
+          integration_timeout: "${{ inputs.integration_timeout }}"
 
       - name: 'Test Results'
         if: "always() && hashFiles('junit.xml') != ''"

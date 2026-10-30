@@ -4,8 +4,8 @@
         <img src="https://img.shields.io/github/release/rios0rios0/pipelines.svg?style=for-the-badge&logo=github" alt="Latest Release"/></a>
     <a href="https://github.com/rios0rios0/pipelines/blob/main/LICENSE">
         <img src="https://img.shields.io/github/license/rios0rios0/pipelines.svg?style=for-the-badge&logo=github" alt="License"/></a>
-    <a href="https://github.com/rios0rios0/pipelines/actions/workflows/ci.yaml">
-        <img src="https://img.shields.io/github/actions/workflow/status/rios0rios0/pipelines/ci.yaml?branch=main&style=for-the-badge&logo=github" alt="Build Status"/></a>
+    <a href="https://github.com/rios0rios0/pipelines/actions/workflows/default.yaml">
+        <img src="https://img.shields.io/github/actions/workflow/status/rios0rios0/pipelines/default.yaml?branch=main&style=for-the-badge&logo=github" alt="Build Status"/></a>
     <a href="https://sonarcloud.io/summary/overall?id=rios0rios0_pipelines">
         <img src="https://img.shields.io/sonar/coverage/rios0rios0_pipelines?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge&logo=sonarqubecloud" alt="Coverage"/></a>
     <a href="https://sonarcloud.io/summary/overall?id=rios0rios0_pipelines">
@@ -215,6 +215,7 @@ GitHub Actions workflows are located in `.github/workflows/` and can be used as 
 | `flutter-artifacts.yaml`     | Flutter web bundle and Android APK/AAB     | Flutter       |
 | `terra.yaml`                 | Terra CLI quality, security, and tests     | Terraform/HCL |
 | `checks.yaml`                | Rebase and changelog gate for a repository with no build | any |
+| `checks-library.yaml`        | The changelog gate, then a tag and GitHub Release from a bump commit, for a repository with no build | any |
 | `release.yaml`               | Tag and GitHub Release from a bump commit  | any           |
 | `update-major-version-tag.yaml` | Moving `vN` tag for action consumers    | any           |
 | `dependency-updates.yaml`    | Twice-weekly pull request bumping stale pinned dependencies, never to a known-vulnerable release | all |
@@ -394,6 +395,13 @@ than on its seconds of `go vet`.
 `make test ONLY=workflow-composition` (Test 18) fails on a job that can start before the stage it
 follows has finished, and on one behind a skippable check that keeps the implicit `success()`.
 
+A repository runs ONE such pipeline: its `default.yaml` calls one workflow from the table above, so
+its checks, its release and whatever it delivers are stages of one run, not separate workflows
+starting side by side on the same push. `checks-library.yaml` is that workflow for a repository with
+no build (see Usage Example (Repository With No Build) below). Claude Review and Claude Mention stay
+workflows of their own: they need permissions no pipeline job should hold, and the mention responder
+answers comments rather than validating a commit.
+
 #### One More Test Run in the Tests Stage (`extra_test_command`)
 
 A consumer of a reusable workflow cannot add a job in the middle of it: a caller's job can only
@@ -536,6 +544,35 @@ release wherever it was built. Empty, the default, passes nothing, because the n
 project may already use `ARG VERSION` for something else. A malformed name fails the job before
 anything is built, and a Dockerfile that declares no such `ARG` gets a warning.
 `make test ONLY=build-version` covers it.
+
+#### Usage Example (Repository With No Build)
+
+A documentation, configuration, template or asset repository has no toolchain workflow to call, and
+calls `checks-library.yaml`: the rebase and changelog gate on every pull request, then a tag and
+GitHub Release when a bump commit lands on `main`, or when its tag is pushed again to recover a
+release that was never cut. One file, one job:
+
+```yaml
+name: 'default'
+
+on:
+  push:
+    branches:
+      - 'main'
+    tags:
+      - '*'
+  pull_request:
+    branches:
+      - 'main'
+  workflow_dispatch:
+
+permissions:
+  contents: 'write' # delivery-release
+
+jobs:
+  default:
+    uses: 'rios0rios0/pipelines/.github/workflows/checks-library.yaml@main'
+```
 
 #### Usage Example (Claude Review and Claude Mention)
 
@@ -1610,8 +1647,9 @@ not a decision anyone can review -- and it never covers a malicious package.
 
 ### Proving a dependency pull request
 
-`dependency-updates-verify.yaml` runs on every pull request and proves, from the
-pull request's **diff** rather than from the generator's word, that every pinned
+`dependency-updates-verify.yaml`, called from the workflow that validates every
+pull request, proves from the pull request's **diff** rather than from the
+generator's word that every pinned
 dependency it moves is safe to merge. That covers the scheduled pull request, a
 commit someone pushes onto it, and a bump a person writes by hand alike. Each
 changed pin must pass every check that applies to it:
@@ -1636,12 +1674,11 @@ filter on purpose, so it reports on every pull request, and one that moves no pi
 passes in seconds without asking the network anything -- an outage of the
 advisory database can hold up a pull request that moves a pin, never one that
 does not. A brief one is ridden out: a gateway error or dropped connection is
-retried twice before a lookup counts as failed. From another repository:
+retried twice before a lookup counts as failed. From another repository, as a
+job of the workflow that validates its pull requests -- this repository's own
+`default.yaml` calls it the same way, in its security stage:
 
 ```yaml
-on:
-  pull_request:
-
 jobs:
   verify-dependency-updates:
     uses: 'rios0rios0/pipelines/.github/workflows/dependency-updates-verify.yaml@main'
@@ -2377,13 +2414,14 @@ make build NAME=awscli TAG=latest
 docker build -t my-image -f global/containers/awscli.latest/Dockerfile global/containers/awscli.latest/
 ```
 
-The `Container Images` workflow builds these on every push to `main` that touches
-`global/containers/**`, and on demand via `workflow_dispatch` with `container_folder`
-(a folder name such as `tor-proxy.latest`; empty builds all of them). Its `push` input
-is **off** by default, so a dispatch verifies a Dockerfile from a branch: both
-architectures are still built, and nothing is pushed over the tag `main` publishes.
-Turn it **on** only to republish an image by hand — pushes to `main` publish either
-way, since they never read the input.
+The delivery stage of this repository's `default.yaml` builds these, once every
+stage before it has passed, on every push to `main` that changes a folder under
+`global/containers/`, and on demand via `workflow_dispatch` with `container_folder`
+(a folder name such as `tor-proxy.latest`; empty builds all of them), four images at
+a time. Its `push` input is **off** by default, so a dispatch verifies a Dockerfile
+from a branch: both architectures are still built, and nothing is pushed over the tag
+`main` publishes. Turn it **on** only to republish an image by hand — pushes to `main`
+publish either way, since they never read the input.
 
 ## Makefile Integration
 

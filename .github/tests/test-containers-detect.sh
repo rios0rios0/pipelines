@@ -2,7 +2,7 @@
 set -e
 
 # Regression test for `global/scripts/tools/containers/detect-changed-folders.sh`,
-# the matrix builder behind the Container Images workflow.
+# the matrix builder behind the container delivery in `.github/workflows/default.yaml`.
 #
 # Why it exists: the merge that renamed `python.3.10-pdm-bullseye` to
 # `python.3.10-pdm-bookworm` listed BOTH paths in `git diff`, the deleted folder

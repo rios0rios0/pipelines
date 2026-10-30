@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added the `node_version` input to `npm-library.yaml`, forwarded to `npm.yaml`, so a repository that names its Node version can release through the wrapper instead of calling `npm.yaml` and `release.yaml` separately'
+time: '2026-10-30T22:09:22.261250948Z'

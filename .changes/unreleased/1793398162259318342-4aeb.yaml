@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added `checks-library.yaml`, the whole pipeline of a repository with no build: the rebase and changelog gate on every pull request, then a tag and GitHub Release when a bump commit lands on `main` or its tag is pushed again. Such a repository now calls it from one `default.yaml` instead of running separate `checks` and `release` workflows that started side by side on the same push'
+time: '2026-10-30T22:09:22.259257884Z'

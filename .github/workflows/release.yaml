@@ -1,8 +1,6 @@
 name: 'Release'
 
 on:
-  push:
-    branches: [ 'main' ]
   workflow_call:
     inputs:
       tag_prefixes:
@@ -34,7 +32,7 @@ jobs:
       tag_name: "${{ steps.release.outputs.tag_name }}"
     strategy:
       matrix:
-        prefix: ${{ fromJSON(github.event_name == 'workflow_call' && inputs.tag_prefixes || '[""]') }}
+        prefix: ${{ fromJSON(inputs.tag_prefixes) }}
     steps:
       - id: 'release'
         uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
@@ -56,15 +54,13 @@ jobs:
     # consumer pins a branch or an exact SemVer tag, so the tag is dead weight
     # plus a stray GitHub Release on their Releases page. Hence opt-in.
     #
-    # `github.event_name` cannot gate this: inside a called reusable workflow
-    # the `github` context belongs to the CALLER, so the event stays `push` and
-    # never becomes `workflow_call` (this is also why `delivery-release` above
-    # can gate on `push` at all). `github.repository` is likewise the caller's
-    # repo, which makes it the reliable way to let this repo opt itself in for
-    # its own `on: push` releases, where no caller exists to pass the input.
+    # This repository opts in exactly as a consumer would: its `default.yaml`
+    # calls this workflow with the input set, so no repository name is needed
+    # here. (`github.event_name` could not gate it either: inside a called
+    # reusable workflow the `github` context belongs to the CALLER, so the event
+    # stays `push` -- which is also why `delivery-release` above can gate on it.)
     if: >-
-      needs.delivery-release.outputs.tag_name != '' &&
-      (inputs.update_major_tag || github.repository == 'rios0rios0/pipelines')
+      needs.delivery-release.outputs.tag_name != '' && inputs.update_major_tag
     uses: 'rios0rios0/pipelines/.github/workflows/update-major-version-tag.yaml@main'
     with:
       tag_name: "${{ needs.delivery-release.outputs.tag_name }}"

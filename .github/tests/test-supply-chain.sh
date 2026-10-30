@@ -166,7 +166,7 @@ echo "1. GitHub Actions are pinned to immutable commits"
 # commit's own tree. There is no publisher who could move it and no SHA that
 # would make it more immutable than it already is -- a SHA would in fact be
 # *looser*, since it could name a different commit than the one being tested.
-# It is what `.github/workflows/ci.yaml` (`security > sast:codeql`) uses so the repository scans itself
+# It is what `.github/workflows/default.yaml` (`security > sast:codeql`) uses so the repository scans itself
 # with the action as it stands in the pull request rather than as published.
 # Anchored to a real YAML key (`^ indent [- ] uses:`), not a bare "uses:"
 # anywhere on the line. This repository's comments discuss `uses:` jobs at

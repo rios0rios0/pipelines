@@ -27,6 +27,7 @@ SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RUN="$SCRIPTS_DIR/global/scripts/tools/dependency-updates/run.sh"
 WORKFLOW="$SCRIPTS_DIR/.github/workflows/dependency-updates.yaml"
 VERIFY_WORKFLOW="$SCRIPTS_DIR/.github/workflows/dependency-updates-verify.yaml"
+PIPELINE_WORKFLOW="$SCRIPTS_DIR/.github/workflows/default.yaml"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -188,8 +189,10 @@ echo ""
 echo "5. The verification workflow is a gate on every pull request"
 # --------------------------------------------------------------------------- #
 VERIFY="$(cat "$VERIFY_WORKFLOW")"
-assert_contains "it runs on pull requests" "$VERIFY" "pull_request:"
-assert_not_contains "with no path filter, so a required check always reports" "$VERIFY" "paths:"
+PIPELINE="$(cat "$PIPELINE_WORKFLOW")"
+assert_contains "this repository's pipeline calls it" "$PIPELINE" "uses: './.github/workflows/dependency-updates-verify.yaml'"
+assert_contains "on pull requests" "$VERIFY" "github.event_name == 'pull_request'"
+assert_not_contains "with no path filter, so a required check always reports" "$VERIFY$PIPELINE" "paths:"
 assert_contains "and can be called by a consumer" "$VERIFY" "workflow_call:"
 assert_contains "it checks out the pull request's base" "$VERIFY" "github.event.pull_request.base.sha"
 assert_contains "and proves the diff between the two" "$VERIFY" "run.sh\" verify"

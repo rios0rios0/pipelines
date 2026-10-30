@@ -1,22 +1,27 @@
-name: 'CI - Pipeline Templates Validation'
+name: 'default'
 
 # This repository's own pipeline, run as stages one after another like every pipeline it ships:
 #
-#   code-check  `quality:validate`   required files, YAML syntax, script permissions
-#               `style:shellcheck`   the ShellCheck runner this repository ships to consumers
-#   security    `sast:codeql`        this repository's own code scanning, one job per language
-#   tests       `test:all`           every validation suite (`make test`)
+#   code-check  `quality:validate`           required files, YAML syntax, script permissions
+#               `style:shellcheck`           the ShellCheck runner this repository ships to consumers
+#   security    `sast:codeql`                this repository's own code scanning, one job per language
+#               `verify:dependency-updates`  the proof that the pins a pull request moves are safe
+#   tests       `test:all`                   every validation suite (`make test`)
+#   delivery    `release`                    the tag and GitHub Release a bump merge cuts, and `vN`
+#               `container (<name>:<tag>)`   the images under `global/containers/` a push changed
 #
-# Every job of a stage needs every job of the stage before it, so a failed lint stops the scans and
-# a failed scan stops the suites. These were four lanes that started together -- the validation job
-# with `make test` in it, ShellCheck, and CodeQL's two analyses in `codeql.yaml` -- and a run read
-# as one wide column. The scheduled run is CodeQL's alone: the checking jobs skip it, so every job
-# after them gates on `!cancelled() && !failure()` (Test 18 of `make test ONLY=workflow-composition`).
+# Every job of a stage needs every job of the stage before it, so a failed lint stops the scans, a
+# failed scan stops the suites, and nothing is released or published from a commit that did not pass
+# them all. It is the ONE workflow this repository runs on a push or a pull request: the dependency
+# verification, the release and the container images were three more, each starting the moment the
+# event arrived and none waiting for the validation. The scheduled run is CodeQL's alone: the
+# checking jobs skip it, so every job after them gates on `!cancelled() && !failure()` (Test 18 of
+# `make test ONLY=workflow-composition`).
 #
-# `security > verify:dependency-updates` stays in `dependency-updates-verify.yaml`, a workflow of
-# its own: the default branch's ruleset requires that check by its exact name, and consumers call
-# that file, so it can neither move here nor be called from here without being renamed to
-# `<job> / security > verify:dependency-updates`.
+# The dependency verification and the release are reusable workflows consumers call too, so this file
+# calls them rather than carrying a second copy of either, and they report as
+# `dependency-updates / security > verify:dependency-updates` and `release / delivery > release`.
+# The default branch's ruleset requires the first by that name.
 on:
   push:
     branches: [ 'main' ]
@@ -26,13 +31,36 @@ on:
   # not modelled on the day the code was last touched. Only `security > sast:codeql` runs on it.
   schedule:
     - cron: '17 3 * * 1'
+  # A dispatch runs the whole pipeline and then builds the container images it names; the inputs
+  # are the container delivery's.
   workflow_dispatch:
+    inputs:
+      container_folder:
+        description: >-
+          Container folder name to build (e.g. "golang.1.27-awscli").
+          Leave empty to build ALL containers.
+        required: false
+        default: ''
+        type: 'string'
+      push:
+        description: >-
+          Publish the result to ghcr.io. Left OFF, a dispatch only VERIFIES the
+          Dockerfile: both architectures are still built, and nothing is pushed
+          over the tag `main` publishes. Turn it ON to republish an image by
+          hand.
+        required: false
+        default: false
+        type: 'boolean'
 
 permissions:
   contents: 'read'
 
+# A newer push to a pull request supersedes its older run. Every other run -- a push to main above
+# all -- gets a group of its own, because it carries the delivery stage: a group shared by every run
+# on `main` would hold the second of three quick merges as pending and cancel it when the third
+# arrived, and the release or image that merge was owed would never be cut.
 concurrency:
-  group: "${{ github.workflow }}-${{ github.ref }}"
+  group: "${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}"
   cancel-in-progress: "${{ github.event_name == 'pull_request' }}"
 
 jobs:
@@ -183,6 +211,19 @@ jobs:
     if: '!cancelled() && !failure()'
 
 
+  # The verification consumers call is the one this repository runs: a copy here would be a second
+  # verifier to keep in step with the first. Only a pull request has a base to compare against, so
+  # it runs on pull requests alone.
+  dependency-updates:
+    uses: './.github/workflows/dependency-updates-verify.yaml'
+    permissions:
+      contents: 'read'
+      # Posts the verification on the pull request; see the called workflow.
+      pull-requests: 'write'
+    needs: [ 'code_check-quality_validate', 'code_check-style_shellcheck' ]
+    if: "!cancelled() && !failure() && github.event_name == 'pull_request'"
+
+
   # third stage
   tests-test_all:
     name: 'tests > test:all'
@@ -212,5 +253,115 @@ jobs:
 
       - name: 'Run all validation tests'
         run: make test
-    needs: [ 'security-sast_codeql' ]
+    needs: [ 'security-sast_codeql', 'dependency-updates' ]
     if: "!cancelled() && !failure() && github.event_name != 'schedule'"
+
+  # fourth stage
+  #
+  # The tag and GitHub Release a bump merge cuts, plus the floating `vN` tag that consumers pinning a
+  # major version follow -- which is why this repository, unlike its consumers, turns that one on.
+  release:
+    uses: './.github/workflows/release.yaml'
+    with:
+      update_major_tag: true
+    permissions:
+      contents: 'write'
+    needs: [ 'tests-test_all' ]
+    if: "!cancelled() && !failure() && github.event_name == 'push' && github.ref == 'refs/heads/main'"
+
+  # The images under `global/containers/`, rebuilt for the folders a push to main changed, or for the
+  # one a dispatch names. Behind `release` as well as the tests: every shipping job waits for every
+  # reusable call in the file (Test 18), and a release that failed is a reason to publish nothing.
+  delivery-containers_detect:
+    name: 'delivery > containers:detect'
+    runs-on: 'ubuntu-latest'
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      has_changes: ${{ steps.set-matrix.outputs.has_changes }}
+      # Resolved once, here, so the matrix job reads a plain 'true'/'false'
+      # instead of repeating the trigger test in two places. The `inputs`
+      # context is populated only for `workflow_dispatch` and `workflow_call`;
+      # on a `push` to main `inputs.push` is simply empty, and that absence has
+      # to mean PUBLISH -- the behaviour this delivery has always had. So the
+      # event test comes first, and `||` returns it without needing the input.
+      #
+      # That short-circuit is also why the input DEFAULTS TO FALSE: `main` never
+      # reads it, so the default governs the dispatch form ALONE, and there the
+      # two mistakes are not the same size. Publishing a branch over a released
+      # tag cannot be undone; forgetting to tick the box costs one re-dispatch.
+      push: ${{ github.event_name != 'workflow_dispatch' || inputs.push }}
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: 'Detect changed container folders'
+        id: 'set-matrix'
+        # The logic lives in a script so `.github/tests/test-containers-detect.sh`
+        # can exercise it; it drops folders that were deleted or renamed in the
+        # push, which otherwise fail the build with a missing-context error.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_FOLDER: ${{ github.event.inputs.container_folder }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          ./global/scripts/tools/containers/detect-changed-folders.sh >> "$GITHUB_OUTPUT"
+    needs: [ 'tests-test_all', 'release' ]
+    if: "!cancelled() && !failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch')"
+
+  delivery-containers:
+    name: "delivery > container (${{ matrix.name }}:${{ matrix.tag }})"
+    runs-on: 'ubuntu-latest'
+    permissions:
+      contents: 'read'
+      packages: 'write'
+    strategy:
+      matrix: ${{ fromJson(needs.delivery-containers_detect.outputs.matrix) }}
+      fail-fast: false
+      # Each image is a two-architecture buildx build under QEMU. Four at a time keeps a dispatch
+      # that rebuilds every folder from taking the account's whole runner allowance at once.
+      max-parallel: 4
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
+
+      - name: 'Set up QEMU'
+        uses: 'docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1' # v4.4.0
+
+      - name: 'Set up Docker Buildx'
+        uses: 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069' # v4.4.1
+
+      # Skipped for a verification build. Nothing is published, so nothing needs
+      # the token -- and a build-only run that never authenticates cannot
+      # publish by accident, whatever the recipe below turns out to do.
+      - name: 'Login to GitHub Container Registry'
+        if: ${{ needs.delivery-containers_detect.outputs.push == 'true' }}
+        uses: 'docker/login-action@dbcb813823bdd20940b903addbd779551569679f' # v4.6.0
+        with:
+          registry: 'ghcr.io'
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Build ${{ matrix.name }}:${{ matrix.tag }}"
+        env:
+          # Through `env:` rather than interpolated into `run:`, which would let
+          # a crafted value inject shell at YAML-parse time. Compared as a
+          # string because a job output always is one.
+          PUSH: ${{ needs.delivery-containers_detect.outputs.push }}
+        run: |
+          # `build` and `build-and-push` share one buildx recipe; the only
+          # difference is whether its output is pushed or discarded.
+          target='build-and-push'
+          if [ "$PUSH" != 'true' ]; then
+            target='build'
+            echo "::notice::Verification build -- linux/amd64 and linux/arm64 are built, nothing is published."
+          fi
+
+          make "$target" \
+            NAME="${{ matrix.name }}" \
+            TAG="${{ matrix.tag }}" \
+            CONTAINER_REGISTRY="ghcr.io/${{ github.repository }}"
+    needs: [ 'delivery-containers_detect' ]
+    if: "!cancelled() && !failure() && needs.delivery-containers_detect.outputs.has_changes == 'true'"

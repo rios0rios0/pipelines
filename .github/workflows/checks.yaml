@@ -14,16 +14,19 @@
 # not as a count anyone maintains.
 #
 # This is deliberately ONE job and no inputs beyond `runs_on`. It is the floor, not a
-# pipeline: a repository that later grows a build drops this file and calls its toolchain
-# workflow, which runs the identical stage under the identical JOB NAME.
+# pipeline: a repository calls it through `checks-library.yaml`, which runs the release after
+# it, and a repository composing a pipeline of its own calls it as that pipeline's first job.
+# A repository that later grows a build calls its toolchain workflow instead, which runs the
+# identical stage under the identical JOB NAME.
 #
 # The job name is not the check name, and the difference decides what survives that
 # migration. GitHub composes a check-run name from the whole chain of job names, and the
 # chains are not the same depth:
 #
-#   this file        `<caller job> / code-check > quality:basic-checks`
-#   `go.yaml`        `<caller job> / code-check > quality:basic-checks`
-#   `go-docker.yaml` `<caller job> / go / code-check > quality:basic-checks`
+#   this file              `<caller job> / code-check > quality:basic-checks`
+#   `checks-library.yaml`  `<caller job> / checks / code-check > quality:basic-checks`
+#   `go.yaml`              `<caller job> / code-check > quality:basic-checks`
+#   `go-docker.yaml`       `<caller job> / go / code-check > quality:basic-checks`
 #
 # Every `-docker` / `-library` / `-binary` / `-<provider>` wrapper adds that extra hop
 # (`go-docker.yaml` names its inner job `go`), and a wrapper is what a repository growing a

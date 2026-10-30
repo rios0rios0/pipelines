@@ -24,7 +24,7 @@ build-and-push:
 		$(BUILD_OUTPUT) "$(ROOT)/$(NAME).$(TAG)"
 
 # Both architectures built, nothing published. This is how a container change is
-# PROVEN before review: `Container Images` has no build-only mode of its own, so
+# PROVEN before review: the container delivery had no build-only mode of its own, so
 # the only way to find out whether a Dockerfile still builds used to be to push
 # the result over the published tag and read the outcome afterwards.
 #

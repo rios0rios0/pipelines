@@ -1,0 +1,68 @@
+# see the bottom of the file for more information¹
+# the parent workflow is responsible for setting up the call events²
+on:
+  workflow_call:
+    inputs:
+      runs_on:
+        type: 'string'
+        required: false
+        default: '["ubuntu-latest"]'
+        description: 'JSON array of runner labels (e.g. ''["self-hosted"]''). See checks.yaml.'
+      tag_prefixes:
+        type: 'string'
+        required: false
+        default: '[""]'
+        description: 'JSON array of tag prefixes (e.g., ''["", "v"]''). Use ''[""]'' for no prefix.'
+
+jobs:
+  checks:
+    uses: 'rios0rios0/pipelines/.github/workflows/checks.yaml@main'
+    with:
+      runs_on: ${{ inputs.runs_on }}
+
+  # fourth stage
+  delivery-release:
+    name: 'delivery > release'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    outputs:
+      tag_name: "${{ steps.release.outputs.tag_name }}"
+    strategy:
+      matrix:
+        prefix: ${{ fromJSON(inputs.tag_prefixes) }}
+    steps:
+      - id: 'release'
+        uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'
+        with:
+          tag_prefix: "${{ matrix.prefix }}"
+    needs: [ 'checks' ]
+    # Cut on a main-branch bump merge, OR on a version-tag push so a bump that was never
+    # released is recovered by (re-)pushing its tag -- the push the weekly release reconcile
+    # makes. Unlike the toolchain `-library` wrappers, the main path cannot use `success()`:
+    # the only job before it, `quality:basic-checks`, runs on pull requests alone, so on a
+    # push the `checks` need concludes "skipped", and `success()` would skip the release
+    # with it. `!failure()` still never releases past a check that failed.
+    if: "!cancelled() && !failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore/bump-') || contains(github.event.head_commit.message, 'chore(bump)'))) || startsWith(github.ref, 'refs/tags/'))"
+
+
+# 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations
+# 2 - the recommended events to trigger this workflow and permissions are:
+#   on:
+#     push:
+#       branches:
+#         - 'main'
+#       tags:
+#         - '*'
+#     pull_request:
+#       branches:
+#         - 'main'
+#     workflow_dispatch:
+#
+#   permissions:
+#     contents: 'write' # delivery-release
+#
+# The whole pipeline of a repository with no build -- documentation, configuration, templates,
+# assets: `checks.yaml`'s rebase and changelog gate on every pull request, then a release tag and
+# GitHub Release when a version-bump commit is pushed to main. It is what such a repository calls
+# from its one `default.yaml`, so its gate and its release are two stages of one run instead of
+# two workflows starting side by side. A repository that grows a build moves to its toolchain's
+# `-library` workflow, which runs the same two jobs around the toolchain's own stages.

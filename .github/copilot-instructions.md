@@ -751,8 +751,8 @@ docker build -t test-image -f global/containers/awscli.latest/Dockerfile global/
 ```
 
 `make build` and `make build-and-push` run the SAME buildx recipe; only the output
-differs (`--output=type=cacheonly` vs `--push`). The `Container Images` workflow
-(`.github/workflows/containers.yaml`) exposes the same choice: it publishes on every
+differs (`--output=type=cacheonly` vs `--push`). The container delivery, the last
+stage of `.github/workflows/default.yaml`, exposes the same choice: it publishes on every
 push to `main` under `global/containers/**`, and its `workflow_dispatch` takes
 `container_folder` (a folder name; empty means all) plus a `push` boolean that
 defaults to `false`. So dispatching a branch PROVES a container change builds on

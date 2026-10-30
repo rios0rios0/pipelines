@@ -33,7 +33,7 @@ there is no target to add and no list to keep in step.
 | `codeql-gate` | That CodeQL fails on findings `.codeql-false-positives` does not list, on every platform, and that the GitHub upload cannot fail the job, |
 | `codeql-runtime` | Where each language's CodeQL analysis runs and with what (GitLab CI images and installs, run.sh's report and build mode, the Azure DevOps and GitHub Actions toolchains, every Node.js the templates name against its end of life) |
 | `codeql-scope` | That a local CodeQL scan builds from the files git would ship, on every core, |
-| `containers-detect` | The Container Images change detection (deleted/renamed folders, dispatch inputs) |
+| `containers-detect` | The container delivery's change detection (deleted/renamed folders, dispatch inputs) |
 | `cyclonedx-main-detection` | The Go CycloneDX entry-point detection |
 | `dart-pipeline` | The Dart/Flutter pipeline (scripts, report converters, Semgrep rules, cross-platform wiring) |
 | `dependency-check` | The OWASP Dependency-Check NVD cache / API-key contract |
@@ -83,7 +83,7 @@ there is no target to add and no list to keep in step.
 | `working-directory` | The `working_directory` threading contract (bundler/npm/yarn and their variants) |
 | `yaml-merge` | Golangci-lint/run.sh (config merge, binary reuse and install, toolchain guard) |
 
-Test scripts live in `.github/tests/`. The CI workflow (`.github/workflows/ci.yaml`) validates YAML syntax, script permissions, and runs ShellCheck on all shell scripts. A suite whose checks parse YAML or read files structurally keeps them as Go test support under `internal/testsuites/<suite>/`, which the suite builds from the checkout for its run (`go build -C "$SCRIPTS_DIR" ...`) and stops on if the build fails; `make test ONLY=go-helpers` runs their unit tests.
+Test scripts live in `.github/tests/`. The CI workflow (`.github/workflows/default.yaml`) validates YAML syntax, script permissions, and runs ShellCheck on all shell scripts. A suite whose checks parse YAML or read files structurally keeps them as Go test support under `internal/testsuites/<suite>/`, which the suite builds from the checkout for its run (`go build -C "$SCRIPTS_DIR" ...`) and stops on if the build fails; `make test ONLY=go-helpers` runs their unit tests.
 
 ## Architecture
 
@@ -337,7 +337,7 @@ Four constraints shape this; do not "simplify" any of them away:
 | **`!= 'self-hosted'`, never `== 'github-hosted'`** | A context that resolves to neither — an empty string on an older runner, a future third value — must keep the cache ON for hosted consumers rather than silently disabling it for everyone. The test rejects the inverted form |
 | **A cache that WORKS on self-hosted is still not necessarily worth it** | The one Dart job whose restore succeeded still paid 308s, while a cold `dart_ensure_sdk` in the same run installed the same SDK from Google's archive in 126s. A cache slower than the download it replaces is not a cache — which is what makes skipping it right on a cold self-hosted host as well as on a warm one |
 | **`actions/setup-node` and `actions/setup-java` are deliberately left ON** | Their caches target `$HOME` too, but their files are writable, so the restore SUCCEEDS — ~9s for a 58 MB `yarn` cache across ten jobs of two runs, no failure and no post-job save. That is a genuine cache seeding a cold host, and turning it off would be a change with no measurement behind it. If one is ever observed failing, it belongs under the rule |
-| **The gate is written even where `runs-on` is hard-coded to a hosted runner** | `terra.yaml` and this repository's `ci.yaml` pin `ubuntu-latest`, so the expression is provably a no-op there. Writing it anyway is what lets the rule have no exemption list — and `terra.yaml` is a reusable workflow, so the day it gains the `runs_on` input that `go.yaml`, `yarn.yaml` and `dart.yaml` already have, the gate is already correct |
+| **The gate is written even where `runs-on` is hard-coded to a hosted runner** | `terra.yaml` and this repository's `default.yaml` pin `ubuntu-latest`, so the expression is provably a no-op there. Writing it anyway is what lets the rule have no exemption list — and `terra.yaml` is a reusable workflow, so the day it gains the `runs_on` input that `go.yaml`, `yarn.yaml` and `dart.yaml` already have, the gate is already correct |
 
 Two `actions/cache` steps are outside the rule by their **path** rather than by exemption, and the rule
 is written so that stays true without a list: `golang/stages/30-tests/all` caches `${{ env.GO_BIN_DIR }}`
@@ -1067,13 +1067,13 @@ so the check could not break.
 | **`analyze` never uploads; the upload is its own `upload-sarif` step, `if: always()` and `continue-on-error: true`, after the gate** | A refused upload is a report-publishing failure (see Report Uploads Never Gate a Job) and must not fail a scan that passed; running it when the gate failed still shows code scanning what failed the job. `codeql_upload` only decides whether the upload is attempted (`failure-only`: when the job is failing) |
 | **The gate step has no `if:` and no `continue-on-error`** | It is the verdict. An `if:` lets something skip it, and `continue-on-error` turns every finding back into a pass |
 | **The analysis runs `security-and-quality` and reads the project's `codeql-config.yml`, as `run.sh` does** | The action's default suite keeps only high-precision security queries, so a medium-precision rule a local scan reports is never even run there, and a gate over a different scan fails on findings nobody can reproduce locally -- or passes ones they can |
-| **The composite reaches the gate through `$GITHUB_ACTION_PATH`, not a `scripts-repo` checkout** | The runner unpacks the whole repository at the ref the action resolved, so the script always matches the action: this repository's own `ci.yaml` runs the action by `./` path, and a `scripts-repo@main` checkout there would test a pull request's action against `main`'s gate. It needs no network fetch and no `$/` runner floor |
+| **The composite reaches the gate through `$GITHUB_ACTION_PATH`, not a `scripts-repo` checkout** | The runner unpacks the whole repository at the ref the action resolved, so the script always matches the action: this repository's own `default.yaml` runs the action by `./` path, and a `scripts-repo@main` checkout there would test a pull request's action against `main`'s gate. It needs no network fetch and no `$/` runner floor |
 | **It fails closed** | No argument, a missing report, a directory with no `*.sarif`, a report that is not SARIF, or no `jq` is an error, never "no findings". The inline filter it replaced read an unparsable report as zero findings |
 
 `.github/tests/test-codeql-gate.sh` holds all of it: the gate against synthetic reports, `run.sh`
 end to end against a stub `codeql`, and the composite's step order and flags.
 
-This repository's own scan (`security > sast:codeql` in `.github/workflows/ci.yaml`) is a consumer of the same rules, from
+This repository's own scan (`security > sast:codeql` in `.github/workflows/default.yaml`) is a consumer of the same rules, from
 its own root. `codeql-config.yml` excludes `actions/unpinned-tag`, which reports every
 `rios0rios0/pipelines/...@main` self-reference -- moving by design, see Test 7 of
 `make test ONLY=workflow-composition` -- while `make test ONLY=supply-chain` already holds every other `uses:`

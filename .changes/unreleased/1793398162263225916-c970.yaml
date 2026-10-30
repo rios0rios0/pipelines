@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed this repository''s own CI into one `default.yaml` running code-check, security, tests and delivery in order: the dependency verification is now a job of its security stage, and the release and the container images its delivery stage, so nothing is released or published from a commit the other stages have not passed. `containers.yaml` is gone, `release.yaml` and `dependency-updates-verify.yaml` no longer run on their own push or pull request, and the required check is now `dependency-updates / security > verify:dependency-updates`. Runs on `main` no longer share a concurrency group, so a merge that lands while another is running is never cancelled before its release'
+time: '2026-10-30T22:09:22.263179697Z'

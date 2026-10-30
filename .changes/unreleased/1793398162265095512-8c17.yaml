@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed `release.yaml` ignoring its `tag_prefixes` input: the matrix tested `github.event_name == ''workflow_call''`, which is never true inside a called workflow, so every caller released with no prefix whatever it passed'
+time: '2026-10-30T22:09:22.265051228Z'

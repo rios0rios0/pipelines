@@ -30,12 +30,14 @@ name: 'Dependency Updates Verification'
 # A check that cannot be completed -- an upstream or the advisory database out
 # of reach -- fails too: an unproven change is not a passing one.
 #
-# Make `security > verify:dependency-updates` a REQUIRED status check to turn the
-# proof into a gate. It runs on every pull request, with no path filter: a
-# required check gated by paths never reports on a pull request outside them,
-# and blocks it forever. A pull request that moves no pin passes in seconds.
+# Call it from the workflow that validates every pull request, and make the check
+# REQUIRED to turn the proof into a gate: it reports as
+# `<calling job> / security > verify:dependency-updates`, which this repository's
+# own `default.yaml` makes `dependency-updates / security > verify:dependency-updates`.
+# Call it with no path filter: a required check gated by paths never reports on a
+# pull request outside them, and blocks it forever. A pull request that moves no
+# pin passes in seconds.
 on:
-  pull_request:
   workflow_call:
 
 jobs:

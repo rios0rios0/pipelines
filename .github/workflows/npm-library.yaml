@@ -33,6 +33,11 @@ on:
         required: false
         default: 'always'
         description: "CodeQL SARIF upload mode ('always', 'failure-only' or 'never'). See npm.yaml."
+      node_version:
+        type: 'string'
+        required: false
+        default: '24'
+        description: 'Node.js version the toolchain jobs set up. See npm.yaml.'
       working_directory:
         type: 'string'
         required: false
@@ -52,6 +57,7 @@ jobs:
     uses: 'rios0rios0/pipelines/.github/workflows/npm.yaml@main'
     with:
       working_directory: "${{ inputs.working_directory }}"
+      node_version: "${{ inputs.node_version }}"
       install_run_scripts: ${{ inputs.install_run_scripts }}
       sonar_host: "${{ inputs.sonar_host }}"
       runs_on: ${{ inputs.runs_on }}

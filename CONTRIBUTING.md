@@ -62,7 +62,7 @@ git push -u origin feat/my-change
 
 Pick any repository that already uses this pipeline and change its reference from `main` to your branch name:
 
-**GitHub Actions** — in `.github/workflows/ci.yaml`:
+**GitHub Actions** — in `.github/workflows/default.yaml`:
 ```yaml
 # before
 uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'

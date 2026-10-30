@@ -157,8 +157,8 @@ stages:
       # upstream. The runner is just the glue.
       #
       # `dependsOn: []` makes this job start in parallel with `test:all`;
-      # the shell tier is offline, deps-free, and finishes in under a
-      # second, so there's no reason to wait. A consumer without
+      # the shell tier is offline, needs nothing but the Go it installs, and
+      # finishes in seconds, so there's no reason to wait. A consumer without
       # `tests/structural.sh` sees the job run, emit a skip message, and
       # exit 0 — no spurious failure.
       # Fourth tier — the only one that RESOLVES references rather than parsing
@@ -211,6 +211,18 @@ stages:
         dependsOn: []
         steps:
           - template: '../../../global/abstracts/scripts-repo.yaml'
+
+          # The consumer's `tests/structural.sh` runs this checkout's Go helpers
+          # -- `var-catalog/run.sh --check` is the CI gate for a generated
+          # `variables-shared.tf` -- and each is built from source in the job.
+          # Without this, a runner with no Go of its own fails with "Go is
+          # required", and one whose image happens to carry a Go passes only by
+          # luck. At least the `go` directive of the pipelines repository's
+          # `go.mod`: an older Go refuses the module.
+          - task: 'GoTool@0'
+            displayName: 'Use Go (structural scripts run Go helpers)'
+            inputs:
+              version: '1.27.3'
 
           - script: $(Scripts.Directory)/global/scripts/languages/terraform/structural/run.sh
             displayName: 'Run repo-convention structural tests'

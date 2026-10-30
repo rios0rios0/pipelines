@@ -500,8 +500,8 @@ jobs:
       - name: 'Checkout code'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
-      # Terraform itself — the structural tier is deps-free, this one
-      # cannot be. HashiCorp's action rather than the terra CLI installer
+      # Terraform itself — the structural tier needs only Go, this one
+      # needs it. HashiCorp's action rather than the terra CLI installer
       # the sibling jobs use: this runner invokes `terraform` directly and
       # never touches Terragrunt, so the terra CLI would install a second
       # tool for nothing, and a versioned action avoids piping a fetched
@@ -584,7 +584,8 @@ jobs:
   # containedness, shared root.hcl presence) that can't live in a shared
   # template. Skipped silently when the consumer has no structural
   # script. Runs in parallel with `tests-test_all` — the shell tier is
-  # offline and deps-free, no reason to queue behind the heavier tests.
+  # offline and needs nothing but Go, no reason to queue behind the
+  # heavier tests.
   tests-test_structural:
     name: 'tests > test:structural'
     runs-on: 'ubuntu-latest'
@@ -624,6 +625,29 @@ jobs:
           ref: ${{ steps.pipelines-ref.outputs.ref }}
           path: '.pipelines'
           persist-credentials: false
+
+      # The consumer's `tests/structural.sh` runs the pipelines' Go helpers --
+      # `var-catalog/run.sh --check` is the CI gate for a generated
+      # `variables-shared.tf` -- built from source here. The hosted image
+      # happens to carry a Go, which is all that kept this job green when
+      # var-catalog moved from Python to Go; a runner without one fails with
+      # "Go is required". At least the `go` directive of `.pipelines/go.mod`:
+      # setup-go sets `GOTOOLCHAIN=local`, so an older Go would refuse the
+      # module. After the pipelines checkout, because the cache is keyed on
+      # its `go.sum`.
+      - name: 'Setup Go'
+        uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: '.pipelines/go.sum'
+          # See `github/golang/stages/10-code-check/golangci-lint/action.yaml` for the measured
+          # reason this is gated: on a self-hosted runner GOMODCACHE and GOCACHE persist on local
+          # disk, the restore untars over files that already exist, `tar` exits 2 and the entire
+          # download is discarded. `runs-on` is hard-coded to a hosted runner in this file, so the
+          # expression is a no-op today. It is written anyway so the rule `make
+          # test-runner-cache-gating` enforces needs no exemption list, and so that adding a
+          # `runs_on` input here later cannot silently reintroduce the defect.
+          cache: ${{ runner.environment != 'self-hosted' }}
 
       - name: 'Run structural tests'
         run: |

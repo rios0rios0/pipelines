@@ -69,7 +69,12 @@ if ! CGO_ENABLED=0 GOFLAGS=-mod=readonly GOWORK=off \
   echo -e "${RED}could not build ./internal/testsuites/azurestepnames, so no assertion can run${NC}"
   exit 1
 fi
-EXPANSION="$("$EXPANDER")"
+# An expander that cannot read the templates prints nothing and exits 1; read as an empty
+# expansion, every assertion below would pass for it.
+EXPANSION="$("$EXPANDER")" || {
+  echo -e "${RED}./internal/testsuites/azurestepnames could not expand the templates, so no assertion can run${NC}"
+  exit 1
+}
 
 select_findings() {
   printf '%s\n' "$EXPANSION" | awk -F '\t' -v group="$1" '$1 == group { sub(/^[^\t]*\t/, ""); print }'

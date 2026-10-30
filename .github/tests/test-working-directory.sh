@@ -100,7 +100,12 @@ if ! CGO_ENABLED=0 GOFLAGS=-mod=readonly GOWORK=off \
   exit 1
 fi
 
-"$CHECKER" "$SCRIPTS_DIR" > "$FINDINGS"
+# A checker that cannot read a workflow (a file yamldoc refuses, an unreadable one) prints nothing
+# and exits 1; read as an empty findings file, every assertion below would pass for it.
+if ! "$CHECKER" "$SCRIPTS_DIR" > "$FINDINGS"; then
+  echo -e "${RED}./internal/testsuites/workingdirectory could not read the workflows, so no assertion can run${NC}"
+  exit 1
+fi
 
 # `awk` rather than `grep -P`: the group separator is a TAB, and a portable BRE
 # cannot name one -- `grep -P` is a GNU extension this suite has no reason to

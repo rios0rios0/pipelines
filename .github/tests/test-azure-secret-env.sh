@@ -93,7 +93,12 @@ fi
 
 # One `<assertion>\t<finding>` line per violation; each assertion below selects
 # its own.
-FINDINGS="$("$CHECKER" check)"
+# A checker that cannot read the templates prints nothing and exits 1; read as no findings, every
+# assertion below would pass for it.
+FINDINGS="$("$CHECKER" check)" || {
+  echo -e "${RED}./internal/testsuites/azuresecretenv could not read the templates, so no assertion can run${NC}"
+  exit 1
+}
 
 select_findings() {
   printf '%s\n' "$FINDINGS" | awk -F '\t' -v group="$1" '$1 == group { sub(/^[^\t]*\t/, ""); print }'

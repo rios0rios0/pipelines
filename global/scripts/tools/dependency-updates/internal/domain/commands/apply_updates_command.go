@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"slices"
 	"strings"
 
 	"github.com/rios0rios0/pipelines/global/scripts/tools/dependency-updates/internal/domain/entities"
@@ -59,7 +58,9 @@ func (c *ApplyUpdatesCommand) Execute(check CheckResult) ApplyResult {
 	result := ApplyResult{Refused: check.Refused()}
 	proposals := check.Proposals()
 	parallel(c.jobs, proposals, c.prepare)
-	held := heldPins(slices.Concat(result.Refused, proposals))
+	// Every task of the check, not only its proposals and refusals: an image whose
+	// lookup failed in the check is neither, and holds its pin all the same.
+	held := heldPins(check.Tasks)
 
 	before := entities.ManifestValues(check.Manifest)
 	targets := maps.Clone(before)

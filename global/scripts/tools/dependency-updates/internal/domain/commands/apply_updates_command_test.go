@@ -333,6 +333,32 @@ func TestApplyUpdatesCommandGoToolchain(t *testing.T) {
 		assert.Contains(t, workspace.Text(goWorkflow), "image: '"+oldImage+"'")
 	})
 
+	t.Run("should hold the pin where it is when the lookup of an image's new tag fails", func(t *testing.T) {
+		t.Parallel()
+		// given
+		releases := goReleases(map[string]string{oldImage: goDigest("a")})
+		releases.Errors = map[string]error{
+			"golang:1.27.2-bookworm": repositories.NewLookupError("golang:1.27.2-bookworm -> HTTP 503"),
+		}
+		scenario := applyCase{
+			files:    goPinned("1.27.1", "1.27.1", oldImage),
+			releases: releases,
+			merger:   &doubles.StubMerger{},
+			scanner:  scanner(),
+		}
+
+		// when
+		result, workspace := scenario.run()
+
+		// then
+		assert.Empty(t, result.Applied)
+		pin := labelled(t, result.Refused, "GO")
+		assert.Contains(t, pin.Refused, "`golang:1.27.1-bookworm` cannot move with it")
+		assert.Contains(t, pin.Refused, "HTTP 503")
+		assert.Contains(t, workspace.Text(entities.ManifestPath), `GO_PINNED_VERSION="1.27.1"`)
+		assert.Contains(t, workspace.Text(goWorkflow), "go-version: '1.27.1'")
+	})
+
 	t.Run("should keep the image where it is when its pin's own update is refused", func(t *testing.T) {
 		t.Parallel()
 		// given

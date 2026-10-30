@@ -1,11 +1,12 @@
 // Command reportuploads holds the GitHub Actions report-upload contract for
 // `.github/tests/test-report-uploads.sh`, which explains why publishing a
-// report must never decide whether a job passes.
+// report must never decide whether a job passes, nor ask to keep it longer
+// than the repository keeps artifacts.
 //
 // Run from the repository root, it reads every composite action under github/
 // and every workflow under .github/workflows/, and prints one
 // `<kind>\t<finding>` line per violation, where <kind> is optional, silent,
-// verify or deliverable.
+// verify, deliverable or retention.
 package main
 
 import (

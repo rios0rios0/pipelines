@@ -35,6 +35,18 @@ set -e
 #      exists to produce, a failed upload means nothing was delivered, and that
 #      job must still fail.
 #
+# And one about how long an upload is kept. `actions/upload-artifact` cuts a
+# `retention-days` longer than the repository's own artifact retention down to
+# it, and says so in a warning annotation. Every medhub-life repository keeps
+# artifacts for 2 days, so each stage asking for 10 (30 for a coverage report)
+# printed "Retention days cannot be greater than the maximum allowed retention
+# set within the repository. Using 2 instead." on every job that uploads, on
+# every run, where it buried the annotations that mean something. So:
+#
+#   4. Every `retention-days` asks for the shorter of the stage's own number of
+#      days and the repository's retention, `github.retention_days`; leaving it
+#      out keeps the repository's retention.
+#
 # Nothing else in CI can catch a regression: the YAML is valid either way, and
 # this repository is a template library -- the first execution is always in a
 # consumer's project.
@@ -98,6 +110,10 @@ echo ""
 
 echo "4. A deliverable upload still fails its job"
 assert_empty "no deliverable upload is continue-on-error" "$(select_findings deliverable)"
+echo ""
+
+echo "5. No upload asks to be kept longer than the repository keeps artifacts"
+assert_empty "every retention-days is bounded by the repository's retention" "$(select_findings retention)"
 echo ""
 
 echo "=============================="

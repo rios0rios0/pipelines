@@ -342,6 +342,52 @@ It is GitHub Actions only, as `runs_on` is: the GitLab CI and Azure DevOps CodeQ
 runner selector of their own. `make test-workflow-composition` fails if a composed workflow stops
 forwarding it, or if the CodeQL job's fallback can no longer reach `runs_on`.
 
+#### Stages Run One After Another
+
+GitHub Actions has no stages: a job starts as soon as the jobs it `needs:` are done. Every
+`<toolchain>.yaml` therefore spells its stages out as edges. Each security job needs every
+code-check job (the changelog gate and the opt-in checks included), each tests job every security
+job, the management job every tests job, and a delivery or deployment job the whole pipeline it
+ships. A run reads code-check -> security -> tests -> management -> delivery, the jobs of one stage
+in parallel, and a failed check stops the stages after it.
+
+`basic-checks` runs on pull requests only, and GitHub skips every job downstream of a skipped one
+unless its `if:` calls a status function, so every job past the first stage gates on
+`!cancelled() && !failure()`: it runs when a check was skipped by design, never when one failed,
+and never on a cancelled run.
+
+The Go cross-compile check (`cross_compile: true`, always on in `go-library.yaml`, an opt-in input on
+`go-binary.yaml`) is one job, `code-check > quality:cross-compile`, that type-checks the six
+OS/arch targets in parallel processes, as many at once as the runner has CPUs. It used to be a
+matrix of six jobs, one per target, each spending more on checkout, Go and the module download
+than on its seconds of `go vet`.
+
+`make test-workflow-composition` (Test 18) fails on a job that can start before the stage it
+follows has finished, and on one behind a skippable check that keeps the implicit `success()`.
+
+#### One More Test Run in the Tests Stage (`extra_test_command`)
+
+A consumer of a reusable workflow cannot add a job in the middle of it: a caller's job can only
+`needs:` the called workflow as a WHOLE, delivery included, so a test job declared beside the call
+starts at once, beside the first stage, and delivery never waits for it. The Go workflows therefore
+run one extra test command as a job of their own in the tests stage, gated like `test:all`:
+
+```yaml
+jobs:
+  default:
+    uses: 'rios0rios0/pipelines/.github/workflows/go-binary.yaml@main'
+    with:
+      binary_name: 'my-tool'
+      extra_test_name: 'windows'                     # the job is `tests > test:windows`
+      extra_test_command: 'go test -count=1 ./...'   # shell, from the repository root
+      extra_test_runs_on: '["windows-latest"]'       # empty runs it on `runs_on`
+```
+
+The race detector (`go test -race -count=1 ./...`), the suite on Windows, or packages the coverage
+run does not reach are the uses it was added for. `go.yaml` takes the three inputs, and so does
+every workflow composed on it. It is GitHub Actions only: on GitLab CI and Azure DevOps a consumer
+adds its own job to the tests stage.
+
 #### CodeQL Fails on Findings, Not on Its Upload (`codeql_upload`)
 
 The `sast:codeql` job fails on every finding the repository's `.codeql-false-positives` does not

@@ -39,7 +39,7 @@ set -e
 # document. A workflow written in flow style would slip past them; none is, and
 # one would fail review long before this.
 #
-# Tests 10 to 17 are the exceptions and read the PARSED document. Test 10
+# Tests 10 to 18 are the exceptions and read the PARSED document. Test 10
 # asserts on an input declared three mappings under `on:` -- a key a YAML 1.1
 # reader does not even spell `on`, since it resolves it to the boolean `true` --
 # where no indentation rule can tell which mapping a line belongs to, and
@@ -567,6 +567,27 @@ echo "Test 17: a deployment handed a delivered image may pull it"
 # classifier is run against canaries first.
 BAD_PACKAGES_GRANT="$(composition_check packages-grant "$WORKFLOWS_DIR")"
 assert_empty "every deployment handed a delivered image may pull it" "$BAD_PACKAGES_GRANT"
+echo ""
+
+echo "Test 18: the stages run one after another"
+
+# GitHub Actions has no stages. A job starts as soon as the jobs it `needs:` are done, so a stage is
+# only as real as its edges: a security job that needs one lint job starts while the changelog gate
+# and the cross-compile check are still running, and a run of eleven jobs reads as one wide column
+# rather than code-check -> security -> tests -> management. A consumer pipeline grew to 53 checks
+# started at once (dotfiles PR #284, 19 jobs running at the peak) before anything objected.
+#
+# The rule, read from the PARSED workflows: a job named `security > `, `tests > ` or `management > `
+# needs EVERY job of the stage before it (the nearest earlier stage the file has); a `delivery > ` or
+# `deployment > ` job needs the whole pipeline it ships -- the base workflow it calls, or the last
+# checking stage of its own file. Its companion: a job downstream of a check that can be skipped
+# calls a status function in its own `if:`. GitHub skips every job of a dependency chain from a
+# skipped one onwards unless the job's condition says otherwise, and `basic-checks` runs only on a
+# pull request, so without it the barrier would skip every later stage on every push to `main`,
+# green and silently. A skip further down -- a job that runs only after a release was cut -- may
+# still propagate, on purpose. Canaries run first, so a parser that stops reading stages fails here.
+BAD_STAGE_BARRIER="$(composition_check stage-barrier "$WORKFLOWS_DIR")"
+assert_empty "every stage waits for the whole stage before it, and survives a skipped check" "$BAD_STAGE_BARRIER"
 echo ""
 
 echo "================================"

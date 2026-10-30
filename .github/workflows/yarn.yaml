@@ -275,8 +275,8 @@ jobs:
         with:
           codeql_language: 'javascript-typescript'
           upload: "${{ inputs.codeql_upload }}"
-    needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sast_semgrep:
     name: 'security > sast:semgrep'
@@ -287,25 +287,25 @@ jobs:
       - uses: '$/github/global/stages/20-security/semgrep'
         with:
           semgrep_lang: 'javascript'
-    needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sast_gitleaks:
     name: 'security > sast:gitleaks'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/gitleaks@main'
-    needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sast_hadolint:
     name: 'security > sast:hadolint'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
-    needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
+    needs: [ 'code_check-basic_checks', 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
     continue-on-error: true
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sca_yarn_audit:
     name: 'security > sca:yarn-audit'
@@ -338,9 +338,9 @@ jobs:
       - run: 'yarn npm audit --recursive --severity high'
         shell: 'bash'
         working-directory: "${{ inputs.working_directory }}"
-    needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
+    needs: [ 'code_check-basic_checks', 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
     continue-on-error: true
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
 
   # third stage
@@ -430,7 +430,7 @@ jobs:
         # the report is evidence, and the step above already decided pass or fail.
         continue-on-error: true
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_yarn_audit' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   tests-test_build:
     name: 'tests > test:build'
@@ -481,7 +481,7 @@ jobs:
         env:
           INSTALL_RUN_SCRIPTS: "${{ inputs.install_run_scripts }}"
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_yarn_audit' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
 
   # management stage (optional)
@@ -490,8 +490,8 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     container:
       image: 'sonarsource/sonar-scanner-cli:12.1.0.3233_8.0.1@sha256:23ca0f137965d9dff2198074043fd48d386280bc5d0ccac8c8349cea4cf096a9'
-    needs: [ 'tests-test_all' ]
-    if: "inputs.sonar_host != '' && !startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'tests-test_all', 'tests-test_build' ]
+    if: "!cancelled() && !failure() && inputs.sonar_host != '' && !startsWith(github.ref, 'refs/tags/')"
     continue-on-error: true
     steps:
       - name: 'Checkout code'

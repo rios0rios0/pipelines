@@ -17,6 +17,7 @@ make test-go-module-toolchain  # Test that every go.mod toolchain directive is r
 make test-go-tool-staleness    # Test that a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves only
 make test-govulncheck-verdict  # Test that govulncheck fails on a vulnerability the code calls, read from its report rather than the `-json` exit code only
 make test-go-tmpdir-modcache   # Test that the Go module cache stays out of $TMPDIR only
+make test-go-cross-compile     # Test the Go cross-compile runner (every target in one job, at most CROSS_COMPILE_JOBS at once, a failing target named) only
 make test-go-integration-scope  # Test which packages the Go runner's integration phase selects only
 make test-lambda       # Test Lambda template validation only
 make test-yaml-merge   # Test golangci-lint/run.sh (config merge, binary reuse and install, toolchain guard) only
@@ -346,7 +347,7 @@ is a large part of why the rule is a test rather than a review habit.
 
 ### Workflow Composition Standard
 
-**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), eighteen
+**Enforced by `.github/tests/test-workflow-composition.sh` (`make test-workflow-composition`), nineteen
 assertions, every one of them proven to fire against a deliberate violation.** Read this section
 before writing anything under `.github/workflows/`, and before writing a pipeline in a repository
 that consumes this one.
@@ -425,6 +426,28 @@ slot busy for ~23 minutes. Write `!cancelled() && !failure() && (…)`, with any
 `inputs.build_web &&` in front, and give every `||` clause a `!cancelled()` or `success()` of its
 own, as the release gates' `(!cancelled() && startsWith(github.ref, 'refs/tags/'))` does. The
 fifteenth assertion holds it clause by clause.
+
+**Every stage waits for the whole stage before it.** GitHub Actions has no stages: a job starts as
+soon as the jobs it `needs:` are done, so a stage exists only as edges. Each `security >` job needs
+EVERY `code-check >` job -- `basic-checks` and the opt-in ones (`openapi-sync`, `cross-compile`)
+included -- each `tests >` job every `security >` job, the `management >` job every `tests >` job,
+and a `delivery >` or `deployment >` job the whole pipeline it ships (the base workflow it calls).
+Before this rule the Go security stage waited for golangci-lint alone, the Terraform one for
+`terra-format` alone, and none waited for the changelog gate; a consumer with extra jobs of its own
+started 10 to 19 of them at once. The companion rule is what makes the barrier safe: `basic-checks`
+runs on pull requests only, an opt-in check only when asked for, and GitHub skips every job of a
+dependency chain from a skipped one onwards unless its `if:` calls a status function, so every job
+past the first stage gates on `!cancelled() && !failure() && (…)` -- without it, every push to
+`main` would skip SAST, tests and delivery, green. A skip further down may propagate on purpose (a
+job that runs only after a release was cut). The eighteenth assertion holds both halves.
+
+**A consumer's extra test run goes in the tests stage, through an input.** A caller's job can only
+`needs:` a reusable workflow as a whole, delivery included, so a test job declared beside the call
+starts at the very beginning and delivery never waits for it -- which is how Windows tests, race
+tests and script suites ended up running beside `code-check` in four consumers. `go.yaml` therefore
+runs `extra_test_command` as `tests > test:<extra_test_name>` on `extra_test_runs_on` (falling back
+to `runs_on`), and every Go workflow composed on it forwards the three inputs. One slot is all any
+consumer needed; GitLab CI and Azure DevOps need none, since a consumer adds a job to the stage there.
 
 **Job names are an API, not a label.** `delivery > <target>` and `deployment > <provider>` are the
 strings consumers pass to `require-checks`, because GitHub composes a check's name from the calling
@@ -1034,13 +1057,13 @@ so the check could not break.
 | **`analyze` never uploads; the upload is its own `upload-sarif` step, `if: always()` and `continue-on-error: true`, after the gate** | A refused upload is a report-publishing failure (see Report Uploads Never Gate a Job) and must not fail a scan that passed; running it when the gate failed still shows code scanning what failed the job. `codeql_upload` only decides whether the upload is attempted (`failure-only`: when the job is failing) |
 | **The gate step has no `if:` and no `continue-on-error`** | It is the verdict. An `if:` lets something skip it, and `continue-on-error` turns every finding back into a pass |
 | **The analysis runs `security-and-quality` and reads the project's `codeql-config.yml`, as `run.sh` does** | The action's default suite keeps only high-precision security queries, so a medium-precision rule a local scan reports is never even run there, and a gate over a different scan fails on findings nobody can reproduce locally -- or passes ones they can |
-| **The composite reaches the gate through `$GITHUB_ACTION_PATH`, not a `scripts-repo` checkout** | The runner unpacks the whole repository at the ref the action resolved, so the script always matches the action: this repository's own `codeql.yaml` runs the action by `./` path, and a `scripts-repo@main` checkout there would test a pull request's action against `main`'s gate. It needs no network fetch and no `$/` runner floor |
+| **The composite reaches the gate through `$GITHUB_ACTION_PATH`, not a `scripts-repo` checkout** | The runner unpacks the whole repository at the ref the action resolved, so the script always matches the action: this repository's own `ci.yaml` runs the action by `./` path, and a `scripts-repo@main` checkout there would test a pull request's action against `main`'s gate. It needs no network fetch and no `$/` runner floor |
 | **It fails closed** | No argument, a missing report, a directory with no `*.sarif`, a report that is not SARIF, or no `jq` is an error, never "no findings". The inline filter it replaced read an unparsable report as zero findings |
 
 `.github/tests/test-codeql-gate.sh` holds all of it: the gate against synthetic reports, `run.sh`
 end to end against a stub `codeql`, and the composite's step order and flags.
 
-This repository's own scan (`.github/workflows/codeql.yaml`) is a consumer of the same rules, from
+This repository's own scan (`security > sast:codeql` in `.github/workflows/ci.yaml`) is a consumer of the same rules, from
 its own root. `codeql-config.yml` excludes `actions/unpinned-tag`, which reports every
 `rios0rios0/pipelines/...@main` self-reference -- moving by design, see Test 7 of
 `make test-workflow-composition` -- while `make test-supply-chain` already holds every other `uses:`

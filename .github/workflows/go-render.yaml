@@ -33,6 +33,21 @@ on:
         required: false
         default: ''
         description: 'Runner labels for the CodeQL job alone; empty runs it on `runs_on`. See go.yaml.'
+      extra_test_command:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'One more test run, as its own job in the tests stage (e.g. ''go test -race -count=1 ./...''). See go.yaml.'
+      extra_test_name:
+        type: 'string'
+        required: false
+        default: 'extra'
+        description: 'Names the extra test job `tests > test:<extra_test_name>`. See go.yaml.'
+      extra_test_runs_on:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'Runner labels for the extra test job alone; empty runs it on `runs_on`. See go.yaml.'
       go_version_file:
         type: 'string'
         required: false
@@ -162,6 +177,9 @@ jobs:
       sonar_host: ${{ inputs.sonar_host }}
       runs_on: ${{ inputs.runs_on }}
       codeql_runs_on: ${{ inputs.codeql_runs_on }}
+      extra_test_command: ${{ inputs.extra_test_command }}
+      extra_test_name: ${{ inputs.extra_test_name }}
+      extra_test_runs_on: ${{ inputs.extra_test_runs_on }}
       codeql_upload: ${{ inputs.codeql_upload }}
       database_image: ${{ inputs.database_image }}
       database_url_env: ${{ inputs.database_url_env }}

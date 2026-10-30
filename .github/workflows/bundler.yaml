@@ -152,8 +152,8 @@ jobs:
         with:
           codeql_language: 'ruby'
           upload: "${{ inputs.codeql_upload }}"
-    needs: [ 'code_check-style_rubocop', 'code_check-quality_debride' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-style_rubocop', 'code_check-quality_debride' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sast_semgrep:
     name: 'security > sast:semgrep'
@@ -162,25 +162,25 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/semgrep@main'
         with:
           semgrep_lang: 'ruby'
-    needs: [ 'code_check-style_rubocop', 'code_check-quality_debride' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-style_rubocop', 'code_check-quality_debride' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sast_gitleaks:
     name: 'security > sast:gitleaks'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/gitleaks@main'
-    needs: [ 'code_check-style_rubocop', 'code_check-quality_debride' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: [ 'code_check-basic_checks', 'code_check-style_rubocop', 'code_check-quality_debride' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sast_hadolint:
     name: 'security > sast:hadolint'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
-    needs: [ 'code_check-style_rubocop', 'code_check-quality_debride' ]
+    needs: [ 'code_check-basic_checks', 'code_check-style_rubocop', 'code_check-quality_debride' ]
     continue-on-error: true
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sca_bundle_audit:
     name: 'security > sca:bundle-audit'
@@ -204,9 +204,9 @@ jobs:
           bundle-audit check --update
         shell: 'bash'
         working-directory: "${{ inputs.working_directory }}"
-    needs: [ 'code_check-style_rubocop', 'code_check-quality_debride' ]
+    needs: [ 'code_check-basic_checks', 'code_check-style_rubocop', 'code_check-quality_debride' ]
     continue-on-error: true
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
 
   # third stage
@@ -228,7 +228,7 @@ jobs:
         shell: 'bash'
         working-directory: "${{ inputs.working_directory }}"
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_bundle_audit' ]
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
 
 

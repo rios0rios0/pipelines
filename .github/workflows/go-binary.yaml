@@ -42,6 +42,29 @@ on:
         required: false
         default: ''
         description: 'Runner labels for the CodeQL job alone; empty runs it on `runs_on`. See go.yaml.'
+      extra_test_command:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'One more test run, as its own job in the tests stage (e.g. ''go test -race -count=1 ./...''). See go.yaml.'
+      extra_test_name:
+        type: 'string'
+        required: false
+        default: 'extra'
+        description: 'Names the extra test job `tests > test:<extra_test_name>`. See go.yaml.'
+      extra_test_runs_on:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'Runner labels for the extra test job alone; empty runs it on `runs_on`. See go.yaml.'
+      cross_compile:
+        type: 'boolean'
+        required: false
+        default: false
+        description: |
+          Type-check the six OS/arch targets before the security stage, in one job. Off by default:
+          GoReleaser builds every target at delivery, so this only moves that failure to the pull
+          request. See go.yaml.
       go_version_file:
         type: 'string'
         required: false
@@ -79,6 +102,10 @@ jobs:
       sonar_host: ${{ inputs.sonar_host }}
       runs_on: ${{ inputs.runs_on }}
       codeql_runs_on: ${{ inputs.codeql_runs_on }}
+      extra_test_command: ${{ inputs.extra_test_command }}
+      extra_test_name: ${{ inputs.extra_test_name }}
+      extra_test_runs_on: ${{ inputs.extra_test_runs_on }}
+      cross_compile: ${{ inputs.cross_compile }}
       codeql_upload: ${{ inputs.codeql_upload }}
     secrets:
       sonar_token: ${{ secrets.sonar_token }}

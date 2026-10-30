@@ -860,7 +860,7 @@ assert_true "the toolchain is installed BEFORE CodeQL initialises its database" 
 # This repository analyses itself through that action, and the file it names has to
 # be the module that actually exists -- a stale path silently falls back to the
 # runner's Go, which is the state this whole file exists to prevent.
-SELF_WORKFLOW="$SCRIPTS_DIR/.github/workflows/codeql.yaml"
+SELF_WORKFLOW="$SCRIPTS_DIR/.github/workflows/ci.yaml"
 assert_true "this repository scans itself through the shared action" \
   "[[ -f '$SELF_WORKFLOW' ]] && grep -q '20-security/codeql' '$SELF_WORKFLOW'"
 

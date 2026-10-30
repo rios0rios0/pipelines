@@ -53,6 +53,7 @@ fi
 LIMIT="${CROSS_COMPILE_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}"
 case "$LIMIT" in
   '' | *[!0-9]* | 0) LIMIT=1 ;;
+  *) ;;
 esac
 
 LOG_DIR="$(mktemp -d)"

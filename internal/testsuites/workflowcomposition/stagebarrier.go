@@ -123,32 +123,47 @@ func barrierFindings(name string, document *value) ([]string, int, error) {
 	var problems []string
 	staged := 0
 	for _, id := range order {
-		job := jobs[id]
-		if job.rank > 0 {
+		if jobs[id].rank > 0 {
 			staged++
 		}
 		upstream := closure(id, jobs)
-		for _, waited := range barrierFor(job, jobs, order) {
-			if waited != id && !upstream[waited] {
-				problems = append(problems, fmt.Sprintf("%s: job %s (%s) can start before %s (%s) finishes -- add it "+
-					"to `needs:`, so each stage waits for the whole stage before it", name, id, job.name, waited,
-					jobs[waited].name))
-			}
-		}
-		if job.tolerant {
-			continue
-		}
-		for _, ancestor := range order {
-			if upstream[ancestor] && jobs[ancestor].skippable && jobs[ancestor].rank >= rankCodeCheck &&
-				jobs[ancestor].rank <= lastCheckingStage {
-				problems = append(problems, fmt.Sprintf("%s: job %s needs %s, which can be skipped, and its `if:` "+
-					"calls no status function, so GitHub skips it too whenever %s is skipped -- gate it on "+
-					"`!cancelled() && !failure() && (...)`", name, id, ancestor, ancestor))
-				break
-			}
+		problems = append(problems, barrierGaps(name, id, jobs, order, upstream)...)
+		if skipped := skippedCheck(jobs[id], jobs, order, upstream); skipped != "" {
+			problems = append(problems, fmt.Sprintf("%s: job %s needs %s, which can be skipped, and its `if:` "+
+				"calls no status function, so GitHub skips it too whenever %s is skipped -- gate it on "+
+				"`!cancelled() && !failure() && (...)`", name, id, skipped, skipped))
 		}
 	}
 	return problems, staged, nil
+}
+
+// barrierGaps is a finding for every job `id` must wait for and can start before.
+func barrierGaps(name, id string, jobs map[string]stagedJob, order []string, upstream map[string]bool) []string {
+	var problems []string
+	job := jobs[id]
+	for _, waited := range barrierFor(job, jobs, order) {
+		if waited != id && !upstream[waited] {
+			problems = append(problems, fmt.Sprintf("%s: job %s (%s) can start before %s (%s) finishes -- add it "+
+				"to `needs:`, so each stage waits for the whole stage before it", name, id, job.name, waited,
+				jobs[waited].name))
+		}
+	}
+	return problems
+}
+
+// skippedCheck is the first check upstream of `job` that can be skipped while `job` keeps the implicit
+// `success()`, or "" when there is none or the job's condition already calls a status function.
+func skippedCheck(job stagedJob, jobs map[string]stagedJob, order []string, upstream map[string]bool) string {
+	if job.tolerant {
+		return ""
+	}
+	for _, ancestor := range order {
+		check := jobs[ancestor]
+		if upstream[ancestor] && check.skippable && check.rank >= rankCodeCheck && check.rank <= lastCheckingStage {
+			return ancestor
+		}
+	}
+	return ""
 }
 
 // barrierFor is the jobs `job` must wait for: every job of the nearest earlier checking stage in the

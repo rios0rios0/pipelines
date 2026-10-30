@@ -7,7 +7,8 @@
 # no build tag ran its whole unit suite twice -- serially, under `-p 1` -- and
 # saw every test counted twice in the merged junit.xml. Phase 2 now runs only
 # the packages whose test file list actually changes under the tag. The last
-# case pins the `-timeout` phase 2 hands to `go test` (GO_TEST_INTEGRATION_TIMEOUT).
+# cases pin the `-timeout` phase 2 hands to `go test` (GO_TEST_INTEGRATION_TIMEOUT)
+# and the `integration_timeout` input that carries it on GitHub Actions.
 #
 # Every case below drives the real run.sh rather than a copy of its selection
 # logic, so the test cannot drift away from the script it is pinning. The
@@ -430,6 +431,27 @@ check "GO_TEST_INTEGRATION_TIMEOUT sets the integration phase's limit" \
     "$(deadline_minutes override 45m)" "45"
 check "GO_TEST_INTEGRATION_TIMEOUT=0 removes the limit" \
     "$(deadline_minutes disabled 0)" "none"
+
+# ── the GitHub path carries the limit as an input ─────────────────────────────
+# A reusable workflow receives only `inputs` and `secrets`, so a caller's `env:`
+# never reaches run.sh. Every Go workflow that runs the tests therefore declares
+# `integration_timeout` and forwards it, and the test action maps it onto the
+# variable the cases above drive. Nothing else asserts that a composed workflow
+# forwards an input of its base, and a dropped forward would not fail anything:
+# its consumers would quietly get the default.
+echo "== the GitHub path threads integration_timeout into GO_TEST_INTEGRATION_TIMEOUT ==" >&2
+
+ACTION="$SCRIPT_DIR/github/golang/stages/30-tests/all/action.yaml"
+# shellcheck disable=SC2016  # the single-quoted `${{ }}` is the action's expected TEXT, never an expansion
+check "the test action maps integration_timeout onto GO_TEST_INTEGRATION_TIMEOUT" \
+    "$(grep -cF 'GO_TEST_INTEGRATION_TIMEOUT: "${{ inputs.integration_timeout }}"' "$ACTION")" "1"
+for workflow in go go-docker go-flyio go-render; do
+    file="$SCRIPT_DIR/.github/workflows/$workflow.yaml"
+    check "$workflow.yaml declares integration_timeout" \
+        "$(grep -c '^      integration_timeout:$' "$file")" "1"
+    check "$workflow.yaml forwards integration_timeout" \
+        "$(grep -cE '^ +integration_timeout: "?\$\{\{ inputs\.integration_timeout \}\}"?$' "$file")" "1"
+done
 
 echo "" >&2
 if [ "$EXIT_CODE" -eq 0 ]; then

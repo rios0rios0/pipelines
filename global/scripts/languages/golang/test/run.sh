@@ -229,8 +229,10 @@ else
   # can need most of that on a quiet runner, then die as `panic: test timed out
   # after 10m0s` as soon as the runner is busy -- with nothing actually hung.
   # 30m still bounds a genuine hang. `0` disables the limit. It is read from the
-  # environment like the variable above; no GitHub input carries it yet, so
-  # GitHub consumers get the default.
+  # environment like the variable above, and the GitHub path threads an
+  # `integration_timeout` input into it the same way, because a package that
+  # keeps growing reaches any fixed limit in the end: one took 22 to 28 minutes
+  # on normal runs and then failed a release on a busy runner at 30.
   # shellcheck disable=SC2086
   "$GOBIN_DIR"/gotestsum \
     --format pkgname \

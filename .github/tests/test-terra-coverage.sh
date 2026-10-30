@@ -2,14 +2,13 @@
 set -e
 
 # Test script for validating the Terraform generic coverage report generator.
-# Exercises terra_coverage.py against synthetic module trees and asserts the
+# Exercises the generator against synthetic module trees and asserts the
 # emitted SonarQube generic-coverage XML measures what it claims to.
 #
 # Every numbered case below is a regression guard for a defect a regex
 # prototype hit on real repositories -- the comments name which.
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-COV="$SCRIPTS_DIR/global/scripts/languages/terraform/terra-test/terra_coverage.py"
 TEST_DIR="$(mktemp -d)" || exit 1
 
 RED='\033[0;31m'
@@ -35,6 +34,21 @@ cleanup() {
   rm -rf "$TEST_DIR"
 }
 trap cleanup EXIT
+
+# The generator and the report checker are Go. Each is built ONCE for the
+# suite, with the same pinned environment `global/scripts/shared/go-helper.sh`
+# builds a helper with; the checker parses a report at least as strictly as a
+# conforming XML parser does.
+COV="$TEST_DIR/terra-coverage"
+REPORTS="$TEST_DIR/terraform-reports"
+build() {
+  CGO_ENABLED=0 GOFLAGS=-mod=readonly GOWORK=off go -C "$SCRIPTS_DIR" build -trimpath -o "$1" "$2"
+}
+if ! build "$COV" ./global/scripts/languages/terraform/terra-test/coverage \
+  || ! build "$REPORTS" ./internal/testsuites/terraform-reports; then
+  echo -e "${RED}FAIL: could not build the coverage generator or the report checker (they need Go 1.25 or newer)${NC}"
+  exit 1
+fi
 
 # =============================================================================
 # Test 1: Root-layout module, reached through locals and outputs
@@ -79,15 +93,15 @@ HCL
 # when
 OUT1="$REPO1/out1.xml"
 # shellcheck disable=SC2034  # used inside assert_true's eval'd argument
-SUMMARY1="$(python3 "$COV" --repo-dir "$REPO1" --output "$OUT1")"
+SUMMARY1="$("$COV" --repo-dir "$REPO1" --output "$OUT1")"
 
 # then
 assert_true "root-layout module is measured, not scored 0/0" \
   "echo \"\$SUMMARY1\" | grep -q 'terra generic coverage: 2/3 blocks (66%)'"
 assert_true "emitted XML parses" \
-  "python3 -c 'import xml.etree.ElementTree as ET; ET.parse(\"$OUT1\")'"
+  "'$REPORTS' well-formed '$OUT1'"
 assert_true "root element is <coverage version=\"1\">" \
-  "python3 -c 'import xml.etree.ElementTree as ET; r=ET.parse(\"$OUT1\").getroot(); raise SystemExit(0 if r.tag==\"coverage\" and r.get(\"version\")==\"1\" else 1)'"
+  "'$REPORTS' root '$OUT1' coverage version=1"
 assert_true "path is relative to --repo-dir" \
   "grep -q '<file path=\"main.tf\">' '$OUT1'"
 assert_true "block reached only through local.* is covered" \
@@ -209,7 +223,7 @@ HCL
 # when
 OUT2="$REPO2/out2.xml"
 # shellcheck disable=SC2034  # used inside assert_true's eval'd argument
-SUMMARY2="$(python3 "$COV" --repo-dir "$REPO2" --output "$OUT2")"
+SUMMARY2="$("$COV" --repo-dir "$REPO2" --output "$OUT2")"
 
 # then
 assert_true "denominator excludes vendored and test code (5/7, not 5/12)" \
@@ -235,7 +249,7 @@ assert_true "a mention in a comment or a string literal does not cover" \
 assert_true "a module with no .tftest.hcl is entirely uncovered" \
   "grep -A1 'modules/notests/main.tf' '$OUT2' | grep -q 'covered=\"false\"'"
 assert_true "line numbers are ascending within a file" \
-  "python3 -c 'import xml.etree.ElementTree as ET; f=ET.parse(\"$OUT2\").getroot()[0]; n=[int(l.get(\"lineNumber\")) for l in f]; raise SystemExit(0 if n==sorted(set(n)) else 1)'"
+  "'$REPORTS' ascending-lines '$OUT2'"
 
 # =============================================================================
 # Test 3: Heredoc bodies are not code, but their interpolations are references
@@ -275,11 +289,11 @@ HCL
 
 # when
 OUT3="$REPO3/out3.xml"
-python3 "$COV" --repo-dir "$REPO3" --output "$OUT3" --quiet
+"$COV" --repo-dir "$REPO3" --output "$OUT3" --quiet
 
 # then
 assert_true "--quiet prints nothing" \
-  "[ -z \"\$(python3 '$COV' --repo-dir '$REPO3' --output '$OUT3' --quiet)\" ]"
+  "[ -z \"\$('$COV' --repo-dir '$REPO3' --output '$OUT3' --quiet)\" ]"
 assert_true "a brace inside a heredoc does not end the locals block" \
   "[ \"\$(grep -c '<lineToCover ' '$OUT3')\" -eq 3 ]"
 assert_true "interpolated reference inside a heredoc is a real reference" \
@@ -300,7 +314,7 @@ mkdir -p "$REPO4"
 OUT4="$REPO4/nested/dir/out4.xml"
 set +e
 # shellcheck disable=SC2034  # used inside assert_true's eval'd argument
-SUMMARY4="$(python3 "$COV" --repo-dir "$REPO4" --output "$OUT4")"
+SUMMARY4="$("$COV" --repo-dir "$REPO4" --output "$OUT4")"
 EXIT4=$?
 set -e
 
@@ -308,7 +322,7 @@ set -e
 assert_true "exit status is 0 with nothing to measure" "[ $EXIT4 -eq 0 ]"
 assert_true "output parent directory is created" "[ -f '$OUT4' ]"
 assert_true "empty report still parses as XML" \
-  "python3 -c 'import xml.etree.ElementTree as ET; r=ET.parse(\"$OUT4\").getroot(); raise SystemExit(0 if r.tag==\"coverage\" and r.get(\"version\")==\"1\" and len(r)==0 else 1)'"
+  "'$REPORTS' root '$OUT4' coverage version=1 children=0"
 assert_true "empty run says so on stdout" \
   "echo \"\$SUMMARY4\" | grep -q 'nothing to measure'"
 assert_true "empty run still states the granularity caveat" \
@@ -356,7 +370,7 @@ HCL
 # when
 OUT5="$REPO5/out5.xml"
 # shellcheck disable=SC2034  # used inside assert_true's eval'd argument
-SUMMARY5="$(python3 "$COV" --repo-dir "$REPO5" --output "$OUT5")"
+SUMMARY5="$("$COV" --repo-dir "$REPO5" --output "$OUT5")"
 
 # then
 assert_true "example usage is not module code (2/2, not 2/4)" \
@@ -409,7 +423,7 @@ HCL
 # when
 OUT6="$REPO6/out6.xml"
 # shellcheck disable=SC2034  # used inside assert_true's eval'd argument
-SUMMARY6="$(python3 "$COV" --repo-dir "$REPO6" --output "$OUT6")"
+SUMMARY6="$("$COV" --repo-dir "$REPO6" --output "$OUT6")"
 
 # then
 assert_true "only the asserted submodule is credited (3/4, not 4/4)" \
@@ -474,7 +488,7 @@ HCL
 # when
 OUT7="$REPO7/out7.xml"
 # shellcheck disable=SC2034  # used inside assert_true's eval'd argument
-SUMMARY7="$(python3 "$COV" --repo-dir "$REPO7" --output "$OUT7")"
+SUMMARY7="$("$COV" --repo-dir "$REPO7" --output "$OUT7")"
 
 # then
 assert_true "only the executed test credits coverage (1/3, not 3/3)" \
@@ -535,7 +549,7 @@ HCL
 # when
 OUT8="$REPO8/out8.xml"
 # shellcheck disable=SC2034  # used inside assert_true's eval'd argument
-SUMMARY8="$(python3 "$COV" --repo-dir "$REPO8" --output "$OUT8")"
+SUMMARY8="$("$COV" --repo-dir "$REPO8" --output "$OUT8")"
 
 # then
 assert_true "a module named examples is measured, not skipped (2/2, not 1/1)" \
@@ -584,7 +598,7 @@ HCL
 # when
 OUT9="$REPO9/out9.xml"
 # shellcheck disable=SC2034  # used inside assert_true's eval'd argument
-SUMMARY9="$(python3 "$COV" --repo-dir "$REPO9" --output "$OUT9")"
+SUMMARY9="$("$COV" --repo-dir "$REPO9" --output "$OUT9")"
 
 # then
 assert_true "every block is reached, including through the nested quotes (4/4)" \
@@ -619,7 +633,7 @@ HCL
 
 # when
 set +e
-TRAVERSE10="$(python3 "$COV" --repo-dir "$REPO10" --output "$REPO10/../outside10/escaped.xml" --quiet 2>&1)"
+TRAVERSE10="$("$COV" --repo-dir "$REPO10" --output "$REPO10/../outside10/escaped.xml" --quiet 2>&1)"
 TRAVERSE10_RC=$?
 set -e
 # shellcheck disable=SC2034  # used inside assert_true's eval'd argument
@@ -633,7 +647,7 @@ assert_true "it says why, naming the repository it is confined to" \
 assert_true "nothing is written outside the repository" \
   "[[ ! -e '$OUTSIDE10/escaped.xml' ]]"
 assert_true "a relative --output still resolves inside the repository" \
-  "python3 '$COV' --repo-dir '$REPO10' --output build/reports/in.xml --quiet && [[ -s '$REPO10/build/reports/in.xml' ]]"
+  "'$COV' --repo-dir '$REPO10' --output build/reports/in.xml --quiet && [[ -s '$REPO10/build/reports/in.xml' ]]"
 
 # =============================================================================
 # Summary

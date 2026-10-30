@@ -30,13 +30,21 @@ stages:
 
       # Enforces the team's file-ordering standard (dependency/inputs in
       # root.hcl, .HCL/.ENV grouping in variables.tf, heaviest->lightest
-      # providers.tf, main.tf-ordered outputs.tf). Deps-free: only needs
-      # python3 from the agent. Run `order-check/run.sh --fix` locally to
-      # auto-sort.
+      # providers.tf, main.tf-ordered outputs.tf). The checker is a Go helper
+      # built from the pipelines checkout, so the job installs Go and reuses
+      # scripts-repo without the terra CLI or Terraform. Run
+      # `order-check/run.sh --fix` locally to auto-sort.
       - job: 'style_order_check'
         displayName: 'style:order-check'
         steps:
           - template: '../../../global/abstracts/scripts-repo.yaml'
+
+          # At least the `go` directive of the pipelines repository's `go.mod`,
+          # which the checker is built against: an older Go refuses the module.
+          - task: 'GoTool@0'
+            displayName: 'Use Go (order-check is a Go helper)'
+            inputs:
+              version: '1.27.3'
 
           - script: $(Scripts.Directory)/global/scripts/languages/terraform/order-check/run.sh
             displayName: 'Check file ordering (deps/variables/providers/outputs)'

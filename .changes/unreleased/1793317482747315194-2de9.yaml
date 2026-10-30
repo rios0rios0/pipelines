@@ -1,0 +1,3 @@
+kind: 'Removed'
+body: 'removed `python` from this repository''s own CodeQL matrix (`.github/workflows/codeql.yaml`), since the Terraform helpers were the last Python source here and CodeQL fails a language it finds no code for'
+time: '2026-10-29T23:44:42.747184415Z'

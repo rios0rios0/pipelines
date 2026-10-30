@@ -26,8 +26,9 @@ development practices, refer to the **[Development Guide](https://github.com/rio
    ```bash
    make test-go-script
    ```
-   and for the Go helpers (the root `go.mod`, such as `global/scripts/tools/dependency-updates/`) --
-   new helpers are written in Go or POSIX shell, not Python:
+   and for the Go helpers (the root `go.mod`, such as `global/scripts/tools/dependency-updates/` and the
+   Terraform helpers under `global/scripts/languages/terraform/`) -- new helpers are written in Go or POSIX
+   shell, not Python:
    ```bash
    make test-go-helpers
    make lint-go-helpers

@@ -2,11 +2,10 @@
 set -e
 
 # Test script for validating the tftest-gen smoke-test generator.
-# Exercises gen_smoke_tests.py against synthetic terraform-module layouts
+# Exercises the generator against synthetic terraform-module layouts
 # and asserts the generated tests/smoke.tftest.hcl is well-formed.
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-GEN="$SCRIPTS_DIR/global/scripts/languages/terraform/tftest-gen/gen_smoke_tests.py"
 RUN_SH="$SCRIPTS_DIR/global/scripts/languages/terraform/tftest-gen/run.sh"
 TEST_DIR="$(mktemp -d)" || exit 1
 
@@ -34,6 +33,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# The generator is Go. It is built ONCE for the suite, with the same pinned
+# environment `global/scripts/shared/go-helper.sh` builds it with, rather than
+# on every call the way `run.sh` does -- Test 8 drives `run.sh` itself.
+GEN="$TEST_DIR/tftest-gen"
+if ! CGO_ENABLED=0 GOFLAGS=-mod=readonly GOWORK=off \
+  go -C "$SCRIPTS_DIR" build -trimpath -o "$GEN" ./global/scripts/languages/terraform/tftest-gen; then
+  echo -e "${RED}FAIL: could not build the tftest-gen generator (it needs Go 1.25 or newer)${NC}"
+  exit 1
+fi
+
 # =============================================================================
 # Test 1: Minimal module -- one provider, one required var, no validations
 # =============================================================================
@@ -55,7 +64,7 @@ variable "resource_group_name" {
 HCL
 
 # when
-python3 "$GEN" --repo-dir "$REPO1" >/dev/null
+"$GEN" --repo-dir "$REPO1" >/dev/null
 
 # then
 SMOKE1="$REPO1/tests/smoke.tftest.hcl"
@@ -96,7 +105,7 @@ variable "name" {
 HCL
 
 # when
-python3 "$GEN" --repo-dir "$REPO2" >/dev/null
+"$GEN" --repo-dir "$REPO2" >/dev/null
 
 # then
 SMOKE2="$REPO2/tests/smoke.tftest.hcl"
@@ -138,7 +147,7 @@ variable "config" {
 HCL
 
 # when
-python3 "$GEN" --repo-dir "$REPO3" >/dev/null
+"$GEN" --repo-dir "$REPO3" >/dev/null
 
 # then
 SMOKE3="$REPO3/tests/smoke.tftest.hcl"
@@ -170,7 +179,7 @@ run "custom" { command = plan }
 HCL
 
 # when (no --force)
-python3 "$GEN" --repo-dir "$REPO4" >/dev/null
+"$GEN" --repo-dir "$REPO4" >/dev/null
 
 # then
 SMOKE4="$REPO4/tests/smoke.tftest.hcl"
@@ -180,7 +189,7 @@ assert_true "hand-written content does not contain auto-gen marker" \
   "! head -n1 '$SMOKE4' | grep -q 'auto-generated'"
 
 # when (with --force)
-python3 "$GEN" --repo-dir "$REPO4" --force >/dev/null
+"$GEN" --repo-dir "$REPO4" --force >/dev/null
 
 # then
 assert_true "--force overwrites hand-written file with generated one" \
@@ -214,7 +223,7 @@ variable "region" {
 HCL
 
 # when
-python3 "$GEN" --repo-dir "$REPO5" >/dev/null
+"$GEN" --repo-dir "$REPO5" >/dev/null
 
 # then
 SMOKE5="$REPO5/tests/smoke.tftest.hcl"
@@ -283,6 +292,28 @@ MAKE_OUTPUT2=$(cd "$REPO7" && PATH="$STUB_BIN:$PATH" make -s test 2>&1 || true)
 # then
 assert_true "make test invokes terraform init when tests/ present" \
   "echo \"\$MAKE_OUTPUT2\" | grep -q 'UNEXPECTED: terraform init'"
+
+# =============================================================================
+# Test 8: run.sh builds and drives the generator
+# =============================================================================
+echo "TEST 8: run.sh drives the generator"
+# given
+REPO8="$TEST_DIR/repo8"
+mkdir -p "$REPO8"
+cat > "$REPO8/variables.tf" << 'HCL'
+variable "location" {
+  type = string
+}
+HCL
+
+# when
+RUN8_RC=0
+"$RUN_SH" --repo-dir "$REPO8" > /dev/null 2>&1 || RUN8_RC=$?
+
+# then
+assert_true "run.sh exits 0" "[ $RUN8_RC -eq 0 ]"
+assert_true "run.sh wrote the smoke test with the location stub" \
+  "grep -q 'location = \"eastus\"' '$REPO8/tests/smoke.tftest.hcl'"
 
 # =============================================================================
 # Summary

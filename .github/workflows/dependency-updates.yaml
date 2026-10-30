@@ -287,7 +287,9 @@ jobs:
           path: 'build/reports/dependency-updates/'
           if-no-files-found: 'warn'
           overwrite: 'true'
-          retention-days: 30
+          # Never past the repository's own retention: a longer request is cut to it anyway, with a
+          # warning on every run (`.github/tests/test-report-uploads.sh`).
+          retention-days: "${{ github.retention_days < 30 && github.retention_days || 30 }}"
         # A refused upload (e.g. `Artifact storage quota has been hit`) must not fail the job:
         # the report is evidence, and the step above already decided pass or fail.
         continue-on-error: true

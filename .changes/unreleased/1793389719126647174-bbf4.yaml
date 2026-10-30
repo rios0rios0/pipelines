@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'stopped every GitHub Actions report upload from asking to be kept longer than the repository keeps artifacts, which put `Retention days cannot be greater than the maximum allowed retention set within the repository. Using 2 instead.` on every job that uploads, on every run, in every `medhub-life` repository (2-day retention): each `retention-days` is now the shorter of the stage''s own number (10, or 30 for the coverage reports) and `github.retention_days`, so a repository that keeps artifacts longer still gets exactly the old retention, and `test-report-uploads` refuses a bare number'
+time: '2026-10-30T19:48:39.126387792Z'

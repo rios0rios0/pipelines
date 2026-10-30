@@ -164,6 +164,52 @@ func TestCheck(t *testing.T) {
 		}, deliverable)
 	})
 
+	t.Run("should report a retention the repository does not bound when an upload asks for a bare or uneven number",
+		func(t *testing.T) {
+			t.Parallel()
+			// given
+			root := repository(t, map[string]string{
+				".github/workflows/go.yaml": "jobs:\n  test:\n    steps:\n" +
+					"      - name: 'Coverage'\n        uses: 'actions/upload-artifact@x'\n        continue-on-error: true\n" +
+					"        with: {retention-days: 30}\n",
+				"github/dart/stages/40-delivery/build/action.yaml": "runs:\n  using: composite\n  steps:\n" +
+					"    - uses: 'actions/upload-artifact@x'\n" +
+					"      with: {retention-days: '${{ github.retention_days < 30 && github.retention_days || 10 }}'}\n",
+			})
+
+			// when
+			retention := findings(t, root, "retention")
+
+			// then
+			assert.Equal(t, []string{
+				".github/workflows/go.yaml :: job test :: step 0 (Coverage) asks for retention-days '30', " +
+					"unbounded by the repository's retention",
+				"github/dart/stages/40-delivery/build/action.yaml :: step 0 (unnamed) asks for retention-days " +
+					"'${{ github.retention_days < 30 && github.retention_days || 10 }}', unbounded by the " +
+					"repository's retention",
+			}, retention)
+		})
+
+	t.Run("should report no retention when an upload bounds its days by the repository's or leaves them out",
+		func(t *testing.T) {
+			t.Parallel()
+			// given
+			root := repository(t, map[string]string{
+				"github/global/stages/20-security/hadolint/action.yaml": "runs:\n  using: composite\n  steps:\n" +
+					"    - uses: 'actions/upload-artifact@x'\n      continue-on-error: true\n" +
+					"      with: {retention-days: '${{ github.retention_days < 10 && github.retention_days || 10 }}'}\n" +
+					"    - uses: 'actions/upload-artifact@x'\n      continue-on-error: true\n",
+			})
+
+			// when
+			var output bytes.Buffer
+			err := check(root, &output)
+
+			// then
+			require.NoError(t, err)
+			assert.Empty(t, output.String())
+		})
+
 	t.Run("should fail when a file in scope does not parse", func(t *testing.T) {
 		t.Parallel()
 		// given

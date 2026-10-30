@@ -70,7 +70,7 @@ make check-dependency-updates # Report which pinned dependencies have a newer re
 make apply-dependency-updates # Rewrite every stale pin in the working tree, digests included -- what the scheduled pull request carries (network)
 make test-azure-step-names  # Test Azure DevOps step-name uniqueness across expanded templates only
 make test-azure-secret-env  # Test that every Azure step consuming a credential maps it through `env:` only
-make test-report-uploads  # Test that no GitHub Actions report upload can fail its job, while mandatory reports stay enforced, only
+make test-report-uploads  # Test that no GitHub Actions report upload can fail its job or ask to be kept longer than the repository keeps artifacts, while mandatory reports stay enforced, only
 make build-and-push NAME=<image> TAG=<tag>  # Build and push a container image
 make build NAME=<image> TAG=<tag>           # Build both architectures, publish nothing (verification)
 ```
@@ -1161,7 +1161,18 @@ requires — and two cases keep the upload from weakening a gate:
 - **A deliverable** (the upload IS the job's product, like `dart/stages/40-delivery/build`)
   stays fatal, because a refused upload means nothing was delivered.
 
-`.github/tests/test-report-uploads.sh` holds all three rules; a new stage that is mandatory or a
+**An upload never asks to be kept longer than the repository keeps artifacts.** `actions/upload-artifact`
+cuts a `retention-days` above the repository's own retention down to it and adds a warning
+annotation saying so. Every `medhub-life` repository keeps artifacts for 2 days, so the stages'
+plain `10` (and `30` for the coverage reports) put "Retention days cannot be greater than the
+maximum allowed retention set within the repository. Using 2 instead." on every job that uploads,
+on every run. Each `retention-days` is therefore the shorter of the stage's own number and the
+repository's `github.retention_days`, written as
+`"${{ github.retention_days < 10 && github.retention_days || 10 }}"` with the same number twice.
+An absent `github.retention_days` compares as `0` and falls back to the stage's number, so nothing
+changes where the repository keeps artifacts longer.
+
+`.github/tests/test-report-uploads.sh` holds all four rules; a new stage that is mandatory or a
 deliverable must be added to that test's `MANDATORY` or `DELIVERABLES` set.
 
 ### A Failing Check Fails the Run

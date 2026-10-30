@@ -105,7 +105,9 @@ runs:
           build/*.aot
         if-no-files-found: 'warn'
         overwrite: 'true'
-        retention-days: 10
+        # Never past the repository's own retention: a longer request is cut to it anyway, with a
+        # warning on every run (`.github/tests/test-report-uploads.sh`).
+        retention-days: "${{ github.retention_days < 10 && github.retention_days || 10 }}"
       # `!cancelled()`, not `always()`: this upload IS the delivery, so a run superseded by
       # `cancel-in-progress` must not publish a half-built artifact or keep a runner slot busy
       # uploading one. A FAILED build still uploads, so what it produced can be inspected.

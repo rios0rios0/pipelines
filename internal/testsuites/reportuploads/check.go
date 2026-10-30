@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -32,6 +33,13 @@ func mandatory() map[string]bool {
 		"github/python/stages/10-code-check/vulture/action.yaml":   true,
 	}
 }
+
+// boundedRetention is the one shape a `retention-days` may take: the stage's own
+// number of days, or the repository's retention when that is shorter. A bare
+// number above the repository's retention is cut to it by `actions/upload-artifact`
+// anyway, with a warning annotation on every run.
+var boundedRetention = regexp.MustCompile(
+	`^\$\{\{ github\.retention_days < (\d+) && github\.retention_days \|\| (\d+) \}\}$`)
 
 // stepList is one list of steps and where it sits, as a finding names it.
 type stepList struct {
@@ -104,6 +112,7 @@ func (c *checker) checkUpload(relative string, list stepList, index int, step *y
 	label := fmt.Sprintf("%s :: step %d (%s)", list.where, index, step.Get("name").StrOr("unnamed"))
 	optional := step.Get("continue-on-error").IsTrue()
 	with := step.Get("with")
+	c.checkRetention(label, with)
 	if deliverables()[relative] {
 		if optional {
 			c.report("deliverable", label+" uploads the job's product but is continue-on-error")
@@ -133,6 +142,21 @@ func (c *checker) checkUpload(relative string, list stepList, index int, step *y
 		c.report("verify", fmt.Sprintf("%s: `Verify Report` checks %s, the upload publishes %s",
 			label, yamldoc.Quote(actual), yamldoc.Quote(expected)))
 	}
+}
+
+// checkRetention reports an upload that asks to keep its files for a number of
+// days the repository's retention does not bound. Leaving `retention-days` out is
+// fine: the upload then keeps the repository's own retention.
+func (c *checker) checkRetention(label string, with *yamldoc.Node) {
+	if !with.Has("retention-days") {
+		return
+	}
+	days := with.Get("retention-days").StrOr("")
+	if bound := boundedRetention.FindStringSubmatch(days); bound != nil && bound[1] == bound[2] {
+		return
+	}
+	c.report("retention", fmt.Sprintf("%s asks for retention-days %s, unbounded by the repository's retention",
+		label, yamldoc.Quote(days)))
 }
 
 // filesInScope are every `action.yaml` at any depth under github/ and every

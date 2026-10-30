@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the Terra `test:structural` job failing with "Go is required" on any runner without a Go of its own: since `var-catalog` became a Go helper, the `var-catalog/run.sh --check` a consumer''s `tests/structural.sh` runs builds it from source, and the job never provisioned Go, so it passed only where the runner image happened to carry one. Every platform''s job now installs the same pinned Go 1.27.3 as `order-check` (the GitLab CI job moves off `alpine/git`, which had neither Go nor the `python3` the old generator needed), and `make test-go-module-toolchain` lists the structural runner as a helper entry, because the call is in the consumer''s repository where discovery cannot follow it'
+time: '2026-10-30T14:53:49.561230333Z'

@@ -165,7 +165,9 @@ echo "1b. The root module is paired with every template that builds it"
 #   - a helper's entry is every script under `global/` that calls `go_helper_run <dir>`
 #     for a `main.go` of this module, and, followed to a fixed point, every script that
 #     runs one of those by path -- `test-all/run.sh` runs `terra-test/run.sh`, which runs
-#     the coverage generator, so a template running `test-all/run.sh` builds a helper;
+#     the coverage generator, so a template running `test-all/run.sh` builds a helper.
+#     The one exception is listed, not found: `structural/run.sh`, whose helper call is
+#     in the consumer's repository (see where ENTRIES is built);
 #   - a builder is a JOB, not a file, because the Go is provisioned per job: a workflow
 #     whose other jobs pin Go says nothing about the one that runs the checker. A GitHub
 #     Actions job pins `go-version:` before it runs the helper, and may hand a consumer's
@@ -570,6 +572,19 @@ if [[ -f "$ROOT_MODULE" ]]; then
   # coverage generator, they name the runners that reach it.
   assert_true "a helper reached through another script is found: test-all/run.sh" \
     "contains global/scripts/languages/terraform/test-all/run.sh ${ENTRIES[*]}"
+
+  # One entry cannot be found, because the call that makes it one is in ANOTHER
+  # repository. The structural runner executes the consumer's own `tests/structural.sh`,
+  # and that is where `var-catalog/run.sh --check` -- the CI gate for the generated
+  # `variables-shared.tf` -- runs: no template here names var-catalog. Left to discovery,
+  # every `test:structural` job read as deps-free and none provisioned Go, so var-catalog's
+  # move from Python to Go failed that job on every runner with no Go of its own, while
+  # runners whose image happens to ship one stayed green. Listed by path, so moving the
+  # runner fails here instead of quietly dropping its jobs from the rules below.
+  STRUCTURAL_RUNNER='global/scripts/languages/terraform/structural/run.sh'
+  assert_true "the structural runner, listed because consumer scripts run helpers through it, exists" \
+    "[[ -f '$SCRIPTS_DIR/$STRUCTURAL_RUNNER' ]]"
+  ENTRIES+=("$STRUCTURAL_RUNNER")
 
   # Each platform runs once: the job count is a side effect of the same pass, so the
   # findings go to a file rather than through a command substitution's subshell.

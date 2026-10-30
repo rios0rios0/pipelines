@@ -99,9 +99,10 @@ tracked_files() {
   git -C "$1" ls-files 2> /dev/null
 }
 
-# python_findings <root> -- one line per breach of rules 1 to 3 in the tree at <root>.
+# python_findings <root> [repository] -- one line per breach of rules 1 to 3 in the tree at <root>.
+# `repository` says <root> is this repository itself, so an excused file that is gone is named too.
 python_findings() {
-  local root="$1" path line number text entry excuse_file excuse_line excused status
+  local root="$1" scope="${2:-}" path line number text entry excuse_file excuse_line excused status
   declare -A seen=()
 
   while IFS= read -r path; do
@@ -138,13 +139,18 @@ python_findings() {
     done < <(grep -I -n -E "$INVOCATION" "$root/$path" 2> /dev/null)
   done < <(tracked_files "$root")
 
-  # An excuse whose line is gone is reported, so the list cannot outlive what it excuses.
+  # An excuse whose line, or whole file, is gone is reported, so the list cannot outlive what it
+  # excuses. A fixture tree holds none of the excused files, so only the repository's own scan
+  # names a missing one.
   for entry in "${EXCUSED[@]}"; do
     excuse_file="${entry%%|*}"
     excuse_line="${entry#*|}"
     excuse_line="${excuse_line%|*}"
-    if [[ -f "$root/$excuse_file" && -z "${seen["$entry"]:-}" ]]; then
+    [[ -n "${seen["$entry"]:-}" ]] && continue
+    if [[ -f "$root/$excuse_file" ]]; then
       echo "$excuse_file: the excused line '$excuse_line' is gone -- remove it from EXCUSED in .github/tests/test-no-python.sh"
+    elif [[ "$scope" == repository ]]; then
+      echo "$excuse_file: the excused file is gone -- remove its lines from EXCUSED in .github/tests/test-no-python.sh"
     fi
   done
 
@@ -175,7 +181,7 @@ fi
 echo ""
 echo "--- 1-3. The repository ---"
 
-FINDINGS="$(python_findings "$SCRIPTS_DIR")"
+FINDINGS="$(python_findings "$SCRIPTS_DIR" repository)"
 assert_empty "no Python source, shebang or interpreter run outside the Python pipelines and the listed lines" "$FINDINGS"
 
 echo ""
@@ -239,6 +245,14 @@ OUT="$(python_findings "$FIXTURE")"
 assert_contains "a listed line that changed is named, since it no longer matches its excuse" "$OUT" \
   'python3 -m venv --upgrade-deps "$CHECKOV_VENV"; then -- runs Python'
 assert_contains "...and the excuse it outlived is named as stale" "$OUT" "the excused line 'if [ ! -x \"\$CHECKOV_VENV/bin/pip\" ] && ! python3 -m venv \"\$CHECKOV_VENV\"; then' is gone"
+
+# An excused file that is gone is named when the repository itself is scanned -- the fixture holds
+# no copy of the supply-chain suite -- and never in a fixture's own scan, which holds none of them.
+OUT="$(python_findings "$FIXTURE" repository)"
+assert_contains "an excused file that is gone is named in the repository's scan" "$OUT" \
+  '.github/tests/test-supply-chain.sh: the excused file is gone'
+OUT="$(python_findings "$FIXTURE")"
+assert_not_contains "...but not in a fixture's own scan" "$OUT" 'the excused file is gone'
 
 cp "$SCRIPTS_DIR/global/scripts/tools/checkov/run.sh" "$FIXTURE/global/scripts/tools/checkov/run.sh"
 awk -v max="$PARSER_QUESTION_MAX_LINES" '{ print } /bin\/python" - .*<<.PY.$/ { for (i = 0; i <= max; i++) print "pass" }' \

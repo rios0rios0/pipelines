@@ -722,7 +722,7 @@ Python stays only where it is really needed, and the suite names each place:
 | One heredoc in `checkov/run.sh`, at most 30 lines, asked once | It asks Checkov's HCL parser -- `bc-python-hcl2`, a Python library that exists only in Checkov's virtualenv -- where it stopped in a file it could not parse |
 
 The excused lines are listed verbatim, so a new use of Python beside them fails like any other, and an
-excused line that disappears fails too, so the list cannot outlive what it excuses. Prose that only
+excused line that disappears fails too, as does an excused file, so the list cannot outlive what it excuses. Prose that only
 names Python -- "install python3 and re-run", `command -v python3`, a `python:3.13-slim` image -- is
 not a call and is not flagged.
 

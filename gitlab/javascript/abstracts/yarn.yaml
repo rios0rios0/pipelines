@@ -4,7 +4,8 @@
 # `corepack` at all. Node 18, which this ran until then, reached its end of life on 2025-04-30, and
 # `quality:knip` could not start on it: knip 6 requires `^20.19.0 || >=22.12.0` (KI-05 in
 # `.docs/known-issues.md`). Pinned by digest, in the mapping form `docker: user:` needs, which
-# `dependency-updates` reads and re-pins like any other.
+# `dependency-updates` reads and re-pins like any other, and moved with `.npm`'s to each new Node 24
+# release `NODE_PINNED_VERSION` adopts.
 .yarn:
   image:
     name: 'node:24.22.1-trixie@sha256:f1e034976f948cf212ef1f659c12e5dd58ac7eab947831813e81a62401ca38be'

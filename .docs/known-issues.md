@@ -229,7 +229,7 @@ privately and fix them.
   they were: the deployment templates' Node 22, supported until 2027-04-30.
   The release is 24.22.1 rather than the newer 24.22.2: 24.22.1 (2026-10-21) is the security
   release that fixed the eight advisories 24.22.0 carries, and 24.22.2 fixes nothing more and was
-  a day old, inside the dependency update's 7-day cooldown.
+  published on 2026-10-28, inside the dependency update's 7-day cooldown.
   And the pins no longer stay where this left them. A tag naming one release stops being rebuilt
   once the next ships, so its digest never moves again and the digest check has nothing to report:
   that is how `.npm` stayed on Node 16.14.0. The GitLab CI images and the Azure DevOps `UseNode@1`

@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added the `lint_runs_on` and `tests_runs_on` inputs to `go.yaml` and every workflow composed on it, which send golangci-lint and `tests > test:all` to their own runners the way `codeql_runs_on` sends CodeQL. Pointed at one label that a single runner per host carries, the three heavy Go jobs run at most one per host, so two of them no longer exhaust a small shared host together and get one killed by the OOM killer. Empty, the default, leaves both jobs on `runs_on`'
+time: '2026-10-30T21:33:31.102169458Z'

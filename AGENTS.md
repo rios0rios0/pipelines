@@ -516,7 +516,9 @@ A job may also take a selector of its **own** that falls back to the pipeline's:
 `runs-on: ${{ fromJSON(inputs.codeql_runs_on || inputs.runs_on) }}` is how `go.yaml`, `npm.yaml` and
 `yarn.yaml` let a consumer send CodeQL alone to a dedicated runner. CodeQL sizes its RAM and threads
 from the whole machine, so two analyses on one shared self-hosted host exhaust its memory, and the
-kernel's OOM kill surfaces as "The runner has received a shutdown signal". The chain parses as a
+kernel's OOM kill surfaces as "The runner has received a shutdown signal". `go.yaml` gives
+golangci-lint (`lint_runs_on`) and `tests > test:all` (`tests_runs_on`) the same chain, because on a
+small host any two heavy jobs together exhaust it, not only two analyses. The chain parses as a
 declared-input selector, but a fallback reads correctly and still fails silently three ways, and the
 check reports each: a link after `runs_on` is never read, because `runs_on` always has a value; a link
 that is required or has a non-empty default never lets the job fall through, so the consumer's

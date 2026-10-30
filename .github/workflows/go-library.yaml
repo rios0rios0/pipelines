@@ -23,6 +23,16 @@ on:
         required: false
         default: ''
         description: 'Runner labels for the CodeQL job alone; empty runs it on `runs_on`. See go.yaml.'
+      lint_runs_on:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'Runner labels for the golangci-lint job alone; empty runs it on `runs_on`. See go.yaml.'
+      tests_runs_on:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'Runner labels for the `tests > test:all` job alone; empty runs it on `runs_on`. See go.yaml.'
       extra_test_command:
         type: 'string'
         required: false
@@ -70,6 +80,8 @@ jobs:
       sonar_host: ${{ inputs.sonar_host }}
       runs_on: ${{ inputs.runs_on }}
       codeql_runs_on: ${{ inputs.codeql_runs_on }}
+      lint_runs_on: ${{ inputs.lint_runs_on }}
+      tests_runs_on: ${{ inputs.tests_runs_on }}
       extra_test_command: ${{ inputs.extra_test_command }}
       extra_test_name: ${{ inputs.extra_test_name }}
       extra_test_runs_on: ${{ inputs.extra_test_runs_on }}

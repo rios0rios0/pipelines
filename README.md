@@ -342,6 +342,35 @@ It is GitHub Actions only, as `runs_on` is: the GitLab CI and Azure DevOps CodeQ
 runner selector of their own. `make test ONLY=workflow-composition` fails if a composed workflow stops
 forwarding it, or if the CodeQL job's fallback can no longer reach `runs_on`.
 
+#### Lint and Tests on Their Own Runners (`lint_runs_on`, `tests_runs_on`)
+
+Capping CodeQL at one analysis per host is not enough where the hosts are small: the OOM killer ends
+any two heavy jobs that land on one host together, and a Go pipeline has three. golangci-lint
+type-checks the whole module in one process, and the `test:all` build instruments every package for
+coverage, so one large test package makes the compiler hold several GB. Beside CodeQL, either one is
+what gets killed; the tests report it as `compile: signal: killed` followed by a coverage drop.
+
+`lint_runs_on` and `tests_runs_on` send those two jobs to their own runners the way `codeql_runs_on`
+sends CodeQL. Pointed at the same label, the three heavy jobs run at most one per host, and every
+other job keeps the whole pool:
+
+```yaml
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'
+    with:
+      runs_on: '["self-hosted"]'
+      codeql_runs_on: '["self-hosted","heavy"]'
+      lint_runs_on: '["self-hosted","heavy"]'
+      tests_runs_on: '["self-hosted","heavy"]'
+```
+
+The cost is queueing: with one such runner per host, the heavy jobs of concurrent pipelines wait for
+each other instead of sharing a host. Empty, the default, leaves both jobs on `runs_on`. Only
+`go.yaml` takes them, and so does every workflow composed on it: `go-docker.yaml`, `go-flyio.yaml`,
+`go-render.yaml`, `go-binary.yaml` and `go-library.yaml`. `make test-workflow-composition` fails if
+a composed workflow stops forwarding either one.
+
 #### Stages Run One After Another
 
 GitHub Actions has no stages: a job starts as soon as the jobs it `needs:` are done. Every

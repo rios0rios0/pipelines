@@ -17,10 +17,10 @@ privately and fix them.
 | ID | Workflow and job | Issue | Status |
 |---|---|---|---|
 | [KI-01](#ki-01--the-dart-test-job-has-no-timeout) | `.github/workflows/dart.yaml`, `tests > test:all` | The Dart test job has no timeout | Open |
-| [KI-02](#ki-02--gitlab-ci-cannot-start-codeql-in-the-default-image) | `gitlab/global/stages/20-security/codeql.yaml`, `sast:codeql` | GitLab CI cannot start CodeQL in the default image | Fixed in #<PR> |
+| [KI-02](#ki-02--gitlab-ci-cannot-start-codeql-in-the-default-image) | `gitlab/global/stages/20-security/codeql.yaml`, `sast:codeql` | GitLab CI cannot start CodeQL in the default image | Fixed in #775 |
 | [KI-03](#ki-03--the-go-autobuild-runs-the-default-goal-of-a-consumer-makefile) | `global/scripts/tools/codeql/run.sh` and the `20-security/codeql` action, Go | The Go autobuild runs the default goal of a consumer Makefile | Won't fix |
-| [KI-04](#ki-04--gitlab-cis-debian-11-images-can-no-longer-install-packages) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml`, `gitlab/java/abstracts/maven.yaml` | GitLab CI's Debian 11 images can no longer install packages | Fixed in #<PR> |
-| [KI-05](#ki-05--gitlab-cis-javascript-images-run-a-nodejs-past-its-end-of-life) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml` | GitLab CI's JavaScript images run a Node.js past its end of life | Fixed in #<PR> |
+| [KI-04](#ki-04--gitlab-cis-debian-11-images-can-no-longer-install-packages) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml`, `gitlab/java/abstracts/maven.yaml` | GitLab CI's Debian 11 images can no longer install packages | Fixed in #775 |
+| [KI-05](#ki-05--gitlab-cis-javascript-images-run-a-nodejs-past-its-end-of-life) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml` | GitLab CI's JavaScript images run a Node.js past its end of life | Fixed in #775 |
 
 ## KI-01 — The Dart test job has no timeout
 
@@ -113,7 +113,7 @@ privately and fix them.
   finding fails the gate (exit 1) and a clean one passes it (exit 0), for Go, Python, JavaScript
   (TypeScript), Java with Gradle and with Maven, and C#, SDK-style and .NET Framework.
   `make test-codeql-runtime` holds the templates to it.
-- **Status:** Fixed in #<PR>.
+- **Status:** Fixed in #775.
 
 ## KI-03 — The Go autobuild runs the default goal of a consumer Makefile
 
@@ -190,7 +190,7 @@ privately and fix them.
     `sca:yarn-audit` over a Yarn 4 project, and the Maven `sast:codeql`.
   - Section 7 of `make test-codeql-runtime` fails on any GitLab CI image marked Debian 11, and keeps
     the two jobs on an image where `apt-get` works.
-- **Status:** Fixed in #<PR>.
+- **Status:** Fixed in #775.
 
 ## KI-05 — GitLab CI's JavaScript images run a Node.js past its end of life
 
@@ -246,4 +246,4 @@ privately and fix them.
     4.18.1), then the `quality:knip` install and knip, `yarn npm audit`, lint, tests and build.
   - Section 8 of `make test-codeql-runtime` fails on any Node.js a template names that is past its
     end of life, on an odd line, or on a line with no recorded date.
-- **Status:** Fixed in #<PR>.
+- **Status:** Fixed in #775.

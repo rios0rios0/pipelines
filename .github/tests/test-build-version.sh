@@ -223,48 +223,32 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "3. The image delivery action: shape"
 # ---------------------------------------------------------------------------
-# PyYAML rather than reading the indented text, for the reason the sibling
-# suites give: the step bodies are block scalars, and re-deriving their
-# indentation by hand is a parser. A host without PyYAML gets the siblings'
-# degradation -- every query answers with the reason, so the assertions below
-# fail by name and the suite still reaches its summary.
+# Parsed rather than read as indented text, for the reason the sibling suites
+# give: the step bodies are block scalars, and re-deriving their indentation by
+# hand is a parser. The parser is Go test support
+# (`internal/testsuites/buildversion`), built from this checkout for this run; a
+# query that fails -- a missing key, a step no fragment matches, a file that does
+# not parse -- answers with the reason, so the assertions below fail by name and
+# the suite still reaches its summary.
 #
-# yaml_query <file> <python expression>
+# yaml_query <file> <expression>
 #
 # Evaluates the expression with `doc` (the parsed file), `trigger` (its `on:`
-# block, which PyYAML reads as the key True) and `step(steps, fragment)` (the
-# first step whose `id` equals, or whose `uses` contains, the fragment), and
-# prints the result. A failed lookup prints its error instead of raising, so a
-# missing key is a FAIL line rather than a crash under `set -e`.
+# block), `step(steps, fragment)` (the first step whose `id` equals, or whose
+# `uses` contains, the fragment), `id_index(steps, id)` and
+# `uses_index(steps, fragment)` (the position of the first step whose `id` is, or
+# whose `uses` contains, the text), `['key']` lookups, `'text' in value` and `<` /
+# `>` between positions, and prints the result: a string as itself, a null as
+# nothing, a boolean as `True` or `False`.
+mkdir -p "$WORK_DIR/tools" || exit 1
+YAML_QUERY="$WORK_DIR/tools/buildversion"
+if ! CGO_ENABLED=0 GOFLAGS=-mod=readonly GOWORK=off \
+  go build -C "$SCRIPTS_DIR" -trimpath -o "$YAML_QUERY" ./internal/testsuites/buildversion; then
+  echo -e "${RED}could not build ./internal/testsuites/buildversion, so no query can run${NC}"
+  exit 1
+fi
 yaml_query() {
-  python3 - "$1" "$2" <<'PY'
-import sys
-
-try:
-    import yaml
-except ImportError:
-    print('PyYAML is required for this assertion '
-          '(CI installs python3-yaml; locally: pip install pyyaml)')
-    raise SystemExit(0)
-
-with open(sys.argv[1], encoding='utf-8') as handle:
-    doc = yaml.safe_load(handle)
-
-
-def step(steps, fragment):
-    for candidate in steps or []:
-        if candidate.get('id') == fragment or fragment in str(candidate.get('uses', '')):
-            return candidate
-    raise LookupError(f'no step matches {fragment!r}')
-
-
-trigger = doc.get('on', doc.get(True)) if isinstance(doc, dict) else None
-try:
-    value = eval(sys.argv[2], {'doc': doc, 'trigger': trigger, 'step': step})
-except Exception as error:  # noqa: BLE001 -- reported, never raised
-    value = f'<{type(error).__name__}: {error}>'
-print('' if value is None else value)
-PY
+  "$YAML_QUERY" query "$1" "$2"
 }
 
 assert_equals "the action declares version_build_arg" \
@@ -289,7 +273,7 @@ assert_equals "the declaration check reads the Dockerfile the build builds" \
   "$(yaml_query "$DOCKER_ACTION" "step(doc['runs']['steps'], 'version')['env']['DOCKERFILE']")"
 # Resolved before the login and the builder setup, so a refusal costs nothing.
 assert_equals "the version is resolved before the registry login" "True" \
-  "$(yaml_query "$DOCKER_ACTION" "[s.get('id') for s in doc['runs']['steps']].index('version') < [i for i, s in enumerate(doc['runs']['steps']) if 'docker/login-action@' in str(s.get('uses'))][0]")"
+  "$(yaml_query "$DOCKER_ACTION" "id_index(doc['runs']['steps'], 'version') < uses_index(doc['runs']['steps'], 'docker/login-action@')")"
 # An input interpolated into a `run:` body is pasted in before bash parses it.
 assert_equals "no input is interpolated into the version step's script" "False" \
   "$(yaml_query "$DOCKER_ACTION" "'\${{' in step(doc['runs']['steps'], 'version')['run']")"
@@ -303,7 +287,7 @@ assert_equals "the build step is the one with the 'build' id" "build" \
 assert_equals "the image is named by the digest that build reports" '${{ steps.build.outputs.digest }}' \
   "$(yaml_query "$DOCKER_ACTION" "step(doc['runs']['steps'], 'image')['env']['DIGEST']")"
 assert_equals "the image is named after the push" "True" \
-  "$(yaml_query "$DOCKER_ACTION" "[s.get('id') for s in doc['runs']['steps']].index('image') > [s.get('id') for s in doc['runs']['steps']].index('build')")"
+  "$(yaml_query "$DOCKER_ACTION" "id_index(doc['runs']['steps'], 'image') > id_index(doc['runs']['steps'], 'build')")"
 # Spelled as both tagging steps spell the name the build pushes, or the output
 # names an image nobody pushed. A caller's own `tags` choose another name, which
 # this action does not know, so it names nothing then.

@@ -330,6 +330,7 @@ pipelines/
 │   └── terraform.mk           # Terraform targets (lint, test)
 ├── .docs/                      # Documentation and examples
 │   └── examples/              # Per-provider usage examples
+├── internal/testsuites/        # Go test support the validation scripts build for their run
 └── .github/tests/              # Validation scripts for this repository
 ```
 
@@ -794,7 +795,7 @@ Test scripts are located in `.github/tests/`; the Quick Reference above covers t
 
 ### Environment Requirements
 - Docker (for container builds; the security tools install natively)
-- Go 1.25+ (for GoLang pipelines, and to build and test the Go helpers such as the dependency-update checker)
+- Go 1.25+ (for GoLang pipelines, to build and test the Go helpers such as the dependency-update checker, and to build the test support several suites in `.github/tests/` run)
 - Python 3 (for script dependencies and Python pipelines)
 - Make (for build automation)
 - Network access (for downloading tools and dependencies)

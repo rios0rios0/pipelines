@@ -11,6 +11,14 @@ build/reports/
 # from history; ignoring the directory keeps a stray `make` run from re-adding them.
 bin/
 
+# `go build` run inside one of the test-support packages writes its binary there, named after the
+# directory, and `internal/testsuites/lambdatemplates/lambdatemplates` (4 MB) once reached a pull
+# request that way. Nothing under this tree is anything but Go source -- every suite builds its
+# test support into `mktemp` space -- so all of it is ignored except directories and `.go` files.
+/internal/testsuites/**
+!/internal/testsuites/**/
+!/internal/testsuites/**/*.go
+
 # `global/scripts/tools/semgrep/run.sh` copies its default `.semgrepignore` here when the
 # project it scans ships none, and removes it again only on the way out -- four
 # install-failure paths and any interruption of the scan leave it behind. This repository

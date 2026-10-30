@@ -78,6 +78,20 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# The few assertions that read a workflow's YAML use Go test support
+# (`internal/testsuites/deployproviders`), built from this checkout for this run.
+# One that does not build stops the suite here, before any assertion runs, rather
+# than leaving those assertions to fail one by one for a reason that has nothing
+# to do with the providers. The deployment receipts are JSON, read with `jq`, which
+# the require-checks cases below already need.
+mkdir -p "$WORK_DIR/tools" || exit 1
+DEPLOY_WORKFLOWS="$WORK_DIR/tools/deployproviders"
+if ! CGO_ENABLED=0 GOFLAGS=-mod=readonly GOWORK=off \
+  go build -C "$SCRIPTS_DIR" -trimpath -o "$DEPLOY_WORKFLOWS" ./internal/testsuites/deployproviders; then
+  echo -e "${RED}could not build ./internal/testsuites/deployproviders, so no assertion can run${NC}"
+  exit 1
+fi
+
 PROVIDERS=(vercel cloudflare netlify render flyio)
 
 # Declared here rather than beside their first use: these paths are read from
@@ -807,9 +821,9 @@ assert_equals "flyio: an empty image keeps the build from source" \
 # evidence the pipeline's own artifact went out.
 run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp FLY_IMAGE="$DELIVERED"
 assert_equals "flyio: the receipt records the image the deploy ships" "$DRY_IMAGE" \
-  "$(python3 -c "import json; print(json.load(open('$REPORT_DIR/deployment.json')).get('image'))" 2>&1)"
+  "$(jq -r '.image' "$REPORT_DIR/deployment.json" 2>&1)"
 assert_equals "flyio: the receipt records the delivered image it came from" "$DELIVERED" \
-  "$(python3 -c "import json; print(json.load(open('$REPORT_DIR/deployment.json')).get('source_image'))" 2>&1)"
+  "$(jq -r '.source_image' "$REPORT_DIR/deployment.json" 2>&1)"
 run_provider flyio FLY_API_TOKEN="$SENTINEL" FLY_APP_NAME=my-mvp
 assert_true "flyio: a build from source writes the receipt it always wrote, with no image" \
   "! grep -q 'image' '$REPORT_DIR/deployment.json'"
@@ -963,10 +977,10 @@ if [[ "$STUB_RESOLVES" == "$FLY_STUB_BIN/flyctl"$'\n'"$FLY_STUB_BIN/crane" ]]; t
   assert_equals "flyio: command.txt holds the deploy of that digest" \
     "flyctl deploy --image registry.fly.io/my-mvp@$CHILD_DIGEST --app my-mvp" "$CMD"
   assert_equals "flyio: the receipt names the digest deployed" "registry.fly.io/my-mvp@$CHILD_DIGEST" \
-    "$(python3 -c "import json; print(json.load(open('$REPORT_DIR/deployment.json')).get('image'))" 2>&1)"
+    "$(jq -r '.image' "$REPORT_DIR/deployment.json" 2>&1)"
   assert_equals "flyio: the receipt names the delivered build it was copied from" \
     "ghcr.io/fixture-owner/fixture-repo@$CHILD_DIGEST" \
-    "$(python3 -c "import json; print(json.load(open('$REPORT_DIR/deployment.json')).get('source_image'))" 2>&1)"
+    "$(jq -r '.source_image' "$REPORT_DIR/deployment.json" 2>&1)"
 
   # Both credentials reach crane on stdin -- never on argv -- and the Fly token as
   # flyctl hands it to the registry itself: without its `FlyV1 ` scheme.
@@ -1058,7 +1072,7 @@ assert_true "flyio: GitLab template documents FLY_IMAGE and its registry credent
 # quietly building one: falling back to Fly's builder would ship an image this run
 # never pushed.
 assert_true "flyio: the reusable workflow declares the fly_build_from_source opt-out, off by default" \
-  "python3 -c \"import sys, yaml; d = yaml.safe_load(open('$GO_FLYIO')); i = d.get('on', d.get(True))['workflow_call']['inputs']['fly_build_from_source']; sys.exit(0 if (i['type'], i['default']) == ('boolean', False) else 1)\""
+  "'$DEPLOY_WORKFLOWS' input-off '$GO_FLYIO' fly_build_from_source"
 assert_true "flyio: the reusable workflow refuses a run with no delivered image to deploy" \
   "grep -qF \"if: \\\"!inputs.fly_build_from_source && needs.go-docker.outputs.image == ''\\\"\" '$GO_FLYIO'"
 echo ""
@@ -1072,10 +1086,8 @@ assert_true "record: the receipt names the provider" \
   "grep -q '\"provider\": \"flyio\"' '$REPORT_DIR/deployment.json'"
 assert_true "record: the receipt marks a dry run as such" \
   "grep -q '\"dry_run\": true' '$REPORT_DIR/deployment.json'"
-if command -v python3 > /dev/null 2>&1; then
-  assert_true "record: the receipt is valid JSON" \
-    "python3 -c \"import json,sys; json.load(open('$REPORT_DIR/deployment.json'))\""
-fi
+assert_true "record: the receipt is valid JSON" \
+  "jq -e -s 'length == 1' '$REPORT_DIR/deployment.json' > /dev/null"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -1137,7 +1149,7 @@ run_provider vercel VERCEL_TOKEN="$SENTINEL" VERCEL_ORG_ID=team_1 VERCEL_PROJECT
 assert_true "azure: DEPLOY_DRY_RUN=True (PascalCase) is honoured as a dry run" \
   "grep -q 'no deploy performed' <<< \"\$OUT\""
 assert_true "azure: a PascalCase dry run still writes a valid-JSON receipt" \
-  "python3 -c \"import json; json.load(open('$REPORT_DIR/deployment.json'))\""
+  "jq -e -s 'length == 1' '$REPORT_DIR/deployment.json' > /dev/null"
 assert_true "azure: the receipt normalises True to a JSON boolean" \
   "grep -q '\"dry_run\": true' '$REPORT_DIR/deployment.json'"
 
@@ -1158,7 +1170,7 @@ rm -rf "$RECORD_PROBE_DIR" && mkdir -p "$RECORD_PROBE_DIR"
   deploy_record "vercel" "prj_1" > /dev/null
 )
 assert_true "azure: DEPLOY_DRY_RUN=False (PascalCase) writes valid JSON" \
-  "python3 -c \"import json; json.load(open('$RECORD_PROBE_DIR/deployment.json'))\""
+  "jq -e -s 'length == 1' '$RECORD_PROBE_DIR/deployment.json' > /dev/null"
 assert_true "azure: the receipt normalises False to a JSON boolean" \
   "grep -q '\"dry_run\": false' '$RECORD_PROBE_DIR/deployment.json'"
 
@@ -1632,26 +1644,7 @@ assert_true "require-checks: a branch dry run says it reads no check runs, with 
 # section below gives: a deployment workflow added later is guarded only if it is
 # iterated. Every step that runs the gate must hand it the job's own needs, or
 # that workflow's branch deploys go back to depending on the check-run record.
-RC_WIRING="$(/usr/bin/env python3 - "$SCRIPTS_DIR"/.github/workflows/*.yaml <<'WIRING'
-import sys
-
-try:
-    import yaml
-except ImportError:
-    print('PyYAML is required for this assertion '
-          '(CI installs python3-yaml; locally: pip install pyyaml)')
-    raise SystemExit(0)
-
-for path in sys.argv[1:]:
-    with open(path, encoding="utf-8") as handle:
-        document = yaml.safe_load(handle) or {}
-    for job in (document.get("jobs") or {}).values():
-        for step in (job.get("steps") or []):
-            if "50-deployment/require-checks@" in str(step.get("uses", "")):
-                needs = (step.get("with") or {}).get("needs", "")
-                print(f"{path.rsplit('/', 1)[-1]}\t{needs}")
-WIRING
-)"
+RC_WIRING="$("$DEPLOY_WORKFLOWS" require-checks-needs "$SCRIPTS_DIR"/.github/workflows/*.yaml)"
 # An empty discovery would otherwise pass every assertion below by running none.
 assert_true "require-checks: the wiring discovery found at least one deployment workflow" \
   "grep -q '\.yaml' <<< \"\$RC_WIRING\""
@@ -1683,38 +1676,12 @@ echo "Testing build_env_secrets value masking..."
 MASK_DIR="$WORK_DIR/build-env-secrets"
 mkdir -p "$MASK_DIR"
 
-# PyYAML rather than reading the indented text, for the reason the
-# workflow-composition and azure-step-names suites already state: the body is a
-# block scalar, and re-deriving its indentation by hand is a parser.
-#
-# A host without PyYAML gets the SIBLING'S degradation -- a named message and
-# exit 0, so the assertions below fail by name and the suite still reaches its
-# summary. Exiting non-zero here would kill the whole file under `set -e`,
-# mid-run and without a count, which is a worse answer to a missing package than
-# the one `test-workflow-composition.sh` already gives.
+# Parsed rather than read as indented text, for the reason the azure-step-names
+# suite states: the body is a block scalar, and re-deriving its indentation by
+# hand is a parser. A workflow with no such step prints a sentence instead of a
+# script, so the assertions below fail by name rather than pass against nothing.
 extract_secrets_step() {
-  /usr/bin/env python3 - "$1" <<'EXTRACT'
-import sys
-
-try:
-    import yaml
-except ImportError:
-    print('PyYAML is required for this assertion '
-          '(CI installs python3-yaml; locally: pip install pyyaml)')
-    raise SystemExit(0)
-
-with open(sys.argv[1], encoding="utf-8") as handle:
-    document = yaml.safe_load(handle)
-
-for job in (document.get("jobs") or {}).values():
-    for step in (job.get("steps") or []):
-        if "BUILD_ENV_SECRETS" in str(step.get("if", "")):
-            sys.stdout.write(step.get("run", ""))
-            raise SystemExit(0)
-
-print("no step gated on BUILD_ENV_SECRETS was found")
-raise SystemExit(0)
-EXTRACT
+  "$DEPLOY_WORKFLOWS" secrets-step "$1"
 }
 
 # Runs the real step against $2, leaving its stdout in MASK_OUT and the file it

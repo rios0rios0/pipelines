@@ -67,75 +67,18 @@ assert_empty() {
 }
 
 # One pass over every composite action and reusable workflow; each assertion
-# below selects its own lines from the output by prefix.
-FINDINGS="$(/usr/bin/env python3 - <<'PY'
-import glob, os, sys
-try:
-    import yaml
-except ImportError:
-    sys.stderr.write("PyYAML is required to read the workflows\n")
-    sys.exit(2)
-
-# Stages whose uploaded files ARE the job's product rather than a report about it.
-DELIVERABLES = {
-    'github/dart/stages/40-delivery/build/action.yaml',
-}
-
-# Stages whose tool must leave a report behind when it exits 0; each carries a
-# `Verify Report` step immediately before its upload.
-MANDATORY = {
-    'github/global/stages/20-security/gitleaks/action.yaml',
-    'github/global/stages/20-security/semgrep/action.yaml',
-    'github/golang/stages/20-security/govulncheck/action.yaml',
-    'github/java/stages/10-code-check/proguard/action.yaml',
-    'github/javascript/stages/10-code-check/knip/action.yaml',
-    'github/python/stages/10-code-check/vulture/action.yaml',
-}
-
-def step_lists(relative, document):
-    runs = document.get('runs') or {}
-    if runs.get('using') == 'composite':
-        yield relative, runs.get('steps') or []
-    for job_id, job in (document.get('jobs') or {}).items():
-        yield '%s :: job %s' % (relative, job_id), (job or {}).get('steps') or []
-
-files = sorted(glob.glob('github/**/action.yaml', recursive=True)
-               + glob.glob('.github/workflows/*.yaml'))
-verified = set()
-for relative in files:
-    with open(relative, encoding='utf-8') as handle:
-        document = yaml.safe_load(handle) or {}
-    for where, steps in step_lists(relative, document):
-        for index, step in enumerate(steps):
-            if not str(step.get('uses', '')).startswith('actions/upload-artifact@'):
-                continue
-            label = '%s :: step %d (%s)' % (where, index, step.get('name', 'unnamed'))
-            optional = step.get('continue-on-error') is True
-            with_ = step.get('with') or {}
-            if relative in DELIVERABLES:
-                if optional:
-                    print('deliverable\t%s uploads the job\'s product but is continue-on-error' % label)
-                continue
-            if not optional:
-                print('optional\t%s is not continue-on-error' % label)
-            if optional and with_.get('if-no-files-found') == 'error':
-                print('silent\t%s says `if-no-files-found: error` under continue-on-error, which fails nothing' % label)
-            previous = steps[index - 1] if index > 0 else {}
-            if previous.get('name') == 'Verify Report':
-                verified.add(relative)
-                if 'if' in previous:
-                    print('verify\t%s: `Verify Report` must run on the default success() condition' % label)
-                expected = str(with_.get('path', '')).rstrip('/')
-                actual = str((previous.get('env') or {}).get('REPORT_DIR', ''))
-                if actual != expected:
-                    print('verify\t%s: `Verify Report` checks %r, the upload publishes %r' % (label, actual, expected))
-
-for relative in sorted(MANDATORY - verified):
-    print('verify\t%s has no `Verify Report` step right before its upload' % relative)
-for relative in sorted(verified - MANDATORY):
-    print('verify\t%s has a `Verify Report` step but is missing from MANDATORY in this test' % relative)
-PY
-)" || { echo -e "${RED}Could not read the workflows${NC}"; exit 1; }
+# below selects its own lines from the output by prefix. The pass is Go test
+# support (`internal/testsuites/reportuploads`), built from this checkout for
+# this run.
+TOOL_DIR="$(mktemp -d)" || exit 1
+trap 'rm -rf "$TOOL_DIR"' EXIT
+CHECKER="$TOOL_DIR/reportuploads"
+if ! CGO_ENABLED=0 GOFLAGS=-mod=readonly GOWORK=off \
+  go build -C "$SCRIPTS_DIR" -trimpath -o "$CHECKER" ./internal/testsuites/reportuploads; then
+  echo -e "${RED}could not build ./internal/testsuites/reportuploads, so no assertion can run${NC}"
+  exit 1
+fi
+FINDINGS="$("$CHECKER")" || { echo -e "${RED}Could not read the workflows${NC}"; exit 1; }
 
 select_findings() {
   echo "$FINDINGS" | awk -F '\t' -v kind="$1" '$1 == kind { print $2 }'

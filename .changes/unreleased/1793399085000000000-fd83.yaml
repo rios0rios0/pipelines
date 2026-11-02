@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'bumped the pinned dependencies the scheduled `Dependency Updates` workflow found outdated: 2 GitHub Actions (`docker/login-action` `v4.7.0`, `ruby/setup-ruby` `v1.335.0`), 5 container image digests (`alpine/git:2.54.0`, `amazon/aws-cli:latest`, `ghcr.io/rios0rios0/pipelines/awscli:latest`, `ghcr.io/rios0rios0/pipelines/golang:1.27-awscli`, `sonarsource/sonar-scanner-cli:12.1.0.3233_8.0.1 -> sonarsource/sonar-scanner-cli:12.3.0.4285_8.1.0`) and 5 tool pins (`FLYCTL` `0.4.122`, `KNIP` `6.43.0`, `SONAR_SCANNER_CLI` `12.3.0.4285_8.1.0`, `TERRAGRUNT` `1.2.1`, `TFLINT` `0.65.0`), each binary''s new SHA-256 taken from its release asset; kept 4 inline copies in step with `pinned-versions.sh`'
+time: '2026-10-30T22:24:45.000000000Z'

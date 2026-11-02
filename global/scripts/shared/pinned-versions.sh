@@ -300,22 +300,22 @@ GORELEASER_SHA256_AMD64_DEB="2710e9740185be82b6929c78b695b455a09975e231bddbb8e29
 # upstream: github-release terraform-linters/tflint
 # osv: Go github.com/terraform-linters/tflint
 # checksums: https://github.com/terraform-linters/tflint/releases/download/v{version}/checksums.txt
-TFLINT_PINNED_VERSION="0.64.0"
+TFLINT_PINNED_VERSION="0.65.0"
 TFLINT_VERSION="${TFLINT_VERSION:-${TFLINT_PINNED_VERSION}}"
 # asset: https://github.com/terraform-linters/tflint/releases/download/v{version}/tflint_linux_amd64.zip
-TFLINT_SHA256_AMD64="cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537"
+TFLINT_SHA256_AMD64="d4c545ed2e29d6338604b586f34f544f380f70f243aa72f7b484713835eaec61"
 # asset: https://github.com/terraform-linters/tflint/releases/download/v{version}/tflint_linux_arm64.zip
-TFLINT_SHA256_ARM64="560da89aacf59389d4eb029730dd5b109b7288096c32f2726a0d9e783a5ea8eb"
+TFLINT_SHA256_ARM64="843017c47a98be1de4d88fa038daa293770fe25cd01656c4f08b2e30d1d3b3a0"
 
 # upstream: github-release gruntwork-io/terragrunt
 # osv: Go github.com/gruntwork-io/terragrunt
 # checksums: https://github.com/gruntwork-io/terragrunt/releases/download/v{version}/SHA256SUMS
-TERRAGRUNT_PINNED_VERSION="1.2.0"
+TERRAGRUNT_PINNED_VERSION="1.2.1"
 TERRAGRUNT_VERSION="${TERRAGRUNT_VERSION:-${TERRAGRUNT_PINNED_VERSION}}"
 # asset: https://github.com/gruntwork-io/terragrunt/releases/download/v{version}/terragrunt_linux_amd64
-TERRAGRUNT_SHA256_AMD64="45b6df8a8494c8cfe34b4abf919e894709557163e4d3b5704d11083002ab787a"
+TERRAGRUNT_SHA256_AMD64="f2f6238ad2348855a4e876b90fd31f3f5d106bb234794202a00b2bcc139fa753"
 # asset: https://github.com/gruntwork-io/terragrunt/releases/download/v{version}/terragrunt_linux_arm64
-TERRAGRUNT_SHA256_ARM64="b069ce4310572bc46ee6f057057acc4bc6a9077ef8687e157a64b0551290a371"
+TERRAGRUNT_SHA256_ARM64="01c0768aab01e0c183209ba7edce9d2ebc8f8a7690763bb52f1b8900aec224bc"
 
 # `rios0rios0/terra` is first-party, which changes nothing about the download:
 # the templates fetched `install.sh` from the `main` BRANCH and piped it into a
@@ -338,12 +338,12 @@ TERRA_SHA256_ARM64="f1fd7926c91ecd29d07391a4836651189dfa1c0c0d7254630c0e68490ac8
 # upstream: github-release superfly/flyctl
 # osv: Go github.com/superfly/flyctl
 # checksums: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_checksums.txt
-FLYCTL_PINNED_VERSION="0.4.120"
+FLYCTL_PINNED_VERSION="0.4.122"
 FLYCTL_VERSION="${FLYCTL_VERSION:-${FLYCTL_PINNED_VERSION}}"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_x86_64.tar.gz
-FLYCTL_SHA256_X86_64="ef9b938ff3af2b28fad961a676e5ac2295124ad0b892ffb1c5f16a03bd4ee378"
+FLYCTL_SHA256_X86_64="3d6ae2e2e24df47b46132e8920eebb7aec4ed0930dae2074369e59db89493cf2"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_arm64.tar.gz
-FLYCTL_SHA256_ARM64="d087cf71f2f7d9e42d596faaf1be542a080fa2c48535bc3853f66c8af1a61ab3"
+FLYCTL_SHA256_ARM64="4abe70bae363e2257b7402439112b513b36bd779bf6c2514791e4a25a7b34e5f"
 
 # crane, from google/go-containerregistry. The Fly.io deploy copies the image
 # the pipeline already delivered into registry.fly.io with it -- registry to
@@ -427,7 +427,7 @@ NETLIFY_CLI_SPEC="${NETLIFY_CLI_SPEC:-netlify-cli@27}"
 # upstream: github-release SonarSource/sonar-scanner-cli-docker
 # osv: none
 # image: sonarsource/sonar-scanner-cli
-SONAR_SCANNER_CLI_PINNED_VERSION="12.1.0.3233_8.0.1"
+SONAR_SCANNER_CLI_PINNED_VERSION="12.3.0.4285_8.1.0"
 
 # Node.js, as the GitLab CI JavaScript images (`node:<release>-trixie` in
 # `gitlab/javascript/abstracts/`) and the Azure DevOps `UseNode@1` inputs name
@@ -525,4 +525,4 @@ BUNDLER_AUDIT_SPEC="${BUNDLER_AUDIT_SPEC:-bundler-audit:0.9.3}"
 # upstream: rubygems debride
 DEBRIDE_SPEC="${DEBRIDE_SPEC:-debride:1.15.2}"
 # upstream: npm knip
-KNIP_SPEC="${KNIP_SPEC:-knip@6.42.1}"
+KNIP_SPEC="${KNIP_SPEC:-knip@6.43.0}"

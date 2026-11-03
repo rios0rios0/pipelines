@@ -2300,6 +2300,72 @@ stages:
       APP_NAME: 'my-mvp'
 ```
 
+### A Tag Older Than the Newest Release Is Not Deployed
+
+Every `<toolchain>-<provider>.yaml` deploys `production` from a tag run, and a tag run starts
+whenever a tag is pushed, whoever pushes it and whatever version it names. One consumer's weekly
+reconciliation job re-pushed the tags of bumps that had failed their gate and been superseded
+(medhub-life/backend `2.1.0` and `2.1.1` after `2.1.2`), and each push started a production deploy
+of a release weeks old. So `deployment > release-guard` runs before the deployment job and compares
+the run's tag with the highest [SemVer](https://semver.org/) tag in the repository:
+
+| The run's tag | Deployed? |
+|---------------|-----------|
+| the newest release, or a tag of equal precedence (a re-run, `v1.2.3` beside `1.2.3`) | yes |
+| older than the newest release | **no**: the deployment job is skipped, and the guard's job summary and a warning annotation say why |
+| older, on a `workflow_dispatch` run with `allow_rollback: true` | yes: a rollback, on purpose |
+| a name that is not a SemVer version (`release-2026`, `app/1.2.3`), or the repository has no SemVer tag | yes, exactly as before |
+| none: a branch run | yes, exactly as before |
+
+Precedence is SemVer's own (section 11): `1.0.0` outranks `1.0.0-rc.1`, which `sort -V` and a plain
+`git tag --sort=v:refname` both get backwards. The tags are listed from the remote with
+`git ls-remote`, not read from the checkout, which holds only what CI fetched. A guard that cannot
+list them reaches no verdict: its job fails and nothing is deployed.
+
+It is a job of its own rather than a step of the deployment job, and it declares no
+`environment:`. A refused tag therefore skips `deployment > <provider>` whole: no environment is
+entered, no protection rule asks anyone to approve a rollback nobody requested, and GitHub records no
+`production` deployment of the old tag. A step could only fail the deployment job after all three
+had happened, or skip the remaining steps and leave a deployment record saying the old tag shipped.
+On a branch run the guard runs no step and answers yes; it runs there at all because `require-checks`
+wants every job the deployment `needs:` to have finished `success`.
+
+**Rolling back on purpose.** Declare a dispatch input and pass it through. The guard honours it on a
+`workflow_dispatch` run only, so a constant `true` wired by mistake cannot reopen the hole:
+
+```yaml
+on:
+  push:
+    branches: [ 'main' ]
+    tags: [ '*' ]
+  workflow_dispatch:
+    inputs:
+      allow_rollback:
+        description: 'Deploy this tag even though a newer release exists'
+        type: 'boolean'
+        default: false
+
+jobs:
+  default:
+    uses: 'rios0rios0/pipelines/.github/workflows/go-flyio.yaml@main'
+    with:
+      allow_rollback: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_rollback }}
+```
+
+Then run the workflow by hand on the older tag: `gh workflow run default.yaml --ref 2.1.0 -f allow_rollback=true`.
+GitHub runs the calling workflow as it is AT that tag, so a tag cut before the caller declared the
+input cannot take it. Roll such a release forward instead (tag its commit with a new, higher
+version), and declare the input now so that later releases can be rolled back to.
+
+The verdict comes from `global/scripts/deploy/release-guard/run.sh`, which reads the run's tag the
+way GitHub Actions, GitLab CI and Azure DevOps each name it, so any of the three can call it. Only the
+five GitHub deployment workflows run it. The GitLab CI and Azure DevOps hosting templates deploy on
+the default branch, or wherever a consumer includes them. The infrastructure deployments that do run
+on a tag (GitLab CI's `k8s-deployment` and `sam` `deployment:prod`, Azure DevOps' Go and JavaScript
+`deployment` stages) deploy to environments their consumers name, and adding the guard to them is
+those consumers' decision. `make test ONLY=release-guard` holds the precedence, every verdict above,
+the remote listing (against a fixture remote, offline) and the wiring of every deployment workflow.
+
 ### Credentials
 
 Every provider reads its token from an environment variable and **never** takes it on the command
@@ -2645,6 +2711,8 @@ Two mechanisms guard against this:
    ```
 
    It prints one `version<TAB>commit<TAB>status` row per gap (empty output means the changelog and tags agree). A tag re-pushed to recover a release must be pushed with a PAT, not the default `GITHUB_TOKEN`, for it to re-trigger delivery; a `GITHUB_TOKEN`-pushed tag is still created (enough for tag-driven ecosystems such as Go modules and Packagist) but starts no workflow. `promote_release` (see Release Promotion above) is the automated form of that hand push: the release job dispatches the workflow on the tag with the same `GITHUB_TOKEN`, which GitHub does allow to start a `workflow_dispatch` run.
+
+   A gap BELOW the newest tag is not a lost release but a superseded one: a bump that failed its gate and was replaced by a later version. Re-pushing its tag starts a tag run like any other, and on a deployment workflow that run would deploy the superseded release to production. `deployment > release-guard` refuses it (see A Tag Older Than the Newest Release Is Not Deployed).
 
 ## Troubleshooting
 

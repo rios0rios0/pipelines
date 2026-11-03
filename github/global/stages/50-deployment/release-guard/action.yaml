@@ -1,0 +1,59 @@
+# Decides whether a tag run may deploy to production: not when the tag is older than the newest
+# SemVer tag in the repository, unless a rollback is asked for on purpose. The rule, and why each
+# part of it is shaped the way it is, is in `global/scripts/deploy/release-guard/run.sh`.
+#
+# A GATE, not a deployment, so it runs in a job of its own BEFORE the deployment job and declares
+# no `environment:`. The deployment job `needs:` it and reads `outputs.deploy` in its `if:`, so a
+# refused tag SKIPS that job: no environment is entered, no protection rule asks anyone to approve
+# a rollback nobody requested, and GitHub records no `production` deployment of the old tag. A
+# check inside the deployment job could only fail it, after all three had happened, or skip its
+# steps and leave a deployment record claiming the old tag shipped.
+inputs:
+  allow_rollback:
+    description: |
+      `true` deploys a tag older than the newest release: a rollback, on purpose. Honoured on a
+      `workflow_dispatch` run only. A pushed tag is never a deliberate rollback, and a caller that
+      wires a constant `true` here by mistake must not reopen the hole the guard closes.
+    type: 'string'
+    required: false
+    default: 'false'
+  rollback_hint:
+    description: 'The sentence a refusal ends with, telling its reader how to roll back on purpose.'
+    type: 'string'
+    required: false
+    default: 'To roll back on purpose, run the workflow by hand on this tag with `allow_rollback` set to `true`.'
+
+outputs:
+  deploy:
+    description: "'true' when the run may deploy, 'false' when the tag is older than the newest release."
+    value: "${{ steps.guard.outputs.deploy }}"
+  newest:
+    description: 'The newest release tag the run was compared with; empty when nothing was compared.'
+    value: "${{ steps.guard.outputs.newest }}"
+
+runs:
+  using: 'composite'
+  steps:
+    # The tags are read from the remote, through the credential the checkout persists: a private
+    # repository answers `git ls-remote` only to it. One commit is enough, since only the remote's
+    # tag list is read, never the history.
+    - name: 'Checkout code'
+      uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
+
+    - name: 'Get Scripts'
+      uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    - name: 'Ignore a rollback asked for outside a dispatch'
+      if: "github.event_name != 'workflow_dispatch' && inputs.allow_rollback == 'true'"
+      shell: 'bash'
+      run: echo "::warning title=Release guard::allow_rollback is honoured on a workflow_dispatch run only, and this is a '$EVENT_NAME' run, so it is ignored."
+      env:
+        EVENT_NAME: "${{ github.event_name }}"
+
+    - id: 'guard'
+      name: 'Compare the tag with the newest release'
+      shell: 'bash'
+      run: $SCRIPTS_DIR/global/scripts/deploy/release-guard/run.sh
+      env:
+        RELEASE_GUARD_ALLOW_ROLLBACK: "${{ github.event_name == 'workflow_dispatch' && inputs.allow_rollback || 'false' }}"
+        RELEASE_GUARD_ROLLBACK_HINT: "${{ inputs.rollback_hint }}"

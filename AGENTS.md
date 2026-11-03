@@ -62,6 +62,7 @@ there is no target to add and no list to keep in step.
 | `order-check` | The Terragrunt file-ordering checker/fixer |
 | `phpmd` | The PHPMD runner (the command line each major takes, the verdict, a report that stays JSON) |
 | `python-cyclonedx` | Static/non-distribution and dynamic Python SBOM versions, including resolution failures |
+| `release-guard` | The release guard (SemVer precedence, the verdict on each kind of tag, the tags listed from a fixture remote, the guard job wired into every deployment workflow) |
 | `release-promotion` | Release promotion (the tag run a bump merge now starts) |
 | `release-reconcile` | Release reconciliation gap detection |
 | `release-tag-idempotency` | Release tag idempotency |
@@ -114,8 +115,8 @@ All platforms follow consistent numbered stages:
   - `terraform/tflint/install.sh` and `terraform/terra/install.sh` — pinned, checksum-verified installers that replaced the vendors' `curl … | sh` one-liners on all three platforms
   - `terraform/order-check/` — checks (and with `--fix` rewrites) the file-ordering standard across `environments/**/root.hcl`, `stacks/*/{variables,providers,outputs}.tf`, and `**/providers.tf`, and additionally reports **dead terragrunt inputs** (an `inputs = {}` key with no matching `variable` in the target stack — reported only, never auto-deleted); emits `build/reports/junit-order-check.xml`. Runs as the `order-check` / `style:order-check` job in the `10-code-check` stage. A standard-library-only Go helper (`main.go` + `internal/`, run through `go_helper_run`, so the job needs Go and nothing else); the `--fix` rewriter is round-trip-safe (parses to exact substrings, then only permutes). See Terraform Ordering Standard below
   - `terraform/var-catalog/` — a standard-library-only Go generator (`main.go` + `internal/`, run through `go_helper_run`) that keeps ONE canonical body per shared `variable` in a per-repo `.terraform-var-catalog.hcl` and writes the subset each stack actually uses into `stacks/<stack>/variables-shared.tf` (the same generic-script/repo-data split as `order-check`). Output is **committed**, not emitted by a Terragrunt `generate` block, because the order-check dead-input scan, the `terraform validate` tier, and AST-based tests all read `stacks/**/*.tf` from the source tree without invoking Terragrunt. It writes a sibling file rather than appending to `variables.tf` (so generated content is exempt from the `// SET ON` marker rule yet still seen by the dead-input glob) and **never overwrites a hand-written declaration** — a stack that already declares a catalogued name keeps its body and is reported. `run.sh --check` is the CI gate (fails if the committed output is stale); `--report` prints changes without writing
-- `global/scripts/deploy/` — MVP hosting providers for the `50-deployment` stage: `cloudflare/` (Pages + Workers via `wrangler`), `vercel/`, `render/` (REST API, no CLI exists), `netlify/`, `flyio/`. Each is wired identically on all three platforms; `common.sh` is sourced, not executed, and holds the shared helpers. See MVP Hosting Providers below
-- `global/scripts/shared/` — Shared utilities (cleanup.sh, rebase-check.sh, changelog-check.sh, reconcile-releases.sh, terraform-provider-mirror.sh, **go-helper.sh**, venv-distribution.sh, **pinned-versions.sh**, **verify-download.sh**). The last two are sourced, never executed, and are the supply-chain contract: `pinned-versions.sh` is the single source of truth for every third-party binary version and its SHA-256, and `verify-download.sh` is the only sanctioned way to fetch one — see Supply-Chain Pinning below. `terraform-provider-mirror.sh` is sourced by the `terra-test` and `validate` tiers: it points `terraform init` at provider stores this machine already populated (`TF_PROVIDER_MIRROR_DIR`, `TERRA_PROVIDER_CACHE_DIR`, the terra CLI's `~/.cache/terra/providers`, then the tier's own `TF_PLUGIN_CACHE_DIR`) via a `filesystem_mirror`, so a mirrored provider costs no registry query and no github.com checksum fetch. Falls back to the origin registry per directory, so a cold machine still works and pays one fetch per provider version instead of one per directory. `TF_PROVIDER_MIRROR=off` disables it. `venv-distribution.sh` (sourced) answers which version of a distribution a Semgrep or Checkov virtualenv holds, from the METADATA pip wrote rather than by running its interpreter
+- `global/scripts/deploy/` — MVP hosting providers for the `50-deployment` stage: `cloudflare/` (Pages + Workers via `wrangler`), `vercel/`, `render/` (REST API, no CLI exists), `netlify/`, `flyio/`. Each is wired identically on all three platforms; `common.sh` is sourced, not executed, and holds the shared helpers. See MVP Hosting Providers below. Beside them, two gates that deploy nothing: `require-checks/` and `release-guard/`, the verdict every GitHub deployment workflow reaches in `deployment > release-guard` before a tag deploys (see A Tag Older Than the Newest Release Is Not Deployed below)
+- `global/scripts/shared/` — Shared utilities (cleanup.sh, rebase-check.sh, changelog-check.sh, reconcile-releases.sh, semver.sh, terraform-provider-mirror.sh, **go-helper.sh**, venv-distribution.sh, **pinned-versions.sh**, **verify-download.sh**). The last two are sourced, never executed, and are the supply-chain contract: `pinned-versions.sh` is the single source of truth for every third-party binary version and its SHA-256, and `verify-download.sh` is the only sanctioned way to fetch one — see Supply-Chain Pinning below. `terraform-provider-mirror.sh` is sourced by the `terra-test` and `validate` tiers: it points `terraform init` at provider stores this machine already populated (`TF_PROVIDER_MIRROR_DIR`, `TERRA_PROVIDER_CACHE_DIR`, the terra CLI's `~/.cache/terra/providers`, then the tier's own `TF_PLUGIN_CACHE_DIR`) via a `filesystem_mirror`, so a mirrored provider costs no registry query and no github.com checksum fetch. Falls back to the origin registry per directory, so a cold machine still works and pays one fetch per provider version instead of one per directory. `TF_PROVIDER_MIRROR=off` disables it. `venv-distribution.sh` (sourced) answers which version of a distribution a Semgrep or Checkov virtualenv holds, from the METADATA pip wrote rather than by running its interpreter. `semver.sh` (sourced) is SemVer 2.0.0 precedence over tag names, in POSIX awk, for the release guard
 - `global/containers/` — Docker image definitions for CI environments
 - `makefiles/` — Includable `.mk` fragments for downstream projects (`common.mk`, `golang.mk`, `python.mk`, etc.)
 - `global/gitignore/` — Canonical ignore rules for the files the pipeline writes into a consumer's working tree, one fragment per language plus `common`. Git has no `include` for ignore files and refuses to follow a symlinked `.gitignore`, so these are GENERATED into a delimited block in the consumer's own `.gitignore` by `make gitignore`, and `make gitignore-check` fails when that block is stale. See Shared Ignore Rules below
@@ -414,6 +415,15 @@ Every deployment job therefore declares, and the test asserts, all four of:
 - **`if:`** — without one, a pull request deploys.
 - a preceding **`# fifth stage`** comment, matching the `# fourth stage` comments the delivery jobs
   already carry.
+
+**The deployment job also waits for the release guard.** Every deployment workflow runs
+`deployment > release-guard` ahead of its deployment job, which `needs:` it and carries
+`needs.deployment-release-guard.outputs.deploy == 'true'` in its `if:`, so a tag older than the
+newest release skips the deployment. The guard job is the one fifth-stage job held to the OPPOSITE
+of the environment rule: it decides whether the deployment job runs at all, holds no credential, and
+entering `production` there would ask for that environment's approvals and record a deployment of
+the very tag it refuses. Test 6 asserts both halves, and `make test ONLY=release-guard` the rest of
+the wiring (see A Tag Older Than the Newest Release Is Not Deployed below).
 
 **A deployment handed a delivered image may pull it.** `go-flyio.yaml` deploys the image `delivery >
 docker` pushed to GHCR, pulled with the deployment job's own `GITHUB_TOKEN`, and a job that declares
@@ -953,6 +963,44 @@ Nine constraints shape this family; do not "simplify" any of them away:
 | **`flyctl` comes from the GitHub release archive, never `curl \| sh`** | Piping a remote script into a shell hands the runner's credentials to whatever that URL returns at that moment — the supply-chain shape this repository's own SAST stage exists to flag. Matches the gitleaks/hadolint/shellcheck install pattern |
 
 Covered by `.github/tests/test-deploy-providers.sh` (345 assertions): the cross-platform wiring contract (a provider added to one platform and forgotten on the other two leaves three files that are each valid YAML on their own, so nothing else in CI would catch it), the argv each provider builds under dry run, and a sentinel-credential leak check over the whole report directory. The Fly.io image copy is also run for real, against stand-ins for `crane` and `flyctl` on an isolated PATH, so the order of the copy and the deploy, the digest each names, what reaches stdin rather than argv, and where the credentials are written are observed rather than read off the script.
+
+### A Tag Older Than the Newest Release Is Not Deployed
+
+**Enforced by `.github/tests/test-release-guard.sh` (`make test ONLY=release-guard`).** Read this
+before changing how a deployment workflow decides to deploy, or how a tag reaches one.
+
+Every deployment workflow deploys `production` from a tag run, and a tag run starts whenever a tag is
+pushed, by anyone, for any version. A weekly reconciliation job (the `medhub-life` leg of
+`rios0rios0/config-automation`'s `Release Reconcile`) re-pushed the tags of bumps that had failed
+their gate and been superseded -- medhub-life/backend `2.1.0`/`2.1.1` after `2.1.2`, frontend `0.4.0`
+after `0.4.1` -- and every push started a production deploy of a release weeks old. They all failed
+for unrelated reasons; one that had succeeded would have rolled production back with every check
+green (medhub-life/.github-private#920). The job was fixed on its own side; the guard is the second
+line of defence, and holds whatever pushes the tag.
+
+`deployment > release-guard` runs `50-deployment/release-guard`, whose script
+(`global/scripts/deploy/release-guard/run.sh`) compares the run's tag with the highest SemVer tag in
+the repository. Older is skipped, unless `allow_rollback: true` on a `workflow_dispatch` run asks for
+it; everything the guard cannot order deploys exactly as before.
+
+| Constraint | Why |
+|------------|-----|
+| **Skip, never fail, and in a job of its own** | The deployment job `needs:` the guard and reads its `deploy` output in `if:`, so a refused tag skips it whole. A step inside the deployment job could only fail it after the job had entered `production` -- asking for that environment's approvals and recording a deployment of the refused tag -- or skip the remaining steps and leave a deployment record claiming the old tag shipped. Nothing else in the run fails: the guard's own job is green, with a warning annotation and its job summary saying why |
+| **The guard job runs on a branch too** | `require-checks` decides a branch run from every job the deployment `needs:`, each required to be `success`, and a skipped guard would refuse every staging deploy. On a branch the guard runs no step and answers `true` |
+| **Its `deploy` output is fail-closed** | `github.ref_type != 'tag' && 'true' \|\| steps.guard.outputs.deploy`: on a tag only the script's own verdict passes, so a step that wrote none leaves the deployment skipped. `steps.guard.outputs.deploy \|\| 'true'` reads the same and deploys whatever happened |
+| **The tags come from the remote** | `git ls-remote --tags --refs` through the credential the action's checkout persists. A CI checkout holds one ref, so its local tags are a sample, and a guard reading them would approve the tag it exists to refuse. The tag being judged is counted among them, so a tag deleted after its push still compares with itself |
+| **No listing, no verdict** | A guard that cannot read the tags, after asking twice more (2s and then 4s later, so a blip is not a failed deploy), exits 1 and writes no `deploy=`; its job fails and the deployment, gated on `!failure()`, does not run. Approving on an outage would make the moment the guard sees least the one in which it lets a rollback through |
+| **SemVer's precedence, not a version sort** | `global/scripts/shared/semver.sh` is section 11 of the specification in POSIX awk: `1.0.0` outranks `1.0.0-rc.1` (which `sort -V` and a plain `git tag --sort=v:refname` get backwards), a numeric identifier ranks below an alphanumeric one, a number past 2^53 compares exactly, build metadata is ignored, and one leading `v` is accepted |
+| **What cannot be ordered deploys as before** | A branch run, a tag that names no SemVer version (`release-2026`, `app/1.2.3`, `1.2.3.4`) and a repository with no SemVer tag deploy exactly as they did before the guard existed. That is what keeps the change backward compatible for every caller |
+| **A rollback is a dispatch** | The action passes `allow_rollback` to the script only on a `workflow_dispatch` run, and warns when a caller set it on any other event. A pushed tag is never a deliberate rollback, and a constant `true` wired by mistake must not reopen the hole. GitHub runs the CALLER's file as it is at the dispatched tag, so a tag cut before the caller declared the input cannot take it: such a release is rolled forward, by tagging its commit with a higher version |
+| **A name the guard cannot order never reaches `$GITHUB_OUTPUT`** | Only `deploy` and `newest` are written there, and `newest` is always a SemVer tag (`[0-9A-Za-z.+-]`). A name with a newline would otherwise add an output of its own |
+
+The script reads the run's tag from all three platforms (`GITHUB_REF_NAME` on a tag, `CI_COMMIT_TAG`,
+`BUILD_SOURCEBRANCH` under `refs/tags/`), but only the GitHub deployment workflows run it. The GitLab
+CI and Azure DevOps hosting templates deploy on the default branch or wherever a consumer includes
+them; the infrastructure deployments that do run on a tag (GitLab CI's `k8s-deployment` and `sam`
+`deployment:prod`, Azure DevOps' Go and JavaScript `deployment` stages) deploy to environments their
+consumers name, so wiring the guard into them is those consumers' call.
 
 ### Makefile Include Pattern
 

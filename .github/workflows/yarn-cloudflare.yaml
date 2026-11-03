@@ -184,6 +184,30 @@ on:
           The caller must declare `on: workflow_dispatch:` and grant the job that calls this
           workflow `actions: write`, beside the `contents: write` the release itself needs. Off by
           default: a caller that has not granted `actions: write` would fail the release job.
+      # A caller makes a rollback possible with a dispatch input of its own, passed through so that
+      # nothing but a dispatch can set it. The example lives in this comment because GitHub
+      # EVALUATES an expression written in an input's description, where no context exists, and
+      # the whole file then fails to compile:
+      #
+      #     on:
+      #       workflow_dispatch:
+      #         inputs:
+      #           allow_rollback: { type: 'boolean', default: false }
+      #     ...
+      #       allow_rollback: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_rollback }}
+      allow_rollback:
+        type: 'boolean'
+        required: false
+        default: false
+        description: |
+          Deploy a tag OLDER than the newest release tag in this repository: a rollback, on
+          purpose. Off by default, and honoured on a `workflow_dispatch` run only.
+
+          `deployment > release-guard` compares the tag a run deploys with the highest SemVer tag
+          in the repository and skips the deployment of an older one, because a tag run starts
+          whenever a tag is pushed: a job re-pushing a superseded tag would otherwise roll
+          production back with every check green. A re-run of the newest tag, a branch run and a
+          tag that names no SemVer version deploy as before.
     secrets:
       sonar_token:
         description: 'SonarQube authentication token'
@@ -249,6 +273,30 @@ jobs:
     # production deploy below, which only a tag run reaches, never ran. `needs:` the quality gate
     # so a red bump is never tagged; the tag-push recovery path covers the one that already was.
     if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore/bump-') || contains(github.event.head_commit.message, 'chore(bump)'))"
+
+  # fifth stage
+  #
+  # Whether this run may deploy: not a tag older than the newest release in the repository, unless
+  # `allow_rollback` asks for it on a dispatch. A gate rather than a deployment, so it declares no
+  # `environment:`, and a job of its own so that a refused tag skips `deployment > cloudflare`
+  # whole -- `50-deployment/release-guard` says why. On a branch it runs no step and answers
+  # `true`; it runs there at all because `require-checks` wants every job the deployment needs
+  # to be `success`.
+  deployment-release-guard:
+    name: 'deployment > release-guard'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    permissions:
+      contents: 'read'
+    outputs:
+      deploy: "${{ github.ref_type != 'tag' && 'true' || steps.guard.outputs.deploy }}"
+    steps:
+      - id: 'guard'
+        if: "github.ref_type == 'tag'"
+        uses: 'rios0rios0/pipelines/github/global/stages/50-deployment/release-guard@main'
+        with:
+          allow_rollback: "${{ inputs.allow_rollback }}"
+    needs: [ 'yarn' ]
+    if: "!cancelled() && !failure() && github.event_name != 'pull_request' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))"
 
   # fifth stage
   deployment-cloudflare:
@@ -479,11 +527,11 @@ jobs:
             export PATH="$corepack_dir:$PATH"
             yarn install --immutable
             ${{ inputs.build_command }}
-    needs: [ 'yarn' ]
+    needs: [ 'yarn', 'deployment-release-guard' ]
     # `!failure()` rather than `success()` so a skipped upstream job does not take the deploy with
     # it -- on a tag every job inside `yarn.yaml` skips, and a bare `needs:` would stop production
     # shipping altogether. A genuine CI failure on a branch still blocks. `!cancelled()` beside it
     # because a cancelled job is not a failed one: without it a run superseded by
     # `cancel-in-progress` still deploys a commit whose checks never finished. A pull request
-    # never deploys.
-    if: "!cancelled() && !failure() && github.event_name != 'pull_request' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))"
+    # never deploys, and neither does a tag older than the newest release (`release-guard`).
+    if: "!cancelled() && !failure() && needs.deployment-release-guard.outputs.deploy == 'true' && github.event_name != 'pull_request' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))"

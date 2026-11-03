@@ -310,7 +310,9 @@ pipelines/
 │   │   │   ├── vercel/        # Vercel (vercel CLI)
 │   │   │   ├── render/        # Render (REST API, polled to a terminal state)
 │   │   │   ├── netlify/       # Netlify (netlify-cli)
-│   │   │   └── flyio/         # Fly.io (flyctl; a delivered image copied with crane, or a remote build)
+│   │   │   ├── flyio/         # Fly.io (flyctl; a delivered image copied with crane, or a remote build)
+│   │   │   ├── require-checks/ # Gate: the checks a tag deploy requires (GitHub only)
+│   │   │   └── release-guard/ # Gate: a tag older than the newest SemVer release is not deployed
 │   │   └── shared/            # Common utilities
 │   ├── containers/            # Custom Docker images
 │   │   ├── golang.*/          # Go development images
@@ -389,7 +391,8 @@ most likely to break, in order of how expensive the mistake was:
 5. **Job names are an API**: `delivery > <target>`, `deployment > <provider>`. Consumers pass these
    strings to `require-checks`; renaming one renames a check for everyone downstream.
 6. **Every deployment job declares `needs:`, `environment:` and `if:`**, under a `# fifth stage`
-   comment.
+   comment. The one exception is `deployment > release-guard`, the gate that runs before it, which must
+   declare NO `environment:` (rule 13).
 7. **Secrets are passed as secrets, not inputs** — an input loses the caller's masking. And a
    step-level `if:` cannot read the `secrets` context at all; hoist it into a job-level `env:`.
 8. **A `uses:` job cannot declare `environment:`**, so its `with:`/`secrets:` are evaluated with no
@@ -416,6 +419,13 @@ most likely to break, in order of how expensive the mistake was:
     `continue-on-error` passes the run whatever the check found, so a failed lint blocked nothing
     for hours. Tolerate a refused report upload at the upload step instead. A deliberate exception
     goes in Test 16's `ADVISORY` with its reason, and `UNREVIEWED` may only shrink.
+13. **A tag older than the newest release never deploys by itself.** Every deployment workflow runs
+    `deployment > release-guard` (no `environment:`) before its deployment job, which `needs:` it and
+    carries `needs.deployment-release-guard.outputs.deploy == 'true'` in its `if:`. A tag older than the
+    highest SemVer tag in the repository is skipped unless `allow_rollback: true` on a
+    `workflow_dispatch` run asks for it; a branch run and a tag that is not SemVer deploy as before.
+    `make test ONLY=release-guard` holds the wiring; see AGENTS.md, "A Tag Older Than the Newest
+    Release Is Not Deployed".
 
 ### Platform and Language Support Matrix
 

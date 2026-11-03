@@ -264,9 +264,21 @@ while IFS=$'\t' read -r _ file job action; do
   # than silence.
   fact_has 'job-has-needs' "$file" "$job" \
     || UNGATED="${UNGATED}${file} job '${job}': no 'needs:', so it can deploy a commit nothing verified"$'\n'
-  # `environment:` is what keeps two environments' credentials apart.
-  fact_has 'job-has-environment' "$file" "$job" \
-    || UNGATED="${UNGATED}${file} job '${job}': no 'environment:', so its credentials are not scoped"$'\n'
+  # `environment:` is what keeps two environments' credentials apart. The release guard is held to
+  # the opposite: it is the gate that decides whether the deployment job runs at all, so it holds no
+  # credential, and entering `production` there would ask for its approvals and record a deployment
+  # of the very tag it refuses (`50-deployment/release-guard`).
+  case "$action" in
+    *50-deployment/release-guard*)
+      if fact_has 'job-has-environment' "$file" "$job"; then
+        UNGATED="${UNGATED}${file} job '${job}': the release guard declares 'environment:', so a refused tag still enters it"$'\n'
+      fi
+      ;;
+    *)
+      fact_has 'job-has-environment' "$file" "$job" \
+        || UNGATED="${UNGATED}${file} job '${job}': no 'environment:', so its credentials are not scoped"$'\n'
+      ;;
+  esac
   # Without an `if:` a pull request deploys.
   fact_has 'job-has-if' "$file" "$job" \
     || UNGATED="${UNGATED}${file} job '${job}': no 'if:', so a pull request deploys"$'\n'

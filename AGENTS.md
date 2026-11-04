@@ -46,7 +46,7 @@ there is no target to add and no list to keep in step.
 | `go-cache-trim` | The Go build-cache disk guard (threshold parsing, trim decision) |
 | `go-cross-compile` | The Go cross-compile runner (every target in one job, at most CROSS_COMPILE_JOBS at once, a failing target named) |
 | `go-helpers` | Run the Go helpers' unit tests (`go test ./...`; the dependency-update tool's behaviour, policy and command line) |
-| `go-integration-scope` | Which packages the Go runner's integration phase selects |
+| `go-integration-scope` | Which packages the Go runner's integration phase selects, and the timeout and environment (`GO_TEST_INTEGRATION_ENV`) it runs them under |
 | `go-module-toolchain` | That every go.mod toolchain directive is readable by the images/analysers/workflows that consume it |
 | `go-tmpdir-modcache` | That the Go module cache stays out of $TMPDIR |
 | `go-tool-staleness` | That a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves |

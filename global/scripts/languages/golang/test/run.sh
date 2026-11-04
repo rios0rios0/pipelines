@@ -22,6 +22,52 @@ fi
 . "$SCRIPTS_DIR/global/scripts/shared/go-modcache.sh"
 resolve_go_paths
 
+# GO_TEST_INTEGRATION_ENV holds dotenv-style `KEY=value` lines, one per line,
+# that are exported into the environment of the integration phase's `go test`
+# (phase 2 below) and of nothing else: the go command, the compiler and the test
+# binaries all inherit them, so a consumer can bound the memory of a large test
+# package's compile (`GOMEMLIMIT=6GiB`, `GOGC=50`) or its CPU (`GOMAXPROCS=4`)
+# without slowing the unit phase down. Blank lines and lines starting with `#`
+# are skipped; empty or unset changes nothing.
+#
+# Each line is handed to `export` as ONE word, so the value reaches the process
+# environment verbatim and is never parsed as shell: quotes, `$` and backticks
+# stay literal. A line that is not `NAME=value`, with NAME a valid variable
+# name, fails the job here -- before the unit phase spends minutes -- naming its
+# line number but never its text, which could hold a value meant to stay out of
+# the log. A silently skipped line would leave the limit it carried unapplied,
+# and the job would fail later the way the limit exists to prevent.
+integration_env_apply() {
+  integration_env_line_number=0
+  while IFS= read -r integration_env_line; do
+    integration_env_line_number=$((integration_env_line_number + 1))
+    integration_env_line="${integration_env_line%"$(printf '\r')"}"
+    case "$integration_env_line" in
+      '' | '#'*) continue ;;
+    esac
+    case "$integration_env_line" in
+      *[![:space:]]*) ;;
+      *) continue ;;
+    esac
+    integration_env_name="${integration_env_line%%=*}"
+    case "$integration_env_name" in
+      "$integration_env_line" | '' | [0-9]* | *[!A-Za-z0-9_]*)
+        echo "GO_TEST_INTEGRATION_ENV line $integration_env_line_number is not NAME=value (NAME: letters, digits and underscores, not starting with a digit)" >&2
+        return 1
+        ;;
+    esac
+    # shellcheck disable=SC2163  # exports the NAME=value the line holds, by design
+    export "$integration_env_line"
+  done << EOF
+${GO_TEST_INTEGRATION_ENV:-}
+EOF
+}
+
+# Validated up front, in a subshell, so nothing it exports leaks into phase 1.
+if ! (integration_env_apply); then
+  exit 1
+fi
+
 touch coverage.xml
 
 # find the directories to test
@@ -233,16 +279,29 @@ else
   # `integration_timeout` input into it the same way, because a package that
   # keeps growing reaches any fixed limit in the end: one took 22 to 28 minutes
   # on normal runs and then failed a release on a busy runner at 30.
+  #
+  # GO_TEST_INTEGRATION_ENV (see `integration_env_apply` above) is applied in
+  # the subshell below, so its variables reach this `gotestsum` -- and the go
+  # command, compiler and test binaries under it -- and nothing that runs after
+  # it. It is read from the environment like the two variables above, and the
+  # GitHub path threads an `integration_env` input into it the same way. Its
+  # main use is memory: one test package with hundreds of files can need more
+  # memory to COMPILE than a runner allows a job, and only this phase builds
+  # it, so a `GOMEMLIMIT` here keeps the compiler under that ceiling (at the
+  # price of more GC CPU) without touching the unit phase.
   # shellcheck disable=SC2086
-  "$GOBIN_DIR"/gotestsum \
-    --format pkgname \
-    --junitfile junit-integration.xml \
-    -- -p "${GO_TEST_INTEGRATION_PARALLEL:-1}" -tags integration \
-    -timeout "${GO_TEST_INTEGRATION_TIMEOUT:-30m}" \
-    -coverpkg="$(echo $directories | tr ' ' ',')" \
-    -covermode=count \
-    -coverprofile=integration_coverage.txt \
-    $integration_directories || INTEGRATION_EXIT_CODE=$?
+  (
+    integration_env_apply || exit 1
+    exec "$GOBIN_DIR"/gotestsum \
+      --format pkgname \
+      --junitfile junit-integration.xml \
+      -- -p "${GO_TEST_INTEGRATION_PARALLEL:-1}" -tags integration \
+      -timeout "${GO_TEST_INTEGRATION_TIMEOUT:-30m}" \
+      -coverpkg="$(echo $directories | tr ' ' ',')" \
+      -covermode=count \
+      -coverprofile=integration_coverage.txt \
+      $integration_directories
+  ) || INTEGRATION_EXIT_CODE=$?
 fi
 
 integration_end_time=$(date +%s)

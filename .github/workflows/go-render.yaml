@@ -101,6 +101,11 @@ on:
         required: false
         default: '30m'
         description: '`go test -timeout` for each integration test binary, a Go duration. See go.yaml.'
+      integration_env:
+        type: 'string'
+        required: false
+        default: ''
+        description: 'KEY=value lines exported into the integration phase''s `go test` only (GOMEMLIMIT, GOGC). See go.yaml.'
       openapi_sync_path:
         type: 'string'
         required: false
@@ -222,6 +227,7 @@ jobs:
       coverage_threshold: ${{ inputs.coverage_threshold }}
       integration_parallel: ${{ inputs.integration_parallel }}
       integration_timeout: ${{ inputs.integration_timeout }}
+      integration_env: ${{ inputs.integration_env }}
       openapi_sync_path: ${{ inputs.openapi_sync_path }}
       openapi_sync_command: ${{ inputs.openapi_sync_command }}
       promote_release: ${{ inputs.promote_release }}

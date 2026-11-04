@@ -37,6 +37,19 @@ inputs:
       `integration_parallel` above.
     required: false
     default: '30m'
+  integration_env:
+    description: |
+      Dotenv-style `KEY=value` lines, one per line, exported into the environment of the
+      integration phase's `go test` and nothing else -- the go command, the compiler and the test
+      binaries inherit them, the unit phase does not. Meant for `GOMEMLIMIT`, `GOGC` and
+      `GOMAXPROCS`: one test package with hundreds of files can need more memory to compile than
+      the runner allows the job, and a `GOMEMLIMIT` keeps the compiler under that ceiling at the
+      cost of more GC CPU. The runner reads it as `GO_TEST_INTEGRATION_ENV`, passes every value
+      verbatim (never parsed as shell), skips blank and `#` lines, and fails the job on a line that
+      is not `NAME=value`. Empty changes nothing; an input for the same reason as
+      `integration_parallel` above.
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -132,6 +145,7 @@ runs:
       env:
         GO_TEST_INTEGRATION_PARALLEL: "${{ inputs.integration_parallel }}"
         GO_TEST_INTEGRATION_TIMEOUT: "${{ inputs.integration_timeout }}"
+        GO_TEST_INTEGRATION_ENV: "${{ inputs.integration_env }}"
 
     # The test runner prints coverage but never fails on it, so without this the number can
     # drift down one merge at a time and nothing notices.

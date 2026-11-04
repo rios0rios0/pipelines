@@ -7,8 +7,9 @@
 # no build tag ran its whole unit suite twice -- serially, under `-p 1` -- and
 # saw every test counted twice in the merged junit.xml. Phase 2 now runs only
 # the packages whose test file list actually changes under the tag. The last
-# cases pin the `-timeout` phase 2 hands to `go test` (GO_TEST_INTEGRATION_TIMEOUT)
-# and the `integration_timeout` input that carries it on GitHub Actions.
+# cases pin the `-timeout` phase 2 hands to `go test` (GO_TEST_INTEGRATION_TIMEOUT),
+# the environment it runs under (GO_TEST_INTEGRATION_ENV), and the
+# `integration_timeout`/`integration_env` inputs that carry them on GitHub Actions.
 #
 # Every case below drives the real run.sh rather than a copy of its selection
 # logic, so the test cannot drift away from the script it is pinning. The
@@ -451,6 +452,163 @@ for workflow in go go-docker go-flyio go-render; do
         "$(grep -c '^      integration_timeout:$' "$file")" "1"
     check "$workflow.yaml forwards integration_timeout" \
         "$(grep -cE '^ +integration_timeout: "?\$\{\{ inputs\.integration_timeout \}\}"?$' "$file")" "1"
+done
+
+# ── phase 2 runs with GO_TEST_INTEGRATION_ENV, phase 1 without it ─────────────
+# A test package whose compile needs more memory than the runner allows is
+# bounded by a GOMEMLIMIT handed to phase 2 only. The fixture's integration test
+# records what reached its own process environment, and an untagged test beside
+# it records what reached phase 1, so each case pins the environment the test
+# binaries actually saw rather than the script's text.
+echo "== phase 2 runs with GO_TEST_INTEGRATION_ENV ==" >&2
+
+ENVFIX="$SANDBOX/envfix"
+mkdir -p "$ENVFIX/internal/integ" "$ENVFIX/internal/unit"
+cat > "$ENVFIX/go.mod" << 'EOF'
+module example.com/scope/envfix
+
+go 1.25
+EOF
+cat > "$ENVFIX/internal/integ/integ.go" << 'EOF'
+package integ
+
+func Integ() int { return 5 }
+EOF
+cat > "$ENVFIX/internal/integ/integ_integration_test.go" << 'EOF'
+//go:build integration
+
+package integ
+
+import (
+	"os"
+	"testing"
+)
+
+// Writes GOGC, GOMEMLIMIT and ODD_VALUE as this binary saw them, "-" for unset.
+func TestRecordsItsEnvironment(t *testing.T) {
+	seen := ""
+	for _, name := range []string{"GOGC", "GOMEMLIMIT", "ODD_VALUE"} {
+		value, ok := os.LookupEnv(name)
+		if !ok {
+			value = "-"
+		}
+		seen += name + "=" + value + "\n"
+	}
+	if Integ() != 5 {
+		t.Fatal("unexpected value")
+	}
+	if err := os.WriteFile(os.Getenv("ENV_FILE"), []byte(seen), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+EOF
+cat > "$ENVFIX/internal/unit/unit.go" << 'EOF'
+package unit
+
+func Unit() int { return 6 }
+EOF
+cat > "$ENVFIX/internal/unit/unit_test.go" << 'EOF'
+package unit
+
+import (
+	"os"
+	"testing"
+)
+
+// Writes GOGC as the unit phase saw it, "-" for unset.
+func TestRecordsTheUnitEnvironment(t *testing.T) {
+	value, ok := os.LookupEnv("GOGC")
+	if !ok {
+		value = "-"
+	}
+	if Unit() != 6 {
+		t.Fatal("unexpected value")
+	}
+	if err := os.WriteFile(os.Getenv("UNIT_ENV_FILE"), []byte(value), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+EOF
+
+# Each case writes to its own files, for the result-cache reason given above.
+# Runs the runner with GO_TEST_INTEGRATION_ENV set to $2, or unset without $2.
+run_env_case() { # run_env_case <case> [GO_TEST_INTEGRATION_ENV]
+    local out="$SANDBOX/env-$1.txt" unit_out="$SANDBOX/env-$1-unit.txt" log="$SANDBOX/env-$1.log"
+    if [ $# -ge 2 ]; then
+        (cd "$ENVFIX" && ENV_FILE="$out" UNIT_ENV_FILE="$unit_out" GO_TEST_INTEGRATION_ENV="$2" \
+            env -u GOGC -u GOMEMLIMIT -u ODD_VALUE "$RUN_SH") > "$log" 2>&1
+    else
+        (cd "$ENVFIX" && env -u GO_TEST_INTEGRATION_ENV -u GOGC -u GOMEMLIMIT -u ODD_VALUE \
+            ENV_FILE="$out" UNIT_ENV_FILE="$unit_out" "$RUN_SH") > "$log" 2>&1
+    fi
+}
+seen_env() { cat "$SANDBOX/env-$1.txt" 2>/dev/null || echo "not-run"; }
+seen_unit_env() { cat "$SANDBOX/env-$1-unit.txt" 2>/dev/null || echo "not-run"; }
+
+run_env_case unset || fail "the runner fails without GO_TEST_INTEGRATION_ENV (see $SANDBOX/env-unset.log)"
+check "without GO_TEST_INTEGRATION_ENV phase 2 sees none of its variables" \
+    "$(seen_env unset)" "GOGC=-
+GOMEMLIMIT=-
+ODD_VALUE=-"
+
+run_env_case empty "" || fail "the runner fails with an empty GO_TEST_INTEGRATION_ENV"
+check "an empty GO_TEST_INTEGRATION_ENV changes nothing" \
+    "$(seen_env empty)" "GOGC=-
+GOMEMLIMIT=-
+ODD_VALUE=-"
+
+# A CRLF line, a comment, a blank line and a value full of shell syntax: the
+# value must arrive byte for byte, which it cannot if the script ever evaluates it.
+# shellcheck disable=SC2016  # the `$HOME` and backticks are the value under test, never an expansion
+set_env="GOGC=50
+# a comment line
+
+GOMEMLIMIT=5GiB$(printf '\r')
+ODD_VALUE=a b \"c\" '\$HOME' \`id\` x=y"
+run_env_case set "$set_env" || fail "the runner fails with a valid GO_TEST_INTEGRATION_ENV"
+# shellcheck disable=SC2016
+check "GO_TEST_INTEGRATION_ENV reaches the integration test binary verbatim" \
+    "$(seen_env set)" "GOGC=50
+GOMEMLIMIT=5GiB
+ODD_VALUE=a b \"c\" '\$HOME' \`id\` x=y"
+check "GO_TEST_INTEGRATION_ENV does not reach the unit phase" \
+    "$(seen_unit_env set)" "-"
+
+# A malformed line fails the job before the unit phase spends any time, names
+# its line number, and never prints the line, which could carry a secret.
+for malformed in "GOGC sentinel" "=sentinel" "9GOGC=sentinel" "GO-GC=sentinel" " GOGC=sentinel"; do
+    label="$(printf '%s' "$malformed" | tr -c 'A-Za-z0-9' '_')"
+    if run_env_case "bad$label" "GOMEMLIMIT=5GiB
+$malformed"; then
+        fail "a malformed GO_TEST_INTEGRATION_ENV line [$malformed] is accepted"
+    else
+        pass "a malformed GO_TEST_INTEGRATION_ENV line [$malformed] fails the runner"
+    fi
+    log="$SANDBOX/env-bad$label.log"
+    check "the error for [$malformed] names line 2" \
+        "$(grep -c 'GO_TEST_INTEGRATION_ENV line 2 is not NAME=value' "$log")" "1"
+    check "a malformed line [$malformed] stops the runner before the unit phase" \
+        "$(grep -c 'PHASE 1' "$log")" "0"
+    check "the error for [$malformed] does not print the value" \
+        "$(grep -cF sentinel "$log")" "0"
+done
+
+# ── the GitHub path carries the environment as an input ───────────────────────
+# Same reason as integration_timeout above: a caller's `env:` never reaches a
+# reusable workflow, so the variable crosses as `integration_env`.
+echo "== the GitHub path threads integration_env into GO_TEST_INTEGRATION_ENV ==" >&2
+
+# shellcheck disable=SC2016  # the single-quoted `${{ }}` is the action's expected TEXT, never an expansion
+check "the test action maps integration_env onto GO_TEST_INTEGRATION_ENV" \
+    "$(grep -cF 'GO_TEST_INTEGRATION_ENV: "${{ inputs.integration_env }}"' "$ACTION")" "1"
+check "the test action declares integration_env" \
+    "$(grep -c '^  integration_env:$' "$ACTION")" "1"
+for workflow in go go-docker go-flyio go-render; do
+    file="$SCRIPT_DIR/.github/workflows/$workflow.yaml"
+    check "$workflow.yaml declares integration_env" \
+        "$(grep -c '^      integration_env:$' "$file")" "1"
+    check "$workflow.yaml forwards integration_env" \
+        "$(grep -cE '^ +integration_env: "?\$\{\{ inputs\.integration_env \}\}"?$' "$file")" "1"
 done
 
 echo "" >&2

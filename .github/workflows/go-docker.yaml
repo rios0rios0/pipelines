@@ -89,6 +89,11 @@ on:
         required: false
         default: ''
         description: 'KEY=value lines exported into the integration phase''s `go test` only (GOMEMLIMIT, GOGC). See go.yaml.'
+      test_selection:
+        type: 'string'
+        required: false
+        default: 'all'
+        description: '`all` runs every package; `affected` only those a pull request can reach. See go.yaml.'
       openapi_sync_path:
         type: 'string'
         required: false
@@ -167,6 +172,7 @@ jobs:
       integration_parallel: ${{ inputs.integration_parallel }}
       integration_timeout: ${{ inputs.integration_timeout }}
       integration_env: ${{ inputs.integration_env }}
+      test_selection: ${{ inputs.test_selection }}
       openapi_sync_path: ${{ inputs.openapi_sync_path }}
       openapi_sync_command: ${{ inputs.openapi_sync_command }}
     secrets:

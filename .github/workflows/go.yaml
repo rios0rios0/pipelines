@@ -162,6 +162,27 @@ on:
           lines starting with `#` are skipped, and a line that is not `NAME=value` fails the test
           job before the unit phase runs. Empty, the default, changes nothing. On GitLab CI and
           Azure DevOps the runner reads the same thing from a `GO_TEST_INTEGRATION_ENV` variable.
+      test_selection:
+        type: 'string'
+        required: false
+        default: 'all'
+        description: |
+          Which packages the test job runs: `all` (the default) or `affected`. `affected` runs, in
+          both phases, only the packages a pull request can reach -- those whose files it changed
+          (Go sources, tests, and the files a `//go:embed` reads, such as migrations) and every
+          package whose dependency closure, test imports included, holds one of them -- read from
+          `go list -test` under the unit and the integration tags. It runs everything instead, and
+          logs why, when the change touches `go.mod`, `go.sum`, `go.work`, `vendor/`, a Makefile,
+          CI configuration or any other file outside every Go package, or when the merge base with
+          the pull request's base branch cannot be found; a change made only of documentation
+          (Markdown, `.changes/`) runs nothing and passes. Outside a `pull_request` run there is no
+          base, so it runs everything: pass `affected` on pull requests and keep the full suite on
+          the default branch, where a test that reads a file the module does not declare still
+          runs. In `affected` mode the checkout fetches the whole history, the coverage is reported
+          but `coverage_threshold` is not enforced, and an empty test report does not fail the job.
+          On GitLab CI and Azure DevOps the runner reads `GO_TEST_SELECTION` and
+          `GO_TEST_SELECTION_BASE` (GitLab merge requests fall back to
+          `CI_MERGE_REQUEST_DIFF_BASE_SHA`).
       openapi_sync_path:
         type: 'string'
         required: false
@@ -331,6 +352,7 @@ jobs:
           integration_parallel: "${{ inputs.integration_parallel }}"
           integration_timeout: "${{ inputs.integration_timeout }}"
           integration_env: "${{ inputs.integration_env }}"
+          test_selection: "${{ inputs.test_selection }}"
 
       - name: 'Test Results'
         if: "always() && hashFiles('junit.xml') != ''"
@@ -339,6 +361,9 @@ jobs:
           name: 'Test Results'
           path: 'junit.xml'
           reporter: 'java-junit'
+          # A narrowed run of a documentation-only change tests nothing, and its empty report is
+          # the expected outcome; every full run still fails on an empty one.
+          fail-on-empty: "${{ inputs.test_selection != 'affected' }}"
 
       - name: 'Upload Coverage Report'
         if: "always() && hashFiles('coverage.txt') != ''"

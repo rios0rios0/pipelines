@@ -92,6 +92,34 @@ fi
 directories=$(echo $directories | sed 's/^ *//;s/ *$//')
 echo "Testing code in the following directories: $directories"
 
+# GO_TEST_SELECTION=affected narrows both phases to the packages a change can
+# reach; `all`, the default, runs everything. selection.sh holds the rules, and
+# when it falls back to everything, why. It is read from the environment like
+# GO_TEST_INTEGRATION_ENV below, and the GitHub path threads a `test_selection`
+# input into it. Decided before the tools install, so an unknown value fails
+# the job at once. go-test-selection.txt records a narrowed run for whatever
+# reads the coverage afterwards: a run of some packages cannot meet a threshold
+# set for all of them, so the GitHub coverage gate reports it and does not fail.
+. "$SCRIPTS_DIR/global/scripts/languages/golang/test/selection.sh"
+rm -f go-test-selection.txt
+go_test_selection_prepare || exit 1
+unit_targets="$directories"
+if [ "$GO_TEST_SELECTION_EFFECTIVE" = "affected" ]; then
+  echo "affected" > go-test-selection.txt
+  if [ -n "$GO_TEST_SELECTION_CHANGED" ]; then
+    echo "Test selection: affected packages only. Packages the change touches:"
+    echo "$GO_TEST_SELECTION_CHANGED" | sed 's/^/  /'
+  else
+    echo "Test selection: affected packages only. The change touches no Go package."
+  fi
+  # shellcheck disable=SC2086
+  unit_targets="$(go_test_selection_affected test,unit $directories | tr '\n' ' ' | sed 's/ *$//')"
+  # shellcheck disable=SC2086
+  echo "Test selection: $(echo $unit_targets | wc -w | tr -d ' ') package(s) affected in the unit phase"
+else
+  echo "Test selection: all packages (${GO_TEST_SELECTION_REASON})"
+fi
+
 echo "Installing dependencies..."
 # Skip `go install` when the binary is already on disk so CI runs that
 # restored a cached Go bin directory (e.g. via `actions/cache@v4` in
@@ -137,15 +165,20 @@ echo "Started at: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "=========================================="
 unit_start_time=$(date +%s)
 
-# shellcheck disable=SC2086
-"$GOBIN_DIR"/gotestsum \
-  --format pkgname \
-  --junitfile junit-unit.xml \
-  -- -tags test,unit \
-  -coverpkg="$(echo $directories | tr ' ' ',')" \
-  -covermode=count \
-  -coverprofile=unit_coverage.txt \
-  $directories || UNIT_EXIT_CODE=$?
+if [ -z "$unit_targets" ]; then
+  echo "No affected package in the unit phase - nothing to run."
+  echo "mode: count" > unit_coverage.txt
+else
+  # shellcheck disable=SC2086
+  "$GOBIN_DIR"/gotestsum \
+    --format pkgname \
+    --junitfile junit-unit.xml \
+    -- -tags test,unit \
+    -coverpkg="$(echo $directories | tr ' ' ',')" \
+    -covermode=count \
+    -coverprofile=unit_coverage.txt \
+    $unit_targets || UNIT_EXIT_CODE=$?
+fi
 
 unit_end_time=$(date +%s)
 unit_duration=$((unit_end_time - unit_start_time))
@@ -239,8 +272,19 @@ integration_directories=$(
     ' | sort
 )
 
+integration_skip=""
 if [ -z "$integration_directories" ]; then
-  echo "No package adds test files under the 'integration' tag - skipping this phase."
+  integration_skip="No package adds test files under the 'integration' tag - skipping this phase."
+elif [ "$GO_TEST_SELECTION_EFFECTIVE" = "affected" ]; then
+  # shellcheck disable=SC2086
+  integration_directories="$(go_test_selection_affected integration $integration_directories)"
+  echo "Test selection: $(printf '%s' "$integration_directories" | grep -c .) package(s) affected in the integration phase"
+  [ -n "$integration_directories" ] \
+    || integration_skip="No affected package adds test files under the 'integration' tag - skipping this phase."
+fi
+
+if [ -n "$integration_skip" ]; then
+  echo "$integration_skip"
   # A lone mode line parses as zero coverage blocks, so phase 3 merges it with
   # the unit profile and emits that profile unchanged. Writing the file matters:
   # the merge step branches on its presence.
@@ -405,6 +449,10 @@ extract_testsuites() {
 } > junit.xml
 
 go tool cover -func coverage.txt
+if [ "$GO_TEST_SELECTION_EFFECTIVE" = "affected" ]; then
+  echo "Test selection: this run tested the affected packages only, so the coverage above is"
+  echo "partial and no coverage threshold is enforced on it."
+fi
 "$GOBIN_DIR"/gocover-cobertura < coverage.txt > cobertura.xml
 
 reports_end_time=$(date +%s)

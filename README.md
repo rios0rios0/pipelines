@@ -372,6 +372,42 @@ each other instead of sharing a host. Empty, the default, leaves both jobs on `r
 `go-render.yaml`, `go-binary.yaml` and `go-library.yaml`. `make test-workflow-composition` fails if
 a composed workflow stops forwarding either one.
 
+#### Test Only What a Pull Request Can Reach (`test_selection`)
+
+A Go test job runs every package by default. `test_selection: affected` narrows both of its phases to
+the packages a pull request can reach: the packages whose files it changed -- Go sources, tests, and
+the files a `//go:embed` reads, such as migrations or templates -- and every package whose dependency
+closure, test imports included, holds one of them. The closure is read from `go list -test`, once
+under the unit tags and once under the `integration` tag. Pass it on pull requests only and keep the
+full suite on the default branch:
+
+```yaml
+jobs:
+  pipeline:
+    uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'
+    with:
+      test_selection: "${{ github.event_name == 'pull_request' && 'affected' || 'all' }}"
+```
+
+The runner (`global/scripts/languages/golang/test/selection.sh`) compares HEAD with its merge base on
+the pull request's base branch, and runs everything instead -- logging why -- when the change touches
+`go.mod`, `go.sum`, `go.work`, `vendor/`, a Makefile, CI configuration or any other file outside every
+Go package (a fixture at the repository root, a file a test opens by a relative path), or when no
+merge base is found. A change made only of documentation (Markdown, `.changes/`, licence files) runs
+nothing and passes. The log names the changed packages and how many packages each phase runs.
+
+What a narrowed run gives up: its coverage covers some packages' tests, so the coverage gate reports
+it and does not enforce `coverage_threshold`; an empty test report does not fail the job; and the
+test checkout fetches the whole history, to reach the merge base. A test that reads a file the
+module does not declare, and that the rules take for documentation, does not run -- which is why the
+default branch keeps running everything. Outside a `pull_request` event there is no base, and
+`affected` runs everything. Only `go.yaml` takes it, and so do `go-docker.yaml`, `go-flyio.yaml` and
+`go-render.yaml`.
+
+On GitLab CI and Azure DevOps, set `GO_TEST_SELECTION=affected` and `GO_TEST_SELECTION_BASE` (a ref
+or a commit the job's clone holds, deep enough to reach the merge base); a GitLab merge request
+pipeline falls back to `CI_MERGE_REQUEST_DIFF_BASE_SHA`.
+
 #### Stages Run One After Another
 
 GitHub Actions has no stages: a job starts as soon as the jobs it `needs:` are done. Every

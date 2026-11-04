@@ -48,6 +48,7 @@ there is no target to add and no list to keep in step.
 | `go-helpers` | Run the Go helpers' unit tests (`go test ./...`; the dependency-update tool's behaviour, policy and command line) |
 | `go-integration-scope` | Which packages the Go runner's integration phase selects, and the timeout and environment (`GO_TEST_INTEGRATION_ENV`) it runs them under |
 | `go-module-toolchain` | That every go.mod toolchain directive is readable by the images/analysers/workflows that consume it |
+| `go-test-selection` | The Go runner's `affected` test selection (`selection.sh`: the packages a change reaches through the dependency graph, the fall-backs to everything, a documentation-only change running nothing) and the `test_selection` input that carries it |
 | `go-tmpdir-modcache` | That the Go module cache stays out of $TMPDIR |
 | `go-tool-staleness` | That a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves |
 | `go-validation` | Go validation script |

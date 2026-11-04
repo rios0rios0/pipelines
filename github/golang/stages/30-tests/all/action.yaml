@@ -50,12 +50,33 @@ inputs:
       `integration_parallel` above.
     required: false
     default: ''
+  test_selection:
+    description: |
+      `all` (the default) runs every package. `affected` runs, in both phases, only the packages a
+      pull request can reach: those whose files it changed (Go sources, tests, embedded files) and
+      every package whose dependency closure holds one of them. It runs everything instead, and
+      says why, when the change touches `go.mod`/`go.sum`, a Makefile, CI configuration or a file
+      outside every package, or when no merge base is found; a documentation change selects only
+      the packages whose tests name the document in a string literal, and otherwise runs nothing. The base is the pull request's base branch, so outside a `pull_request` run it always
+      runs everything, and the checkout fetches the whole history to reach the merge base. A
+      narrowed run reports its coverage but the coverage gate does not fail it, since a run of some
+      packages cannot meet a threshold set for all of them. The runner reads it as
+      `GO_TEST_SELECTION`, and the base as `GO_TEST_SELECTION_BASE`; an input for the same reason
+      as `integration_parallel` above.
+    required: false
+    default: 'all'
 
 runs:
   using: 'composite'
   steps:
     - name: 'Checkout code'
       uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
+      with:
+        # The whole history, only when a pull request asks for a narrowed run: the selection
+        # compares HEAD with its merge base on the base branch, which a one-commit clone does not
+        # hold (the runner would then fall back to running everything). Every other run keeps the
+        # one-commit default.
+        fetch-depth: "${{ inputs.test_selection == 'affected' && github.base_ref != '' && '0' || '1' }}"
 
     # Hoisted above the database step, which runs one of the scripts it fetches.
     # `SCRIPTS_DIR` is written to `$GITHUB_ENV`, so it is only readable from the
@@ -146,6 +167,10 @@ runs:
         GO_TEST_INTEGRATION_PARALLEL: "${{ inputs.integration_parallel }}"
         GO_TEST_INTEGRATION_TIMEOUT: "${{ inputs.integration_timeout }}"
         GO_TEST_INTEGRATION_ENV: "${{ inputs.integration_env }}"
+        GO_TEST_SELECTION: "${{ inputs.test_selection }}"
+        # `origin/<base branch>` on a pull request, which the full-history checkout above
+        # fetched; empty on every other event, which makes `affected` run everything.
+        GO_TEST_SELECTION_BASE: "${{ github.base_ref != '' && format('origin/{0}', github.base_ref) || '' }}"
 
     # The test runner prints coverage but never fails on it, so without this the number can
     # drift down one merge at a time and nothing notices.
@@ -154,6 +179,13 @@ runs:
       shell: 'bash'
       run: |
         set -euo pipefail
+
+        # The runner writes this file only after a narrowed run (`test_selection: affected`):
+        # its total covers some packages' tests against every package's statements.
+        if [ "$(cat go-test-selection.txt 2> /dev/null)" = 'affected' ]; then
+          echo "::notice::only the affected packages were tested; the ${COVERAGE_THRESHOLD}% minimum is not enforced on this run"
+          exit 0
+        fi
 
         total="$(go tool cover -func=coverage.txt | awk '/^total:/ {print $3}' | tr -d '%')"
         if [ -z "$total" ]; then

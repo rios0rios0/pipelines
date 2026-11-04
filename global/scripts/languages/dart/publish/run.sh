@@ -21,7 +21,7 @@ set -e
 # job before the upload rather than be discovered after it.
 
 if [ -z "$SCRIPTS_DIR" ]; then
-  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
+  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*\)/global/scripts/.*|\1|')"
   export SCRIPTS_DIR
 fi
 

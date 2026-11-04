@@ -14,3 +14,6 @@
 /coverage.txt
 /coverage.xml
 /cobertura.xml
+# Written by the same runner after a run narrowed to the affected packages, for the
+# coverage gate that reads it.
+/go-test-selection.txt

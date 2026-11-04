@@ -15,10 +15,6 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 RUN_SH="$SCRIPT_DIR/global/scripts/languages/golang/test/run.sh"
-# run.sh derives SCRIPTS_DIR from its own path, up to the last "pipelines" in it, which a
-# checkout whose directory name merely contains the word would get wrong; this suite names
-# the checkout it tests.
-export SCRIPTS_DIR="$SCRIPT_DIR"
 EXIT_CODE=0
 PASSED=0
 
@@ -116,6 +112,35 @@ func TestInteg${upper}(t *testing.T) {
 }
 EOF
 done
+# Two documents a test pins to the code: b's tests name the runbook by its path
+# from the repository's top, c's name the handbook by its bare file name. The
+# README is named by no test.
+mkdir -p "$FIXTURE/.docs" "$FIXTURE/docs/guide"
+printf '# runbook\n' > "$FIXTURE/.docs/runbook.md"
+printf '# handbook\n' > "$FIXTURE/docs/guide/handbook.md"
+cat > "$FIXTURE/internal/b/doc_test.go" << 'EOF'
+package b
+
+import "testing"
+
+func TestDocB(t *testing.T) {
+	if len(".docs/runbook.md") == 0 {
+		t.Fatal("empty")
+	}
+}
+EOF
+cat > "$FIXTURE/internal/c/doc_test.go" << 'EOF'
+package c
+
+import "testing"
+
+func TestDocC(t *testing.T) {
+	if len("handbook.md") == 0 {
+		t.Fatal("empty")
+	}
+}
+EOF
+EVERY_TEST="TestDocB TestDocC TestIntegA TestIntegC TestUnitA TestUnitB TestUnitC"
 fixture_git init -q
 fixture_git add -A
 fixture_git commit -q -m 'base'
@@ -144,7 +169,7 @@ rc() { cat "$SANDBOX/$1.rc"; }
 echo "== a change in a reaches every package that depends on it ==" >&2
 run_case change-a affected main sh -c 'printf "func Extra() int { return 1 }\n" >> internal/a/a.go'
 check "a change in a runs the unit and integration tests of a, b and c" \
-    "$(ran change-a)" "TestIntegA TestIntegC TestUnitA TestUnitB TestUnitC"
+    "$(ran change-a)" "$EVERY_TEST"
 check "the runner passes when a changes" "$(rc change-a)" "0"
 check "the runner logs the package the change touches" \
     "$(grep -A1 'Packages the change touches:$' "$SANDBOX/change-a.log" | tail -1)" \
@@ -160,17 +185,17 @@ check "the runner records the narrowed run for the coverage gate" \
 
 echo "== a change in c reaches c alone ==" >&2
 run_case change-c affected main sh -c 'printf "func Extra() int { return 1 }\n" >> internal/c/c.go'
-check "a change in c runs the tests of c alone" "$(ran change-c)" "TestIntegC TestUnitC"
+check "a change in c runs the tests of c alone" "$(ran change-c)" "TestDocC TestIntegC TestUnitC"
 
 echo "== a file a package embeds belongs to that package ==" >&2
 run_case embed affected main sh -c 'printf "two\n" > internal/a/data/greeting.txt'
 check "a change to a's embedded file runs a, b and c" \
-    "$(ran embed)" "TestIntegA TestIntegC TestUnitA TestUnitB TestUnitC"
+    "$(ran embed)" "$EVERY_TEST"
 
 echo "== a go.mod change runs everything ==" >&2
 run_case go-mod affected main sh -c 'printf "\n// a comment\n" >> go.mod'
 check "a go.mod change runs every test" \
-    "$(ran go-mod)" "TestIntegA TestIntegC TestUnitA TestUnitB TestUnitC"
+    "$(ran go-mod)" "$EVERY_TEST"
 check "the runner says why everything ran" \
     "$(grep -c '^Test selection: all packages (go.mod changes the module definition)$' "$SANDBOX/go-mod.log")" "1"
 check "an unnarrowed run leaves no record for the coverage gate" \
@@ -179,28 +204,42 @@ check "an unnarrowed run leaves no record for the coverage gate" \
 echo "== a file outside every package runs everything ==" >&2
 run_case outside affected main sh -c 'printf "key: value\n" > settings.yaml'
 check "a file outside every package runs every test" \
-    "$(ran outside)" "TestIntegA TestIntegC TestUnitA TestUnitB TestUnitC"
+    "$(ran outside)" "$EVERY_TEST"
 
 echo "== a documentation change runs nothing and passes ==" >&2
 run_case docs affected main sh -c 'printf "more\n" >> README.md && mkdir -p .changes && printf "x\n" > .changes/note.yaml'
 check "a documentation change runs no test" "$(ran docs)" ""
 check "the runner passes on a documentation change" "$(rc docs)" "0"
+check "the runner says the unread document selects nothing" \
+    "$(grep -c '^  not code, selects nothing: README.md$' "$SANDBOX/docs.log")" "1"
 check "the runner says the change touches no package" \
     "$(grep -c 'The change touches no Go package' "$SANDBOX/docs.log")" "1"
 check "the runner skips the unit phase with a reason" \
     "$(grep -c '^No affected package in the unit phase - nothing to run.$' "$SANDBOX/docs.log")" "1"
 
+echo "== a document a test names by its path selects that test's package ==" >&2
+run_case doc-path affected main sh -c 'printf "more\n" >> .docs/runbook.md'
+check "a document b's tests name by path runs b and what depends on it" \
+    "$(ran doc-path)" "TestDocB TestDocC TestIntegC TestUnitB TestUnitC"
+check "the runner names the document and the package it selected" \
+    "$(grep -c '^  read by tests, selects their packages: .docs/runbook.md -> example.com/selection/internal/b$' "$SANDBOX/doc-path.log")" "1"
+
+echo "== a document a test names by its file name selects that test's package ==" >&2
+run_case doc-name affected main sh -c 'printf "more\n" >> docs/guide/handbook.md'
+check "a document c's tests name by file name runs c alone" \
+    "$(ran doc-name)" "TestDocC TestIntegC TestUnitC"
+
 echo "== without a merge base, everything runs ==" >&2
 run_case no-base affected refs/heads/absent sh -c 'printf "func Extra() int { return 1 }\n" >> internal/c/c.go'
 check "an unknown base runs every test" \
-    "$(ran no-base)" "TestIntegA TestIntegC TestUnitA TestUnitB TestUnitC"
+    "$(ran no-base)" "$EVERY_TEST"
 check "the runner says there is no merge base" \
     "$(grep -c 'no merge base between' "$SANDBOX/no-base.log")" "1"
 
 echo "== 'all' ignores the base ==" >&2
 run_case mode-all all main sh -c 'printf "func Extra() int { return 1 }\n" >> internal/c/c.go'
 check "'all' runs every test whatever changed" \
-    "$(ran mode-all)" "TestIntegA TestIntegC TestUnitA TestUnitB TestUnitC"
+    "$(ran mode-all)" "$EVERY_TEST"
 
 echo "== an unknown mode fails before any test ==" >&2
 run_case bogus sometimes main true

@@ -31,8 +31,11 @@
 # integration tags; when it sits in a package's directory (a deleted file, one
 # excluded by a build constraint); or when it sits under a package's testdata/.
 # Markdown, changelog fragments (.changes/), licence files and git's own dotfiles
-# outside those are documentation: they select nothing. A change made only of
-# them selects no package at all, and both phases pass with nothing to run.
+# outside those are documentation: they select nothing, unless a test names one
+# in a string literal (its repository or module path, or its bare name) -- a test
+# that pins a document to the code -- in which case it selects that test's
+# package. A change made only of documentation no test names selects no package
+# at all, and both phases pass with nothing to run.
 #
 # The dependency closure is read from `go list -test`, whose `Deps` is the
 # transitive closure of a package's imports and, for its test variants, of its
@@ -106,12 +109,16 @@ go_test_selection_prepare() {
 {{end}}{{range .XTestEmbedFiles}}F	{{$p}}	{{$d}}/{{.}}
 {{end}}'
 
+  # From the physical directory, as git names the top level: under a symlinked
+  # path the two would otherwise spell one file two ways.
+  selection_listing="$(
+    (cd -P . && go list -e -tags test,unit -f "$selection_template" ./...)
+    (cd -P . && go list -e -tags integration -f "$selection_template" ./...)
+  )"
+
   selection_verdict="$(
     {
-      # From the physical directory, as git names the top level: under a
-      # symlinked path the two would otherwise spell one file two ways.
-      (cd -P . && go list -e -tags test,unit -f "$selection_template" ./...)
-      (cd -P . && go list -e -tags integration -f "$selection_template" ./...)
+      printf '%s\n' "$selection_listing"
       printf '%s\n' "$selection_files" | while IFS= read -r selection_file; do
         [ -n "$selection_file" ] && printf 'C\t%s\t%s/%s\n' "$selection_file" "$selection_top" "$selection_file"
       done
@@ -157,10 +164,56 @@ ALL"*)
       ;;
   esac
 
-  printf '%s\n' "$selection_verdict" | awk -F '\t' '$1 == "I" { print "  not code, selects nothing: " $2 }'
-  GO_TEST_SELECTION_CHANGED="$(printf '%s\n' "$selection_verdict" | awk -F '\t' '$1 == "P" { print $2 }' | sort -u)"
+  selection_read="$(go_test_selection_documents_read "$selection_verdict")"
+  GO_TEST_SELECTION_CHANGED="$(
+    {
+      printf '%s\n' "$selection_verdict"
+      printf '%s\n' "$selection_read"
+    } | awk -F '\t' '$1 == "P" { print $2 }' | sort -u
+  )"
   GO_TEST_SELECTION_EFFECTIVE=affected
   return 0
+}
+
+# go_test_selection_documents_read <verdict> prints a `P<TAB>package` line for each
+# package whose tests name a changed document, and logs what it found.
+#
+# Documentation selects nothing, except where a test pins it to the code: a test
+# that checks a runbook still matches a repository, or that the README declares
+# what a constant holds. Such a test reads the file by a string literal -- its
+# path from the repository's top, from the module's, or its bare name -- so a
+# changed document selects the packages of the test files that spell one of those
+# between double quotes. A common name (`README.md`) can select a test that
+# reads another file of that name; that costs a few extra packages, never a
+# missed test. Reads `selection_listing`, `selection_top` and their siblings
+# from go_test_selection_prepare.
+go_test_selection_documents_read() {
+  selection_prefix="$(git rev-parse --show-prefix 2> /dev/null)"
+  selection_here="$(pwd -P)"
+  printf '%s\n' "$1" | awk -F '\t' '$1 == "I" { print $2 }' | while IFS= read -r selection_document; do
+    [ -n "$selection_document" ] || continue
+    selection_name="${selection_document##*/}"
+    selection_module_path="${selection_document#"$selection_prefix"}"
+    selection_tests="$(git grep -l -F -e "\"${selection_document}\"" -e "\"${selection_module_path}\"" \
+      -e "\"${selection_name}\"" -- '*_test.go' 2> /dev/null || true)"
+    selection_packages="$(
+      {
+        printf '%s\n' "$selection_listing"
+        printf '%s\n' "$selection_tests" | while IFS= read -r selection_test; do
+          [ -n "$selection_test" ] && printf 'T\t%s/%s\n' "$selection_here" "$selection_test"
+        done
+      } | awk -F '\t' '
+        $1 == "F" { files[$3] = $2; next }
+        $1 == "T" && ($2 in files) { print files[$2] }
+      ' | sort -u
+    )"
+    if [ -z "$selection_packages" ]; then
+      echo "  not code, selects nothing: ${selection_document}" >&2
+    else
+      echo "  read by tests, selects their packages: ${selection_document} -> $(printf '%s\n' "$selection_packages" | tr '\n' ' ' | sed 's/ $//')" >&2
+      printf '%s\n' "$selection_packages" | sed 's/^/P\t/'
+    fi
+  done
 }
 
 # go_test_selection_affected <tags> <patterns...> prints, one per line, the packages

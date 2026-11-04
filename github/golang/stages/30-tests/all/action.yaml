@@ -56,8 +56,8 @@ inputs:
       pull request can reach: those whose files it changed (Go sources, tests, embedded files) and
       every package whose dependency closure holds one of them. It runs everything instead, and
       says why, when the change touches `go.mod`/`go.sum`, a Makefile, CI configuration or a file
-      outside every package, or when no merge base is found; a documentation-only change runs
-      nothing. The base is the pull request's base branch, so outside a `pull_request` run it always
+      outside every package, or when no merge base is found; a documentation change selects only
+      the packages whose tests name the document in a string literal, and otherwise runs nothing. The base is the pull request's base branch, so outside a `pull_request` run it always
       runs everything, and the checkout fetches the whole history to reach the merge base. A
       narrowed run reports its coverage but the coverage gate does not fail it, since a run of some
       packages cannot meet a threshold set for all of them. The runner reads it as

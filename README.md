@@ -393,14 +393,17 @@ The runner (`global/scripts/languages/golang/test/selection.sh`) compares HEAD w
 the pull request's base branch, and runs everything instead -- logging why -- when the change touches
 `go.mod`, `go.sum`, `go.work`, `vendor/`, a Makefile, CI configuration or any other file outside every
 Go package (a fixture at the repository root, a file a test opens by a relative path), or when no
-merge base is found. A change made only of documentation (Markdown, `.changes/`, licence files) runs
-nothing and passes. The log names the changed packages and how many packages each phase runs.
+merge base is found. Documentation (Markdown, `.changes/`, licence files) selects nothing, except
+where a test pins a document to the code: a changed document selects the packages whose `*_test.go`
+files name it in a string literal -- its path from the repository's or the module's top, or its bare
+file name -- so a test that checks a runbook against the code still runs. A change made only of
+documentation no test names runs nothing and passes. The log names the changed packages and how many packages each phase runs.
 
 What a narrowed run gives up: its coverage covers some packages' tests, so the coverage gate reports
 it and does not enforce `coverage_threshold`; an empty test report does not fail the job; and the
-test checkout fetches the whole history, to reach the merge base. A test that reads a file the
-module does not declare, and that the rules take for documentation, does not run -- which is why the
-default branch keeps running everything. Outside a `pull_request` event there is no base, and
+test checkout fetches the whole history, to reach the merge base. A test that reads a document
+without naming it in a literal (a path it builds from parts, say) does not run when only that
+document changes -- which is why the default branch keeps running everything. Outside a `pull_request` event there is no base, and
 `affected` runs everything. Only `go.yaml` takes it, and so do `go-docker.yaml`, `go-flyio.yaml` and
 `go-render.yaml`.
 

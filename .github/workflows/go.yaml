@@ -174,8 +174,10 @@ on:
           `go list -test` under the unit and the integration tags. It runs everything instead, and
           logs why, when the change touches `go.mod`, `go.sum`, `go.work`, `vendor/`, a Makefile,
           CI configuration or any other file outside every Go package, or when the merge base with
-          the pull request's base branch cannot be found; a change made only of documentation
-          (Markdown, `.changes/`) runs nothing and passes. Outside a `pull_request` run there is no
+          the pull request's base branch cannot be found. Documentation (Markdown, `.changes/`)
+          selects only the packages whose tests name the changed document in a string literal (its
+          path or its bare file name), and a change made only of documentation no test names runs
+          nothing and passes. Outside a `pull_request` run there is no
           base, so it runs everything: pass `affected` on pull requests and keep the full suite on
           the default branch, where a test that reads a file the module does not declare still
           runs. In `affected` mode the checkout fetches the whole history, the coverage is reported

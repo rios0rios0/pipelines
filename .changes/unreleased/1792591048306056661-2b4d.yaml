@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed `claude-review` and `claude-mention` failing every run since #745 pinned `claude-opus-5-5` through `ANTHROPIC_MODEL`, with `API Error: 400 Claude Code 2.1.250 does not support this model; version 2.1.280 or newer is required`: both reusable workflows pinned `anthropics/claude-code-action` `v1.0.209`, whose lockfile installs Claude Code `2.1.250`, and now pin `v1.0.249`, which installs `2.1.299` and is the newest release past the seven-day cooldown. The scheduled `Dependency Updates` run never proposed the bump, because the action marks its floating `v1` release as the latest one, which compares older than any `v1.0.x` pin'
-time: '2026-10-21T13:57:28.305885547Z'

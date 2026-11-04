@@ -145,6 +145,23 @@ on:
           nothing hung. Set it well above that package's normal run: it exists to stop a hang and to
           print the goroutine dump that tells one from a slow run. `0` disables the limit, which
           leaves only the job's own timeout to stop a hung test.
+      integration_env:
+        type: 'string'
+        required: false
+        default: ''
+        description: |
+          Dotenv-style lines (KEY=value, one per line) exported into the environment of the
+          integration phase's `go test` only -- the go command, the compiler and the test binaries
+          inherit them; the unit phase and every other job do not. It exists for the Go runtime's
+          own knobs: `GOMEMLIMIT=6GiB` (a soft heap limit), `GOGC=50` (collect more often) and
+          `GOMAXPROCS=4` (fewer threads). A test package with hundreds of files can need more
+          memory to compile than the runner allows the job, and is killed for it with nothing
+          wrong in the code; `GOGC` alone helps little when most of the heap is live, while a
+          `GOMEMLIMIT` under the ceiling keeps the compiler there at the cost of more GC CPU. Each
+          value reaches the environment verbatim and is never parsed as shell; blank lines and
+          lines starting with `#` are skipped, and a line that is not `NAME=value` fails the test
+          job before the unit phase runs. Empty, the default, changes nothing. On GitLab CI and
+          Azure DevOps the runner reads the same thing from a `GO_TEST_INTEGRATION_ENV` variable.
       openapi_sync_path:
         type: 'string'
         required: false
@@ -313,6 +330,7 @@ jobs:
           coverage_threshold: "${{ inputs.coverage_threshold }}"
           integration_parallel: "${{ inputs.integration_parallel }}"
           integration_timeout: "${{ inputs.integration_timeout }}"
+          integration_env: "${{ inputs.integration_env }}"
 
       - name: 'Test Results'
         if: "always() && hashFiles('junit.xml') != ''"

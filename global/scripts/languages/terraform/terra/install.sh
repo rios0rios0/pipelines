@@ -19,7 +19,7 @@
 # that is terra's own job and unchanged here.
 
 if [ -z "$SCRIPTS_DIR" ]; then
-  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
+  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*\)/global/scripts/.*|\1|')"
   export SCRIPTS_DIR
 fi
 

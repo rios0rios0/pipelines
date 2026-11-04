@@ -66,7 +66,7 @@
 # is 0 for either verdict and 1 when none was reached.
 
 if [ -z "$SCRIPTS_DIR" ]; then
-  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
+  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*\)/global/scripts/.*|\1|')"
   export SCRIPTS_DIR
 fi
 TOOL_NAME="release-guard" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"

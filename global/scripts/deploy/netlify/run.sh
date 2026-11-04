@@ -14,7 +14,7 @@
 # paying for in minutes) and uploading the artifact does not.
 
 if [ -z "$SCRIPTS_DIR" ]; then
-  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
+  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*\)/global/scripts/.*|\1|')"
   export SCRIPTS_DIR
 fi
 TOOL_NAME="deploy-netlify" . "$SCRIPTS_DIR/global/scripts/shared/cleanup.sh"

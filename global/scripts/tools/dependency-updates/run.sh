@@ -35,7 +35,7 @@
 set -eu
 
 if [ -z "${SCRIPTS_DIR:-}" ]; then
-  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
+  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*\)/global/scripts/.*|\1|')"
   export SCRIPTS_DIR
 fi
 # Defaulted before sourcing `cleanup.sh`, which reads `$REPORT_PATH` unguarded.

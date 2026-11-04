@@ -5,7 +5,7 @@ BINARY_NAME="${1:?Binary name is required as the first argument}"
 BINARY_PATH="${2:-.}" # Optional, defaults to "."
 
 if [ -z "${SCRIPTS_DIR:-}" ]; then
-  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
+  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*\)/global/scripts/.*|\1|')"
 fi
 
 TEMPLATE="$SCRIPTS_DIR/global/scripts/languages/golang/goreleaser/.goreleaser.yaml"

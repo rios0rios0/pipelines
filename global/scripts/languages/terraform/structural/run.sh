@@ -4,7 +4,7 @@ set -eu
 # GitLab CI/CD leverages this variable to source shared helpers from the
 # pipelines checkout. Matches the preamble used by every other run.sh.
 if [ -z "${SCRIPTS_DIR:-}" ]; then
-  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*pipelines\).*|\1|')"
+  SCRIPTS_DIR="$(echo "$(dirname "$(realpath "$0")")" | sed 's|\(.*\)/global/scripts/.*|\1|')"
   export SCRIPTS_DIR
 fi
 

@@ -140,6 +140,11 @@ func TestDocC(t *testing.T) {
 	}
 }
 EOF
+# Documentation inside packages: a golden file under a's testdata/, which a test
+# would open by a path relative to its package, and c's own README.
+mkdir -p "$FIXTURE/internal/a/testdata"
+printf '# golden\n' > "$FIXTURE/internal/a/testdata/golden.md"
+printf '# package c\n' > "$FIXTURE/internal/c/README.md"
 EVERY_TEST="TestDocB TestDocC TestIntegA TestIntegC TestUnitA TestUnitB TestUnitC"
 fixture_git init -q
 fixture_git add -A
@@ -228,6 +233,21 @@ echo "== a document a test names by its file name selects that test's package ==
 run_case doc-name affected main sh -c 'printf "more\n" >> docs/guide/handbook.md'
 check "a document c's tests name by file name runs c alone" \
     "$(ran doc-name)" "TestDocC TestIntegC TestUnitC"
+
+echo "== a document under a package's testdata/ selects that package ==" >&2
+run_case testdata-doc affected main sh -c 'printf "more\n" >> internal/a/testdata/golden.md'
+check "a golden file under a's testdata/ narrows the run instead of running everything" \
+    "$(grep -c '^Test selection: affected packages only. Packages the change touches:$' "$SANDBOX/testdata-doc.log")" "1"
+check "the golden file selects a, the package that owns it" \
+    "$(awk '/^Test selection: affected packages only. Packages the change touches:$/ { getline; print; exit }' \
+        "$SANDBOX/testdata-doc.log")" "  example.com/selection/internal/a"
+check "a golden file under a's testdata/ runs a and what depends on it" \
+    "$(ran testdata-doc)" "$EVERY_TEST"
+
+echo "== a package's own README selects that package ==" >&2
+run_case package-readme affected main sh -c 'printf "more\n" >> internal/c/README.md'
+check "c's own README runs c alone" \
+    "$(ran package-readme)" "TestDocC TestIntegC TestUnitC"
 
 echo "== without a merge base, everything runs ==" >&2
 run_case no-base affected refs/heads/absent sh -c 'printf "func Extra() int { return 1 }\n" >> internal/c/c.go'

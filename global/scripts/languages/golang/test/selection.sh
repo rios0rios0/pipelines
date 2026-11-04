@@ -30,6 +30,8 @@
 # //go:embed patterns match (migrations, templates) -- under the unit or the
 # integration tags; when it sits in a package's directory (a deleted file, one
 # excluded by a build constraint); or when it sits under a package's testdata/.
+# Those rules come first, so a package's own README or a golden Markdown file
+# under its testdata/ selects that package: a few extra runs, never a missed test.
 # Markdown, changelog fragments (.changes/), licence files and git's own dotfiles
 # outside those are documentation: they select nothing, unless a test names one
 # in a string literal (its repository or module path, or its bare name) -- a test
@@ -141,15 +143,18 @@ go_test_selection_prepare() {
           print "ALL\t" rel " changes the CI configuration"; exit
         }
         if (abs in files) { print "P\t" files[abs]; next }
-        if (name ~ /\.(md|markdown)$/ || rel ~ /^\.changes\// ||
-            name ~ /^(LICENSE|LICENCE|COPYING|NOTICE)/ ||
-            name ~ /^\.(gitignore|gitattributes|mailmap)$/) {
-          print "I\t" rel; next
-        }
+        # A package claims what sits in its directory or under its testdata/ before
+        # the documentation rule runs: a golden file such as testdata/golden.md is
+        # opened by a path relative to the package, which no repository path names.
         if (dirname(abs) in dirs) { print "P\t" dirs[dirname(abs)]; next }
         if (abs ~ /\/testdata\//) {
           owner = abs; sub(/\/testdata\/.*$/, "", owner)
           if (owner in dirs) { print "P\t" dirs[owner]; next }
+        }
+        if (name ~ /\.(md|markdown)$/ || rel ~ /^\.changes\// ||
+            name ~ /^(LICENSE|LICENCE|COPYING|NOTICE)/ ||
+            name ~ /^\.(gitignore|gitattributes|mailmap)$/) {
+          print "I\t" rel; next
         }
         print "ALL\t" rel " is outside every Go package, and a build or a test may read it"; exit
       }

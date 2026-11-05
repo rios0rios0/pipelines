@@ -17,11 +17,11 @@
 # needs them. A project that compiles a C extension with no wheel, or renders with
 # Pango, extends this image with what it needs. The unprivileged user is the 3.13
 # image's `app_user`, which images built on this one switch to.
-FROM python:3.14-slim-trixie@sha256:cd89c30eda26ee911a4611b18680086e0ea42e6f5f8cbe653d07fa7958c9cec8
+FROM python:3.14-slim-trixie@sha256:930e1abba7c4e8f96ed93e8012c35d174d7732752731bbd5e8e757d7ec6f3966
 
 # Pinned and binary-only, matching global/scripts/shared/pinned-versions.sh.
 # An unversioned install bakes whatever PyPI served on build day into the
 # image, and an sdist runs its `setup.py` during the build.
-RUN pip install --only-binary :all: "pdm==2.29.3" "unearth==0.18.3"
+RUN pip install --only-binary :all: "pdm==2.29.4" "unearth==0.19.0"
 RUN groupadd --system -g 1001 app_user \
   && useradd --system --create-home -g 1001 --no-user-group -u 1001 app_user

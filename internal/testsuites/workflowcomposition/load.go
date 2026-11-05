@@ -9,7 +9,7 @@ import (
 	"os"
 	"slices"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // dialect is the YAML a file is written in: which tags it may carry beyond YAML's own.

@@ -226,10 +226,10 @@ OSV_SCANNER_SHA256_ARM64="4061ef4c021ed3c47f203b818f337e351336cc5cd67c0274fc36bd
 # digest the way it does for any release binary. The wheel's dependencies are
 # resolved by pip within the ranges the wheel declares, binary-only.
 # upstream: pypi checkov
-CHECKOV_PINNED_VERSION="3.3.30"
+CHECKOV_PINNED_VERSION="3.4.0"
 CHECKOV_VERSION="${CHECKOV_VERSION:-${CHECKOV_PINNED_VERSION}}"
 # asset: https://files.pythonhosted.org/packages/py3/c/checkov/checkov-{version}-py3-none-any.whl
-CHECKOV_SHA256="32c3d6a808399f3fd6ec83e68a337050d17f019336f4d8f3b23aae469ba79408"
+CHECKOV_SHA256="fae991abfd873266d7dc135d0295b8c66a70be27eeb9191279c1b4f16f5393c2"
 
 # --- Language tooling --------------------------------------------------------
 
@@ -338,12 +338,12 @@ TERRA_SHA256_ARM64="f1fd7926c91ecd29d07391a4836651189dfa1c0c0d7254630c0e68490ac8
 # upstream: github-release superfly/flyctl
 # osv: Go github.com/superfly/flyctl
 # checksums: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_checksums.txt
-FLYCTL_PINNED_VERSION="0.4.122"
+FLYCTL_PINNED_VERSION="0.5.0"
 FLYCTL_VERSION="${FLYCTL_VERSION:-${FLYCTL_PINNED_VERSION}}"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_x86_64.tar.gz
-FLYCTL_SHA256_X86_64="3d6ae2e2e24df47b46132e8920eebb7aec4ed0930dae2074369e59db89493cf2"
+FLYCTL_SHA256_X86_64="d0e9fcc10f60b12b93344e03b108c974a8c82e56e28fbad8624edefe5c1e504d"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_arm64.tar.gz
-FLYCTL_SHA256_ARM64="4abe70bae363e2257b7402439112b513b36bd779bf6c2514791e4a25a7b34e5f"
+FLYCTL_SHA256_ARM64="426a6c4fa9a7f136b709a1058c01ee14ae86599b5c42401e661ae150770cedc7"
 
 # crane, from google/go-containerregistry. The Fly.io deploy copies the image
 # the pipeline already delivered into registry.fly.io with it -- registry to
@@ -445,7 +445,7 @@ SONAR_SCANNER_CLI_PINNED_VERSION="12.3.0.4285_8.1.0"
 # upstream: github-release nodejs/node track=24
 # osv: Bitnami node
 # image: node
-NODE_PINNED_VERSION="24.22.1"
+NODE_PINNED_VERSION="24.22.2"
 
 # --- Miscellaneous -----------------------------------------------------------
 
@@ -508,14 +508,14 @@ CYCLONEDX_GOMOD_VERSION="${CYCLONEDX_GOMOD_VERSION:-${CYCLONEDX_GOMOD_PINNED_VER
 # behaviour on the day it landed -- it only stopped the behaviour changing
 # underneath a consumer afterwards.
 # upstream: pypi pdm
-PDM_SPEC="${PDM_SPEC:-pdm==2.29.3}"
+PDM_SPEC="${PDM_SPEC:-pdm==2.29.4}"
 # PDM does not pin its own dependencies, and `unearth` 0.19.0 (2026-10-27) breaks
 # PDM 2.29.2 at install (`super(type, obj): obj (instance of PDMPyPIClient) is
 # not an instance or subtype of type (Client)`), so it is installed beside PDM in
 # the same `pip install`. Drop this pin when PDM moves to 2.29.4 or later (which
 # requires `unearth>=0.19`, past the cooldown on 2026-11-03).
 # upstream: pypi unearth
-UNEARTH_SPEC="${UNEARTH_SPEC:-unearth==0.18.3}"
+UNEARTH_SPEC="${UNEARTH_SPEC:-unearth==0.19.0}"
 # upstream: pypi vulture
 VULTURE_SPEC="${VULTURE_SPEC:-vulture==2.16}"
 # upstream: pypi semgrep

@@ -283,7 +283,14 @@ the fix.
 NOT trust the generator: it reads the DIFF between the pull request's base and
 head checkouts and re-proves every pin that moved, so it covers the scheduled
 pull request, a commit pushed onto it, and a hand-written bump alike. Make
-`security > verify:dependency-updates` a required check.
+`<calling job> / security > verify:dependency-updates` a required check, which
+here is `dependency-updates / security > verify:dependency-updates`, after the
+`default.yaml` job that calls it. A ruleset holds that name as plain text outside
+this repository, so no pull request can move it: renaming the calling job, or
+moving a required job behind `uses:`, leaves every pull request on "Expected —
+Waiting for status to be reported" until the ruleset is edited by hand. A failing
+`code-check` shows the same line here, rightly: `default.yaml` then skips the
+calling job, which reports only as `dependency-updates`.
 
 | Check | Fails when |
 |-------|-----------|

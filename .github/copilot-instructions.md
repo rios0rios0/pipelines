@@ -69,9 +69,9 @@ rebuild against the image it replaces with OSV-Scanner. Go itself is a pin per r
 `go-version:`, `GoTool@0` input and `golang:<release>` image is a copy of the pin of its line --
 `internal/domain/entities/toolchain.go`. `dependency-updates-verify.yaml`
 (`run.sh verify --base-dir <base> --repo-dir <head>`) re-proves every pin a pull request moves from its
-diff; `security > verify:dependency-updates` is meant to be a required check, so a pull request that
-moves no pin must keep asking the network nothing -- `test-dependency-updates.sh` runs it live with every
-connection refused.
+diff; `dependency-updates / security > verify:dependency-updates` (a called job reports under the name
+of the job calling it) is meant to be a required check, so a pull request that moves no pin must keep
+asking the network nothing -- `test-dependency-updates.sh` runs it live with every connection refused.
 
 ## Working Effectively
 

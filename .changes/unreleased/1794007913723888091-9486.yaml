@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the documentation of the dependency verification''s required check, which gave the job''s bare name: since `dependency-updates-verify.yaml` became a reusable workflow the check reports as `<calling job> / security > verify:dependency-updates`, and a ruleset requiring the bare name leaves every pull request waiting on a status nothing sends'
+time: '2026-11-06T23:31:53.72382662Z'

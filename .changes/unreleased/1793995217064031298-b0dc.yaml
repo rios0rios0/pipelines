@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added the Argo CD pipeline family (`azure-devops/argocd/argocd.yaml`) for a GitOps repository of Helm charts: `style:helm-lint`, `test:render` and `test:schema` over every chart and every `ci/*-values.yaml` scenario, rendered separately, kubeconform in strict mode against Argo CD and Kubernetes schemas pinned to a commit, an `EXTRA_TEST_JOBS` hook for a consumers own jobs, and pinned, checksum-verified Helm and kubeconform installers'
+time: '2026-11-06T20:00:17.063963826Z'

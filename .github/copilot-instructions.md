@@ -204,6 +204,16 @@ One set of scripts serves both toolchains: `dart_detect_toolchain` reads the pro
 
 The report converters the **analyze** and **test** runners call (`analyze/analyze-report.sh`, `test/lcov-to-cobertura.sh`, `test/lcov-to-markdown.sh`, `test/filter-test-events.sh`) are POSIX sh around awk programs loaded with the shared `common.awk`, run under `LC_ALL=C`, so a Dart job needs no Python. They reproduce the Python converters they replaced byte for byte, and the suite's section 7d holds every report against output recorded from those; the suite itself reads YAML and XML through `internal/testsuites/dartpipeline` (Go) and JSON through `jq`, and runs every script with a HOME, PUB_CACHE and PATH of its own, so a developer's activated `junitreport`, `coverage` or `dart_code_linter` cannot change its verdict.
 
+#### Argo CD Tools
+
+The Azure DevOps `argocd` pipeline (`azure-devops/argocd/argocd.yaml`) is for a GitOps repository of Helm charts. `helm-lint` and `render` walk every chart under `ARGOCD_CHART_ROOTS`, skipping subcharts vendored in another chart's `charts/`, once per `ci/*-values.yaml` scenario, never merged; a chart with none runs once with its defaults. `schema` validates what `render` wrote, plus `ARGOCD_MANIFEST_DIRS`, with kubeconform in strict mode against schemas pinned to a commit. There is no deploy stage: Argo CD is the delivery. `EXTRA_TEST_JOBS` is how a consumer adds its own jobs to the tests stage. `make test ONLY=argocd-pipeline` holds all of it. See Argo CD Pipeline in `AGENTS.md`.
+
+| Tool          | Purpose                                                            | Script Location                                  |
+|---------------|--------------------------------------------------------------------|--------------------------------------------------|
+| **helm-lint** | `helm lint`, once per scenario                                     | `global/scripts/languages/argocd/helm-lint/run.sh` |
+| **render**    | `helm template`, once per scenario, into `build/reports/argocd-render/` | `global/scripts/languages/argocd/render/run.sh`  |
+| **schema**    | kubeconform over the rendered charts and `ARGOCD_MANIFEST_DIRS`    | `global/scripts/languages/argocd/schema/run.sh`  |
+
 #### Terraform / Terra Tools
 
 The Terra CLI pipeline test stage exposes parallel jobs on every platform (Azure DevOps, GitLab CI, GitHub Actions) — two always on, one opt-in. `test:all` delegates to `test-all/run.sh`, which auto-detects which of the two heavier tiers the consumer has, runs only those, merges the JUnit outputs into `build/reports/junit-terra-all.xml`, and exits `0` when neither has tests so stack-only repos pass without a bespoke opt-out. `test:structural` and the opt-in `test:validate` each run on their own parallel job with their own JUnit. Only `validate` **resolves** references (`terraform validate`) — the other three tiers parse, so a root module referencing an undeclared module/variable/resource/output stays green everywhere else while failing every plan. `test:validate` is off by default (`ENABLE_VALIDATE` / `enable_validate`) because it needs the network for provider downloads and, for private module sources, credentials; each platform reuses its existing pre-script hook (`PRE_STEPS` / `VALIDATE_PRE_SCRIPT` / `pre_script`) and `VALIDATE_ROOTS` (default `stacks`) overrides the search. Root modules' own `tests/*.tftest.hcl` join `terra-test` only through `TERRA_TEST_ROOTS` (empty by default; Azure DevOps parameter or pipeline variable, GitLab CI variable, GitHub Actions `terra_test_roots` input), and a root whose test would apply with its real providers — a `run` block without `command = plan`, in a file with no `mock_provider` — is refused and fails the job rather than run, because under `-backend=false` a cancelled job would orphan what it created; module tests are not checked.
@@ -285,6 +295,7 @@ pipelines/
 │   ├── dotnet/                # .NET language pipelines
 │   ├── terraform/             # Terraform pipelines
 │   ├── terra/                 # Terra CLI pipelines
+│   ├── argocd/                # Argo CD pipelines (GitOps repositories of Helm charts)
 │   └── global/                # Shared Azure DevOps templates
 ├── global/                     # Shared resources across platforms
 │   ├── scripts/               # Automation scripts
@@ -297,6 +308,7 @@ pipelines/
 │   │   │   ├── sonarqube/     # Code quality
 │   │   │   └── dependency-track/ # SCA analysis
 │   │   ├── languages/         # Language-specific scripts
+│   │   │   ├── argocd/        # Argo CD scripts (helm-lint, render, schema, the Helm and kubeconform installers)
 │   │   │   ├── golang/        # Go scripts (test, cyclonedx, golangci-lint, goreleaser, govulncheck, cross-compile, init)
 │   │   │   ├── java/          # Java scripts (checkstyle, pmd)
 │   │   │   ├── javascript/    # JavaScript scripts (unused-code detection)
@@ -451,6 +463,7 @@ most likely to break, in order of how expensive the mistake was:
 | **Logstash**           | ❌              | ✅         | ❌            | Docker delivery                           |
 | **Terraform**          | ❌              | ✅         | ✅            | Infrastructure as Code                    |
 | **Terra CLI**          | ✅              | ✅         | ✅            | Terraform/Terragrunt wrapper              |
+| **Argo CD**            | ❌              | ❌         | ✅            | GitOps repository of Helm charts          |
 
 **Pipeline Templates Available:**
 - **GitHub Actions:** `go.yaml`, `go-docker.yaml`, `go-binary.yaml`, `go-library.yaml`, `pdm.yaml`, `pdm-docker.yaml`, `pdm-library.yaml`, `gradle.yaml`, `gradle-docker.yaml`, `gradle-library.yaml`, `maven.yaml`, `maven-docker.yaml`, `maven-library.yaml`, `yarn.yaml`, `yarn-docker.yaml`, `yarn-library.yaml`, `npm.yaml`, `npm-docker.yaml`, `npm-library.yaml`, `composer.yaml`, `composer-docker.yaml`, `composer-library.yaml`, `bundler.yaml`, `bundler-docker.yaml`, `bundler-library.yaml`, `dotnet.yaml`, `dotnet-docker.yaml`, `dotnet-library.yaml`, `dart.yaml`, `dart-docker.yaml`, `dart-library.yaml`, `flutter-artifacts.yaml`, `terra.yaml`

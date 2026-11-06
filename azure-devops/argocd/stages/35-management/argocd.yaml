@@ -1,0 +1,25 @@
+parameters:
+  - name: 'DOWNLOAD_COVERAGE_ARTIFACT'
+    type: 'boolean'
+    default: false
+  - name: 'COVERAGE_ARTIFACT_NAME'
+    type: 'string'
+    default: 'coverage'
+  - name: 'COVERAGE_ARTIFACT_TARGET_PATH'
+    type: 'string'
+    default: "$(Build.SourcesDirectory)"
+
+stages:
+  - stage: 'management'
+    displayName: 'management'
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    jobs:
+      - template: '../../../global/stages/35-management/sonarqube.yaml'
+        parameters:
+          # Forwarded from the pipeline parameters. The default is `false`: chart
+          # repositories produce no `coverage` artifact, so the download would
+          # emit `##[error]Artifact coverage was not found` and turn the job
+          # yellow. A consumer that does produce one opts in.
+          DOWNLOAD_COVERAGE_ARTIFACT: ${{ parameters.DOWNLOAD_COVERAGE_ARTIFACT }}
+          COVERAGE_ARTIFACT_NAME: ${{ parameters.COVERAGE_ARTIFACT_NAME }}
+          COVERAGE_ARTIFACT_TARGET_PATH: ${{ parameters.COVERAGE_ARTIFACT_TARGET_PATH }}

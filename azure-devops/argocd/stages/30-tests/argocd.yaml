@@ -1,0 +1,97 @@
+parameters:
+  # See `argocd.yaml`: a chart's dependencies are built before it is rendered.
+  - name: 'PRE_STEPS'
+    type: 'stepList'
+    default: []
+
+  - name: 'CHART_ROOTS'
+    type: 'string'
+    default: '.'
+
+  # Mapped into the step ONLY when set, so a pipeline variable of that name is
+  # not shadowed by an empty `env:` entry.
+  - name: 'MANIFEST_DIRS'
+    type: 'string'
+    default: ''
+
+  - name: 'KUBERNETES_VERSION'
+    type: 'string'
+    default: 'master'
+
+  - name: 'EXTRA_TEST_JOBS'
+    type: 'jobList'
+    default: []
+
+stages:
+  - stage: 'tests'
+    displayName: 'tests'
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    variables:
+      REPORT_PATH: 'build/reports'
+    jobs:
+      - job: 'test_render'
+        displayName: 'test:render'
+        steps:
+          - template: '../../../global/abstracts/scripts-repo.yaml'
+
+          - ${{ each step in parameters.PRE_STEPS }}:
+              - ${{ step }}
+
+          - script: $(Scripts.Directory)/global/scripts/languages/argocd/render/run.sh
+            displayName: 'Render every chart, scenario by scenario'
+            env:
+              ARGOCD_CHART_ROOTS: ${{ parameters.CHART_ROOTS }}
+
+          - task: 'PublishTestResults@2'
+            displayName: 'Publish render results'
+            condition: always()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: "$(REPORT_PATH)/argocd-render/junit-render.xml"
+              testRunTitle: 'render'
+              failTaskOnFailedTests: true
+
+          # Only a render that worked is published. `test:schema` waits for this
+          # job, so a failed one has no reader, and an artifact name can be taken
+          # only once: published here, a retry of the failed job would fail on
+          # the upload instead of running.
+          - task: 'PublishPipelineArtifact@1'
+            displayName: 'Publish the rendered manifests'
+            inputs:
+              targetPath: "$(REPORT_PATH)/argocd-render"
+              artifactName: 'argocd-render'
+              publishLocation: 'pipeline'
+
+      # A job of its own so it holds nothing `PRE_STEPS` handed the render: jobs
+      # run in separate workspaces, so the artifact is how the manifests get here.
+      - job: 'test_schema'
+        displayName: 'test:schema'
+        dependsOn: 'test_render'
+        steps:
+          - template: '../../../global/abstracts/scripts-repo.yaml'
+
+          - task: 'DownloadPipelineArtifact@2'
+            displayName: 'Download the rendered manifests'
+            inputs:
+              artifactName: 'argocd-render'
+              targetPath: "$(Build.SourcesDirectory)/$(REPORT_PATH)/argocd-render"
+
+          - script: $(Scripts.Directory)/global/scripts/languages/argocd/schema/run.sh
+            displayName: 'Validate the manifests against their schemas'
+            env:
+              ARGOCD_KUBERNETES_VERSION: ${{ parameters.KUBERNETES_VERSION }}
+              ${{ if ne(parameters.MANIFEST_DIRS, '') }}:
+                ARGOCD_MANIFEST_DIRS: ${{ parameters.MANIFEST_DIRS }}
+
+          - task: 'PublishTestResults@2'
+            displayName: 'Publish schema results'
+            condition: always()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: "$(REPORT_PATH)/argocd-schema/junit-schema.xml"
+              testRunTitle: 'schema'
+              failTaskOnFailedTests: true
+
+      # The consumer's own jobs: see `argocd.yaml`.
+      - ${{ each job in parameters.EXTRA_TEST_JOBS }}:
+          - ${{ job }}

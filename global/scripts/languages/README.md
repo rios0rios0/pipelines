@@ -6,6 +6,13 @@ This directory contains **language-specific** tools organized by programming lan
 
 ```
 languages/
+  argocd/
+    common.sh         # shared helpers (SOURCED, not executed)
+    helm/             # pinned Helm installer
+    helm-lint/        # helm lint, one chart scenario at a time
+    kubeconform/      # pinned kubeconform installer
+    render/           # helm template, one chart scenario at a time
+    schema/           # kubeconform over what render wrote and plain manifests
   golang/
     golangci-lint/    # Go linter with merged configuration
     goreleaser/       # Go binary release with template config

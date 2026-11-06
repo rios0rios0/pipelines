@@ -201,6 +201,52 @@ func TestVerifyPullRequestCommandManifest(t *testing.T) {
 	})
 }
 
+func TestVerifyPullRequestCommandUntrackedPins(t *testing.T) {
+	t.Parallel()
+
+	handPin := func(commit string) map[string]string {
+		return manifest("# upstream: none example/schemas", `EXAMPLE_SCHEMAS_PINNED_VERSION="`+commit+`"`)
+	}
+
+	t.Run("should warn for a pin that moves by hand instead of dating it", func(t *testing.T) {
+		t.Parallel()
+		// given
+		scenario := verifyCase{
+			base:     handPin("1111111111111111111111111111111111111111"),
+			head:     handPin("2222222222222222222222222222222222222222"),
+			releases: &doubles.StubReleases{},
+		}
+
+		// when
+		result := scenario.run()
+
+		// then
+		require.Len(t, result.Changes, 1)
+		finding := findingOf(t, result.Changes[0], commands.CheckCooldown)
+		assert.Equal(t, commands.VerdictWarn, finding.Verdict)
+		assert.Contains(t, finding.Detail, "by hand")
+		assert.Zero(t, result.Exit())
+	})
+
+	t.Run("should warn for a new pin that moves by hand", func(t *testing.T) {
+		t.Parallel()
+		// given
+		scenario := verifyCase{
+			base:     manifest("# nothing pinned yet"),
+			head:     handPin("2222222222222222222222222222222222222222"),
+			releases: &doubles.StubReleases{},
+		}
+
+		// when
+		result := scenario.run()
+
+		// then
+		require.Len(t, result.Changes, 1)
+		assert.Equal(t, commands.VerdictWarn, findingOf(t, result.Changes[0], commands.CheckCooldown).Verdict)
+		assert.Zero(t, result.Exit())
+	})
+}
+
 func TestVerifyPullRequestCommandVendored(t *testing.T) {
 	t.Parallel()
 

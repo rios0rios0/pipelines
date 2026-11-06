@@ -73,6 +73,9 @@ parameters:
   # sense in that repository, including ones that check out another. A job runs
   # alongside `test:render` and `test:schema`; one that reads the rendered charts
   # sets `dependsOn: 'test_render'` and downloads the `argocd-render` artifact.
+  # Use plain steps in these jobs: a `template:` inside one is resolved against
+  # this directory, not the consumer's, so a reference such as `...@pipelines`
+  # fails to compile.
   - name: 'EXTRA_TEST_JOBS'
     type: 'jobList'
     default: []

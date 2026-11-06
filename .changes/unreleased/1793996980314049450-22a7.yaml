@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed `verify:dependency-updates` failing on a pin marked `# upstream: none`: it tried to date a release that does not exist. Such a pin now gets a warning that it moves by hand'
+time: '2026-11-06T20:29:40.313975185Z'

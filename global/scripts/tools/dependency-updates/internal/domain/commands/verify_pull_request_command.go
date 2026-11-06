@@ -556,6 +556,12 @@ func describe(advisories []entities.Advisory) string {
 // which is the one reason to adopt a release early.
 func (c *VerifyPullRequestCommand) cooldownFinding(item *change, base, head []entities.Advisory) Finding {
 	task := item.task
+	// A pin deliberately not tracked upstream has no release to date, and a lookup
+	// would only fail on its kind. Nothing here can vouch for it, so say so.
+	if task.Kind == entities.KindNone {
+		return Finding{Verdict: VerdictWarn, Check: CheckCooldown, Detail: "not tracked upstream: it moves by hand, " +
+			"so its age was not checked and its reviewer stands behind it"}
+	}
 	cooldown := cooldownFor(task, c.deps.Settings)
 	if cooldown <= 0 {
 		return Finding{Verdict: VerdictPass, Check: CheckCooldown, Detail: "no cooldown applies"}

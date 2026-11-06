@@ -1778,7 +1778,8 @@ changed pin must pass every check that applies to it:
 
 A check that cannot be completed fails too: an unproven change is not a passing
 one. The verdict is posted on the pull request as one comment, updated on every
-push, and in the job summary. Make **`security > verify:dependency-updates`** a
+push, and in the job summary. Make
+**`<calling job> / security > verify:dependency-updates`** a
 required status check to turn the proof into a gate; the workflow has no path
 filter on purpose, so it reports on every pull request, and one that moves no pin
 passes in seconds without asking the network anything -- an outage of the
@@ -1796,6 +1797,16 @@ jobs:
       contents: 'read'
       pull-requests: 'write'
 ```
+
+GitHub names a called workflow's job after the job calling it, so this one reports
+as `verify-dependency-updates / security > verify:dependency-updates`, and that
+whole name is the one to require. This repository's calling job is
+`dependency-updates`, so it requires
+`dependency-updates / security > verify:dependency-updates`. A required check
+naming anything else, the job alone included, never receives a status: every pull
+request stays on "Expected — Waiting for status to be reported". Renaming the
+calling job has the same effect until the ruleset or branch protection rule is
+changed to match.
 
 The same check by hand, against any two checkouts:
 

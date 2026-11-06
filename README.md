@@ -41,6 +41,7 @@ Comprehensive, enterprise-grade SDLC pipeline templates for **GitHub Actions**, 
 | **Flutter**            | yes            | yes       | yes          | Web, Android APK/AAB, Docker      |
 | **Terraform**          | no             | yes       | yes          | Infrastructure as Code            |
 | **Terra CLI**          | yes            | yes       | yes          | Terraform/Terragrunt wrapper      |
+| **Argo CD**            | no             | no        | yes          | GitOps repository of Helm charts  |
 
 ## Project Structure
 
@@ -82,6 +83,7 @@ pipelines/
 │   ├── dart/                  # Dart and Flutter pipelines
 │   ├── terraform/             # Terraform pipelines (raw terraform/terragrunt)
 │   ├── terra/                 # Terra CLI pipelines (terraform/terragrunt wrapper)
+│   ├── argocd/                # Argo CD pipelines (GitOps repositories of Helm charts)
 │   └── global/                # Shared Azure DevOps templates
 ├── global/                     # Shared resources across platforms
 │   ├── scripts/               # Automation scripts
@@ -97,6 +99,7 @@ pipelines/
 │   │   │   ├── golang/        # Go scripts (test, cyclonedx, golangci-lint, init)
 │   │   │   ├── dart/          # Dart/Flutter scripts (setup, format, analyze,
 │   │   │   │                  #   test, unused, sca, build, publish)
+│   │   │   ├── argocd/        # Argo CD scripts (helm-lint, render, schema)
 │   │   │   └── python/        # Python scripts (cyclonedx)
 │   │   ├── deploy/            # MVP hosting providers (50-deployment stage)
 │   │   │   ├── cloudflare/    # Cloudflare Pages + Workers
@@ -1321,6 +1324,7 @@ Azure DevOps templates are located in the `azure-devops/` directory and use temp
 | **Flutter**     | `dart/flutter-artifacts.yaml` | Flutter web + Android      |
 | **Terraform**   | `terra.yaml`           | Infrastructure as Code pipeline   |
 | **Terra CLI**   | `terra/terra.yaml`     | Terra CLI wrapper pipeline        |
+| **Argo CD**     | `argocd/argocd.yaml`   | GitOps repository of Helm charts  |
 
 #### Usage Example (Go with Docker)
 
@@ -1438,6 +1442,70 @@ stages:
       SAM_CONFIG_ENV: 'default'  # References samconfig.toml environment
 ```
 
+#### Usage Example (Argo CD GitOps Repository)
+
+For a repository of Helm charts that Argo CD reads: an app-of-apps umbrella chart, the charts it installs, and the manifests that bootstrap it. A broken chart is caught on the pull request rather than as an application that will not sync.
+
+```yaml
+resources:
+  repositories:
+    - repository: 'pipelines'
+      type: 'github'
+      name: 'rios0rios0/pipelines'
+      ref: 'refs/tags/4.23.0'
+      endpoint: 'github-service-connection'
+    - repository: 'example-platform'
+      type: 'git'
+      name: 'example-project/example-platform'
+
+stages:
+  - template: 'azure-devops/argocd/argocd.yaml@pipelines'
+    parameters:
+      CHART_ROOTS: 'charts'
+      MANIFEST_DIRS: 'bootstrap'
+      EXTRA_TEST_JOBS:
+        - job: 'test_example_contract'
+          displayName: 'test:example-contract'
+          steps:
+            - checkout: 'self'
+            - checkout: 'example-platform'
+            # beside a second checkout, each repository lands in a directory of its own name
+            - script: ./example-charts/.ci/example-contract.sh
+```
+
+| Stage          | Jobs                                                                                        |
+|----------------|---------------------------------------------------------------------------------------------|
+| `code_check`   | `quality:basic-checks`, `style:helm-lint`                                                    |
+| `security`     | `sast:semgrep` (`kubernetes`), `sast:gitleaks`                                               |
+| `tests`        | `test:render`, `test:schema`, and the jobs of `EXTRA_TEST_JOBS`                              |
+| `management`   | `report:sonarqube`                                                                           |
+| `release`      | `release`: cuts the tag of a version-bump commit merged to `main`, a no-op on any other      |
+
+| Parameter                       | Type       | Default                     | What it controls                                                                  |
+|---------------------------------|------------|-----------------------------|-----------------------------------------------------------------------------------|
+| `PRE_STEPS`                     | `stepList` | `[]`                        | Steps before anything that builds a chart's dependencies, such as a registry login |
+| `CHART_ROOTS`                   | `string`   | `.`                         | Directories searched for charts, space-separated                                  |
+| `MANIFEST_DIRS`                 | `string`   | empty                       | Directories of plain manifests `test:schema` validates too, space-separated       |
+| `KUBERNETES_VERSION`            | `string`   | `master`                    | The Kubernetes version the core kinds are validated against, such as `1.33.0`     |
+| `EXTRA_TEST_JOBS`               | `jobList`  | `[]`                        | The consumer's own jobs, added to the tests stage                                 |
+| `DOWNLOAD_COVERAGE_ARTIFACT`    | `boolean`  | `false`                     | Whether the Sonar job downloads a coverage artifact first                         |
+| `COVERAGE_ARTIFACT_NAME`        | `string`   | `coverage`                  | Which pipeline artifact to download                                               |
+| `COVERAGE_ARTIFACT_TARGET_PATH` | `string`   | `$(Build.SourcesDirectory)` | Where it is unpacked                                                              |
+
+**Charts and scenarios.** A chart is any directory with a `Chart.yaml` under `CHART_ROOTS`, except a subchart vendored in another chart's `charts/` directory. Each `ci/*-values.yaml` file in a chart, the chart-testing convention, is a scenario of its own and is linted and rendered separately, because the files of one chart can be alternative shapes that exclude each other. A chart with no `ci/` file runs once, with its defaults. A dependency a chart declares and does not have is built first, adding its https repository if nothing has; a private one needs its credentials from `PRE_STEPS`. A failing chart and scenario are named in the log and in the JUnit report, and the walk goes on, so one run names everything that is broken.
+
+**Schemas.** `test:render` publishes what it rendered as the `argocd-render` pipeline artifact, and `test:schema` validates it, with the `MANIFEST_DIRS`, using kubeconform in strict mode against schemas pinned to a commit, Argo CD's `Application`, `ApplicationSet` and `AppProject` among them. A kind no schema location holds is skipped, because no catalog holds every custom resource; the kinds this check exists for are proven to resolve first, so a location that stops resolving fails the job instead of skipping everything. A consumer job that reads the rendered charts sets `dependsOn: 'test_render'` and downloads the artifact.
+
+**No deploy stage.** Argo CD is the delivery: it reads the repository and reconciles what merged. The last stage is `release`, not `delivery`, so that id stays free for a consumer that has something of its own to deliver.
+
+Azure DevOps only, like the `helm` family. The runners are plain scripts under `global/scripts/languages/argocd/`, so the same checks run on a developer's machine:
+
+```bash
+$SCRIPTS_DIR/global/scripts/languages/argocd/helm-lint/run.sh
+$SCRIPTS_DIR/global/scripts/languages/argocd/render/run.sh
+ARGOCD_MANIFEST_DIRS='bootstrap' $SCRIPTS_DIR/global/scripts/languages/argocd/schema/run.sh
+```
+
 #### Required Variable Groups
 
 Create these variable groups in Azure DevOps Library:
@@ -1494,6 +1562,7 @@ through `$/path/to/action`. `make test ONLY=supply-chain` and
 | First-party GitHub Actions | `$/path/to/action` where a consumer pin must cover the nested action; explicit `@main` otherwise | workflow-composition contract |
 | Container images | `tag@sha256:<digest>` | every `image:` and every Dockerfile `FROM` |
 | Downloaded binaries | exact version **and** a committed SHA-256 | `global/scripts/shared/pinned-versions.sh` |
+| JSON schemas kubeconform reads | a 40-character commit, in the URL | `pinned-versions.sh`, as `# upstream: none`: neither repository releases what it holds, so they move by hand |
 | `go install` / `pip` / `gem` / `npx` packages | exact version | `pinned-versions.sh`, mirrored inline where a template has no `SCRIPTS_DIR` |
 
 These controls do not claim offline reproducibility for package-manager
@@ -2155,6 +2224,16 @@ since that is where every lint lands).
 | **validate**     | `terraform validate` over root modules (opt-in)      | `global/scripts/languages/terraform/validate/`        |
 
 `order-check`, `tftest-gen`, `var-catalog` and the terra-test tier's generic coverage report (`terra-test/coverage/`) are standard-library-only Go helpers, built from the pipelines checkout on every run through `global/scripts/shared/go-helper.sh`: they need Go 1.25 or newer, the `go` directive of the root `go.mod`, and nothing else. Every template that runs one provisions that Go (`make test ONLY=go-module-toolchain` holds it per job), `test:structural` included, since a consumer's `tests/structural.sh` is where `var-catalog --check` runs; running one locally -- `run.sh --fix`, the `tftest-gen` generator -- needs Go on `PATH`.
+
+#### Argo CD Tools
+
+| Tool           | Purpose                                                                                     | Script Location                                  |
+|----------------|---------------------------------------------------------------------------------------------|--------------------------------------------------|
+| **helm-lint**  | `helm lint` over every chart, once per `ci/*-values.yaml` scenario                          | `global/scripts/languages/argocd/helm-lint/`     |
+| **render**     | `helm template` over every chart, once per scenario, into `build/reports/argocd-render/`    | `global/scripts/languages/argocd/render/`        |
+| **schema**     | kubeconform, strict, over the rendered charts and `ARGOCD_MANIFEST_DIRS`                    | `global/scripts/languages/argocd/schema/`        |
+| **Helm**       | Pinned, checksum-verified installer, run by the two runners that need it                    | `global/scripts/languages/argocd/helm/`          |
+| **kubeconform**| Pinned, checksum-verified installer, run by `schema`                                        | `global/scripts/languages/argocd/kubeconform/`   |
 
 #### MVP Hosting Providers
 

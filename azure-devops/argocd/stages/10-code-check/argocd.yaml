@@ -1,0 +1,41 @@
+parameters:
+  # See `argocd.yaml`: a chart's dependencies are built before it is linted, and
+  # private ones need their credentials first.
+  - name: 'PRE_STEPS'
+    type: 'stepList'
+    default: []
+
+  - name: 'CHART_ROOTS'
+    type: 'string'
+    default: '.'
+
+stages:
+  - stage: 'code_check'
+    displayName: 'code check (style/quality)'
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    variables:
+      REPORT_PATH: 'build/reports'
+    jobs:
+      - template: '../../../global/stages/10-code-check/basic-checks.yaml'
+
+      - job: 'style_helm_lint'
+        displayName: 'style:helm-lint'
+        steps:
+          - template: '../../../global/abstracts/scripts-repo.yaml'
+
+          - ${{ each step in parameters.PRE_STEPS }}:
+              - ${{ step }}
+
+          - script: $(Scripts.Directory)/global/scripts/languages/argocd/helm-lint/run.sh
+            displayName: 'Lint every chart, scenario by scenario'
+            env:
+              ARGOCD_CHART_ROOTS: ${{ parameters.CHART_ROOTS }}
+
+          - task: 'PublishTestResults@2'
+            displayName: 'Publish helm-lint results'
+            condition: always()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: "$(REPORT_PATH)/argocd-helm-lint/junit-helm-lint.xml"
+              testRunTitle: 'helm-lint'
+              failTaskOnFailedTests: true

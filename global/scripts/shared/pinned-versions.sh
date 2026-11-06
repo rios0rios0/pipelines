@@ -39,7 +39,8 @@
 #   # upstream: <kind> <coordinate> [track=<line>] [ceiling=<PIN>] [cooldown=<days>]
 #
 #   kind         one of github-release, github-tag, gitlab-tag, pypi, npm,
-#                rubygems, goproxy, go-toolchain
+#                rubygems, goproxy, go-toolchain, or `none` for a pin with
+#                nothing to follow, which says why and moves by hand
 #   coordinate   owner/repo, a project path, or a package/module name
 #   track=<n>    only report releases INSIDE the line <n> names: a major (`1`)
 #                or a minor line (`1.27`). Used where a pin is deliberately
@@ -332,6 +333,54 @@ TERRA_VERSION="${TERRA_VERSION:-${TERRA_PINNED_VERSION}}"
 TERRA_SHA256_AMD64="2963335d80933d5f4c727704b7e690d1ec2bbe804bab76679bc4a1339e158145"
 # asset: https://github.com/rios0rios0/terra/releases/download/{version}/terra-{version}-linux-arm64.tar.gz
 TERRA_SHA256_ARM64="f1fd7926c91ecd29d07391a4836651189dfa1c0c0d7254630c0e68490ac849e1"
+
+# --- Helm charts and Argo CD tooling -----------------------------------------
+
+# Argo CD renders a chart with the Helm it bundles, and every Argo CD line from
+# 3.5 on bundles Helm 4, so a chart is checked here by the major that renders
+# it. `track=4` holds the pin there: Helm publishes two majors side by side, and
+# the next one is a decision for every consumer rather than an update. The
+# binaries live on get.helm.sh, not on the GitHub releases, and each
+# has a checksum file of its own, which no single `# checksums:` line can name;
+# both digests below were compared with those files when this pin was taken.
+# upstream: github-release helm/helm track=4
+# osv: Go helm.sh/helm/v4
+HELM_PINNED_VERSION="4.3.1"
+HELM_VERSION="${HELM_VERSION:-${HELM_PINNED_VERSION}}"
+# asset: https://get.helm.sh/helm-v{version}-linux-amd64.tar.gz
+HELM_SHA256_AMD64="0403a88ae20913d11b10a2467b50087721fea7581736da6b9d3992f5357fe54b"
+# asset: https://get.helm.sh/helm-v{version}-linux-arm64.tar.gz
+HELM_SHA256_ARM64="8cf8f66ecbc252ac8f7f06cca68aba88508ddfde3a6a34feb1678ad1694b4f88"
+
+# upstream: github-release yannh/kubeconform
+# osv: Go github.com/yannh/kubeconform
+# checksums: https://github.com/yannh/kubeconform/releases/download/v{version}/CHECKSUMS
+KUBECONFORM_PINNED_VERSION="0.8.0"
+KUBECONFORM_VERSION="${KUBECONFORM_VERSION:-${KUBECONFORM_PINNED_VERSION}}"
+# asset: https://github.com/yannh/kubeconform/releases/download/v{version}/kubeconform-linux-amd64.tar.gz
+KUBECONFORM_SHA256_AMD64="9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883"
+# asset: https://github.com/yannh/kubeconform/releases/download/v{version}/kubeconform-linux-arm64.tar.gz
+KUBECONFORM_SHA256_ARM64="1f53fc8e81258197a35e8603054162a5af1de8c5af13746c71ab680d9534ed87"
+
+# The JSON schemas kubeconform reads, as the commit of the repository that holds
+# them, so a verdict on unchanged manifests cannot move overnight the way it
+# does on kubeconform's own default, which reads a `master` branch. A commit in
+# a raw.githubusercontent.com URL is immutable, and these are data read by a
+# validator, never executed, so no digest sits beside them.
+#
+# `# upstream: none`, because neither repository releases what it holds: the
+# catalog's newest tag is years behind its Argo CD schemas, and the other has no
+# release at all. The scheduled check follows tags and has no kind for a branch's
+# commits, so these two move by hand: take a commit past the cooldown, then run
+# `make test ONLY=argocd-pipeline`, which needs the network for this. A pin left
+# behind fails loudly: strict validation rejects a field the schema has not
+# heard of yet.
+# upstream: none datreeio/CRDs-catalog
+CRDS_CATALOG_PINNED_VERSION="3eb90d47aba8d61919d4419dd38301536e32a94b"
+CRDS_CATALOG_VERSION="${CRDS_CATALOG_VERSION:-${CRDS_CATALOG_PINNED_VERSION}}"
+# upstream: none yannh/kubernetes-json-schema
+KUBERNETES_JSON_SCHEMA_PINNED_VERSION="47163ead3738a996c3e30be9691bb37b8071d9d3"
+KUBERNETES_JSON_SCHEMA_VERSION="${KUBERNETES_JSON_SCHEMA_VERSION:-${KUBERNETES_JSON_SCHEMA_PINNED_VERSION}}"
 
 # --- Deployment tooling (50-deployment stage) --------------------------------
 

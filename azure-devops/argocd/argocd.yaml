@@ -1,0 +1,111 @@
+# Argo CD pipeline, for a GitOps repository of Helm charts: an app-of-apps
+# umbrella chart and the manifests that bootstrap it. Provides code check,
+# security, tests, management and release stages, so a chart that does not lint,
+# render or validate is caught on the pull request instead of in the cluster.
+#
+# There is no deploy stage, on purpose: Argo CD is the delivery. It reads this
+# repository and reconciles what merged, so a deploy job here would have nothing
+# to do. The `release` stage only cuts a tag for a version-bump commit merged to
+# `main`; every other commit is a no-op. It is not named `delivery`, which keeps
+# that stage id free for a consumer that has something of its own to deliver.
+#
+# Usage in your azure-pipelines.yml:
+#   resources:
+#     repositories:
+#       - repository: 'pipelines'
+#         type: 'github'
+#         name: 'rios0rios0/pipelines'
+#         ref: 'refs/tags/<release tag>'
+#         endpoint: 'YOUR_GITHUB_SERVICE_CONNECTION'
+#       - repository: 'example-platform'
+#         type: 'git'
+#         name: 'example-project/example-platform'
+#
+#   stages:
+#     - template: 'azure-devops/argocd/argocd.yaml@pipelines'
+#       parameters:
+#         CHART_ROOTS: 'charts'
+#         MANIFEST_DIRS: 'bootstrap'
+#         # Login to a private chart registry, before a dependency is built:
+#         PRE_STEPS:
+#           - script: ./.ci/chart-registry-login.sh
+#             displayName: 'Log in to the chart registry'
+#         # Your own checks, in the tests stage, each one a job of yours. This one
+#         # checks the charts against another repository. Beside a second checkout,
+#         # each repository lands in a directory of its own name:
+#         EXTRA_TEST_JOBS:
+#           - job: 'test_example_contract'
+#             displayName: 'test:example-contract'
+#             steps:
+#               - checkout: 'self'
+#               - checkout: 'example-platform'
+#               - script: ./example-charts/.ci/example-contract.sh
+#                 displayName: 'Check the charts against example-platform'
+
+parameters:
+  # Steps injected before anything that builds a chart's dependencies, in
+  # `style:helm-lint` and `test:render`: a login to a private registry or a
+  # `helm repo add` with credentials. Nothing else sees them, so the other jobs
+  # hold no credential they do not need.
+  - name: 'PRE_STEPS'
+    type: 'stepList'
+    default: []
+
+  # Directories searched for charts, at any depth, space-separated. `.` is the
+  # repository root.
+  - name: 'CHART_ROOTS'
+    type: 'string'
+    default: '.'
+
+  # Directories of plain manifests `test:schema` validates beside the rendered
+  # charts, space-separated (e.g. `bootstrap`). Empty by default.
+  - name: 'MANIFEST_DIRS'
+    type: 'string'
+    default: ''
+
+  # The Kubernetes version `test:schema` reads the core kinds' schemas for, such
+  # as `1.33.0`. `master` is the newest the pinned schemas know.
+  - name: 'KUBERNETES_VERSION'
+    type: 'string'
+    default: 'master'
+
+  # Jobs of the consumer's own, added to the tests stage: checks that only make
+  # sense in that repository, including ones that check out another. A job runs
+  # alongside `test:render` and `test:schema`; one that reads the rendered charts
+  # sets `dependsOn: 'test_render'` and downloads the `argocd-render` artifact.
+  - name: 'EXTRA_TEST_JOBS'
+    type: 'jobList'
+    default: []
+
+  # Forwarded to the management (Sonar) stage. Off by default: a chart repository
+  # produces no `coverage` artifact, and the download would fail for it. A
+  # consumer that publishes one from `EXTRA_TEST_JOBS` opts in.
+  - name: 'DOWNLOAD_COVERAGE_ARTIFACT'
+    type: 'boolean'
+    default: false
+  - name: 'COVERAGE_ARTIFACT_NAME'
+    type: 'string'
+    default: 'coverage'
+  - name: 'COVERAGE_ARTIFACT_TARGET_PATH'
+    type: 'string'
+    default: "$(Build.SourcesDirectory)"
+
+stages:
+  - template: 'stages/10-code-check/argocd.yaml'
+    parameters:
+      PRE_STEPS: ${{ parameters.PRE_STEPS }}
+      CHART_ROOTS: ${{ parameters.CHART_ROOTS }}
+  - template: 'stages/20-security/argocd.yaml'
+  - template: 'stages/30-tests/argocd.yaml'
+    parameters:
+      PRE_STEPS: ${{ parameters.PRE_STEPS }}
+      CHART_ROOTS: ${{ parameters.CHART_ROOTS }}
+      MANIFEST_DIRS: ${{ parameters.MANIFEST_DIRS }}
+      KUBERNETES_VERSION: ${{ parameters.KUBERNETES_VERSION }}
+      EXTRA_TEST_JOBS: ${{ parameters.EXTRA_TEST_JOBS }}
+  - template: 'stages/35-management/argocd.yaml'
+    parameters:
+      DOWNLOAD_COVERAGE_ARTIFACT: ${{ parameters.DOWNLOAD_COVERAGE_ARTIFACT }}
+      COVERAGE_ARTIFACT_NAME: ${{ parameters.COVERAGE_ARTIFACT_NAME }}
+      COVERAGE_ARTIFACT_TARGET_PATH: ${{ parameters.COVERAGE_ARTIFACT_TARGET_PATH }}
+  - template: 'stages/40-delivery/release.yaml'

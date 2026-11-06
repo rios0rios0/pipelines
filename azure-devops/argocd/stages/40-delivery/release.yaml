@@ -1,0 +1,20 @@
+# Cuts the Git tag for a merged version-bump commit on `main`. This is all the
+# family delivers: Argo CD reads the repository, so what merged is already on its
+# way to the cluster and there is nothing to deploy from here.
+#
+# Named `release` and not `delivery` for the reason `terra` gives, whose stage
+# this mirrors (`azure-devops/terra/stages/40-delivery/release.yaml`, which also
+# explains why the gate names the two acceptable `management` results): a consumer
+# with something of its own to deliver adds a `delivery` stage after this template,
+# and a second stage with that id would make the compiled pipeline a duplicate.
+stages:
+  - stage: 'release'
+    displayName: 'release'
+    dependsOn: 'management'
+    condition: |
+      and(
+        in(dependencies.management.result, 'Succeeded', 'SucceededWithIssues'),
+        eq(variables['Build.SourceBranch'], 'refs/heads/main')
+      )
+    jobs:
+      - template: '../../../global/stages/40-delivery/release.yaml'

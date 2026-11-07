@@ -45,6 +45,7 @@ there is no target to add and no list to keep in step.
 | `fixture-isolation` | That every suite builds its fixtures in mktemp space and guards every cd |
 | `gitignore` | The shared .gitignore block generator |
 | `go-cache-trim` | The Go build-cache disk guard (threshold parsing, trim decision) |
+| `go-coverage-report` | The Go runner's `cobertura.xml`: generated files stay in by default and leave it on `GO_COVERAGE_IGNORE_GENERATED`, while `coverage.txt` stays whole, and the GitHub input that carries it |
 | `go-cross-compile` | The Go cross-compile runner (every target in one job, at most CROSS_COMPILE_JOBS at once, a failing target named) |
 | `go-helpers` | Run the Go helpers' unit tests (`go test ./...`; the dependency-update tool's behaviour, policy and command line) |
 | `go-integration-scope` | Which packages the Go runner's integration phase selects, and the timeout and environment (`GO_TEST_INTEGRATION_ENV`) it runs them under |

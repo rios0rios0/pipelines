@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added an opt-in to leave generated files out of the Go coverage report: `coverage_ignore_generated` on the Go workflows and `GO_COVERAGE_IGNORE_GENERATED` on GitLab CI and Azure DevOps, for a repository whose generated parser writes gigabytes of report and can fill the agent; `coverage.txt`, the coverage gate and SonarQube are unchanged'
+time: '2026-11-07T03:50:29.014213447Z'

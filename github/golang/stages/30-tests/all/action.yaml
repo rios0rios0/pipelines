@@ -15,6 +15,15 @@ inputs:
     description: 'Minimum total coverage percentage; the step fails below it. 0 disables the gate.'
     required: false
     default: '0'
+  coverage_ignore_generated:
+    description: |
+      `true` leaves generated files (Go's `// Code generated ... DO NOT EDIT.` header) out of
+      `cobertura.xml`, for a repository whose generated code swamps the report. Off by default,
+      because it moves the percentage the report shows. `coverage.txt` stays whole, so the summary
+      and `coverage_threshold` are unchanged. The runner reads it as
+      `GO_COVERAGE_IGNORE_GENERATED`; an input for the same reason as `integration_parallel` below.
+    required: false
+    default: 'false'
   integration_parallel:
     description: |
       How many integration test binaries `go test` runs concurrently (its `-p` flag). The default
@@ -164,6 +173,7 @@ runs:
     - run: $SCRIPTS_DIR/global/scripts/languages/golang/test/run.sh
       shell: 'bash'
       env:
+        GO_COVERAGE_IGNORE_GENERATED: "${{ inputs.coverage_ignore_generated }}"
         GO_TEST_INTEGRATION_PARALLEL: "${{ inputs.integration_parallel }}"
         GO_TEST_INTEGRATION_TIMEOUT: "${{ inputs.integration_timeout }}"
         GO_TEST_INTEGRATION_ENV: "${{ inputs.integration_env }}"

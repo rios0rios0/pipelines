@@ -453,7 +453,31 @@ if [ "$GO_TEST_SELECTION_EFFECTIVE" = "affected" ]; then
   echo "Test selection: this run tested the affected packages only, so the coverage above is"
   echo "partial and no coverage threshold is enforced on it."
 fi
-"$GOBIN_DIR"/gocover-cobertura < coverage.txt > cobertura.xml
+
+# GO_COVERAGE_IGNORE_GENERATED=true leaves generated files -- those carrying Go's
+# `// Code generated ... DO NOT EDIT.` header -- out of cobertura.xml, the report a
+# platform renders. A generated parser is why it exists: Azure's report repeats a
+# file's whole source on the page of every class in that file, so one 20 MB parser
+# with hundreds of classes writes gigabytes of HTML, fills the agent's disk and
+# kills the job at its time limit with every test passed.
+#
+# It is off by default because it moves the percentage the report shows. Only the
+# report changes: coverage.txt stays whole, so the summary above, the coverage gate
+# and SonarQube, which all read it, see what they always saw.
+#
+# It is read from the environment like the GO_TEST_INTEGRATION_* variables, and the
+# GitHub path threads a `coverage_ignore_generated` input into it. The comparison
+# folds case because Azure DevOps stringifies a `boolean` template parameter as
+# `True`, which a strict `= "true"` would silently read as off.
+case "$(printf '%s' "${GO_COVERAGE_IGNORE_GENERATED:-false}" | tr '[:upper:]' '[:lower:]')" in
+  true | 1 | yes)
+    echo "Leaving generated files out of cobertura.xml (GO_COVERAGE_IGNORE_GENERATED)."
+    "$GOBIN_DIR"/gocover-cobertura -ignore-gen-files < coverage.txt > cobertura.xml
+    ;;
+  *)
+    "$GOBIN_DIR"/gocover-cobertura < coverage.txt > cobertura.xml
+    ;;
+esac
 
 reports_end_time=$(date +%s)
 reports_duration=$((reports_end_time - reports_start_time))

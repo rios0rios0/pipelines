@@ -446,6 +446,20 @@ no build (see Usage Example (Repository With No Build) below). Claude Review and
 workflows of their own: they need permissions no pipeline job should hold, and the mention responder
 answers comments rather than validating a commit.
 
+#### Generated Code in the Coverage Report (`coverage_ignore_generated`)
+
+A Go test job reports every package it covers, generated code included. `coverage_ignore_generated: true`
+leaves files carrying Go's `// Code generated ... DO NOT EDIT.` header out of `cobertura.xml`. Use it when
+generated code swamps the report: Azure DevOps repeats a file's whole source on the page of each class in
+it, so one 20 MB parser with hundreds of classes writes gigabytes of HTML, can fill the agent's disk and
+end the job at its time limit with every test passed.
+
+It is off by default because it moves the percentage the report shows. Only the report changes:
+`coverage.txt` stays whole, so the job's summary, `coverage_threshold` and SonarQube read what they always
+did. `go.yaml`, `go-docker.yaml`, `go-flyio.yaml` and `go-render.yaml` take it.
+
+On GitLab CI and Azure DevOps, set the pipeline variable `GO_COVERAGE_IGNORE_GENERATED=true`.
+
 #### One More Test Run in the Tests Stage (`extra_test_command`)
 
 A consumer of a reusable workflow cannot add a job in the middle of it: a caller's job can only

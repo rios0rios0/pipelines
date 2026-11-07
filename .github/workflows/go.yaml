@@ -124,6 +124,15 @@ on:
         description: |
           Minimum total coverage percentage; the test job fails below it. 0 disables the gate.
           Without this the number can drift down one merge at a time and nothing notices.
+      coverage_ignore_generated:
+        type: 'boolean'
+        required: false
+        default: false
+        description: |
+          Leaves generated files (Go's `// Code generated ... DO NOT EDIT.` header) out of
+          `cobertura.xml`, for a repository whose generated code swamps the report. Off by default,
+          because it moves the percentage the report shows. `coverage.txt` stays whole, so the
+          summary and `coverage_threshold` are unchanged.
       integration_parallel:
         type: 'number'
         required: false
@@ -351,6 +360,7 @@ jobs:
           database_image: "${{ inputs.database_image }}"
           database_url_env: "${{ inputs.database_url_env }}"
           coverage_threshold: "${{ inputs.coverage_threshold }}"
+          coverage_ignore_generated: "${{ inputs.coverage_ignore_generated }}"
           integration_parallel: "${{ inputs.integration_parallel }}"
           integration_timeout: "${{ inputs.integration_timeout }}"
           integration_env: "${{ inputs.integration_env }}"

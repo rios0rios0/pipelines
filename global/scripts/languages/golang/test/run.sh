@@ -457,9 +457,9 @@ fi
 # GO_COVERAGE_IGNORE_GENERATED=true leaves generated files -- those carrying Go's
 # `// Code generated ... DO NOT EDIT.` header -- out of cobertura.xml, the report a
 # platform renders. A generated parser is why it exists: Azure's report repeats a
-# file's whole source on the page of every class in that file, so one 20 MB parser
-# with hundreds of classes writes gigabytes of HTML, fills the agent's disk and
-# kills the job at its time limit with every test passed.
+# file's whole source on the page of every class in that file, so a large parser
+# with hundreds of classes writes gigabytes of HTML, can fill the agent's disk and
+# end the job at its time limit with every test passed.
 #
 # It is off by default because it moves the percentage the report shows. Only the
 # report changes: coverage.txt stays whole, so the summary above, the coverage gate

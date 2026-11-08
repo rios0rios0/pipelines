@@ -76,7 +76,7 @@ there is no target to add and no list to keep in step.
 | `sonarqube-auto-derive` | SonarQube auto-derivation and the retry of a scanner run the server broke |
 | `supply-chain` | The supply-chain pinning contract (actions, images, binaries, packages) |
 | `terra-coverage` | The Terraform generic coverage report generator |
-| `terra-install` | The terra CLI installer (pin check, installs that run together on one HOME, Azure DevOps step stops at a failed install) |
+| `terra-install` | The terra CLI installer (pin check, installs that run together on one HOME, Azure DevOps step stops at a failed install, the job's token on every GitHub step that runs `terra install`, on that step alone) |
 | `terra-pipeline` | The Terraform/terra pipeline's CodeQL tool gap (GitHub, GitLab, Azure, terra.mk, terraform.mk) |
 | `terra-test-roots` | The terra-test tier's opt-in root-module run (`TERRA_TEST_ROOTS`) |
 | `terraform-provider-mirror` | The local Terraform provider mirror |

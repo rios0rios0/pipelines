@@ -113,6 +113,14 @@ jobs:
           "$GITHUB_WORKSPACE/.pipelines/global/scripts/languages/terraform/terra/install.sh"
           terra install
         shell: 'bash'
+        # `terra install` looks up Terragrunt's newest release on api.github.com, which allows an
+        # unauthenticated address 60 lookups an hour. Runners sharing an address use them up between
+        # them, and a terra without rios0rios0/terra#358 then stops with "No version match found".
+        # One with it sends `GITHUB_TOKEN` to that API, and to no other host; an older one ignores
+        # it. On this step alone, so no later step -- the consumer's own Terraform included -- sees
+        # the token. `make test ONLY=terra-install` (Test 6) holds it.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: 'Check formatting'
         run: |
@@ -459,6 +467,9 @@ jobs:
           "$GITHUB_WORKSPACE/.pipelines/global/scripts/languages/terraform/terra/install.sh"
           terra install
         shell: 'bash'
+        # The job's token, on this step alone: see the same step of `code-check > style:terra-format`.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       # The two heavy tiers only: structural and validate run as jobs of their own beside this one.
       - name: 'Run Terraform tests (terra-test + terratest)'

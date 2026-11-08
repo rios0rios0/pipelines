@@ -26,7 +26,7 @@ import (
 // excuses.
 
 // unreviewedLimit is the ratchet. Lower it when an entry leaves UNREVIEWED; never raise it.
-const unreviewedLimit = 30
+const unreviewedLimit = 29
 
 // The workflows and the job the two lists name more than once.
 const (
@@ -73,7 +73,7 @@ func unreviewedJobs() map[string][]string {
 		npmWorkflow: {hadolintJob, "security-sca_npm_audit"},
 		"pdm.yaml": {"code_check-quality_mypy", "code_check-quality_vulture",
 			hadolintJob, "security-sca_safety"},
-		"terra.yaml": {"code_check-style_tflint", hadolintJob},
+		"terra.yaml": {"code_check-style_tflint"},
 		yarnWorkflow: {hadolintJob, "security-sca_yarn_audit"},
 	}
 }

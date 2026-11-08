@@ -2250,6 +2250,10 @@ since that is where every lint lands).
 
 `order-check`, `tftest-gen`, `var-catalog` and the terra-test tier's generic coverage report (`terra-test/coverage/`) are standard-library-only Go helpers, built from the pipelines checkout on every run through `global/scripts/shared/go-helper.sh`: they need Go 1.25 or newer, the `go` directive of the root `go.mod`, and nothing else. Every template that runs one provisions that Go (`make test ONLY=go-module-toolchain` holds it per job), `test:structural` included, since a consumer's `tests/structural.sh` is where `var-catalog --check` runs; running one locally -- `run.sh --fix`, the `tftest-gen` generator -- needs Go on `PATH`.
 
+**Hadolint blocks the Terra pipeline**, as it blocks the Go one: a Dockerfile finding fails the run
+on GitHub Actions and GitLab CI, and a repository with no Dockerfile passes. Azure DevOps keeps
+Hadolint advisory, like the platform's other shared SAST templates, for every toolchain.
+
 #### Argo CD Tools
 
 | Tool           | Purpose                                                                                     | Script Location                                  |

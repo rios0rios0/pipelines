@@ -285,13 +285,18 @@ jobs:
     needs: [ 'code_check-basic_checks', 'code_check-style_terra_format', 'code_check-style_tflint', 'code_check-style_order_check' ]
     if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
+  # Blocking, as in `go.yaml`, unlike the `sast:hadolint` of the other toolchains' workflows. A
+  # job-level `continue-on-error` concludes the RUN as passed whatever the job did, so a Dockerfile
+  # finding failed `make sast` and GitLab CI's Terra pipeline but never this one. A refused report
+  # upload is the only failure the check tolerates, at the action's upload step, and a repository
+  # with no Dockerfile passes as before: the runner writes an empty report and exits 0.
+  # `make test ONLY=workflow-composition` (Test 16) holds it.
   security-sast_hadolint:
     name: 'security > sast:hadolint'
     runs-on: 'ubuntu-latest'
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
     needs: [ 'code_check-basic_checks', 'code_check-style_terra_format', 'code_check-style_tflint', 'code_check-style_order_check' ]
-    continue-on-error: true
     if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   # The IaC misconfiguration scanner: a public bucket, an encryption setting left off, an IAM

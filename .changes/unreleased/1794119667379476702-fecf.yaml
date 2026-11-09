@@ -1,0 +1,4 @@
+kind: 'Fixed'
+body: 'fixed the Terra pipeline letting a Hadolint finding pass the run. `.github/workflows/terra.yaml` gave `security > sast:hadolint` a job-level `continue-on-error`, which concludes the run as passed whatever the job does, so a Dockerfile finding failed `make sast` and GitLab CI''s Terra pipeline but never the GitHub Actions one. The job now fails the run and skips the stages after it, as in `go.yaml`. A repository with no Dockerfile passes as before, a refused report upload is still tolerated at the upload step, and Azure DevOps keeps its shared Hadolint template advisory for every toolchain. Test 16 of `make test ONLY=workflow-composition` no longer lists the job, and its `UNREVIEWED` limit fell to 29. **BREAKING CHANGE:** a Terra pipeline on GitHub Actions whose Hadolint fails today now fails and skips every later stage, instead of passing'
+breaking: true
+time: '2026-11-08T06:34:27.379395465Z'

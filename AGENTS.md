@@ -1068,8 +1068,8 @@ at the end.
 
 **Do not "make SAST advisory again" here.** Advisory-versus-blocking is already decided at
 the call site, differently per platform — Azure DevOps marks all five `continueOnError:
-true`, `.github/workflows/*.yaml` forgives only `hadolint` (and `go.yaml` not even that, see
-"A Failing Check Fails the Run"), GitLab blocks on all five — and
+true`, `.github/workflows/*.yaml` forgives only `hadolint` (and neither `go.yaml` nor `terra.yaml`
+does, see "A Failing Check Fails the Run"), GitLab blocks on all five — and
 a makefile that swallows the code silently overrides all three. Findings a team has triaged
 belong in that tool's own suppression file (`.codeql-false-positives`, `.semgrepignore`,
 `.semgrepexcluderules`, `.hadolint.yaml`, `.gitleaksignore`). A consumer that genuinely
@@ -1287,10 +1287,12 @@ advisory without being listed, and on a listed job that no longer is:
 
 - **`ADVISORY`**: advisory on purpose, each entry with the reason its users read. Today that is
   ESLint beside the blocking `style:format`, Knip, and Dart's unused-code check.
-- **`UNREVIEWED`**: advisory since before the rule, with no reason recorded anywhere. It holds 30
-  jobs, every other toolchain's Hadolint among them. It may only **shrink**, and its limit is
-  pinned in the test. Before a job leaves it, check it the way the Go checks were checked: does
-  any consumer fail it today? Each one that does turns red the moment the check blocks.
+- **`UNREVIEWED`**: advisory since before the rule, with no reason recorded anywhere. It holds 29
+  jobs, the Hadolint of every toolchain but Go and Terra among them. It may only **shrink**, and
+  its limit is pinned in the test. Before a job leaves it, check it the way the Go checks were
+  checked: does any consumer fail it today? Each one that does turns red the moment the check
+  blocks. Terra's Hadolint left it that way: every consumer of `terra.yaml` that could be read
+  passed it, a Dockerfile in flight included, and a repository with no Dockerfile always does.
 
 The test follows the Go pipeline's GitLab CI and Azure DevOps twins through their includes and
 templates too. It accepts exactly two kinds of `continueOnError` there:

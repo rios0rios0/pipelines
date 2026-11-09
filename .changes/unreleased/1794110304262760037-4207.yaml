@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'made the gitleaks runner trust the working directory in the global Git config only once, so repeated scans no longer append a `safe.directory` entry per run'
+time: '2026-11-08T03:58:24.262651187Z'

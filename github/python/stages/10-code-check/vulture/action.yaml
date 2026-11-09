@@ -17,7 +17,7 @@ runs:
 
     - name: 'Install PDM and dependencies'
       run: |
-        python -m pip install --only-binary :all: "pdm==2.29.4" "unearth==0.19.0"
+        python -m pip install --only-binary :all: "pdm==2.29.4" "unearth==0.19.0" "hishel==1.4.0"
         pdm install -v
       shell: 'bash'
 

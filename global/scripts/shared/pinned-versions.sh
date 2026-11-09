@@ -565,6 +565,13 @@ PDM_SPEC="${PDM_SPEC:-pdm==2.29.4}"
 # requires `unearth>=0.19`, past the cooldown on 2026-11-03).
 # upstream: pypi unearth
 UNEARTH_SPEC="${UNEARTH_SPEC:-unearth==0.19.0}"
+# `hishel` 2.0.0 (2026-11-05) removed `SyncSqliteStorage`, which PDM 2.29.4 imports
+# when it builds its HTTP session, so every `pdm install` fails with
+# `[AttributeError]: module 'hishel' has no attribute 'SyncSqliteStorage'`. It is
+# installed beside PDM in the same `pip install`. Drop this pin when PDM moves to
+# 2.29.6 or later (which requires `hishel>=2.0`, past the cooldown on 2026-11-12).
+# upstream: pypi hishel
+HISHEL_SPEC="${HISHEL_SPEC:-hishel==1.4.0}"
 # upstream: pypi vulture
 VULTURE_SPEC="${VULTURE_SPEC:-vulture==2.16}"
 # upstream: pypi semgrep

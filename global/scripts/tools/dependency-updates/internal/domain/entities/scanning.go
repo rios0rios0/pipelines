@@ -179,6 +179,7 @@ func InlineCopies() []InlineCopy {
 		// Installed in the same `pip install` as PDM, AFTER its quoted spec, so
 		// the gap may hold quotes.
 		{"UNEARTH_SPEC", `pip install[^\n]*"unearth==([0-9][^"]*)"`},
+		{"HISHEL_SPEC", `pip install[^\n]*"hishel==([0-9][^"]*)"`},
 		{"VULTURE_SPEC", `pip install[^"\n]*"vulture==([0-9][^"]*)"`},
 		{"KNIP_SPEC", `npx --yes[^\n]*knip@([0-9][^\s'"]*)`},
 		{"GOVULNCHECK_PINNED_VERSION", `go install golang\.org/x/vuln/cmd/govulncheck@v?([0-9][^\s'"]*)`},

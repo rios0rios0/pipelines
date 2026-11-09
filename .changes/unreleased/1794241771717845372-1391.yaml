@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the Python pipelines failing at PDM install on every platform with `[AttributeError]: module ''hishel'' has no attribute ''SyncSqliteStorage''` by pinning `hishel` to `1.4.0` beside PDM `2.29.4`, in every `pip install` of PDM and in `pinned-versions.sh` as `HISHEL_SPEC`. PDM does not pin its own dependencies, and `hishel` `2.0.0`, released on 2026-11-05, removed the class PDM `2.29.4` imports; the pin goes once PDM moves to `2.29.6` or later'
+time: '2026-11-09T16:29:31.717750981Z'

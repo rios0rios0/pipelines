@@ -31,14 +31,33 @@ func TestFindDrift(t *testing.T) {
 		assert.Equal(t, "0.18.3", drifts[0].Manifest)
 	})
 
+	t.Run("should read hishel after PDM and unearth in one pip install against its own pin", func(t *testing.T) {
+		t.Parallel()
+		// given
+		files := []entities.SourceText{{
+			Path: "action.yaml",
+			Text: `python -m pip install --only-binary :all: "pdm==2.29.4" "unearth==0.19.0" "hishel==1.3.1"` + "\n",
+		}}
+		expected := map[string]string{"PDM_SPEC": "2.29.4", "UNEARTH_SPEC": "0.19.0", "HISHEL_SPEC": "1.4.0"}
+
+		// when
+		drifts := entities.FindDrift(files, expected)
+
+		// then
+		require.Len(t, drifts, 1)
+		assert.Equal(t, "HISHEL_SPEC", drifts[0].Name)
+		assert.Equal(t, "1.3.1", drifts[0].Inline)
+		assert.Equal(t, "1.4.0", drifts[0].Manifest)
+	})
+
 	t.Run("should report nothing when every copy agrees with its pin", func(t *testing.T) {
 		t.Parallel()
 		// given
 		files := []entities.SourceText{{
 			Path: "Dockerfile",
-			Text: `RUN pip install --only-binary :all: "pdm==2.29.2" "unearth==0.18.3"` + "\n",
+			Text: `RUN pip install --only-binary :all: "pdm==2.29.2" "unearth==0.18.3" "hishel==1.4.0"` + "\n",
 		}}
-		expected := map[string]string{"PDM_SPEC": "2.29.2", "UNEARTH_SPEC": "0.18.3"}
+		expected := map[string]string{"PDM_SPEC": "2.29.2", "UNEARTH_SPEC": "0.18.3", "HISHEL_SPEC": "1.4.0"}
 
 		// when
 		drifts := entities.FindDrift(files, expected)

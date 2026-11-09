@@ -13,10 +13,17 @@
 #   4. a download that fails verification leaves the installed terra as it was;
 #   5. the Azure DevOps step stops at a failed install, as GitHub (`shell: bash`) and GitLab
 #      (one command per line) already do. It ran without `-e`, so a failed install fell through
-#      to `terra install` and `terra version`, and the step passed when the last line did.
+#      to `terra install` and `terra version`, and the step passed when the last line did;
+#   6. every GitHub step that runs `terra install` passes it the job's token as `GITHUB_TOKEN`, on
+#      the step alone. terra looks up Terragrunt's newest release on api.github.com, and GitHub
+#      answers an anonymous lookup from an address that has spent its rate limit with no
+#      `tag_name`: terra 1.18.16 stopped there with "No version match found". A terra carrying
+#      rios0rios0/terra#358 sends the token to that API.
 #
 # Runs OFFLINE. curl is a stub that serves release tarballs built here, and the "terra" inside
 # them is a shell script that answers `version` as the real binary does: logrus lines on stderr.
+# Test 6 reads the workflows with mikefarah/yq: the one on PATH, as on GitHub's hosted runners,
+# or else the pinned release, which `resolve-yq.sh` downloads and verifies.
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 INSTALLER="$SCRIPTS_DIR/global/scripts/languages/terraform/terra/install.sh"
@@ -164,6 +171,62 @@ echo ""
 echo "Test 5: the Azure DevOps step stops at a failed install"
 assert_true "its script starts with 'set -e'" \
   "grep -A1 -E '^[[:space:]]+- script: [|]\$' '$AZURE_STEP' | grep -qE '^[[:space:]]+set -e\$'"
+echo ""
+
+echo "Test 6: every GitHub step that runs \`terra install\` hands it the job's token"
+# On the step itself: set on the job or the workflow, the token would reach every later step too,
+# the consumer's own Terraform included. Every GitHub workflow and composite action that names
+# `terra install` is read with mikefarah/yq, and yq decides which of its steps run it.
+EXPECTED_TOKEN='${{ github.token }}'
+INSTALL_STEP='select((.run // "") | test("(?m)^\\s*terra install(\\s|$)"))'
+YQ="$(
+  # shellcheck source=/dev/null
+  . "$SCRIPTS_DIR/global/scripts/shared/pinned-versions.sh"
+  # shellcheck source=/dev/null
+  . "$SCRIPTS_DIR/global/scripts/shared/verify-download.sh"
+  # shellcheck source=/dev/null
+  . "$SCRIPTS_DIR/global/scripts/shared/resolve-yq.sh"
+  resolve_yq "$WORK/yq" >&2 && printf '%s' "$YQ"
+)"
+
+# leaked_tokens <file>: how many places above a step set GITHUB_TOKEN -- the workflow, or a job
+# with a step that runs `terra install`.
+leaked_tokens() {
+  "$YQ" eval "(.env.GITHUB_TOKEN // \"\"),
+    (.jobs[] | select([.steps[] | $INSTALL_STEP] | length > 0) | .env.GITHUB_TOKEN // \"\")" "$1" | grep -c .
+}
+
+assert_true "mikefarah/yq resolves, so the workflows can be read" "[ -n \"\$YQ\" ]"
+INSTALL_STEPS=0
+if [ -n "$YQ" ]; then
+  printf '%s\n' 'env:' '  GITHUB_TOKEN: x' 'jobs:' '  install:' '    env:' '      GITHUB_TOKEN: x' \
+    '    steps:' '      - run: terra install' > "$WORK/leaky.yaml"
+  assert_true "a token on the workflow and on the installing job is counted twice (canary)" \
+    "[ \"\$(leaked_tokens '$WORK/leaky.yaml')\" = 2 ]"
+
+  # Only a file that names `terra install` at all is parsed; yq then decides which steps run it.
+  while IFS= read -r file; do
+    relative="${file#"$SCRIPTS_DIR"/}"
+    if ! steps="$("$YQ" eval "(.jobs[].steps[], .runs.steps[]) | $INSTALL_STEP |
+      [(parent | parent | key), (.name // \"<unnamed>\"), (.env.GITHUB_TOKEN // \"<unset>\")] | @tsv" "$file")"; then
+      assert_true "$relative is readable YAML" "false"
+      continue
+    fi
+    [ -n "$steps" ] || continue
+    while IFS=$'\t' read -r job step token; do
+      INSTALL_STEPS=$((INSTALL_STEPS + 1))
+      # Compared here, not in the condition: `eval` would read the expression as a substitution.
+      passes=false
+      [ "$token" = "$EXPECTED_TOKEN" ] && passes=true
+      assert_true "$relative: '$step' in $job passes the job's token as GITHUB_TOKEN" "$passes"
+    done <<< "$steps"
+    assert_true "$relative: the token is set on those steps alone, not on their job or the workflow" \
+      "[ \"\$(leaked_tokens '$file')\" = 0 ]"
+  done < <(grep -rl --include='*.yaml' --include='*.yml' 'terra install' \
+    "$SCRIPTS_DIR/.github/workflows" "$SCRIPTS_DIR/github" | sort)
+fi
+assert_true "the GitHub workflows and actions run \`terra install\` in at least one step" \
+  "[ $INSTALL_STEPS -gt 0 ]"
 echo ""
 
 echo "=== Summary ==="

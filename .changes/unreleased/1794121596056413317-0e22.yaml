@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed both `Install terra CLI` steps of `.github/workflows/terra.yaml` to pass the job''s token to `terra install` as `GITHUB_TOKEN`, on the step alone so no later step sees it. A terra that carries rios0rios0/terra#358 sends it to the GitHub API when it looks up the newest Terragrunt, so a runner whose address has spent GitHub''s anonymous rate limit installs instead of stopping with "No version match found". The pinned terra 1.18.16 ignores it until the pin moves to a release that carries that change, and `.docs/known-issues.md` records the failure as KI-06 until then. Test 6 of `make test ONLY=terra-install` holds the steps to it'
+time: '2026-11-08T07:06:36.056344812Z'

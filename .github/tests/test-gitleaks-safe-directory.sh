@@ -19,7 +19,7 @@ TESTS_FAILED=0
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 RUNNER="$ROOT/global/scripts/tools/gitleaks/run.sh"
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d)" || exit 1
 trap 'rm -rf "$WORK"' EXIT
 
 BLOCK="$WORK/block.sh"

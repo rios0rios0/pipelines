@@ -425,8 +425,9 @@ job, the management job every tests job, and a delivery or deployment job the wh
 ships. A run reads code-check -> security -> tests -> management -> delivery, the jobs of one stage
 in parallel, and a failed check stops the stages after it.
 
-`basic-checks` runs on pull requests only, and GitHub skips every job downstream of a skipped one
-unless its `if:` calls a status function, so every job past the first stage gates on
+`basic-checks` runs on pull requests only, as does the Go pipeline's `migration-order` check, and
+GitHub skips every job downstream of a skipped one unless its `if:` calls a status function, so
+every job past the first stage gates on
 `!cancelled() && !failure()`: it runs when a check was skipped by design, never when one failed,
 and never on a cancelled run.
 
@@ -2141,11 +2142,12 @@ Optional environment variables:
 
 #### Go Tools
 
-| Tool               | Purpose               | Script Location                                  |
-|--------------------|-----------------------|--------------------------------------------------|
-| **golangci-lint**  | Go linting suite      | `global/scripts/languages/golang/golangci-lint/` |
-| **Go Test Runner** | Comprehensive testing | `global/scripts/languages/golang/test/`          |
-| **CycloneDX**      | SBOM generation       | `global/scripts/languages/golang/cyclonedx/`     |
+| Tool                | Purpose                             | Script Location                                    |
+|---------------------|-------------------------------------|----------------------------------------------------|
+| **golangci-lint**   | Go linting suite                    | `global/scripts/languages/golang/golangci-lint/`   |
+| **Go Test Runner**  | Comprehensive testing               | `global/scripts/languages/golang/test/`            |
+| **CycloneDX**       | SBOM generation                     | `global/scripts/languages/golang/cyclonedx/`       |
+| **Migration order** | goose migration order, per PR       | `global/scripts/languages/golang/migration-order/` |
 
 **The Go checks block.**
 
@@ -2158,6 +2160,44 @@ Optional environment variables:
 - golangci-lint gives up after `30m` by default. On a busy self-hosted runner, raise it with
   `GOLANGCI_LINT_TIMEOUT` (for example `45m`).
 - Exit code 4 means the time ran out, not that anything was found.
+
+##### Goose Migration Order (`quality:migration-order`)
+
+Every Go pipeline fails a pull request whose new [goose](https://github.com/pressly/goose) migration
+is not newer than the newest migration its target branch already holds in the same directory. goose
+refuses to apply a migration older than the version a database has reached ("found N missing
+migrations before current version"). Two branches that each name a migration when they start, and
+merge in the opposite order, leave exactly such a file behind. Review does not see it, and neither
+do the tests, which migrate an empty database. The first deploy after the second merge stops at the
+migrations, and the service does not start until the file is renamed. On the pull request, the
+rename costs nothing.
+
+- **Pull requests only**, on all three platforms: `code-check > quality:migration-order` on GitHub
+  Actions, `quality:migration-order` on GitLab CI (merge requests) and Azure DevOps. The verdict is
+  relative to the branch being merged into, which the check fetches first, so a target that moved
+  after the branch was opened is the one judged against.
+- **No configuration.** A directory is a goose directory when one of its tracked
+  `<version>_<name>.sql` files carries the `-- +goose Up` annotation, or one of its
+  `<version>_<name>.go` files calls `goose.AddMigration...`. `testdata` and `vendor` trees are
+  skipped. A repository without goose migrations passes in seconds, without fetching anything.
+- **Each directory on its own**, because goose reads one directory at a time: a seeders directory
+  is compared with its own newest migration, not with the schema's.
+- **Versions as goose reads them**: the number before the first `_`, so timestamps
+  (`20260101120000_`) and sequential numbers (`00042_`) both work, leading zeros included. Two new
+  migrations sharing a version fail too, and a renamed migration is judged by its new name.
+- **The fix** is to rename the file so its version is newer: a fresh timestamp
+  (`date -u +%Y%m%d%H%M%S`) or, with sequential numbering, the next free number.
+
+`GOOSE_MIGRATION_DIRS` (space-separated) checks the named directories instead of the detected ones,
+and `none` turns the check off, for a service that runs goose with missing migrations allowed
+(`goose.WithAllowMissing()`, `-allow-missing`) and applies an older file on purpose. Set it as a
+pipeline variable on Azure DevOps or a CI/CD variable on GitLab CI. GitHub Actions does not hand a
+caller's environment to a reusable workflow, so there it is read only from the runner's own
+environment, such as a self-hosted runner's `.env` file. A named directory that holds no migration
+fails the check rather than passing it unexamined.
+
+Run it before pushing with `make migration-order` (`golang.mk`); `TARGET_BRANCH=<branch>` compares
+with a branch other than the remote's default one.
 
 #### JavaScript / TypeScript Tools
 
@@ -2775,6 +2815,9 @@ $SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/run.sh --fix
 
 # Go tests
 $SCRIPTS_DIR/global/scripts/languages/golang/test/run.sh
+
+# goose migration order against the remote's default branch (what pull requests run)
+$SCRIPTS_DIR/global/scripts/languages/golang/migration-order/run.sh
 
 # Security scans
 $SCRIPTS_DIR/global/scripts/tools/gitleaks/run.sh

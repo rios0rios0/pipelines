@@ -1,0 +1,23 @@
+name: 'Goose Migration Order'
+description: |
+  Fails a pull request whose new goose migration is not newer than the newest migration its
+  target branch already holds in the same directory. goose refuses to apply a migration older
+  than the version a database has reached, so such a file passes review and the tests -- which
+  migrate an empty database -- and stops the first deploy after the merge. A repository with no
+  goose migrations passes at once, without fetching anything.
+
+runs:
+  using: 'composite'
+  steps:
+    # Shallow, as by default: the script compares the target branch's TREE with this one and
+    # fetches that tree alone (`--depth=1`), so neither side's history is needed.
+    - name: 'Checkout code'
+      uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
+
+    - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    # The script reads the target branch from `GITHUB_BASE_REF`, which GitHub sets on every
+    # pull_request run, so no input crosses into the shell.
+    - name: 'Check the goose migration order'
+      shell: 'bash'
+      run: $SCRIPTS_DIR/global/scripts/languages/golang/migration-order/run.sh

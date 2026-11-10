@@ -61,6 +61,7 @@ there is no target to add and no list to keep in step.
 | `javascript-pipeline` | The JavaScript formatting gate (Prettier runner + cross-platform wiring) |
 | `lambda-templates` | Lambda template validation |
 | `memory-detection` | The cgroup-aware memory ceiling detection |
+| `migration-order` | The goose migration-order check (a new migration newer than the target branch's newest in its directory; detection, fetch, shallow clones, version parsing, `GOOSE_MIGRATION_DIRS`) and its pull-request-only wiring on all three platforms and in `golang.mk` |
 | `no-python` | That the repository runs no Python of its own: no `.py` file, and no interpreter outside the Python pipelines and the Semgrep/Checkov installs, |
 | `order-check` | The Terragrunt file-ordering checker/fixer |
 | `phpmd` | The PHPMD runner (the command line each major takes, the verdict, a report that stays JSON) |

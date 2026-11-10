@@ -5,7 +5,7 @@
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #   -include $(SCRIPTS_DIR)/makefiles/golang.mk
 #
-# Targets provided: lint, test, cross-compile, cyclonedx
+# Targets provided: lint, test, cross-compile, cyclonedx, migration-order
 # Variables provided: VERSION (CHANGELOG-/Git-tag-derived build version)
 # Also sets CODEQL_LANGUAGE=go, SEMGREP_LANGUAGE=golang for the common.mk sast target.
 # Note: Unused code detection is handled by golangci-lint (unused, unparam, wastedassign linters).
@@ -24,7 +24,7 @@ export REPORT_PATH ?= ./reports
 # VERSION from the environment or command line still overrides everything.
 VERSION ?= $(shell { grep -m1 -oE '^\#\# \[[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+'; } || { git describe --tags --abbrev=0 2>/dev/null || echo "dev"; } | sed 's/^v//')
 
-.PHONY: lint test cross-compile cyclonedx
+.PHONY: lint test cross-compile cyclonedx migration-order
 
 lint:
 	@$(SCRIPTS_DIR)/global/scripts/languages/golang/golangci-lint/run.sh --fix .
@@ -37,3 +37,9 @@ cross-compile:
 
 cyclonedx:
 	@$(SCRIPTS_DIR)/global/scripts/languages/golang/cyclonedx/run.sh
+
+# The goose migration-order check CI runs on every pull request: each new migration must be newer
+# than the newest one the target branch holds in its directory. TARGET_BRANCH defaults to the
+# remote's default branch, which the check fetches before comparing.
+migration-order:
+	@$(SCRIPTS_DIR)/global/scripts/languages/golang/migration-order/run.sh $(TARGET_BRANCH)

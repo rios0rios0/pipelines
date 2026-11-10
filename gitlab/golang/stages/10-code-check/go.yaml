@@ -11,3 +11,18 @@ style:golangci-lint:
   stage: 'code check (style/quality)'
   script:
     - $SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/run.sh
+
+# A merge request whose new goose migration is not newer than the newest one on its target branch
+# passes review and the tests, then stops the first deploy after the merge: goose refuses to apply
+# a migration older than the version the database has reached. Merge requests only, because the
+# verdict is relative to the target branch, which the script reads from
+# CI_MERGE_REQUEST_TARGET_BRANCH_NAME. The Go image is used for its git and shell alone: the check
+# compiles nothing. A repository without goose migrations passes in seconds.
+quality:migration-order:
+  extends: '.scripts-repo'
+  image: !reference [ .go, image ]
+  stage: 'code check (style/quality)'
+  script:
+    - $SCRIPTS_DIR/global/scripts/languages/golang/migration-order/run.sh
+  rules:
+    - if: "$CI_MERGE_REQUEST_IID"

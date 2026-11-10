@@ -288,16 +288,29 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/golang/stages/10-code-check/cross-compile@main'
     if: "inputs.cross_compile && !startsWith(github.ref, 'refs/tags/')"
 
+  # A pull request whose new goose migration is not newer than the newest one on its target branch
+  # passes review and the tests, then stops the first deploy after the merge: goose refuses to
+  # apply a migration older than the version the database has reached. Pull requests only, like
+  # `basic-checks`, because the verdict is relative to the branch being merged into. A repository
+  # without goose migrations passes in seconds.
+  code_check-quality_migration_order:
+    name: 'code-check > quality:migration-order'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    steps:
+      - uses: 'rios0rios0/pipelines/github/golang/stages/10-code-check/migration-order@main'
+    if: "github.event_name == 'pull_request'"
+
 
   # second stage
   #
   # Every stage waits for the WHOLE stage before it, so a run reads code-check -> security ->
   # tests -> management, each stage's jobs in parallel and nothing starting beside the stage it
   # follows: this stage needs every code-check job, `basic-checks` and the optional ones included.
-  # Those can be skipped -- `basic-checks` runs only on a pull request, the optional ones only when
-  # asked for -- and GitHub skips every job downstream of a skipped one unless its `if:` calls a
-  # status function, so every job from here on gates on `!cancelled() && !failure()` rather than
-  # on the implicit `success()`. `make test ONLY=workflow-composition` (Test 18) holds both halves.
+  # Those can be skipped -- `basic-checks` and `migration-order` run only on a pull request, the
+  # optional ones only when asked for -- and GitHub skips every job downstream of a skipped one
+  # unless its `if:` calls a status function, so every job from here on gates on
+  # `!cancelled() && !failure()` rather than on the implicit `success()`.
+  # `make test ONLY=workflow-composition` (Test 18) holds both halves.
   security-sast_codeql:
     name: 'security > sast:codeql'
     # Its own selector, falling back to the pipeline's: see `codeql_runs_on`. An empty string is
@@ -309,7 +322,7 @@ jobs:
           codeql_language: 'go'
           upload: "${{ inputs.codeql_upload }}"
           go_version_file: "${{ inputs.go_version_file }}"
-    needs: [ 'code_check-basic_checks', 'code_check-style_golangci_lint', 'code_check-docs_openapi_sync', 'code_check-cross_compile' ]
+    needs: [ 'code_check-basic_checks', 'code_check-style_golangci_lint', 'code_check-docs_openapi_sync', 'code_check-cross_compile', 'code_check-quality_migration_order' ]
     if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sast_semgrep:
@@ -319,7 +332,7 @@ jobs:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/semgrep@main'
         with:
           semgrep_lang: 'golang'
-    needs: [ 'code_check-basic_checks', 'code_check-style_golangci_lint', 'code_check-docs_openapi_sync', 'code_check-cross_compile' ]
+    needs: [ 'code_check-basic_checks', 'code_check-style_golangci_lint', 'code_check-docs_openapi_sync', 'code_check-cross_compile', 'code_check-quality_migration_order' ]
     if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sast_gitleaks:
@@ -327,7 +340,7 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/gitleaks@main'
-    needs: [ 'code_check-basic_checks', 'code_check-style_golangci_lint', 'code_check-docs_openapi_sync', 'code_check-cross_compile' ]
+    needs: [ 'code_check-basic_checks', 'code_check-style_golangci_lint', 'code_check-docs_openapi_sync', 'code_check-cross_compile', 'code_check-quality_migration_order' ]
     if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   # Blocking, unlike the `sast:hadolint` of the other toolchains' workflows: see the note on
@@ -337,7 +350,7 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
-    needs: [ 'code_check-basic_checks', 'code_check-style_golangci_lint', 'code_check-docs_openapi_sync', 'code_check-cross_compile' ]
+    needs: [ 'code_check-basic_checks', 'code_check-style_golangci_lint', 'code_check-docs_openapi_sync', 'code_check-cross_compile', 'code_check-quality_migration_order' ]
     if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
   security-sca_govulncheck:
@@ -345,7 +358,7 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - uses: 'rios0rios0/pipelines/github/golang/stages/20-security/govulncheck@main'
-    needs: [ 'code_check-basic_checks', 'code_check-style_golangci_lint', 'code_check-docs_openapi_sync', 'code_check-cross_compile' ]
+    needs: [ 'code_check-basic_checks', 'code_check-style_golangci_lint', 'code_check-docs_openapi_sync', 'code_check-cross_compile', 'code_check-quality_migration_order' ]
     if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
 

@@ -12,6 +12,30 @@ stages:
     jobs:
       - template: '../../../global/stages/10-code-check/basic-checks.yaml'
 
+      # A pull request whose new goose migration is not newer than the newest one on its target
+      # branch passes review and the tests, then stops the first deploy after the merge: goose
+      # refuses to apply a migration older than the version the database has reached. Pull
+      # requests only, like `basic-checks`, because the verdict is relative to the target branch.
+      # A repository without goose migrations passes in seconds, without fetching anything.
+      - job: 'quality_migration_order'
+        displayName: 'quality:migration-order'
+        condition: eq(variables['Build.Reason'], 'PullRequest')
+        steps:
+          # Shallow: the script compares the target branch's TREE with this one and fetches that
+          # tree alone, so neither side's history is needed. The credentials stay for that fetch;
+          # without them it cannot reach a private repository.
+          - checkout: 'self'
+            fetchDepth: 1
+            fetchTags: false
+            persistCredentials: true
+
+          - template: '../../../global/abstracts/scripts-repo.yaml'
+
+          # The script reads the target branch from SYSTEM_PULLREQUEST_TARGETBRANCH, an agent
+          # environment variable, never from a `$(...)` macro substituted into the script.
+          - script: $(Scripts.Directory)/global/scripts/languages/golang/migration-order/run.sh
+            displayName: 'Check the goose migration order'
+
       - job: 'style_golangci_lint'
         displayName: 'style:golangci-lint'
         variables:

@@ -631,7 +631,7 @@ jobs:
       - run: '$SCRIPTS_DIR/global/scripts/helper/run.sh'
       - uses: 'actions/setup-go@x'
         with:
-          go-version: '1.27.3'
+          go-version: '1.27.4'
   unguarded_file:
     steps:
       - uses: 'actions/setup-go@x'
@@ -639,7 +639,7 @@ jobs:
           go-version-file: 'tests/go.mod'
       - uses: 'actions/setup-go@x'
         with:
-          go-version: '1.27.3'
+          go-version: '1.27.4'
       - run: '$SCRIPTS_DIR/global/scripts/wrapper/run.sh'
   commented:
     steps:
@@ -649,17 +649,17 @@ jobs:
     steps:
       - uses: 'actions/setup-go@x'
         with:
-          go-version: '1.27.3'
+          go-version: '1.27.4'
       - run: '$SCRIPTS_DIR/global/scripts/wrapper/run.sh'
 YAML
   cat > "$TREE/gitlab/x/abstracts/go.yaml" << 'YAML'
 .old-go:
   image: 'golang:1.24.9@sha256:0000'
 .new-go:
-  image: 'golang:1.27.3-bookworm@sha256:0000'
+  image: 'golang:1.27.4-bookworm@sha256:0000'
 .mapped-go:
   image:
-    name: 'golang:1.27.3'
+    name: 'golang:1.27.4'
     entrypoint: [ '' ]
 .runs-helper:
   image: 'python:3.13-alpine@sha256:0000'
@@ -727,7 +727,7 @@ YAML
 steps:
   - task: 'GoTool@0'
     inputs:
-      version: '1.27.3'
+      version: '1.27.4'
 YAML
   cat > "$TREE/azure-devops/x/fixture.yaml" << 'YAML'
 stages:
@@ -747,7 +747,7 @@ stages:
           - script: $(Scripts.Directory)/global/scripts/helper/run.sh
           - task: 'GoTool@0'
             inputs:
-              version: '1.27.3'
+              version: '1.27.4'
       - job: 'template_helper'
         steps:
           - template: 'steps/helper.yaml'
@@ -756,7 +756,7 @@ stages:
           - task: 'GoTool@0'
             displayName: 'Use Go'
             inputs:
-              version: '1.27.3'
+              version: '1.27.4'
           - script: $(Scripts.Directory)/global/scripts/wrapper/run.sh
       - job: 'template_gotool'
         steps:

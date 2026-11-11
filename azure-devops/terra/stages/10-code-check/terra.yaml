@@ -49,7 +49,7 @@ stages:
           - task: 'GoTool@0'
             displayName: 'Use Go (order-check is a Go helper)'
             inputs:
-              version: '1.27.3'
+              version: '1.27.4'
 
           - script: $(Scripts.Directory)/global/scripts/languages/terraform/order-check/run.sh
             displayName: 'Check file ordering (deps/variables/providers/outputs)'

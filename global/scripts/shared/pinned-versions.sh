@@ -246,7 +246,7 @@ CHECKOV_SHA256="fae991abfd873266d7dc135d0295b8c66a70be27eeb9191279c1b4f16f5393c2
 # named after it, so moving to a new line renames that image too.
 # upstream: go-toolchain golang.org/toolchain track=1.27
 # osv: Go stdlib toolchain
-GO_PINNED_VERSION="1.27.3"
+GO_PINNED_VERSION="1.27.4"
 
 # upstream: github-release golangci/golangci-lint
 # osv: Go github.com/golangci/golangci-lint/v2

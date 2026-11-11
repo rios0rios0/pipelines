@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed every script that finds this repository from its own path (`SCRIPTS_DIR` left unset) resolving it to the wrong directory in a checkout whose path holds the word `pipelines` elsewhere -- a worktree nested inside another checkout, or a directory named `pipelines-something`: the path was cut after the last `pipelines` in it, and is now cut before the last `/global/scripts/`, where every such script lives'
-time: '2026-11-04T21:36:08.715912302Z'

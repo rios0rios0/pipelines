@@ -27,7 +27,7 @@ stages:
           PRE_STEPS:
             - task: 'GoTool@0'
               inputs:
-                version: '1.27.3'
+                version: '1.27.4'
                 architecture: 'amd64'
               displayName: 'Setup Go'
 

@@ -21,7 +21,7 @@ privately and fix them.
 | [KI-03](#ki-03--the-go-autobuild-runs-the-default-goal-of-a-consumer-makefile) | `global/scripts/tools/codeql/run.sh` and the `20-security/codeql` action, Go | The Go autobuild runs the default goal of a consumer Makefile | Won't fix |
 | [KI-04](#ki-04--gitlab-cis-debian-11-images-can-no-longer-install-packages) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml`, `gitlab/java/abstracts/maven.yaml` | GitLab CI's Debian 11 images can no longer install packages | Fixed in #775 |
 | [KI-05](#ki-05--gitlab-cis-javascript-images-run-a-nodejs-past-its-end-of-life) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml` | GitLab CI's JavaScript images run a Node.js past its end of life | Fixed in #775 |
-| [KI-06](#ki-06--terra-install-stops-when-github-rate-limits-its-lookup) | `.github/workflows/terra.yaml`, `code-check > style:terra-format` and `tests > test:all`; `gitlab/terra/abstracts/terra.yaml`; `azure-devops/terra/abstracts/terra.yaml` | `terra install` stops when GitHub rate-limits its lookup | Open |
+| [KI-06](#ki-06--terra-install-stops-when-github-rate-limits-its-lookup) | `.github/workflows/terra.yaml`, `code-check > style:terra-format` and `tests > test:all`; `gitlab/terra/abstracts/terra.yaml`; `azure-devops/terra/abstracts/terra.yaml` | `terra install` stops when GitHub rate-limits its lookup | Fixed in #801 |
 
 ## KI-01 — The Dart test job has no timeout
 
@@ -280,13 +280,16 @@ privately and fix them.
 - **The fix:**
   - rios0rios0/terra#358, merged on 2026-11-07, reports the status, retries a rate limit or a
     server error, keeps an installed Terragrunt when the lookup still fails, and sends
-    `GITHUB_TOKEN` to the GitHub API, and to no other host, when it is set. No terra release
-    carries it yet: 1.18.17 was cut on 2026-11-04.
+    `GITHUB_TOKEN` to the GitHub API, and to no other host, when it is set. 1.18.17, cut on
+    2026-11-04, does not carry it; 1.18.18, published on 2026-11-09, is the first release that does.
   - On GitHub Actions, both steps pass the job's token as `GITHUB_TOKEN`, on the step alone
     (`make test ONLY=terra-install`, Test 6). A terra without #358 ignores it.
-  - Move `TERRA_PINNED_VERSION` in `global/scripts/shared/pinned-versions.sh`, with its digests, to
-    the first release that carries #358.
+  - `TERRA_PINNED_VERSION` in `global/scripts/shared/pinned-versions.sh` moved, with its digests,
+    to 1.18.18 in #801, a day after its release instead of a week: its `cooldown=1` is a one-time
+    exception, to be removed once 1.18.18 is past the default cooldown on 2026-11-16.
   - GitLab CI and Azure DevOps have no job token for GitHub. On GitLab CI, a consumer's own
     `GITHUB_TOKEN` CI/CD variable reaches terra with no template change. On Azure DevOps, a secret
-    variable reaches a script only through `env:`, which the abstract does not map.
-- **Status:** Open. The GitHub Actions steps pass the token; the pin waits for a terra release.
+    variable reaches a script only through `env:`, which the abstract does not map. Without a
+    token, 1.18.18 still retries the lookup and keeps an installed Terragrunt, so only a runner
+    with no Terragrunt yet can stop, and only when the limit outlasts the retries.
+- **Status:** Fixed in #801. The GitHub Actions steps pass the token, and the pinned terra reads it.

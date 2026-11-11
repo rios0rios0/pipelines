@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed `terra install` stopping with "No version match found" when GitHub rate-limits its lookup on runners that share one address: the terra pin moved from 1.18.16 to 1.18.18, the first release with rios0rios0/terra#358, which reports the HTTP status, retries, keeps an installed Terragrunt and reads the `GITHUB_TOKEN` the GitHub Actions steps already pass. Both digests were checked against the release''s `checksums.txt` and its assets. It was adopted a day after its release under a one-time `cooldown=1` on the pin, to be removed once 1.18.18 is past the default cooldown on 2026-11-16, and it closes KI-06'
+time: '2026-11-11T01:28:18.090052143Z'

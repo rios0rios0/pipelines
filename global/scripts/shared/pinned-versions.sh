@@ -324,15 +324,22 @@ TERRAGRUNT_SHA256_ARM64="01c0768aab01e0c183209ba7edce9d2ebc8f8a7690763bb52f1b890
 # immediately, with no release and no review gate in between.
 # Its tags carry no `v`, so they are not Go module versions and no advisory
 # database can name one of its releases.
-# upstream: github-release rios0rios0/terra
+# `cooldown=1` is a one-time exception, not a policy. 1.18.18 is the first
+# release with rios0rios0/terra#358, which stops `terra install` failing when
+# GitHub rate-limits its lookup (KI-06 in `.docs/known-issues.md`), and
+# self-hosted runners that share one address reach that limit between them. It
+# was adopted the day after it was published instead of a week after. Remove
+# the option once 1.18.18 is past the default cooldown (2026-11-16), so the
+# next release waits the full week again.
+# upstream: github-release rios0rios0/terra cooldown=1
 # osv: none
 # checksums: https://github.com/rios0rios0/terra/releases/download/{version}/checksums.txt
-TERRA_PINNED_VERSION="1.18.16"
+TERRA_PINNED_VERSION="1.18.18"
 TERRA_VERSION="${TERRA_VERSION:-${TERRA_PINNED_VERSION}}"
 # asset: https://github.com/rios0rios0/terra/releases/download/{version}/terra-{version}-linux-amd64.tar.gz
-TERRA_SHA256_AMD64="2963335d80933d5f4c727704b7e690d1ec2bbe804bab76679bc4a1339e158145"
+TERRA_SHA256_AMD64="6d2a1f3ed2c2bb89497e82956524568a4e458bd53835daeda81f763e5606a779"
 # asset: https://github.com/rios0rios0/terra/releases/download/{version}/terra-{version}-linux-arm64.tar.gz
-TERRA_SHA256_ARM64="f1fd7926c91ecd29d07391a4836651189dfa1c0c0d7254630c0e68490ac849e1"
+TERRA_SHA256_ARM64="7f0fb4263574f1132cbab579c824c5282b35928dfc302b246630b1c9702ab514"
 
 # --- Helm charts and Argo CD tooling -----------------------------------------
 

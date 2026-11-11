@@ -86,13 +86,14 @@ jobs:
           # ever tag it. So walk HEAD's first-parent history (the merges into the
           # branch, not the commits inside them), newest first, and collect every
           # bump that is newer than the newest version tag and has no tag of its
-          # own; the first bump that is already released, or older, ends the walk.
-          # HEAD stays with the check above, so a run whose HEAD is the bump tags
-          # it exactly as before, and a repository with no version tag yet
-          # collects nothing. Only on a branch: a tag run releases its own tag.
-          # The result is `version=commit` pairs, oldest first, which the tag step
-          # creates in that order, each on its own commit. Only versions and
-          # commit ids reach the log, never a message.
+          # own. The walk ends at the commit the previous CI run built (what this
+          # run carries is what came after it), or at the first bump that is
+          # already released, or older. HEAD stays with the check above, so a run
+          # whose HEAD is the bump tags it exactly as before, and a repository with
+          # no version tag yet collects nothing. Only on a branch: a tag run
+          # releases its own tag. The result is `version=commit` pairs, oldest
+          # first, which the tag step creates in that order, each on its own
+          # commit. Only versions and commit ids reach the log, never a message.
           BATCHED_RELEASES=""
           case "${BUILD_SOURCEBRANCH:-}" in
             refs/heads/*)
@@ -100,7 +101,19 @@ jobs:
               NEWEST_TAG_VERSION="$(printf '%s\n' "$TAG_VERSIONS" | sed '/^$/d' | sort -V | tail -n 1)"
               COLLECTED=" $VERSION "
               if [ -n "$NEWEST_TAG_VERSION" ]; then
+                # The commit the CI run queued just before this one built, whatever
+                # its status or result. A bump at or before it belongs to that run or
+                # an earlier one, which tagged it if its gate passed. A bump whose
+                # own run failed is released by re-pushing its tag, never by
+                # whichever later run happens to pass: that would tag code that
+                # failed its checks. The token reaches curl on stdin, not argv.
+                PREVIOUS_RUN_COMMIT="$(printf 'Authorization: Bearer %s\n' "$(System.AccessToken)" \
+                  | curl --silent --fail --header @- \
+                      "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_apis/build/builds?definitions=$(System.DefinitionId)&branchName=${BUILD_SOURCEBRANCH}&reasonFilter=individualCI,batchedCI&queryOrder=queueTimeDescending&\$top=100&api-version=7.1" 2>/dev/null \
+                  | jq -r --argjson current "$(Build.BuildId)" '[.value[] | select(.id < $current)][0].sourceVersion // empty' 2>/dev/null || true)"
+                HEAD_COMMIT="$(git rev-parse HEAD)"
                 for COMMIT in $(git rev-list --first-parent --max-count=1000 HEAD | tail -n +2); do
+                  [ "$COMMIT" != "$PREVIOUS_RUN_COMMIT" ] || break
                   BUMP=""
                   BUMP_MESSAGE="$(git log -1 --pretty=%B "$COMMIT")"
                   if printf '%s' "$BUMP_MESSAGE" | grep -Eq "$REGEX"; then
@@ -118,6 +131,25 @@ jobs:
                   COLLECTED="$COLLECTED$BUMP "
                   BATCHED_RELEASES="$BUMP=$COMMIT${BATCHED_RELEASES:+ }$BATCHED_RELEASES"
                 done
+                # Only a previous run placed below HEAD in this branch's history
+                # tells which bumps this run carries; without one, tag none of them.
+                if [ -n "$BATCHED_RELEASES" ]; then
+                  PREVIOUS_RUN_PROBLEM=""
+                  case "$PREVIOUS_RUN_COMMIT" in
+                    '') PREVIOUS_RUN_PROBLEM="the CI run queued before this one could not be read" ;;
+                    *[!0-9a-f]*) PREVIOUS_RUN_PROBLEM="the CI run queued before this one names no commit" ;;
+                    "$HEAD_COMMIT") PREVIOUS_RUN_PROBLEM="the CI run queued before this one built this same commit" ;;
+                    *)
+                      if ! git merge-base --is-ancestor "$PREVIOUS_RUN_COMMIT" HEAD 2>/dev/null; then
+                        PREVIOUS_RUN_PROBLEM="the commit the CI run queued before this one built ($PREVIOUS_RUN_COMMIT) is not in this branch's history"
+                      fi
+                      ;;
+                  esac
+                  if [ -n "$PREVIOUS_RUN_PROBLEM" ]; then
+                    echo "##[warning]Bump commits below HEAD have no tag yet ($BATCHED_RELEASES), but $PREVIOUS_RUN_PROBLEM, so this run cannot tell it carries them and tags none. Push a missed tag on its bump commit to release it."
+                    BATCHED_RELEASES=""
+                  fi
+                fi
               fi
               ;;
           esac

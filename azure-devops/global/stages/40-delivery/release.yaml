@@ -21,6 +21,14 @@ jobs:
     # is then taken from the tag ref in the Extract Release Version step).
     condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
     steps:
+      # The whole history and every tag. The extraction step walks HEAD's
+      # first-parent history back to the newest version tag (see the end of
+      # it), which neither a shallow clone -- a new pipeline fetches one commit
+      # by default -- nor a clone without tags can answer.
+      - checkout: 'self'
+        fetchDepth: 0
+        fetchTags: true
+
       - script: |
           # Deliberately NOT `set -x` here. COMMIT_MESSAGE is user-controlled
           # (it is the merged commit body / PR description) and may contain a
@@ -70,21 +78,58 @@ jobs:
             echo "$(date "+%Y-%m-%d %H:%M:%S") - Commit is not a bump and ref is not a version tag, not creating a release..."
             echo "##vso[task.setvariable variable=SKIP_RELEASE]true"
           fi
+
+          # Bump commits a batched run carries below HEAD. A CI trigger with
+          # `batch: true` builds every merge that landed while a run was in
+          # progress in ONE run, at the newest commit, so a bump among those
+          # merges is not HEAD: the check above never sees it, and no run would
+          # ever tag it. So walk HEAD's first-parent history (the merges into the
+          # branch, not the commits inside them), newest first, and collect every
+          # bump that is newer than the newest version tag and has no tag of its
+          # own; the first bump that is already released, or older, ends the walk.
+          # HEAD stays with the check above, so a run whose HEAD is the bump tags
+          # it exactly as before, and a repository with no version tag yet
+          # collects nothing. Only on a branch: a tag run releases its own tag.
+          # The result is `version=commit` pairs, oldest first, which the tag step
+          # creates in that order, each on its own commit. Only versions and
+          # commit ids reach the log, never a message.
+          BATCHED_RELEASES=""
+          case "${BUILD_SOURCEBRANCH:-}" in
+            refs/heads/*)
+              TAG_VERSIONS="$(git tag --list | sed -nE 's/^(.*[^0-9.])?v?([0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?)$/\2/p')"
+              NEWEST_TAG_VERSION="$(printf '%s\n' "$TAG_VERSIONS" | sed '/^$/d' | sort -V | tail -n 1)"
+              COLLECTED=" $VERSION "
+              if [ -n "$NEWEST_TAG_VERSION" ]; then
+                for COMMIT in $(git rev-list --first-parent --max-count=1000 HEAD | tail -n +2); do
+                  BUMP=""
+                  BUMP_MESSAGE="$(git log -1 --pretty=%B "$COMMIT")"
+                  if printf '%s' "$BUMP_MESSAGE" | grep -Eq "$REGEX"; then
+                    BUMP=$(printf '%s\n' "$BUMP_MESSAGE" | sed -En "s/$REGEX/\3\4\6/p" | head -n 1)
+                  fi
+                  [ -n "$BUMP" ] || continue
+                  if printf '%s\n' "$TAG_VERSIONS" | grep -qxF "$BUMP" \
+                    || [ "$(printf '%s\n%s\n' "$BUMP" "$NEWEST_TAG_VERSION" | sort -V | tail -n 1)" != "$BUMP" ]; then
+                    break
+                  fi
+                  # One tag per version: the newest commit that bumps to it.
+                  case "$COLLECTED" in
+                    *" $BUMP "*) continue ;;
+                  esac
+                  COLLECTED="$COLLECTED$BUMP "
+                  BATCHED_RELEASES="$BUMP=$COMMIT${BATCHED_RELEASES:+ }$BATCHED_RELEASES"
+                done
+              fi
+              ;;
+          esac
+          if [ -n "$BATCHED_RELEASES" ]; then
+            echo "Bump commits below HEAD with no tag yet, tagged oldest first on their own commits: $BATCHED_RELEASES"
+            echo "##vso[task.setvariable variable=BATCHED_RELEASES]$BATCHED_RELEASES"
+          fi
         displayName: 'Extract Release Version'
 
       - ${{ each prefix in parameters.TAG_PREFIXES }}:
           - script: |
               set -ex
-
-              # only run if extraction found a version
-              if [ "${SKIP_RELEASE:-}" = "true" ]; then
-                echo "Skipping tag creation for prefix '${VERSION_PREFIX:-}' because no bump commit was detected."
-                exit 0
-              fi
-              if [ -z "${RELEASE_VERSION:-}" ]; then
-                echo "##[warning]RELEASE_VERSION is empty — nothing to tag for prefix '${VERSION_PREFIX:-}'."
-                exit 0
-              fi
 
               RESPONSE_FILE=$(mktemp)
               DATA_FILE=$(mktemp)
@@ -93,104 +138,143 @@ jobs:
               # (network/TLS/etc).
               trap 'rm -f "$RESPONSE_FILE" "$DATA_FILE"' EXIT
 
+              # create_tag <name> <commit>: one annotated tag, created through the
+              # REST API on <commit>, with TAG_NOTES (the release notes, already a
+              # JSON string) as its message. The notes travel in a variable rather
+              # than an argument because xtrace prints a function's arguments.
+              create_tag() {
+                TAG_NAME="$1"
+                TAG_COMMIT="$2"
+
+                # The notes come from CHANGELOG.md (user-controlled) and may
+                # contain a literal `##vso[...]`/`##[...]` token. Build the request
+                # body with xtrace OFF and POST it from a file (`--data-binary @`)
+                # so the notes are never echoed to the log — neither by a traced
+                # `DATA=...` assignment nor by traced curl arguments — where the
+                # Azure DevOps agent would re-parse the token as a logging command.
+                # The traced curl line shows only `--data-binary @<tmpfile>`.
+                { set +x; } 2>/dev/null
+                DATA="{
+                  \"name\": \"${TAG_NAME}\",
+                  \"taggedObject\": {
+                    \"objectId\": \"${TAG_COMMIT}\"
+                  },
+                  \"message\": $TAG_NOTES
+                }"
+                printf '%s' "$DATA" > "$DATA_FILE"
+                { set -x; } 2>/dev/null
+
+                # Tag creation is idempotent:
+                #   * If the tag already exists (AutoBump pre-created it when opening the bump PR,
+                #     or a prior pipeline run partially succeeded), the `annotatedtags` endpoint
+                #     returns HTTP 409 Conflict. That is a no-op, not a failure.
+                #   * 429 / 5xx are transient and retried in bash (see loop below).
+                #   * 400 / 401 / 403 / 404 are genuine failures and must abort the stage.
+                # `curl` exits 0 on HTTP 4xx/5xx unless `--fail` is passed, and `set -e` only
+                # reacts to non-zero exits. So we capture the body + status, pick the outcome
+                # from the status, and surface the body on genuine failures.
+                #
+                # Retry handling: curl's own `--retry` only kicks in when curl itself exits
+                # non-zero (which requires `--fail`), but `--fail` would make 409 abort the
+                # script before we can recognize it as success. So we drive the retry loop
+                # in bash on the captured HTTP_STATUS — same behaviour, no curl-version
+                # dependency, no extra binaries to install.
+                #
+                # Transport-level failures (DNS/TLS/timeout/connection reset) make curl exit
+                # non-zero before any HTTP_STATUS is captured. Under `set -e` that would abort
+                # the step instantly and skip the retry loop, so the curl invocation runs with
+                # `set +e` around it: we capture the exit code, synthesize HTTP_STATUS="000"
+                # on transport failure, and let the same retry case-statement handle it.
+                MAX_ATTEMPTS=5
+                RETRY_DELAY=5
+                HTTP_STATUS=""
+                CURL_EXIT_CODE=0
+                for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+                  set +e
+                  HTTP_STATUS=$(curl --silent --show-error \
+                                     -o "$RESPONSE_FILE" -w "%{http_code}" \
+                                     -X POST "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_apis/git/repositories/$(Build.Repository.ID)/annotatedtags?api-version=7.1-preview.1" \
+                                     --header "Authorization: Bearer $(System.AccessToken)" \
+                                     --header "Content-Type: application/json" \
+                                     --data-binary "@$DATA_FILE")
+                  CURL_EXIT_CODE=$?
+                  set -e
+
+                  if [ "$CURL_EXIT_CODE" -ne 0 ]; then
+                    HTTP_STATUS="000"
+                  fi
+
+                  case "$HTTP_STATUS" in
+                    000|429|500|502|503|504)
+                      if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+                        if [ "$HTTP_STATUS" = "000" ]; then
+                          echo "Transient curl transport failure (exit $CURL_EXIT_CODE) from annotatedtags; retrying ($attempt/$MAX_ATTEMPTS) after ${RETRY_DELAY}s..."
+                        else
+                          echo "Transient HTTP $HTTP_STATUS from annotatedtags; retrying ($attempt/$MAX_ATTEMPTS) after ${RETRY_DELAY}s..."
+                        fi
+                        sleep "$RETRY_DELAY"
+                        continue
+                      fi
+                      ;;
+                  esac
+                  break
+                done
+
+                case "$HTTP_STATUS" in
+                  200|201)
+                    echo "Tag '$TAG_NAME' created."
+                    ;;
+                  409)
+                    echo "Tag '$TAG_NAME' already exists (HTTP 409). Skipping — AutoBump or a prior run already created it."
+                    ;;
+                  000)
+                    echo "Tag creation failed: curl transport error (exit $CURL_EXIT_CODE) after $MAX_ATTEMPTS attempt(s)."
+                    exit 1
+                    ;;
+                  *)
+                    echo "Tag creation failed with HTTP $HTTP_STATUS after $MAX_ATTEMPTS attempt(s). Response body:"
+                    cat "$RESPONSE_FILE"
+                    exit 1
+                    ;;
+                esac
+              }
+
+              # Bump commits a batched run carries below HEAD (`version=commit`,
+              # oldest first; see the extraction step), each tagged on its own
+              # commit with the notes its own CHANGELOG.md holds for that version,
+              # before HEAD, which is the newest.
+              for BATCHED_RELEASE in ${BATCHED_RELEASES:-}; do
+                { set +x; } 2>/dev/null
+                TAG_NOTES=$(git show "${BATCHED_RELEASE#*=}:CHANGELOG.md" 2>/dev/null | awk '/## \[Unreleased\]/ {skip=1; next} skip && /## \[.*\]/ {found=1; skip=0; next} found && /## \[.*\]/ {exit} found {print}' || true)
+                TAG_NOTES=$(echo "$TAG_NOTES" | jq --raw-input --slurp .)
+                { set -x; } 2>/dev/null
+                create_tag "${VERSION_PREFIX}${BATCHED_RELEASE%%=*}" "${BATCHED_RELEASE#*=}"
+              done
+
+              # only run if extraction found a version
+              if [ "${SKIP_RELEASE:-}" = "true" ]; then
+                if [ -n "${BATCHED_RELEASES:-}" ]; then
+                  echo "HEAD is not a bump commit, so it gets no tag with prefix '${VERSION_PREFIX:-}'."
+                else
+                  echo "Skipping tag creation for prefix '${VERSION_PREFIX:-}' because no bump commit was detected."
+                fi
+                exit 0
+              fi
+              if [ -z "${RELEASE_VERSION:-}" ]; then
+                echo "##[warning]RELEASE_VERSION is empty — nothing to tag for prefix '${VERSION_PREFIX:-}'."
+                exit 0
+              fi
+
               RELEASE_NOTES=""
               if [ -f CHANGELOG.md ]; then
                   RELEASE_NOTES=$(awk '/## \[Unreleased\]/ {skip=1; next} skip && /## \[.*\]/ {found=1; skip=0; next} found && /## \[.*\]/ {exit} found {print}' CHANGELOG.md)
                   RELEASE_NOTES=$(echo "$RELEASE_NOTES" | jq --raw-input --slurp .)
               fi
 
-              # RELEASE_NOTES comes from CHANGELOG.md (user-controlled) and may
-              # contain a literal `##vso[...]`/`##[...]` token. Build the request
-              # body with xtrace OFF and POST it from a file (`--data-binary @`)
-              # so the notes are never echoed to the log — neither by a traced
-              # `DATA=...` assignment nor by traced curl arguments — where the
-              # Azure DevOps agent would re-parse the token as a logging command.
-              # The traced curl line shows only `--data-binary @<tmpfile>`.
               { set +x; } 2>/dev/null
-              DATA="{
-                \"name\": \"${VERSION_PREFIX}${RELEASE_VERSION:-}\",
-                \"taggedObject\": {
-                  \"objectId\": \"$(Build.SourceVersion)\"
-                },
-                \"message\": $RELEASE_NOTES
-              }"
-              printf '%s' "$DATA" > "$DATA_FILE"
+              TAG_NOTES="$RELEASE_NOTES"
               { set -x; } 2>/dev/null
-
-              # Tag creation is idempotent:
-              #   * If the tag already exists (AutoBump pre-created it when opening the bump PR,
-              #     or a prior pipeline run partially succeeded), the `annotatedtags` endpoint
-              #     returns HTTP 409 Conflict. That is a no-op, not a failure.
-              #   * 429 / 5xx are transient and retried in bash (see loop below).
-              #   * 400 / 401 / 403 / 404 are genuine failures and must abort the stage.
-              # `curl` exits 0 on HTTP 4xx/5xx unless `--fail` is passed, and `set -e` only
-              # reacts to non-zero exits. So we capture the body + status, pick the outcome
-              # from the status, and surface the body on genuine failures.
-              #
-              # Retry handling: curl's own `--retry` only kicks in when curl itself exits
-              # non-zero (which requires `--fail`), but `--fail` would make 409 abort the
-              # script before we can recognize it as success. So we drive the retry loop
-              # in bash on the captured HTTP_STATUS — same behaviour, no curl-version
-              # dependency, no extra binaries to install.
-              #
-              # Transport-level failures (DNS/TLS/timeout/connection reset) make curl exit
-              # non-zero before any HTTP_STATUS is captured. Under `set -e` that would abort
-              # the step instantly and skip the retry loop, so the curl invocation runs with
-              # `set +e` around it: we capture the exit code, synthesize HTTP_STATUS="000"
-              # on transport failure, and let the same retry case-statement handle it.
-              TAG_NAME="${VERSION_PREFIX}${RELEASE_VERSION:-}"
-              MAX_ATTEMPTS=5
-              RETRY_DELAY=5
-              HTTP_STATUS=""
-              CURL_EXIT_CODE=0
-              for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
-                set +e
-                HTTP_STATUS=$(curl --silent --show-error \
-                                   -o "$RESPONSE_FILE" -w "%{http_code}" \
-                                   -X POST "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_apis/git/repositories/$(Build.Repository.ID)/annotatedtags?api-version=7.1-preview.1" \
-                                   --header "Authorization: Bearer $(System.AccessToken)" \
-                                   --header "Content-Type: application/json" \
-                                   --data-binary "@$DATA_FILE")
-                CURL_EXIT_CODE=$?
-                set -e
-
-                if [ "$CURL_EXIT_CODE" -ne 0 ]; then
-                  HTTP_STATUS="000"
-                fi
-
-                case "$HTTP_STATUS" in
-                  000|429|500|502|503|504)
-                    if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
-                      if [ "$HTTP_STATUS" = "000" ]; then
-                        echo "Transient curl transport failure (exit $CURL_EXIT_CODE) from annotatedtags; retrying ($attempt/$MAX_ATTEMPTS) after ${RETRY_DELAY}s..."
-                      else
-                        echo "Transient HTTP $HTTP_STATUS from annotatedtags; retrying ($attempt/$MAX_ATTEMPTS) after ${RETRY_DELAY}s..."
-                      fi
-                      sleep "$RETRY_DELAY"
-                      continue
-                    fi
-                    ;;
-                esac
-                break
-              done
-
-              case "$HTTP_STATUS" in
-                200|201)
-                  echo "Tag '$TAG_NAME' created."
-                  ;;
-                409)
-                  echo "Tag '$TAG_NAME' already exists (HTTP 409). Skipping — AutoBump or a prior run already created it."
-                  ;;
-                000)
-                  echo "Tag creation failed: curl transport error (exit $CURL_EXIT_CODE) after $MAX_ATTEMPTS attempt(s)."
-                  exit 1
-                  ;;
-                *)
-                  echo "Tag creation failed with HTTP $HTTP_STATUS after $MAX_ATTEMPTS attempt(s). Response body:"
-                  cat "$RESPONSE_FILE"
-                  exit 1
-                  ;;
-              esac
+              create_tag "${VERSION_PREFIX}${RELEASE_VERSION:-}" "$(Build.SourceVersion)"
             displayName: "Create Tag w/ Prefix '${{ prefix }}'"
             env:
               VERSION_PREFIX: "${{ prefix }}"

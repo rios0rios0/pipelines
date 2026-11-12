@@ -361,7 +361,7 @@ jobs:
       # simply stop appearing with nothing in the log to say why.
       - name: 'Coverage Report'
         if: "always() && hashFiles(env.COVERAGE_SUMMARY_PATH) != '' && hashFiles(env.COVERAGE_FINAL_PATH) != ''"
-        uses: 'davelosert/vitest-coverage-report-action@8f86cfb56ed6d5613ea8cdc5259f207fbfd51ece' # v2.13.1
+        uses: 'davelosert/vitest-coverage-report-action@74c2d9210b4fc44c84d8213f61d7ec99837b7aa0' # v2.13.2
         with:
           json-summary-path: "${{ env.COVERAGE_SUMMARY_PATH }}"
           json-final-path: "${{ env.COVERAGE_FINAL_PATH }}"
@@ -443,7 +443,7 @@ jobs:
     name: 'management > report:sonarqube'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     container:
-      image: 'sonarsource/sonar-scanner-cli:12.3.0.4285_8.1.0@sha256:47956b669bf486bdad919e1cbd0533223515aa0b6d1d31763e5a3754942df6d7'
+      image: 'sonarsource/sonar-scanner-cli:12.3.1.4302_8.3.1@sha256:38207bba3d98c8ce6f6c051ea2b9f05a24480da78c9ee5945ceafc3d9de02b88'
     needs: [ 'tests-test_all', 'tests-test_build' ]
     if: "!cancelled() && !failure() && inputs.sonar_host != '' && !startsWith(github.ref, 'refs/tags/')"
     continue-on-error: true

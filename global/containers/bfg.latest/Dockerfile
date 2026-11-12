@@ -1,4 +1,4 @@
-FROM eclipse-temurin:8-jre@sha256:377fe8e36a4b1530d9d52020069367ef44313fa891a82ae102b1016a6a3a72f5
+FROM eclipse-temurin:8-jre@sha256:d1450af461d0d791f3b405895baf11ad37881a66e9a4dd9bbe2cd10d99278caf
 
 # Note: https://rtyley.github.io/bfg-repo-cleaner/
 ENV BFG_VERSION 1.14.0

@@ -44,7 +44,7 @@ jobs:
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
       - name: 'Setup Java'
-        uses: 'actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad' # v6.1.0
+        uses: 'actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78' # v6.2.0
         with:
           distribution: 'temurin'
           java-version: '21'
@@ -133,7 +133,7 @@ jobs:
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
 
       - name: 'Setup Java'
-        uses: 'actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad' # v6.1.0
+        uses: 'actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78' # v6.2.0
         with:
           distribution: 'temurin'
           java-version: '21'
@@ -171,7 +171,7 @@ jobs:
     name: 'management > report:sonarqube'
     runs-on: 'ubuntu-latest'
     container:
-      image: 'sonarsource/sonar-scanner-cli:12.3.0.4285_8.1.0@sha256:47956b669bf486bdad919e1cbd0533223515aa0b6d1d31763e5a3754942df6d7'
+      image: 'sonarsource/sonar-scanner-cli:12.3.1.4302_8.3.1@sha256:38207bba3d98c8ce6f6c051ea2b9f05a24480da78c9ee5945ceafc3d9de02b88'
     needs: [ 'tests-test_all' ]
     if: "!cancelled() && !failure() && inputs.sonar_host != '' && !startsWith(github.ref, 'refs/tags/')"
     continue-on-error: true

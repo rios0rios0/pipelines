@@ -203,10 +203,10 @@ HADOLINT_SHA256_ARM64="f6198ef8090f404dbb771abfee086eb8c48ac177f30da7fd3510aca35
 # upstream: github-release github/codeql-action
 # osv: none
 # checksums: https://github.com/github/codeql-action/releases/download/{version}/codeql-bundle-linux64.tar.gz.checksum.txt
-CODEQL_BUNDLE_PINNED_VERSION="codeql-bundle-v2.27.3"
+CODEQL_BUNDLE_PINNED_VERSION="codeql-bundle-v2.27.4"
 CODEQL_BUNDLE_VERSION="${CODEQL_BUNDLE_VERSION:-${CODEQL_BUNDLE_PINNED_VERSION}}"
 # asset: https://github.com/github/codeql-action/releases/download/{version}/codeql-bundle-linux64.tar.gz
-CODEQL_BUNDLE_SHA256_LINUX64="64518dc413c8e7b5733fee2489e830a899bb1e3f28c8873b5869d5cc90164c5c"
+CODEQL_BUNDLE_SHA256_LINUX64="89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016ec134b942c17a4"
 
 # upstream: github-release google/osv-scanner
 # osv: Go github.com/google/osv-scanner/v2
@@ -227,10 +227,10 @@ OSV_SCANNER_SHA256_ARM64="4061ef4c021ed3c47f203b818f337e351336cc5cd67c0274fc36bd
 # digest the way it does for any release binary. The wheel's dependencies are
 # resolved by pip within the ranges the wheel declares, binary-only.
 # upstream: pypi checkov
-CHECKOV_PINNED_VERSION="3.4.0"
+CHECKOV_PINNED_VERSION="3.4.3"
 CHECKOV_VERSION="${CHECKOV_VERSION:-${CHECKOV_PINNED_VERSION}}"
 # asset: https://files.pythonhosted.org/packages/py3/c/checkov/checkov-{version}-py3-none-any.whl
-CHECKOV_SHA256="fae991abfd873266d7dc135d0295b8c66a70be27eeb9191279c1b4f16f5393c2"
+CHECKOV_SHA256="666f376019f6a9fdbeb5c9d2a57be3fb83a4acd2d924d447942450a926ba0f55"
 
 # --- Language tooling --------------------------------------------------------
 
@@ -394,12 +394,12 @@ KUBERNETES_JSON_SCHEMA_VERSION="${KUBERNETES_JSON_SCHEMA_VERSION:-${KUBERNETES_J
 # upstream: github-release superfly/flyctl
 # osv: Go github.com/superfly/flyctl
 # checksums: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_checksums.txt
-FLYCTL_PINNED_VERSION="0.5.0"
+FLYCTL_PINNED_VERSION="0.5.4"
 FLYCTL_VERSION="${FLYCTL_VERSION:-${FLYCTL_PINNED_VERSION}}"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_x86_64.tar.gz
-FLYCTL_SHA256_X86_64="d0e9fcc10f60b12b93344e03b108c974a8c82e56e28fbad8624edefe5c1e504d"
+FLYCTL_SHA256_X86_64="0e58776a99e561887b82b941b15b63fd8fb1c7153b567b11fb3e63b65dd9780e"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_arm64.tar.gz
-FLYCTL_SHA256_ARM64="426a6c4fa9a7f136b709a1058c01ee14ae86599b5c42401e661ae150770cedc7"
+FLYCTL_SHA256_ARM64="1954e48cd16bd330d4ce49dcb0dbae3f5ba4675500f9c27af6e96b0cd0f456ca"
 
 # crane, from google/go-containerregistry. The Fly.io deploy copies the image
 # the pipeline already delivered into registry.fly.io with it -- registry to
@@ -483,7 +483,7 @@ NETLIFY_CLI_SPEC="${NETLIFY_CLI_SPEC:-netlify-cli@27}"
 # upstream: github-release SonarSource/sonar-scanner-cli-docker
 # osv: none
 # image: sonarsource/sonar-scanner-cli
-SONAR_SCANNER_CLI_PINNED_VERSION="12.3.0.4285_8.1.0"
+SONAR_SCANNER_CLI_PINNED_VERSION="12.3.1.4302_8.3.1"
 
 # Node.js, as the GitLab CI JavaScript images (`node:<release>-trixie` in
 # `gitlab/javascript/abstracts/`) and the Azure DevOps `UseNode@1` inputs name
@@ -564,7 +564,7 @@ CYCLONEDX_GOMOD_VERSION="${CYCLONEDX_GOMOD_VERSION:-${CYCLONEDX_GOMOD_PINNED_VER
 # behaviour on the day it landed -- it only stopped the behaviour changing
 # underneath a consumer afterwards.
 # upstream: pypi pdm
-PDM_SPEC="${PDM_SPEC:-pdm==2.29.4}"
+PDM_SPEC="${PDM_SPEC:-pdm==2.29.5}"
 # PDM does not pin its own dependencies, and `unearth` 0.19.0 (2026-10-27) breaks
 # PDM 2.29.2 at install (`super(type, obj): obj (instance of PDMPyPIClient) is
 # not an instance or subtype of type (Client)`), so it is installed beside PDM in
@@ -582,10 +582,10 @@ HISHEL_SPEC="${HISHEL_SPEC:-hishel==1.4.0}"
 # upstream: pypi vulture
 VULTURE_SPEC="${VULTURE_SPEC:-vulture==2.16}"
 # upstream: pypi semgrep
-SEMGREP_SPEC="${SEMGREP_SPEC:-semgrep==1.182.1}"
+SEMGREP_SPEC="${SEMGREP_SPEC:-semgrep==1.183.0}"
 # upstream: rubygems bundler-audit
 BUNDLER_AUDIT_SPEC="${BUNDLER_AUDIT_SPEC:-bundler-audit:0.9.3}"
 # upstream: rubygems debride
 DEBRIDE_SPEC="${DEBRIDE_SPEC:-debride:1.15.2}"
 # upstream: npm knip
-KNIP_SPEC="${KNIP_SPEC:-knip@6.43.0}"
+KNIP_SPEC="${KNIP_SPEC:-knip@6.44.1}"

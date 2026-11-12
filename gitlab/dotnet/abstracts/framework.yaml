@@ -1,5 +1,5 @@
 .framework:
-  image: 'mcr.microsoft.com/dotnet/framework/sdk:4.8@sha256:ed923d49e5f627352072fca2e7e9aff462b1e43aae0a921d30ee1c7916901736' # GitLab Runner SaaS doesn't support Windows containers yet
+  image: 'mcr.microsoft.com/dotnet/framework/sdk:4.8@sha256:8028371c8e691b5d0bbebc18dad2433eb046d2a52dc73c4fe5aba1e9ee19d55c' # GitLab Runner SaaS doesn't support Windows containers yet
   cache: # relative to the project directory ($CI_PROJECT_DIR)
     key: "$CI_JOB_NAME_SLUG"
     paths:

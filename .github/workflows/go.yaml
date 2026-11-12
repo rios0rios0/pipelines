@@ -430,7 +430,7 @@ jobs:
     name: 'management > report:sonarqube'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     container:
-      image: 'sonarsource/sonar-scanner-cli:12.3.0.4285_8.1.0@sha256:47956b669bf486bdad919e1cbd0533223515aa0b6d1d31763e5a3754942df6d7'
+      image: 'sonarsource/sonar-scanner-cli:12.3.1.4302_8.3.1@sha256:38207bba3d98c8ce6f6c051ea2b9f05a24480da78c9ee5945ceafc3d9de02b88'
     needs: [ 'tests-test_all', 'tests-test_extra' ]
     if: "!cancelled() && !failure() && inputs.sonar_host != '' && !startsWith(github.ref, 'refs/tags/')"
     continue-on-error: true

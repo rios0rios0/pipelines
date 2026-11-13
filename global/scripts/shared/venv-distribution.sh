@@ -5,13 +5,14 @@
 # running the virtualenv's interpreter. SOURCED, never executed -- it carries no
 # `run.sh` name and no executable bit.
 #
-# Semgrep and Checkov are Python programs with no standalone binary, so each is
-# installed into a virtualenv of its own, and each runner checks that the venv
-# holds the PINNED version before trusting it. That check must not ask the tool
-# itself: `semgrep --version` can disagree with the installed distribution (see
-# semgrep/run.sh). The authority is the metadata pip wrote: the `Version:` field
-# of `<name>-<version>.dist-info/METADATA`, which is the same file `pip show`
-# and `importlib.metadata.version()` read. Reading it here needs no Python.
+# Semgrep, Checkov and ansible-lint are Python programs with no standalone
+# binary, so each is installed into a virtualenv of its own, and each runner
+# checks that the venv holds the PINNED version before trusting it. That check
+# must not ask the tool itself: `semgrep --version` can disagree with the
+# installed distribution (see semgrep/run.sh). The authority is the metadata pip
+# wrote: the `Version:` field of `<name>-<version>.dist-info/METADATA`, which is
+# the same file `pip show` and `importlib.metadata.version()` read. Reading it
+# here needs no Python.
 #
 #   venv_distribution_version <venv directory> <distribution name>
 #

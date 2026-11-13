@@ -6,6 +6,7 @@ This directory contains **language-agnostic** security and quality tools used ac
 
 | Tool                | Purpose                                                            |
 |---------------------|--------------------------------------------------------------------|
+| `ansible-lint/`     | Ansible playbook, role and collection linting (`make ansible-lint`) |
 | `codeql/`           | Static Application Security Testing (SAST)                         |
 | `dependency-track/` | Software Composition Analysis (SCA) tracking                       |
 | `gitleaks/`         | Secret and credential detection in Git history                     |

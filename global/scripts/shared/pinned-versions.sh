@@ -296,6 +296,21 @@ GORELEASER_VERSION="${GORELEASER_VERSION:-${GORELEASER_PINNED_VERSION}}"
 # asset: https://github.com/goreleaser/goreleaser/releases/download/v{version}/goreleaser_{version}_amd64.deb
 GORELEASER_SHA256_AMD64_DEB="2710e9740185be82b6929c78b695b455a09975e231bddbb8e295f1cc1b591d4b"
 
+# --- Ansible tooling ---------------------------------------------------------
+
+# ansible-lint, the linter `make ansible-lint` runs over playbooks, roles and
+# collections. Like Checkov it is a PyPI package with no binary, so it is pinned
+# the same way: `ansible-lint/run.sh` downloads the release's universal wheel by
+# name, refuses it unless its SHA-256 matches the one below, and only then hands
+# that file to pip, binary-only, in a virtualenv of its own. Its dependencies --
+# ansible-core among them, whose `ansible-playbook --syntax-check` the lint runs
+# -- are resolved by pip within the ranges the wheel declares.
+# upstream: pypi ansible-lint
+ANSIBLE_LINT_PINNED_VERSION="26.11.0"
+ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION:-${ANSIBLE_LINT_PINNED_VERSION}}"
+# asset: https://files.pythonhosted.org/packages/py3/a/ansible-lint/ansible_lint-{version}-py3-none-any.whl
+ANSIBLE_LINT_SHA256="b778ea87fa873384b373e8c3fe53a06b3acc7b72ac283e2d2070f76fdf9f8358"
+
 # --- Terraform / Terragrunt tooling ------------------------------------------
 
 # upstream: github-release terraform-linters/tflint

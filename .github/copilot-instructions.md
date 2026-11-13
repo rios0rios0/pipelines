@@ -22,7 +22,7 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 
 **SAST Tools:** Gitleaks, CodeQL, Semgrep, Hadolint, ShellCheck, Checkov (IaC misconfiguration, Terraform pipelines; advisory unless `CHECKOV_BLOCKING` is `true`)
 **SCA Tools:** govulncheck (Go), Safety (Python), OWASP Dependency-Check (Java), yarn npm audit (JavaScript/Yarn), npm audit (JavaScript/npm), Composer Audit (PHP), bundler-audit (Ruby), OSV-Scanner (Dart, and container image rebuilds in the dependency-update checks)
-**Quality Tools:** SonarQube, Dependency Track
+**Quality Tools:** SonarQube, Dependency Track, ansible-lint (Ansible playbooks, roles and collections; `make ansible-lint`, which an Ansible project calls from its own `lint`)
 **Performance:** Security scans 2-10min, Container builds 5-30min
 **Architecture:** numbered stages 10 Code Check [lint + basic-checks] → 20 Security → 30 Tests → 35 Management → 40 Delivery → 50 Deployment
 
@@ -124,6 +124,7 @@ asking the network nothing -- `test-dependency-updates.sh` runs it live with eve
 - **sonarqube/run.sh** - Requires `sonar-scanner` installed and SonarQube environment; derives project key/name and the `githubactions:S7637` ignore rules for first-party workflow references (owners from `SONAR_FIRST_PARTY_OWNERS`, else the owner of `GITHUB_REPOSITORY`) for every key absent from `sonar-project.properties`, plus the test classification (`sonar.sources`, `sonar.tests`, `sonar.test.inclusions`, `sonar.exclusions`) as one unit, only when the file declares none of the four -- they are a partition, and an overlap aborts the scanner with "can't be indexed twice"; runs `sonar-scanner` again when its output shows the server was unreachable or answered 5xx, never after a quality gate verdict (`SONARQUBE_ATTEMPTS`, default 5; `SONARQUBE_RETRY_DELAY`, default 30 seconds, growing per attempt)
 - **semgrep/run.sh** - May run for 10+ minutes, installs Semgrep from PyPI into a virtualenv
 - **checkov/run.sh** - Scans Terraform under `CHECKOV_DIRECTORIES` (default `.`); advisory unless `CHECKOV_BLOCKING=true`; installs the pinned, digest-verified wheel into a virtualenv; skips gracefully when there is no Terraform
+- **ansible-lint/run.sh** - Lints Ansible content with the pinned, digest-verified ansible-lint wheel in a virtualenv, the virtualenv's `bin` first on PATH; uses the project's `.ansible-lint`; writes `build/reports/ansible-lint/ansible-lint.sarif`; fails on violations; skips gracefully when there is no Ansible content
 - **golang/test/run.sh** - Tests `cmd/`, `pkg/` and `internal/` when present, otherwise the whole module (`./...`)
 
 ## Available Tools & Scripts
@@ -304,6 +305,7 @@ pipelines/
 │   │   │   ├── gitleaks/      # Secret scanning
 │   │   │   ├── hadolint/      # Dockerfile linting
 │   │   │   ├── checkov/       # IaC misconfiguration scanning (Terraform)
+│   │   │   ├── ansible-lint/  # Ansible linting (playbooks, roles, collections)
 │   │   │   ├── semgrep/       # Static analysis
 │   │   │   ├── sonarqube/     # Code quality
 │   │   │   └── dependency-track/ # SCA analysis
@@ -819,7 +821,7 @@ Test scripts are located in `.github/tests/`; the Quick Reference above covers t
 ### Environment Requirements
 - Docker (for container builds; the security tools install natively)
 - Go 1.25+ (for GoLang pipelines, to build and test the Go helpers such as the dependency-update checker, and to build the test support several suites in `.github/tests/` run)
-- Python 3 only for the Python pipelines and the Semgrep and Checkov installs: nothing else here runs Python, and `make test ONLY=no-python` keeps it so
+- Python 3 only for the Python pipelines and the Semgrep, Checkov and ansible-lint installs: nothing else here runs Python, and `make test ONLY=no-python` keeps it so
 - Make (for build automation)
 - Network access (for downloading tools and dependencies)
 

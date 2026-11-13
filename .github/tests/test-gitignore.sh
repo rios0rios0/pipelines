@@ -217,7 +217,7 @@ echo "Real gitignore semantics"
 # interruption of the scan -- return before the line that removes it again. It then sits
 # there untracked, waiting for a `git add -A`, which is how it came close to being
 # committed in a consumer.
-for artifact in build/reports/x.json reports/x.json .codeql-db/x .semgrepignore coverage.out \
+for artifact in build/reports/x.json reports/x.json .codeql-db/x .semgrepignore .ansible/collections/x coverage.out \
                 coverage.txt coverage.xml cobertura.xml junit.xml junit-unit.xml \
                 junit-integration.xml unit_coverage.txt integration_coverage.txt; do
   assert_true "git ignores $artifact" \

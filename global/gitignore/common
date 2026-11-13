@@ -10,6 +10,12 @@ build/reports/
 # an interrupted or failing run leaves it behind.
 .codeql-db/
 
+# `global/scripts/tools/ansible-lint/run.sh` lets ansible-lint provision the project
+# -- the collection a `galaxy.yml` defines, and the collections it depends on --
+# and ansible-lint keeps all of it in `.ansible/` at the project root, where it
+# stays between runs as its cache.
+.ansible/
+
 # `global/scripts/tools/semgrep/run.sh` copies its default `.semgrepignore` into the
 # project root when the project ships none, and removes it again on the way out -- but
 # only on the way out. Four `exit 1` paths between the copy and the removal (no Python 3,

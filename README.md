@@ -1956,6 +1956,7 @@ last-match-wins, so your own entries below it, including a `!` negation, still w
 | Tool                 | Purpose                                 | Script Location                                               | Configuration         |
 |----------------------|-----------------------------------------|---------------------------------------------------------------|-----------------------|
 | **Basic Checks**     | PR/MR rebase and changelog verification | `global/scripts/shared/rebase-check.sh`, `changelog-check.sh` | Auto-configured       |
+| **ansible-lint**     | Ansible playbook, role and collection linting — [`make ansible-lint`](#make-ansible-lint-in-an-ansible-project) | `global/scripts/tools/ansible-lint/` | `.ansible-lint`       |
 | **SonarQube**        | Code quality & security                 | `global/scripts/tools/sonarqube/`                             | Project settings      |
 | **Dependency Track** | SBOM tracking                           | `global/scripts/tools/dependency-track/`                      | Environment variables |
 
@@ -2721,6 +2722,7 @@ This gives you the following targets for free:
 |--------------|-------------------|------------------------------------------|
 | `make setup` | `common.mk`       | Clone or update the pipelines repository |
 | `make sast`  | `common.mk`       | Run all security SAST tools — **fails** on findings |
+| `make ansible-lint` | `common.mk` | Lint an Ansible project with the pinned ansible-lint — **fails** on violations; not part of `sast` |
 | `make lint`  | `<language>.mk`   | Run language-specific linter             |
 | `make test`  | `<language>.mk`   | Run language-specific tests              |
 
@@ -2795,6 +2797,30 @@ CI is recognised by `CI` (GitHub Actions, GitLab CI) or `TF_BUILD` (Azure DevOps
 build needs a file `.gitignore` keeps out of the repository, scan it with
 `CODEQL_SOURCE_SCOPE=tree make codeql`.
 
+#### `make ansible-lint` in an Ansible Project
+
+There is no `ansible.mk`: an Ansible project includes `common.mk` and calls the target from its own
+`lint`, so `make lint` never depends on whichever `ansible-lint` a machine has installed:
+
+```makefile
+SCRIPTS_DIR ?= $(HOME)/Development/github.com/rios0rios0/pipelines
+-include $(SCRIPTS_DIR)/makefiles/common.mk
+
+lint: ansible-lint
+```
+
+It installs the release pinned in `pinned-versions.sh` (the wheel verified against its committed SHA-256)
+into `~/.local/share/ansible-lint-venv` and runs it with that virtualenv's `bin` first on `PATH`, so
+the `ansible-playbook --syntax-check` it runs is the ansible-core installed beside it. The project's
+own configuration (`.ansible-lint`, or any name ansible-lint looks for) decides the profile and the
+rules; a violation fails the lint (exit 2), a warning only under `strict: true`. It neither refreshes ansible-lint's
+schemas nor looks up its latest release, both of which would change the verdict or the advice under
+an unchanged pin, but it does let ansible-lint provision the project -- the collection a `galaxy.yml`
+defines, so its playbooks can name its roles by their fully qualified names, and the collections it
+depends on -- which ansible-lint keeps in `.ansible/` at the project root (covered by
+`make gitignore`). The report is `build/reports/ansible-lint/ansible-lint.sarif`; a project with no
+Ansible content skips with an empty one.
+
 See the [`.docs/examples/`](.docs/examples) directory for complete per-provider examples including Makefiles.
 
 ### Direct Script Usage
@@ -2824,6 +2850,9 @@ $SCRIPTS_DIR/global/scripts/tools/gitleaks/run.sh
 $SCRIPTS_DIR/global/scripts/tools/codeql/run.sh go
 $SCRIPTS_DIR/global/scripts/tools/hadolint/run.sh
 $SCRIPTS_DIR/global/scripts/tools/semgrep/run.sh
+
+# Ansible linting (playbooks, roles, collections)
+$SCRIPTS_DIR/global/scripts/tools/ansible-lint/run.sh
 ```
 
 ### Testing Pipeline Changes

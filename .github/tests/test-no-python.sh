@@ -12,9 +12,9 @@
 #
 #   * the Python PIPELINES -- the templates, scripts, makefile and images that build consumers'
 #     Python projects (PDM, Safety, vulture, cyclonedx-py). Python is what they build;
-#   * Semgrep and Checkov, Python programs with no binary release. Each runner creates a
-#     virtualenv of its own (`python3 -m venv`) and installs the pinned release into it with that
-#     virtualenv's pip;
+#   * Semgrep, Checkov and ansible-lint, Python programs with no binary release. Each runner
+#     creates a virtualenv of its own (`python3 -m venv`) and installs the pinned release into it
+#     with that virtualenv's pip;
 #   * one question to Checkov's HCL parser, bc-python-hcl2, which exists only as a Python library
 #     inside Checkov's virtualenv: where it stopped in a file it could not parse.
 #
@@ -83,6 +83,10 @@ EXCUSED=(
   'global/scripts/tools/checkov/run.sh|if [ ! -x "$CHECKOV_VENV/bin/pip" ] && ! python3 -m venv "$CHECKOV_VENV"; then|Checkov ships no binary: it gets a virtualenv of its own'
   'global/scripts/tools/checkov/run.sh|if ! _ck_pip_log=$("$CHECKOV_VENV/bin/pip" install --disable-pip-version-check --only-binary :all: "$_ck_wheel" 2>&1); then|...and the verified wheel, binary-only'
   "global/scripts/tools/checkov/run.sh|\"\$CHECKOV_VENV/bin/python\" - \"\$@\" > \"\$_ck_diagnosis/records\" <<'PY'|the parser Checkov uses is a Python library in Checkov's virtualenv"
+  'global/scripts/tools/ansible-lint/run.sh|if [ ! -x "$ANSIBLE_LINT_VENV/bin/pip" ] && ! python3 -m venv "$ANSIBLE_LINT_VENV"; then|ansible-lint ships no binary: it gets a virtualenv of its own'
+  'global/scripts/tools/ansible-lint/run.sh|if ! _al_pip_log=$("$ANSIBLE_LINT_VENV/bin/pip" install --disable-pip-version-check --only-binary :all: "$_al_wheel" 2>&1); then|...and the verified wheel, binary-only'
+  ".github/tests/test-ansible-lint.sh|cat > \"\$VENV/bin/pip\" <<'STUB'|a stand-in for ansible-lint's pip"
+  '.github/tests/test-ansible-lint.sh|chmod +x "$VENV/bin/pip" "$VENV/bin/ansible-lint" "$VENV/bin/ansible-playbook" "$STUB_HOME/.local/bin/ansible-lint" "$STUB_HOME/.local/bin/ansible-playbook" "$STUB_HOME/.local/bin/curl"|...made executable'
   ".github/tests/test-checkov.sh|cat > \"\$VENV/bin/python\" <<'STUB'|a stand-in for Checkov's interpreter, which runs no Python"
   ".github/tests/test-checkov.sh|cat > \"\$VENV/bin/pip\" <<'STUB'|a stand-in for Checkov's pip"
   '.github/tests/test-checkov.sh|chmod +x "$VENV/bin/python" "$VENV/bin/pip" "$VENV/bin/checkov" "$STUB_HOME/.local/bin/curl"|...made executable'

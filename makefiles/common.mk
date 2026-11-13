@@ -5,7 +5,7 @@
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #
 # Targets provided: setup codeql semgrep hadolint shellcheck gitleaks checkov sast
-#                   gitignore gitignore-check
+#                   ansible-lint gitignore gitignore-check
 # Requires: SCRIPTS_DIR to be set. SEMGREP_LANGUAGE and CODEQL_LANGUAGE should be set by a language
 #           .mk file (e.g. golang.mk) or manually before including this file.
 #
@@ -21,7 +21,7 @@
 #            CHECKOV_BLOCKING    `true` makes `checkov` fail on findings (default: advisory)
 #            CHECKOV_DIRECTORIES what `checkov` scans, space-separated (default: `.`)
 
-.PHONY: setup codeql semgrep hadolint shellcheck gitleaks checkov sast gitignore gitignore-check
+.PHONY: setup codeql semgrep hadolint shellcheck gitleaks checkov ansible-lint sast gitignore gitignore-check
 
 # Bootstraps the local checkout of this repository that every other target
 # reads its scripts from.
@@ -146,6 +146,15 @@ gitleaks:
 checkov:
 	@CHECKOV_BLOCKING='$(CHECKOV_BLOCKING)' CHECKOV_DIRECTORIES='$(CHECKOV_DIRECTORIES)' \
 	  $(SCRIPTS_DIR)/global/scripts/tools/checkov/run.sh
+
+# ansible-lint, over the playbooks, roles and collections of an Ansible project. A
+# LINTER, not a SAST tool, so it is not in `SAST_TOOLS`: an Ansible project calls it
+# from its own `lint` target (`lint: ansible-lint`), which is how its lint runs the
+# pinned release and the project's own `.ansible-lint` rather than whatever
+# `ansible-lint` the machine has. It fails on violations, and skips with an empty
+# report in a project with no Ansible content.
+ansible-lint:
+	@$(SCRIPTS_DIR)/global/scripts/tools/ansible-lint/run.sh
 
 # The tools `sast` runs, by target name. Overridable, so a project can narrow
 # the suite; a LANGUAGE FRAGMENT adds to `SAST_TOOLS_EXTRA` instead (see

@@ -28,7 +28,7 @@ development practices, refer to the **[Development Guide](https://github.com/rio
    ```
    and for the Go helpers (the root `go.mod`, such as `global/scripts/tools/dependency-updates/` and the
    Terraform helpers under `global/scripts/languages/terraform/`) -- new helpers are written in Go or POSIX
-   shell, never Python (`make test ONLY=no-python` fails on Python outside the Python pipelines and the Semgrep and Checkov installs):
+   shell, never Python (`make test ONLY=no-python` fails on Python outside the Python pipelines and the Semgrep, Checkov and ansible-lint installs):
    ```bash
    make test ONLY=go-helpers
    make lint

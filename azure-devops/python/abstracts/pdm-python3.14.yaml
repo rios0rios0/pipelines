@@ -1,7 +1,17 @@
 steps:
+  # The cache holds the project's `.venv`, and a virtualenv cannot be moved: the
+  # console scripts PDM installs (`black`, `isort`, `flake8`, `mypy`, ...) start
+  # with the absolute path of the interpreter inside it. The key therefore names
+  # the directory the cache is restored into. Without it, a `.venv` saved where
+  # the sources lived at one path is restored under another -- a hosted image
+  # whose agent runs as a different user moves the whole workspace -- and then
+  # `pdm install` reports every package in sync while each `pdm run <tool>` fails
+  # with `No such file or directory` on a script that is right there. The
+  # directory is quoted so that the Cache task reads it as a string, not as a
+  # file whose contents it should hash.
   - task: 'Cache@2'
     inputs:
-      key: "$(Agent.JobName)|$(Agent.OS)|pdm.lock"
+      key: "$(Agent.JobName)|$(Agent.OS)|\"$(System.DefaultWorkingDirectory)\"|pdm.lock"
       path: '.venv'
     displayName: 'Cache for Python modules'
     continueOnError: true

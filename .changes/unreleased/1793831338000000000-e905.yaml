@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'bumped the pinned dependencies the scheduled `Dependency Updates` workflow found outdated: 7 container image digests (`amazon/aws-cli:latest`, `bitnami/kubectl:latest`, `ghcr.io/rios0rios0/pipelines/awscli:latest`, `golang:1.27.3`, `node:24.22.1-trixie -> node:24.22.2-trixie`, `python:3.13-slim`, `python:3.14-slim-trixie`) and 5 tool pins (`CHECKOV` `3.4.0`, `FLYCTL` `0.5.0`, `NODE` `24.22.2`, `PDM` `2.29.4`, `UNEARTH` `0.19.0`), each binary''s new SHA-256 taken from its release asset; kept 16 inline copies in step with `pinned-versions.sh`'
-time: '2026-11-04T22:28:58.000000000Z'

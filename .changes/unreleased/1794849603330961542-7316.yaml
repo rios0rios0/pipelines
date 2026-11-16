@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed every `pdm run` tool of the Azure DevOps Python pipeline failing with `No such file or directory` once a hosted image moved the workspace of the agent: the `.venv` cache was keyed on the job, the OS and `pdm.lock` alone, so a virtualenv saved under the old sources path was restored under the new one with console scripts that start an interpreter no longer there, while `pdm install` reported every package in sync. The key now names `$(System.DefaultWorkingDirectory)`, the directory the cache is restored into, so each existing `.venv` cache misses once'
+time: '2026-11-16T17:20:03.330865701Z'

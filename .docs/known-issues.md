@@ -285,8 +285,8 @@ privately and fix them.
   - On GitHub Actions, both steps pass the job's token as `GITHUB_TOKEN`, on the step alone
     (`make test ONLY=terra-install`, Test 6). A terra without #358 ignores it.
   - `TERRA_PINNED_VERSION` in `global/scripts/shared/pinned-versions.sh` moved, with its digests,
-    to 1.18.18 in #801, a day after its release instead of a week: its `cooldown=1` is a one-time
-    exception, to be removed once 1.18.18 is past the default cooldown on 2026-11-16.
+    to 1.18.18 in #801, a day after its release instead of a week, under a one-time `cooldown=1`
+    that was removed once 1.18.18 was past the default cooldown on 2026-11-16.
   - GitLab CI and Azure DevOps have no job token for GitHub. On GitLab CI, a consumer's own
     `GITHUB_TOKEN` CI/CD variable reaches terra with no template change. On Azure DevOps, a secret
     variable reaches a script only through `env:`, which the abstract does not map. Without a

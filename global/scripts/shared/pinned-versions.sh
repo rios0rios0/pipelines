@@ -339,14 +339,7 @@ TERRAGRUNT_SHA256_ARM64="01c0768aab01e0c183209ba7edce9d2ebc8f8a7690763bb52f1b890
 # immediately, with no release and no review gate in between.
 # Its tags carry no `v`, so they are not Go module versions and no advisory
 # database can name one of its releases.
-# `cooldown=1` is a one-time exception, not a policy. 1.18.18 is the first
-# release with rios0rios0/terra#358, which stops `terra install` failing when
-# GitHub rate-limits its lookup (KI-06 in `.docs/known-issues.md`), and
-# self-hosted runners that share one address reach that limit between them. It
-# was adopted the day after it was published instead of a week after. Remove
-# the option once 1.18.18 is past the default cooldown (2026-11-16), so the
-# next release waits the full week again.
-# upstream: github-release rios0rios0/terra cooldown=1
+# upstream: github-release rios0rios0/terra
 # osv: none
 # checksums: https://github.com/rios0rios0/terra/releases/download/{version}/checksums.txt
 TERRA_PINNED_VERSION="1.18.18"

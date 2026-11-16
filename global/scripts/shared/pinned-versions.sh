@@ -211,12 +211,12 @@ CODEQL_BUNDLE_SHA256_LINUX64="89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016
 # upstream: github-release google/osv-scanner
 # osv: Go github.com/google/osv-scanner/v2
 # checksums: https://github.com/google/osv-scanner/releases/download/v{version}/osv-scanner_SHA256SUMS
-OSV_SCANNER_PINNED_VERSION="2.7.0"
+OSV_SCANNER_PINNED_VERSION="2.7.1"
 OSV_SCANNER_VERSION="${OSV_SCANNER_VERSION:-${OSV_SCANNER_PINNED_VERSION}}"
 # asset: https://github.com/google/osv-scanner/releases/download/v{version}/osv-scanner_linux_amd64
-OSV_SCANNER_SHA256_AMD64="160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b"
+OSV_SCANNER_SHA256_AMD64="fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8"
 # asset: https://github.com/google/osv-scanner/releases/download/v{version}/osv-scanner_linux_arm64
-OSV_SCANNER_SHA256_ARM64="4061ef4c021ed3c47f203b818f337e351336cc5cd67c0274fc36bd1dfc728dd7"
+OSV_SCANNER_SHA256_ARM64="983d22fbad9724514e3fcc6acc83b5fa64c5ffa6b0d9f510028f22c1b223ff81"
 
 # Checkov, the IaC misconfiguration scanner. It ships no binary -- it is a PyPI
 # package -- so it is written as a pinned version with a digest rather than as a
@@ -316,12 +316,12 @@ ANSIBLE_LINT_SHA256="b778ea87fa873384b373e8c3fe53a06b3acc7b72ac283e2d2070f76fdf9
 # upstream: github-release terraform-linters/tflint
 # osv: Go github.com/terraform-linters/tflint
 # checksums: https://github.com/terraform-linters/tflint/releases/download/v{version}/checksums.txt
-TFLINT_PINNED_VERSION="0.65.0"
+TFLINT_PINNED_VERSION="0.66.0"
 TFLINT_VERSION="${TFLINT_VERSION:-${TFLINT_PINNED_VERSION}}"
 # asset: https://github.com/terraform-linters/tflint/releases/download/v{version}/tflint_linux_amd64.zip
-TFLINT_SHA256_AMD64="d4c545ed2e29d6338604b586f34f544f380f70f243aa72f7b484713835eaec61"
+TFLINT_SHA256_AMD64="22be11cadc25cd02401e94c0ccc91aa63467debb8485c2a755d98f4c0a9d1e2e"
 # asset: https://github.com/terraform-linters/tflint/releases/download/v{version}/tflint_linux_arm64.zip
-TFLINT_SHA256_ARM64="843017c47a98be1de4d88fa038daa293770fe25cd01656c4f08b2e30d1d3b3a0"
+TFLINT_SHA256_ARM64="1105a0a5ddee7cdac7957a3475571a946b839192ea1bc0c722c6c4686001067e"
 
 # upstream: github-release gruntwork-io/terragrunt
 # osv: Go github.com/gruntwork-io/terragrunt
@@ -409,12 +409,12 @@ KUBERNETES_JSON_SCHEMA_VERSION="${KUBERNETES_JSON_SCHEMA_VERSION:-${KUBERNETES_J
 # upstream: github-release superfly/flyctl
 # osv: Go github.com/superfly/flyctl
 # checksums: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_checksums.txt
-FLYCTL_PINNED_VERSION="0.5.4"
+FLYCTL_PINNED_VERSION="0.5.5"
 FLYCTL_VERSION="${FLYCTL_VERSION:-${FLYCTL_PINNED_VERSION}}"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_x86_64.tar.gz
-FLYCTL_SHA256_X86_64="0e58776a99e561887b82b941b15b63fd8fb1c7153b567b11fb3e63b65dd9780e"
+FLYCTL_SHA256_X86_64="2c64e1c7f320fafed0452fbce9adff57fcaf733619f0faa315ae883ec03d7ef6"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_arm64.tar.gz
-FLYCTL_SHA256_ARM64="1954e48cd16bd330d4ce49dcb0dbae3f5ba4675500f9c27af6e96b0cd0f456ca"
+FLYCTL_SHA256_ARM64="3d471f692a1ec597b68bcfba73ac613add7c227f7cfdf0bb7083cc0bb992ba25"
 
 # crane, from google/go-containerregistry. The Fly.io deploy copies the image
 # the pipeline already delivered into registry.fly.io with it -- registry to
@@ -453,16 +453,16 @@ CRANE_SHA256_ARM64="898c0cff975f898a33e8c4580bdafb0e7c02c7faa33374e946762f97c4ab
 # upstream: github-release mikefarah/yq
 # osv: Go github.com/mikefarah/yq/v4
 # checksums: https://github.com/mikefarah/yq/releases/download/v{version}/checksums-bsd
-YQ_PINNED_VERSION="4.54.1"
+YQ_PINNED_VERSION="4.54.3"
 YQ_VERSION="${YQ_VERSION:-${YQ_PINNED_VERSION}}"
 # asset: https://github.com/mikefarah/yq/releases/download/v{version}/yq_linux_amd64
-YQ_SHA256_LINUX_AMD64="8e34fc298390875de416e6a4afcb8cabeceb25d9aa8506c1a2f9353cf702ea5f"
+YQ_SHA256_LINUX_AMD64="129534601871538efe0ba4c5e62a34fb1d5f469bcb975c4fddeb467d82974973"
 # asset: https://github.com/mikefarah/yq/releases/download/v{version}/yq_linux_arm64
-YQ_SHA256_LINUX_ARM64="189088da0c6429ec5178dfaab1a114805f6cab0b61b165ab236efedf1d57a71b"
+YQ_SHA256_LINUX_ARM64="89f69310b61b68d1245065a1241d1fc843f7a36cd6103ffd77ad987613bd1b67"
 # asset: https://github.com/mikefarah/yq/releases/download/v{version}/yq_darwin_amd64
-YQ_SHA256_DARWIN_AMD64="3a812fce205a4d67014fb71b7fa297092210e580df3d8f52dddc2cf3a599c22b"
+YQ_SHA256_DARWIN_AMD64="96d5105ffd693d6845c54fbd825b2d1bbdb8619e0a2ce6af95e5654e841e0984"
 # asset: https://github.com/mikefarah/yq/releases/download/v{version}/yq_darwin_arm64
-YQ_SHA256_DARWIN_ARM64="fee511a181bd8b3e6b7da98842b41973bfac8cd3bcd341ed29a584620b5b2844"
+YQ_SHA256_DARWIN_ARM64="a2aebb93b5bdcb61bb76f630e42a0ef6a3ee10842a6516cd7b9e4080786ec593"
 
 # The npm-published deploy clients (`wrangler`, `vercel`, `netlify-cli`) talk to
 # a hosted API the vendor versions on their side, so these are the majors this
@@ -579,7 +579,7 @@ CYCLONEDX_GOMOD_VERSION="${CYCLONEDX_GOMOD_VERSION:-${CYCLONEDX_GOMOD_PINNED_VER
 # behaviour on the day it landed -- it only stopped the behaviour changing
 # underneath a consumer afterwards.
 # upstream: pypi pdm
-PDM_SPEC="${PDM_SPEC:-pdm==2.29.5}"
+PDM_SPEC="${PDM_SPEC:-pdm==2.29.7}"
 # PDM does not pin its own dependencies, and `unearth` 0.19.0 (2026-10-27) breaks
 # PDM 2.29.2 at install (`super(type, obj): obj (instance of PDMPyPIClient) is
 # not an instance or subtype of type (Client)`), so it is installed beside PDM in
@@ -593,14 +593,14 @@ UNEARTH_SPEC="${UNEARTH_SPEC:-unearth==0.19.0}"
 # installed beside PDM in the same `pip install`. Drop this pin when PDM moves to
 # 2.29.6 or later (which requires `hishel>=2.0`, past the cooldown on 2026-11-12).
 # upstream: pypi hishel
-HISHEL_SPEC="${HISHEL_SPEC:-hishel==1.4.0}"
+HISHEL_SPEC="${HISHEL_SPEC:-hishel==2.0.0}"
 # upstream: pypi vulture
 VULTURE_SPEC="${VULTURE_SPEC:-vulture==2.16}"
 # upstream: pypi semgrep
-SEMGREP_SPEC="${SEMGREP_SPEC:-semgrep==1.183.0}"
+SEMGREP_SPEC="${SEMGREP_SPEC:-semgrep==1.184.0}"
 # upstream: rubygems bundler-audit
 BUNDLER_AUDIT_SPEC="${BUNDLER_AUDIT_SPEC:-bundler-audit:0.9.3}"
 # upstream: rubygems debride
 DEBRIDE_SPEC="${DEBRIDE_SPEC:-debride:1.15.2}"
 # upstream: npm knip
-KNIP_SPEC="${KNIP_SPEC:-knip@6.44.1}"
+KNIP_SPEC="${KNIP_SPEC:-knip@6.44.2}"

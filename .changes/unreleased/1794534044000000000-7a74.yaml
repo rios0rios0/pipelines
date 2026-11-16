@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'bumped the pinned dependencies the scheduled `Dependency Updates` workflow found outdated: 3 GitHub Actions (`docker/login-action` `v4.8.0`, `ruby/setup-ruby` `v1.338.0`, `softprops/action-gh-release` `v3.0.4`), 5 container image digests (`amazon/aws-cli:latest`, `ghcr.io/rios0rios0/pipelines/awscli:latest`, `ghcr.io/rios0rios0/pipelines/golang:1.27-awscli`, `ghcr.io/rios0rios0/pipelines/python:3.14-pdm-trixie`, `ubuntu:24.04`) and 8 tool pins (`FLYCTL` `0.5.5`, `HISHEL` `2.0.0`, `KNIP` `6.44.2`, `OSV_SCANNER` `2.7.1`, `PDM` `2.29.7`, `SEMGREP` `1.184.0`, `TFLINT` `0.66.0`, `YQ` `4.54.3`), each binary''s new SHA-256 taken from its release asset; kept 14 inline copies in step with `pinned-versions.sh`'
+time: '2026-11-13T01:40:44.000000000Z'

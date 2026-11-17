@@ -97,6 +97,10 @@ stages:
           # `go` directive.
           - task: 'GoTool@0'
             displayName: 'Use Go (toolchain auto-upgrades per go.mod)'
+            # The toolchain download can drop mid-way (`Failed to download
+            # version ... Aborted`); the task retries itself with a growing wait
+            # instead of failing the job.
+            retryCountOnTaskFailure: 3
             inputs:
               version: '1.27.4'
 
@@ -143,12 +147,59 @@ stages:
           # JUnit. Downstream stages (SonarQube, Dependency-Track, custom
           # dashboards) can grab them by name from the `terra-coverage`
           # artifact.
+          #
+          # Only a PASSING attempt publishes under that name. An artifact name
+          # can be used once per run, and this step used to run under
+          # `always()`: a failed or cancelled attempt took the name, so retrying
+          # the job then failed on `Artifact terra-coverage already exists`
+          # after every test had passed, and no retry of this job could ever
+          # pass. Nothing downstream needs a failed attempt's copy: the
+          # management stage only runs after a passing tests stage.
+          #
+          # Re-running a job that had already passed (re-running every job of
+          # a stage does that) would collide the same way, so the name is
+          # checked first. An attempt that finds it taken publishes under
+          # `terra-coverage-attempt-<n>`, and the earlier passing copy stays
+          # what downstream stages read. The check fails open: when the build
+          # API cannot answer, the step publishes as before.
+          - bash: |
+              set -uo pipefail
+              url="${SYSTEM_COLLECTIONURI}${SYSTEM_TEAMPROJECTID}/_apis/build/builds/${BUILD_BUILDID}/artifacts?artifactName=terra-coverage&api-version=7.1"
+              # The token reaches curl on stdin, never on its command line.
+              code="$(printf 'Authorization: Bearer %s\n' "${SYSTEM_ACCESSTOKEN}" |
+                curl -sS -o /dev/null -w '%{http_code}' --max-time 30 --retry 2 -H @- "${url}" 2> /dev/null || true)"
+              case "${code}" in
+                200)
+                  echo "An earlier attempt of this job already published terra-coverage; this attempt publishes terra-coverage-attempt-${SYSTEM_JOBATTEMPT} instead."
+                  echo "##vso[task.setvariable variable=TERRA_COVERAGE_PUBLISHED]true"
+                  ;;
+                404) echo "No terra-coverage artifact in this run yet; publishing it." ;;
+                *) echo "##[warning]Could not tell whether terra-coverage exists in this run (HTTP ${code:-none}); publishing it as before." ;;
+              esac
+            displayName: 'Check for an earlier Terra coverage report'
+            condition: succeeded()
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
           - task: 'PublishPipelineArtifact@1'
             displayName: 'Publish Terra coverage report'
-            condition: always()
+            condition: and(succeeded(), ne(variables['TERRA_COVERAGE_PUBLISHED'], 'true'))
             inputs:
               targetPath: "$(REPORT_PATH)"
               artifactName: 'terra-coverage'
+              publishLocation: 'pipeline'
+
+          # A failed attempt keeps its reports for debugging, under a name of
+          # its own that no retry can collide with. `continueOnError` because
+          # a job that failed before writing any report has nothing to publish,
+          # and the job has already failed for its own reason.
+          - task: 'PublishPipelineArtifact@1'
+            displayName: 'Publish Terra coverage report of this attempt'
+            condition: or(failed(), eq(variables['TERRA_COVERAGE_PUBLISHED'], 'true'))
+            continueOnError: true
+            inputs:
+              targetPath: "$(REPORT_PATH)"
+              artifactName: 'terra-coverage-attempt-$(System.JobAttempt)'
               publishLocation: 'pipeline'
 
       # Third tier — repo-convention assertions the consumer owns. Runs
@@ -223,6 +274,10 @@ stages:
           # `go.mod`: an older Go refuses the module.
           - task: 'GoTool@0'
             displayName: 'Use Go (structural scripts run Go helpers)'
+            # The toolchain download can drop mid-way (`Failed to download
+            # version ... Aborted`); the task retries itself with a growing wait
+            # instead of failing the job.
+            retryCountOnTaskFailure: 3
             inputs:
               version: '1.27.4'
 

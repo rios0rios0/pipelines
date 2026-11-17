@@ -26,7 +26,26 @@ steps:
       # shape accepts all three.
       git init --quiet "$SCRIPTS_DIR"
       git -C "$SCRIPTS_DIR" remote add origin "$PIPELINES_REPO"
-      git -C "$SCRIPTS_DIR" fetch --quiet --depth 1 --no-tags origin "$PIPELINES_REF"
+      # Every job that runs a shared script fetches it first, so a resolver or
+      # network blip on the agent (`Could not resolve host: github.com`) used
+      # to fail the whole job before it ran anything. Fetch up to three times,
+      # waiting 10 s and then 30 s; a ref that does not exist fails the same way
+      # every time and still fails, after those 40 s.
+      FETCHED=''
+      for DELAY in 0 10 30; do
+        if [ "$DELAY" -gt 0 ]; then
+          echo "##[warning]Fetching ${PIPELINES_REPO}@${PIPELINES_REF} failed; retrying in ${DELAY}s."
+          sleep "$DELAY"
+        fi
+        if git -C "$SCRIPTS_DIR" fetch --quiet --depth 1 --no-tags origin "$PIPELINES_REF"; then
+          FETCHED=1
+          break
+        fi
+      done
+      if [ -z "$FETCHED" ]; then
+        echo "##[error]Could not fetch ${PIPELINES_REPO}@${PIPELINES_REF} after 3 attempts."
+        exit 1
+      fi
       git -C "$SCRIPTS_DIR" checkout --quiet FETCH_HEAD
 
       # A ref is a label and a label can be moved; the commit is what ran.

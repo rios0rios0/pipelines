@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed retrying the `test:all` job of the Azure DevOps `terra` test stage, which could never pass: `terra-coverage` was published under `condition: always()`, so a failed or cancelled attempt took the artifact name and the retry failed on `Artifact terra-coverage already exists` after every test had passed. Only a passing attempt publishes `terra-coverage` now, once per run (a re-run of a job that had already passed publishes `terra-coverage-attempt-<n>` instead), and a failed attempt keeps its reports as `terra-coverage-attempt-<n>`; the SonarQube stage still reads `terra-coverage`'
+time: '2026-11-17T17:34:41.307507248Z'

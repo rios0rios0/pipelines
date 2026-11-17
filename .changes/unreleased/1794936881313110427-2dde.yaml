@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed a passing network blip failing a job before it ran anything: the shared scripts fetch of the Azure DevOps `scripts-repo.yaml` abstract now tries three times, waiting 10 s and then 30 s, and the `GoTool@0` tasks of the `terra` code-check and test stages retry a toolchain download that dropped (`retryCountOnTaskFailure: 3`)'
+time: '2026-11-17T17:34:41.313064744Z'

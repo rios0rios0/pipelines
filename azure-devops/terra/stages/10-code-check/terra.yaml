@@ -48,6 +48,10 @@ stages:
           # which the checker is built against: an older Go refuses the module.
           - task: 'GoTool@0'
             displayName: 'Use Go (order-check is a Go helper)'
+            # The toolchain download can drop mid-way (`Failed to download
+            # version ... Aborted`); the task retries itself with a growing wait
+            # instead of failing the job.
+            retryCountOnTaskFailure: 3
             inputs:
               version: '1.27.4'
 

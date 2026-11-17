@@ -1073,8 +1073,9 @@ at the end.
 
 **Do not "make SAST advisory again" here.** Advisory-versus-blocking is already decided at
 the call site, differently per platform — Azure DevOps marks all five `continueOnError:
-true`, `.github/workflows/*.yaml` forgives only `hadolint` (and neither `go.yaml` nor `terra.yaml`
-does, see "A Failing Check Fails the Run"), GitLab blocks on all five — and
+true` unless the consumer opts in with `ENABLE_SECURITY_GATE`, `.github/workflows/*.yaml`
+forgives only `hadolint` (and neither `go.yaml` nor `terra.yaml` does, see "A Failing Check
+Fails the Run"), GitLab blocks on all five — and
 a makefile that swallows the code silently overrides all three. Findings a team has triaged
 belong in that tool's own suppression file (`.codeql-false-positives`, `.semgrepignore`,
 `.semgrepexcluderules`, `.hadolint.yaml`, `.gitleaksignore`). A consumer that genuinely
@@ -1283,7 +1284,7 @@ The Go pipeline blocks on its checks on every platform:
 |---------------|-------------------------|--------------------------------|----------------------------------------------|
 | golangci-lint | blocking (was advisory) | blocking (was `allow_failure`) | blocking (already was)                       |
 | govulncheck   | blocking (was advisory) | blocking (was `allow_failure`) | blocking (was a job-level `continueOnError`) |
-| Hadolint      | blocking (was advisory) | blocking (already was)         | advisory: a shared template, see below       |
+| Hadolint      | blocking (was advisory) | blocking (already was)         | advisory by default (shared), see below      |
 
 For govulncheck, removing the advisory flags was not enough. The script runs `govulncheck -json` so the report is machine-readable, and with `-json` govulncheck exits 0 whatever it finds: the job could only fail when the scan itself broke, so no Go pipeline ever failed on a vulnerability. The verdict now comes from the report. `global/scripts/languages/golang/govulncheck/run.sh` replays it through `govulncheck -mode convert`, which prints the findings into the log and exits 3 when the code calls a vulnerable symbol. A vulnerability only in a package the code imports, or a module it requires, is listed but does not fail the job, which is govulncheck's own default. The scan's stderr goes to the log, never into the report, so the report stays JSON `convert` can read. `make test ONLY=govulncheck-verdict` pins all of it, with `go` and `govulncheck` stubbed. When the fix was written, none of the 17 GitHub repositories that use the Go pipeline called a vulnerable symbol on its default branch, so the change turned none of them red.
 
@@ -1305,7 +1306,12 @@ templates too. It accepts exactly two kinds of `continueOnError` there:
 - the step that trims the build cache, which is housekeeping rather than a check;
 - the analysis steps of Azure DevOps' four shared SAST templates. They are advisory for **every**
   Azure toolchain at once, by the decision recorded under "Do not make SAST advisory again". Making
-  them block is a decision about every Azure pipeline, not about the Go one.
+  them block by default is a decision about every Azure pipeline, not about the Go one, so blocking
+  is an opt-in instead: `ENABLE_SECURITY_GATE` (a boolean, `false` by default) on the Go, JavaScript
+  and Python security stages and their Docker entry points turns the flag into
+  `${{ not(parameters.ENABLE_SECURITY_GATE) }}`, for the four shared templates and the stage's
+  dependency audit alike. The flag is still an expression that can become `true`, so the entries
+  stay listed. `make test ONLY=azure-security-gate` holds that chain.
 
 **A blocking lint needs headroom under load.** With about twenty runs sharing one self-hosted host,
 a clean golangci-lint analysis outran its fixed `--timeout 10m` and exited 4. A blocking job turns

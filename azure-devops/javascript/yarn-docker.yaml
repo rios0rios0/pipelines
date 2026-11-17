@@ -32,6 +32,13 @@ parameters:
     type: 'string'
     default: 'echo "No after script"'
 
+  # Whether a failing security job fails the security stage, forwarded to it. `false` (the default)
+  # keeps the shared SAST scans and the dependency audit advisory. See README.md, "Making the
+  # Security Stage Blocking".
+  - name: 'ENABLE_SECURITY_GATE'
+    type: 'boolean'
+    default: false
+
 stages:
   - template: 'stages/10-code-check/yarn.yaml'
     parameters:
@@ -40,6 +47,8 @@ stages:
       WORKING_DIRECTORY: "$(System.DefaultWorkingDirectory)"
 
   - template: 'stages/20-security/yarn.yaml'
+    parameters:
+      ENABLE_SECURITY_GATE: ${{ parameters.ENABLE_SECURITY_GATE }}
 
   - template: 'stages/30-tests/yarn.yaml'
     parameters:

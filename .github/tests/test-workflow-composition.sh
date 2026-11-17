@@ -556,8 +556,9 @@ assert_empty "no code-check or security job is advisory unless listed with its r
 # Read from the two Go stage files of each platform AND every stage template they pull in from this
 # repository, so a check that moves into a shared template stays covered. Those shared templates
 # are why AZURE_ADVISORY is not empty: Azure DevOps runs its four SAST tools advisory by the
-# per-platform decision CLAUDE.md records, for every toolchain at once, and making them block is a
-# decision about every Azure pipeline rather than about the Go one.
+# per-platform decision CLAUDE.md records, for every toolchain at once, and making them block by
+# default is a decision about every Azure pipeline rather than about the Go one. A consumer opts in
+# to blocking with `ENABLE_SECURITY_GATE`, which `make test ONLY=azure-security-gate` holds.
 BAD_ADVISORY_TWIN="$(composition_check advisory-twin "$SCRIPTS_DIR")"
 assert_empty "the Go pipeline's GitLab and Azure DevOps twins keep no check advisory unless listed" \
   "$BAD_ADVISORY_TWIN"

@@ -2,6 +2,12 @@ parameters:
   - name: 'DEPENDS_ON'
     type: object
     default: ''
+  # Whether a failing security job fails the stage. `false` (the default) keeps the shared SAST
+  # scans and the dependency audit advisory; a consumer that wants findings to block its merges sets
+  # it to `true`. See README.md, "Making the Security Stage Blocking".
+  - name: 'ENABLE_SECURITY_GATE'
+    type: 'boolean'
+    default: false
   # The Python every job of this stage sets up; see `abstracts/pdm-python3.14.yaml`.
   - name: 'PYTHON_VERSION'
     type: 'string'
@@ -16,12 +22,16 @@ stages:
     jobs:
       - template: '../../../global/stages/20-security/semgrep.yaml'
         parameters:
+          ENABLE_SECURITY_GATE: ${{ parameters.ENABLE_SECURITY_GATE }}
           SEMGREP_LANGUAGE: 'python'
 
       - template: '../../../global/stages/20-security/gitleaks.yaml'
+        parameters:
+          ENABLE_SECURITY_GATE: ${{ parameters.ENABLE_SECURITY_GATE }}
 
       - template: '../../../global/stages/20-security/codeql.yaml'
         parameters:
+          ENABLE_SECURITY_GATE: ${{ parameters.ENABLE_SECURITY_GATE }}
           CODEQL_LANGUAGE: 'python'
           # The Python extractor runs on the `python3` it finds on PATH, and this job set none up:
           # an agent without one failed the analysis -- quietly, since that step is
@@ -34,6 +44,8 @@ stages:
               displayName: "Use Python ${{ parameters.PYTHON_VERSION }}"
 
       - template: '../../../global/stages/20-security/hadolint.yaml'
+        parameters:
+          ENABLE_SECURITY_GATE: ${{ parameters.ENABLE_SECURITY_GATE }}
 
       - job: 'sca_safety'
         displayName: 'sca:safety'
@@ -63,4 +75,4 @@ stages:
             # what it is -- silently turns the scan unauthenticated.
             env:
               SAFETY_API_KEY: $(SAFETY_API_KEY)
-        continueOnError: true
+        continueOnError: ${{ not(parameters.ENABLE_SECURITY_GATE) }}

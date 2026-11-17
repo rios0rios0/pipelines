@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added the `ENABLE_SECURITY_GATE` parameter (default `false`) to the Azure DevOps Go, JavaScript and Python security stages and their Docker entry points, which makes the shared Semgrep, Gitleaks, CodeQL and Hadolint scans and the `sca:yarn-audit`/`sca:safety` audit fail the stage when they fail; the four shared templates now publish their report under `always()`, so a failing gated scan still publishes what it found'
+time: '2026-11-17T20:21:30.143618974Z'

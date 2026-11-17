@@ -2,6 +2,12 @@ parameters:
   - name: 'DEPENDS_ON'
     type: object
     default: ''
+  # Whether a failing security job fails the stage. `false` (the default) keeps the shared SAST
+  # scans advisory; a consumer that wants findings to block its merges sets it to `true`. See
+  # README.md, "Making the Security Stage Blocking".
+  - name: 'ENABLE_SECURITY_GATE'
+    type: 'boolean'
+    default: false
 
 stages:
   - stage: 'security'
@@ -12,12 +18,16 @@ stages:
     jobs:
       - template: '../../../global/stages/20-security/semgrep.yaml'
         parameters:
+          ENABLE_SECURITY_GATE: ${{ parameters.ENABLE_SECURITY_GATE }}
           SEMGREP_LANGUAGE: 'golang'
 
       - template: '../../../global/stages/20-security/gitleaks.yaml'
+        parameters:
+          ENABLE_SECURITY_GATE: ${{ parameters.ENABLE_SECURITY_GATE }}
 
       - template: '../../../global/stages/20-security/codeql.yaml'
         parameters:
+          ENABLE_SECURITY_GATE: ${{ parameters.ENABLE_SECURITY_GATE }}
           CODEQL_LANGUAGE: 'go'
           # CodeQL's Go extraction builds the module with the `go` on PATH, and this job set none
           # up: a Microsoft-hosted agent carries Go 1.24 to 1.26 and reaches a newer module only by
@@ -32,6 +42,8 @@ stages:
               displayName: 'Setup Go'
 
       - template: '../../../global/stages/20-security/hadolint.yaml'
+        parameters:
+          ENABLE_SECURITY_GATE: ${{ parameters.ENABLE_SECURITY_GATE }}
 
       - job: 'sca_govulncheck'
         displayName: 'sca:govulncheck'

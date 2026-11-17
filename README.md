@@ -1539,6 +1539,23 @@ $SCRIPTS_DIR/global/scripts/languages/argocd/render/run.sh
 ARGOCD_MANIFEST_DIRS='bootstrap' $SCRIPTS_DIR/global/scripts/languages/argocd/schema/run.sh
 ```
 
+#### Making the Security Stage Blocking
+
+On Azure DevOps the security stage is **advisory by default**: Semgrep, Gitleaks, CodeQL and Hadolint run with `continueOnError`, and so do the JavaScript `sca:yarn-audit` and the Python `sca:safety` jobs. A failing scan marks the run `partiallySucceeded` and nothing waits for it, for every Azure toolchain at once (see `AGENTS.md`, "Do not make SAST advisory again"). Go's `sca:govulncheck` already blocks.
+
+A consumer that wants findings to fail its runs, and therefore its pull requests, opts in with `ENABLE_SECURITY_GATE`, a boolean defaulting to `false`. The Go, JavaScript and Python security stages (`golang/stages/20-security/go.yaml`, `javascript/stages/20-security/yarn.yaml`, `python/stages/20-security/pdm.yaml`) declare it, and so do their Docker entry points (`go-docker.yaml`, `yarn-docker.yaml`, `pdm-docker.yaml`), which forward it:
+
+```yaml
+stages:
+  - template: 'azure-devops/golang/stages/20-security/go.yaml@pipelines'
+    parameters:
+      ENABLE_SECURITY_GATE: true
+```
+
+The stage forwards it to the four shared templates under `azure-devops/global/stages/20-security/`, whose scan step and the stage's dependency audit job then run with `continueOnError: false`. Each report is still published when its scan fails, so the findings stay available. A consumer that does not pass the parameter keeps its security stage advisory, as before.
+
+Before turning it on, check the security jobs of the repository's latest default-branch run: a job that is `succeededWithIssues` today fails the stage the moment the gate is on. Triaged findings belong in the tool's own suppression file (`.semgrepignore`, `.semgrepexcluderules`, `.gitleaksignore`, `.hadolint.yaml`, `.codeql-false-positives`).
+
 #### Required Variable Groups
 
 Create these variable groups in Azure DevOps Library:

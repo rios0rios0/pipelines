@@ -7,6 +7,12 @@ parameters:
   - name: 'PRE_STEPS'
     type: 'stepList'
     default: []
+  # Whether a failing scan fails the job. `false` (the default) keeps the scan advisory, as it is
+  # for every Azure DevOps toolchain; a consumer whose security stage gates its merges sets it
+  # through its language stage. See README.md, "Making the Security Stage Blocking".
+  - name: 'ENABLE_SECURITY_GATE'
+    type: 'boolean'
+    default: false
 
 jobs:
   - job: 'sast_codeql'
@@ -29,9 +35,10 @@ jobs:
         env:
           SYSTEM_ACCESSTOKEN: $(System.AccessToken)
           CODEQL_LANGUAGE: ${{ parameters.CODEQL_LANGUAGE }}
-        continueOnError: true
+        continueOnError: ${{ not(parameters.ENABLE_SECURITY_GATE) }}
 
       - task: 'PublishPipelineArtifact@1'
         inputs:
           artifactName: 'codeql'
           targetPath: 'build/reports/codeql'
+        condition: always()

@@ -69,11 +69,12 @@ func gitlabAdvisory() map[twinEntry]string {
 
 // azureAdvisory is AZURE_ADVISORY. The shared SAST templates are why it is not empty: Azure DevOps
 // runs its four SAST tools advisory by the per-platform decision AGENTS.md records, for every
-// toolchain at once, and making them block is a decision about every Azure pipeline rather than
-// about the Go one.
+// toolchain at once, and making them block by default is a decision about every Azure pipeline
+// rather than about the Go one; a consumer opts in to blocking with `ENABLE_SECURITY_GATE`.
 func azureAdvisory() map[twinEntry]string {
 	sharedSAST := "shared by every Azure DevOps pipeline, not just Go: the platform runs its SAST advisory by " +
-		"the decision CLAUDE.md records, for every toolchain at once"
+		"the decision CLAUDE.md records, for every toolchain at once, unless the consumer opts in with " +
+		"`ENABLE_SECURITY_GATE`"
 	sharedStage := func(tool string) twinEntry {
 		return twinEntry{
 			file:  "azure-devops/global/stages/20-security/" + tool + ".yaml",

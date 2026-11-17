@@ -13,6 +13,12 @@ parameters:
   - name: 'PYTHON_VERSION'
     type: 'string'
     default: '3.14'
+  # Whether a failing security job fails the security stage, forwarded to it. `false` (the default)
+  # keeps the shared SAST scans and the dependency audit advisory. See README.md, "Making the
+  # Security Stage Blocking".
+  - name: 'ENABLE_SECURITY_GATE'
+    type: 'boolean'
+    default: false
 
 stages:
   - template: 'stages/10-code-check/pdm.yaml'
@@ -20,6 +26,7 @@ stages:
       PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
   - template: 'stages/20-security/pdm.yaml'
     parameters:
+      ENABLE_SECURITY_GATE: ${{ parameters.ENABLE_SECURITY_GATE }}
       PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
   - template: 'stages/30-tests/pdm.yaml'
     parameters:

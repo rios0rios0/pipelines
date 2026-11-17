@@ -2,6 +2,12 @@ parameters:
   - name: 'DEPENDS_ON'
     type: object
     default: ''
+  # Whether a failing security job fails the stage. `false` (the default) keeps the shared SAST
+  # scans and the dependency audit advisory; a consumer that wants findings to block its merges sets
+  # it to `true`. See README.md, "Making the Security Stage Blocking".
+  - name: 'ENABLE_SECURITY_GATE'
+    type: 'boolean'
+    default: false
 
 stages:
   - stage: 'security'
@@ -12,12 +18,16 @@ stages:
     jobs:
       - template: '../../../global/stages/20-security/semgrep.yaml'
         parameters:
+          ENABLE_SECURITY_GATE: ${{ parameters.ENABLE_SECURITY_GATE }}
           SEMGREP_LANGUAGE: 'javascript'
 
       - template: '../../../global/stages/20-security/gitleaks.yaml'
+        parameters:
+          ENABLE_SECURITY_GATE: ${{ parameters.ENABLE_SECURITY_GATE }}
 
       - template: '../../../global/stages/20-security/codeql.yaml'
         parameters:
+          ENABLE_SECURITY_GATE: ${{ parameters.ENABLE_SECURITY_GATE }}
           CODEQL_LANGUAGE: 'javascript'
           # The JavaScript extractor parses TypeScript by running the TypeScript compiler on the
           # `node` on PATH, which the CodeQL bundle does not ship, and this job set none up: on an
@@ -32,6 +42,8 @@ stages:
               displayName: 'Use Node.js 24.22.2'
 
       - template: '../../../global/stages/20-security/hadolint.yaml'
+        parameters:
+          ENABLE_SECURITY_GATE: ${{ parameters.ENABLE_SECURITY_GATE }}
 
       - job: 'sca_yarn_audit'
         displayName: 'sca:yarn-audit'
@@ -39,4 +51,4 @@ stages:
           - template: '../../abstracts/corepack-node-no-cache.yaml'
           - script: yarn npm audit --recursive --severity high
             displayName: 'Run yarn npm audit'
-        continueOnError: true
+        continueOnError: ${{ not(parameters.ENABLE_SECURITY_GATE) }}

@@ -7,6 +7,12 @@ parameters:
   - name: 'PRE_STEPS'
     type: 'stepList'
     default: []
+  # Whether a failing scan fails the job. `false` (the default) keeps the scan advisory, as it is
+  # for every Azure DevOps toolchain; a consumer whose security stage gates its merges sets it
+  # through its language stage. See README.md, "Making the Security Stage Blocking".
+  - name: 'ENABLE_SECURITY_GATE'
+    type: 'boolean'
+    default: false
 
 jobs:
   - job: 'sast_semgrep'
@@ -22,9 +28,10 @@ jobs:
       - script: $(Scripts.Directory)/global/scripts/tools/semgrep/run.sh "$SEMGREP_LANGUAGE" # it takes the first param as the main language
         env:
           SEMGREP_LANGUAGE: ${{ parameters.SEMGREP_LANGUAGE }}
-        continueOnError: true
+        continueOnError: ${{ not(parameters.ENABLE_SECURITY_GATE) }}
 
       - task: 'PublishPipelineArtifact@1'
         inputs:
           artifactName: 'semgrep'
           targetPath: 'build/reports/semgrep'
+        condition: always()

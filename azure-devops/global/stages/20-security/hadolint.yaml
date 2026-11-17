@@ -1,12 +1,21 @@
+parameters:
+  # Whether a failing scan fails the job. `false` (the default) keeps the scan advisory, as it is
+  # for every Azure DevOps toolchain; a consumer whose security stage gates its merges sets it
+  # through its language stage. See README.md, "Making the Security Stage Blocking".
+  - name: 'ENABLE_SECURITY_GATE'
+    type: 'boolean'
+    default: false
+
 jobs:
   - job: 'sast_hadolint'
     displayName: 'sast:hadolint'
     steps:
       - template: '../../abstracts/scripts-repo.yaml'
       - script: $(Scripts.Directory)/global/scripts/tools/hadolint/run.sh
-        continueOnError: true
+        continueOnError: ${{ not(parameters.ENABLE_SECURITY_GATE) }}
 
       - task: 'PublishPipelineArtifact@1'
         inputs:
           artifactName: 'hadolint'
           targetPath: 'build/reports/hadolint'
+        condition: always()

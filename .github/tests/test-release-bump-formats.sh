@@ -72,13 +72,16 @@ mkdir -p "$WORK/bin" "$WORK/gitlab" || exit 1
 # block <file> <anchor> <opening> -- the body of the first literal block scalar whose opening line
 # matches <opening>, at or after the first line matching <anchor>, dedented: the shell the runner
 # executes for that step. A list item that opens with a key (`- script: |`) ends at its next key.
+# A literal `|` in a pattern is written `[|]`, never `\|`: awk applies string escapes to `-v`
+# values, and gawk turns `\|` into a bare `|` (an alternation that matches every line) where
+# mawk and BusyBox keep it, so only a bracket expression means the same to every awk.
 block() {
   awk -v anchor="$2" -v opening="$3" '
     function indent(s) { match(s, /^ */); return RLENGTH }
     !anchored && $0 ~ anchor { anchored = 1 }
     anchored && !inside && $0 ~ opening {
       inside = 1; body = -1; stop = indent($0)
-      if ($0 ~ /^ *- [A-Za-z_-]+: \|$/) { stop += 2 }
+      if ($0 ~ /^ *- [A-Za-z_-]+: [|]$/) { stop += 2 }
       next
     }
     inside {
@@ -91,11 +94,11 @@ block() {
   ' "$1"
 }
 
-block "$GITHUB_ACTION" "^ *- id: 'extract'$" '^ *run: \|$' > "$WORK/github.sh"
-block "$GITLAB_JOB" '^  script:$' '^ *- \|$' > "$WORK/gitlab.sh"
+block "$GITHUB_ACTION" "^ *- id: 'extract'$" '^ *run: [|]$' > "$WORK/github.sh"
+block "$GITLAB_JOB" '^  script:$' '^ *- [|]$' > "$WORK/gitlab.sh"
 # The agent fills its macros into the text before bash runs it. Only the walk below HEAD names
 # them, and a fixture with no tag never reaches it, but no macro is left for bash to run.
-block "$AZURE_JOB" '^ *- script: \|$' '^ *- script: \|$' \
+block "$AZURE_JOB" '^ *- script: [|]$' '^ *- script: [|]$' \
   | sed -e 's/[$](\([A-Za-z]*\.[A-Za-z.]*\))/fixture-\1/g' > "$WORK/azure.sh"
 
 echo "=== The steps this suite runs ==="

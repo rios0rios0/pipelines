@@ -67,6 +67,7 @@ there is no target to add and no list to keep in step.
 | `order-check` | The Terragrunt file-ordering checker/fixer |
 | `phpmd` | The PHPMD runner (the command line each major takes, the verdict, a report that stays JSON) |
 | `python-cyclonedx` | Static/non-distribution and dynamic Python SBOM versions, including resolution failures |
+| `python-version` | The Python each PDM template runs and each PDM image ships (the Azure DevOps `PYTHON_VERSION`: declared with its `3.14` default by every PDM template, forwarded to every job, set up by the CodeQL analysis too and named in the `.venv` cache key; every PDM image on the Python and Debian release its tag names) |
 | `release-batched-bumps` | The Azure DevOps release job on a batched run (`trigger.batch`): every untagged bump the run carries (after the commit the CI run queued before it built) tagged on its own commit, oldest first; a bump whose own run failed left to a re-push; a HEAD bump, an existing tag, a tag run and a run with no new bump unchanged |
 | `release-guard` | The release guard (SemVer precedence, the verdict on each kind of tag, the tags listed from a fixture remote, the guard job wired into every deployment workflow) |
 | `release-promotion` | Release promotion (the tag run a bump merge now starts) |

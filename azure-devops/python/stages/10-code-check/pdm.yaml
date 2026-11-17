@@ -2,6 +2,10 @@ parameters:
   - name: 'DEPENDS_ON'
     type: object
     default: ''
+  # The Python every job of this stage sets up; see `abstracts/pdm-python3.14.yaml`.
+  - name: 'PYTHON_VERSION'
+    type: 'string'
+    default: '3.14'
 
 stages:
   - stage: 'code_check'
@@ -16,6 +20,8 @@ stages:
         displayName: 'style:isort'
         steps:
           - template: '../../abstracts/pdm-python3.14.yaml'
+            parameters:
+              PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
           - script: |
               pdm run isort --check-only .
             displayName: 'Run "isort" check'
@@ -24,6 +30,8 @@ stages:
         displayName: 'style:black'
         steps:
           - template: '../../abstracts/pdm-python3.14.yaml'
+            parameters:
+              PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
           - script: |
               pdm run black --check .
             displayName: 'Run "black" check'
@@ -32,6 +40,8 @@ stages:
         displayName: 'quality:flake8'
         steps:
           - template: '../../abstracts/pdm-python3.14.yaml'
+            parameters:
+              PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
           - script: |
               pdm run flake8 .
             displayName: 'Run "flake8" check'
@@ -40,6 +50,8 @@ stages:
         displayName: 'quality:mypy'
         steps:
           - template: '../../abstracts/pdm-python3.14.yaml'
+            parameters:
+              PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
           - script: |
               pdm run type-check
             displayName: 'Run "mypy" check'
@@ -49,6 +61,8 @@ stages:
         displayName: 'quality:vulture'
         steps:
           - template: '../../abstracts/pdm-python3.14.yaml'
+            parameters:
+              PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
           - script: |
               # Pinned; see global/scripts/shared/pinned-versions.sh.
               pip install --only-binary :all: "vulture==2.16" --quiet

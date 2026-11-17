@@ -2,6 +2,10 @@ parameters:
   - name: 'DEPENDS_ON'
     type: object
     default: ''
+  # The Python every job of this stage sets up; see `abstracts/pdm-python3.14.yaml`.
+  - name: 'PYTHON_VERSION'
+    type: 'string'
+    default: '3.14'
 
 stages:
   - stage: 'tests'
@@ -14,6 +18,8 @@ stages:
         displayName: 'test:all'
         steps:
           - template: '../../abstracts/pdm-python3.14.yaml'
+            parameters:
+              PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
           - script: |
               pdm run test
             displayName: 'Run Tests'

@@ -52,9 +52,16 @@ jobs:
           #     `#` and the trailing ` into <target>` are both optional. The GitHub
           #     Actions counterpart already handles this format; this keeps the
           #     Azure DevOps job in parity.
-          # `\3` captures the branch-style version, `\4` the conventional one,
-          # `\6` the GitHub-style PR-merge one.
-          REGEX="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)'.*$|.*chore\(bump\):.*version to ([0-9]+\.[0-9]+\.[0-9]+).*|^Merge pull request #?[0-9]+ from (origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+)( into .+)?$"
+          # X.Y.Z may carry a fork's fourth segment (X.Y.Z.N or X.Y.Z-N), the
+          # shape the tag-ref path below and the walk's tag list already read.
+          # Without it, a four-segment bump released its first three segments
+          # (`1.0.0` for `1.0.0.1`) in the conventional format, and nothing in
+          # the two branch formats, whose version must end the branch name.
+          # `\3` captures the branch-style version, `\5` the conventional one,
+          # `\8` the GitHub-style PR-merge one; `\4`, `\6` and `\9` are their
+          # fourth segments, inside them. sed numbers no group past `\9`, so a
+          # group added here must not push a version beyond it.
+          REGEX="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?)'.*$|.*chore\(bump\):.*version to ([0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?).*|^Merge pull request #?[0-9]+ from (origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?)( into .+)?$"
 
           VERSION=""
           # Tag-push recovery: derive the version straight from the tag ref when
@@ -69,7 +76,7 @@ jobs:
               ;;
           esac
           if [ -z "$VERSION" ] && echo -n "$COMMIT_MESSAGE" | grep -Eq "$REGEX"; then
-            VERSION=$(echo "$COMMIT_MESSAGE" | sed -En "s/$REGEX/\3\4\6/p" | head -n 1)
+            VERSION=$(echo "$COMMIT_MESSAGE" | sed -En "s/$REGEX/\3\5\8/p" | head -n 1)
           fi
 
           if [ -n "$VERSION" ]; then
@@ -117,7 +124,7 @@ jobs:
                   BUMP=""
                   BUMP_MESSAGE="$(git log -1 --pretty=%B "$COMMIT")"
                   if printf '%s' "$BUMP_MESSAGE" | grep -Eq "$REGEX"; then
-                    BUMP=$(printf '%s\n' "$BUMP_MESSAGE" | sed -En "s/$REGEX/\3\4\6/p" | head -n 1)
+                    BUMP=$(printf '%s\n' "$BUMP_MESSAGE" | sed -En "s/$REGEX/\3\5\8/p" | head -n 1)
                   fi
                   [ -n "$BUMP" ] || continue
                   if printf '%s\n' "$TAG_VERSIONS" | grep -qxF "$BUMP" \

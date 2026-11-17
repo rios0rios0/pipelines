@@ -33,9 +33,9 @@ extract_version() {
 
   if [[ -z "$version" ]]; then
     if echo "$msg" | grep -Eq "chore/bump-[0-9]+\.[0-9]+\.[0-9]+"; then
-      version=$(echo "$msg" | grep -oE "chore/bump-[0-9]+\.[0-9]+\.[0-9]+" | head -n 1 | sed 's/chore\/bump-//')
+      version=$(echo "$msg" | grep -oE "chore/bump-[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?" | head -n 1 | sed 's/chore\/bump-//')
     elif echo "$msg" | grep -Eq "chore\(bump\):.*version to [0-9]+\.[0-9]+\.[0-9]+"; then
-      version=$(echo "$msg" | grep -oE "version to [0-9]+\.[0-9]+\.[0-9]+" | head -n 1 | sed 's/version to //')
+      version=$(echo "$msg" | grep -oE "version to [0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?" | head -n 1 | sed 's/version to //')
     fi
   fi
 
@@ -70,6 +70,10 @@ assert_version "PR merge bump message" \
   "refs/heads/main" "main" "Merge pull request #256 from rios0rios0/chore/bump-2.32.14" "2.32.14"
 assert_version "conventional bump message" \
   "refs/heads/main" "main" "chore(bump): bumped version to 0.2.4" "0.2.4"
+assert_version "fork dot four-segment PR merge bump message" \
+  "refs/heads/main" "main" "Merge pull request #257 from rios0rios0/chore/bump-1.0.0.1" "1.0.0.1"
+assert_version "fork dash four-segment conventional bump message" \
+  "refs/heads/main" "main" "chore(bump): bumped version to 1.0.1-2" "1.0.1-2"
 assert_version "non-bump commit is skipped" \
   "refs/heads/main" "main" "fix(core): corrected an edge case" ""
 

@@ -50,12 +50,14 @@ runs:
         # Delivery path: extract the version from the bump commit merged to main.
         # GitHub PR merge format: "Merge pull request #XX from repository/chore/bump-X.X.X"
         # Conventional commit format: "chore(bump): bumped version to X.X.X"
+        # Both read the same four-segment fork variant as the tag ref above:
+        # without `([.-][0-9]+)?`, a `1.0.0.1` bump released `1.0.0`.
         if [ -z "$VERSION" ]; then
           COMMIT_MESSAGE="$(git log -1 --pretty=%B)"
           if echo "$COMMIT_MESSAGE" | grep -Eq "chore/bump-[0-9]+\.[0-9]+\.[0-9]+"; then
-            VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE "chore/bump-[0-9]+\.[0-9]+\.[0-9]+" | head -n 1 | sed 's/chore\/bump-//')
+            VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE "chore/bump-[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?" | head -n 1 | sed 's/chore\/bump-//')
           elif echo "$COMMIT_MESSAGE" | grep -Eq "chore\(bump\):.*version to [0-9]+\.[0-9]+\.[0-9]+"; then
-            VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE "version to [0-9]+\.[0-9]+\.[0-9]+" | head -n 1 | sed 's/version to //')
+            VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE "version to [0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?" | head -n 1 | sed 's/version to //')
           fi
         fi
 

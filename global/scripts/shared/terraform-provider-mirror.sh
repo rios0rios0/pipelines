@@ -377,15 +377,58 @@ validate_positive_int() {
 
 # Normalises the retry knobs once per run. Callers invoke this before their loop
 # so an invalid override warns a single time rather than once per directory.
+#
+# The waits grow linearly (`attempt * TF_INIT_RETRY_DELAY`: 15, 30, 45, 60 and
+# 75 s with the defaults), and ALL of a run's waits draw on one budget,
+# `TF_INIT_RETRY_BUDGET` seconds (default 300). Each attempt of an `init` whose
+# module sources cannot be resolved can itself take a minute of resolver
+# timeouts, and one resolver outage on a CI machine outlasted the four attempts
+# and 30 s of waiting this loop used to have. A longer wait for EVERY directory
+# would turn a deterministic failure shared by the whole tree (a missing
+# credential, a deleted ref) into one that outlives the job's time limit, so the
+# patience is spent once: the first directories to fail get it, and once it is
+# gone the rest fail after a single attempt. The budget lives in a file because
+# the callers run `terraform_init_cached` in subshells, which cannot hand a
+# variable back.
 terraform_init_retry_defaults() {
-  TF_INIT_MAX_ATTEMPTS="$(validate_positive_int "${TF_INIT_MAX_ATTEMPTS:-4}" 1 4 TF_INIT_MAX_ATTEMPTS)"
-  TF_INIT_RETRY_DELAY="$(validate_positive_int "${TF_INIT_RETRY_DELAY:-5}" 0 5 TF_INIT_RETRY_DELAY)"
+  TF_INIT_MAX_ATTEMPTS="$(validate_positive_int "${TF_INIT_MAX_ATTEMPTS:-6}" 1 6 TF_INIT_MAX_ATTEMPTS)"
+  TF_INIT_RETRY_DELAY="$(validate_positive_int "${TF_INIT_RETRY_DELAY:-15}" 0 15 TF_INIT_RETRY_DELAY)"
+  TF_INIT_RETRY_BUDGET="$(validate_positive_int "${TF_INIT_RETRY_BUDGET:-300}" 0 300 TF_INIT_RETRY_BUDGET)"
+  if [ -z "${TF_INIT_RETRY_SPENT_FILE:-}" ] && TF_INIT_RETRY_SPENT_FILE="$(mktemp)"; then
+    printf '0\n' > "${TF_INIT_RETRY_SPENT_FILE}"
+  fi
+}
+
+# Takes up to <seconds> of wait from the run's retry budget and prints what it
+# got; returns 1 when the budget is spent. With no budget file (a caller that
+# never ran `terraform_init_retry_defaults`) every wait is granted, as before.
+terraform_init_take_retry_budget() {
+  terraform_init_wanted="$1"
+  if [ -z "${TF_INIT_RETRY_SPENT_FILE:-}" ] || [ ! -f "${TF_INIT_RETRY_SPENT_FILE}" ]; then
+    printf '%s' "${terraform_init_wanted}"
+    return 0
+  fi
+  terraform_init_spent="$(cat "${TF_INIT_RETRY_SPENT_FILE}" 2> /dev/null)"
+  case "${terraform_init_spent}" in '' | *[!0-9]*) terraform_init_spent=0 ;; esac
+  terraform_init_left=$((${TF_INIT_RETRY_BUDGET:-300} - terraform_init_spent))
+  if [ "${terraform_init_left}" -le 0 ]; then
+    return 1
+  fi
+  if [ "${terraform_init_wanted}" -gt "${terraform_init_left}" ]; then
+    terraform_init_wanted="${terraform_init_left}"
+  fi
+  printf '%s\n' "$((terraform_init_spent + terraform_init_wanted))" > "${TF_INIT_RETRY_SPENT_FILE}"
+  printf '%s' "${terraform_init_wanted}"
 }
 
 # Removes the generated CLI config. Callers invoke this from their own `trap`
 # rather than the helper installing one, because a sourced function that installs
 # an EXIT trap silently replaces whatever trap the caller already had.
 provider_mirror_cleanup() {
+  if [ -n "${TF_INIT_RETRY_SPENT_FILE:-}" ]; then
+    rm -f "${TF_INIT_RETRY_SPENT_FILE}"
+    TF_INIT_RETRY_SPENT_FILE=''
+  fi
   if [ -n "${TF_PROVIDER_MIRROR_CONFIG:-}" ]; then
     rm -f "${TF_PROVIDER_MIRROR_CONFIG}"
     TF_PROVIDER_MIRROR_CONFIG=''
@@ -468,7 +511,7 @@ terraform_init_cached() {
   # directories, and the PRIMARY attempt does list it, so the next directory
   # needing that version is served locally with no request at all.
   terraform_init_attempt=1
-  while [ "${terraform_init_attempt}" -le "${TF_INIT_MAX_ATTEMPTS:-4}" ]; do
+  while [ "${terraform_init_attempt}" -le "${TF_INIT_MAX_ATTEMPTS:-6}" ]; do
     if [ -n "${TF_PROVIDER_MIRROR_FALLBACK_CONFIG:-}" ]; then
       if TF_CLI_CONFIG_FILE="${TF_PROVIDER_MIRROR_FALLBACK_CONFIG}" \
         terraform -chdir="${terraform_init_dir}" init "$@"; then
@@ -477,9 +520,12 @@ terraform_init_cached() {
     elif terraform -chdir="${terraform_init_dir}" init "$@"; then
       return 0
     fi
-    if [ "${terraform_init_attempt}" -lt "${TF_INIT_MAX_ATTEMPTS:-4}" ]; then
-      terraform_init_sleep=$((terraform_init_attempt * ${TF_INIT_RETRY_DELAY:-5}))
-      echo "  terraform init failed (attempt ${terraform_init_attempt}/${TF_INIT_MAX_ATTEMPTS:-4}); retrying in ${terraform_init_sleep}s. A transient registry.terraform.io 5xx or a github.com 503 on provider checksums clears on retry; anything repeating identically across every attempt is deterministic and the retries will not help — read the error above rather than this line." >&2
+    if [ "${terraform_init_attempt}" -lt "${TF_INIT_MAX_ATTEMPTS:-6}" ]; then
+      if ! terraform_init_sleep="$(terraform_init_take_retry_budget "$((terraform_init_attempt * ${TF_INIT_RETRY_DELAY:-15}))")"; then
+        echo "  terraform init failed (attempt ${terraform_init_attempt}/${TF_INIT_MAX_ATTEMPTS:-6}); not retrying: this run's ${TF_INIT_RETRY_BUDGET:-300}s of init retry waits is spent, so this is not a passing blip — read the error above." >&2
+        return 1
+      fi
+      echo "  terraform init failed (attempt ${terraform_init_attempt}/${TF_INIT_MAX_ATTEMPTS:-6}); retrying in ${terraform_init_sleep}s. A transient registry.terraform.io 5xx, a github.com 503 on provider checksums or a resolver blip on a module source clears on retry; anything repeating identically across every attempt is deterministic and the retries will not help — read the error above rather than this line." >&2
       sleep "${terraform_init_sleep}"
     fi
     terraform_init_attempt=$((terraform_init_attempt + 1))

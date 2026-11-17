@@ -41,25 +41,37 @@ runs:
         # simply (re-)pushing its version tag — the gate jobs skip on tags, so
         # only this delivery step runs. Handles "v"-prefixed tags and the
         # four-segment fork variant (X.Y.Z.N / X.Y.Z-N).
+        #
+        # A tag run releases the version its tag names or nothing. A tag that
+        # names none (`latest`) is a skip, and its commit is not read: a bump
+        # read from it would be released under a tag this run never pushes, and
+        # the release step creates a missing tag on the default branch's head
+        # (see Create Tag below). `|| true` keeps the skip a skip, since this
+        # shell runs with `pipefail`: grep finding no version failed the step.
         case "${GITHUB_REF:-}" in
           refs/tags/*)
-            VERSION="$(printf '%s' "${GITHUB_REF_NAME:-}" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?' | head -n 1)"
+            VERSION="$(printf '%s' "${GITHUB_REF_NAME:-}" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?' | head -n 1 || true)"
+            ;;
+          *)
+            # Delivery path: extract the version from the bump commit merged to main.
+            # GitHub PR merge format: "Merge pull request #XX from repository/chore/bump-X.X.X"
+            # Conventional commit format: "chore(bump): bumped version to X.X.X"
+            # Both read the same four-segment fork variant as the tag ref above:
+            # without `([.-][0-9]+)?`, a `1.0.0.1` bump released `1.0.0`.
+            # Only the subject, the message's first line, is read. A squash
+            # merge's body lists the commits it squashed (or carries the pull
+            # request's description), and a merge commit's body is the pull
+            # request's title, so a bump named below the subject is not this
+            # commit's: a bump pull request merged with a merge commit is found
+            # by its `chore/bump-` branch.
+            COMMIT_SUBJECT="$(git log -1 --pretty=%B | sed -n '1p')"
+            if echo "$COMMIT_SUBJECT" | grep -Eq "chore/bump-[0-9]+\.[0-9]+\.[0-9]+"; then
+              VERSION=$(echo "$COMMIT_SUBJECT" | grep -oE "chore/bump-[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?" | head -n 1 | sed 's/chore\/bump-//')
+            elif echo "$COMMIT_SUBJECT" | grep -Eq "chore\(bump\):.*version to [0-9]+\.[0-9]+\.[0-9]+"; then
+              VERSION=$(echo "$COMMIT_SUBJECT" | grep -oE "version to [0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?" | head -n 1 | sed 's/version to //')
+            fi
             ;;
         esac
-
-        # Delivery path: extract the version from the bump commit merged to main.
-        # GitHub PR merge format: "Merge pull request #XX from repository/chore/bump-X.X.X"
-        # Conventional commit format: "chore(bump): bumped version to X.X.X"
-        # Both read the same four-segment fork variant as the tag ref above:
-        # without `([.-][0-9]+)?`, a `1.0.0.1` bump released `1.0.0`.
-        if [ -z "$VERSION" ]; then
-          COMMIT_MESSAGE="$(git log -1 --pretty=%B)"
-          if echo "$COMMIT_MESSAGE" | grep -Eq "chore/bump-[0-9]+\.[0-9]+\.[0-9]+"; then
-            VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE "chore/bump-[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?" | head -n 1 | sed 's/chore\/bump-//')
-          elif echo "$COMMIT_MESSAGE" | grep -Eq "chore\(bump\):.*version to [0-9]+\.[0-9]+\.[0-9]+"; then
-            VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE "version to [0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?" | head -n 1 | sed 's/version to //')
-          fi
-        fi
 
         if [ -n "$VERSION" ]; then
           echo "tag_name=$VERSION" >> $GITHUB_OUTPUT

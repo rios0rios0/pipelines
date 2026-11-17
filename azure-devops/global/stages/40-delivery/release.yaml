@@ -12,8 +12,9 @@ jobs:
     # message that happened to include the literal text `chore/bump-` or
     # `chore(bump)` (e.g. `refactor: clarified chore(bump) workflow`) would
     # pass the condition. The bash regex below is the actual source of truth:
-    # it matches only the two canonical bump formats and sets SKIP_RELEASE=true
-    # for anything else, so the subsequent tag-creation steps no-op cleanly.
+    # it matches only the three canonical bump formats, in the commit's subject
+    # (its first line), and sets SKIP_RELEASE=true for anything else, so the
+    # subsequent tag-creation steps no-op cleanly.
     # Cost of dropping the substring filter is one ~30s job spin-up per merged
     # commit on main — acceptable for correctness.
     # Gate on the default branch, OR on a version-tag push so a bump whose main
@@ -30,18 +31,19 @@ jobs:
         fetchTags: true
 
       - script: |
-          # Deliberately NOT `set -x` here. COMMIT_MESSAGE is user-controlled
-          # (it is the merged commit body / PR description) and may contain a
+          # Deliberately NOT `set -x` here. COMMIT_SUBJECT is user-controlled
+          # (it is the merged commit's subject, a PR title) and may contain a
           # literal `##vso[...]` or `##[...]` token. Under xtrace, bash echoes
-          # the expanded command lines — including the raw message — to the log,
+          # the expanded command lines — including the raw subject — to the log,
           # where the Azure DevOps agent re-parses the token as a (malformed)
           # logging command and fails the step. A PR whose description merely
           # mentioned `##vso[task.setvariable]` took the release job down this
-          # way. With xtrace off, the message stays inside the grep/sed pipes
+          # way. With xtrace off, the subject stays inside the grep/sed pipes
           # and never reaches the log.
           set -eu
 
-          COMMIT_MESSAGE="$(git log -1 --pretty=%B)"
+          # The first line of the message, the only one a bump is read from.
+          COMMIT_SUBJECT="$(git log -1 --pretty=%B | sed -n '1p')"
           # Canonical bump commit formats. Anything else → SKIP_RELEASE=true.
           #   - Git/Azure native merge: "Merge branch 'chore/bump-X.Y.Z'..."
           #   - Conventional commit:    "chore(bump): bumped version to X.Y.Z"
@@ -49,9 +51,16 @@ jobs:
           #     Produced by auto-complete / bots (e.g. code-guru) merging the bump
           #     PR without squashing. The version lives only in the branch name, so
           #     the conventional-commit branch above never matches it. The leading
-          #     `#` and the trailing ` into <target>` are both optional. The GitHub
+          #     `#`, the `<owner>/` (or `origin/`) before the branch and the
+          #     trailing ` into <target>` are all optional; a GitHub merge commit
+          #     names its owner (`from owner/chore/bump-X.Y.Z`). The GitHub
           #     Actions counterpart already handles this format; this keeps the
           #     Azure DevOps job in parity.
+          # Only the subject is matched. An Azure DevOps merge commit is
+          # `Merged PR <n>: <title>` followed by the PR's description, and a
+          # squash merge's body can list the commits it squashed, so a bump
+          # named below the subject is not this commit's; matched line by line,
+          # a description that read like a bump released a PR that was not one.
           # X.Y.Z may carry a fork's fourth segment (X.Y.Z.N or X.Y.Z-N), the
           # shape the tag-ref path below and the walk's tag list already read.
           # Without it, a four-segment bump released its first three segments
@@ -61,7 +70,7 @@ jobs:
           # `\8` the GitHub-style PR-merge one; `\4`, `\6` and `\9` are their
           # fourth segments, inside them. sed numbers no group past `\9`, so a
           # group added here must not push a version beyond it.
-          REGEX="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?)'.*$|.*chore\(bump\):.*version to ([0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?).*|^Merge pull request #?[0-9]+ from (origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?)( into .+)?$"
+          REGEX="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?)'.*$|.*chore\(bump\):.*version to ([0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?).*|^Merge pull request #?[0-9]+ from ([A-Za-z0-9_.-]+\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?)( into .+)?$"
 
           VERSION=""
           # Tag-push recovery: derive the version straight from the tag ref when
@@ -75,8 +84,8 @@ jobs:
               VERSION=$(printf '%s' "${BUILD_SOURCEBRANCHNAME:-}" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?' | head -n 1)
               ;;
           esac
-          if [ -z "$VERSION" ] && echo -n "$COMMIT_MESSAGE" | grep -Eq "$REGEX"; then
-            VERSION=$(echo "$COMMIT_MESSAGE" | sed -En "s/$REGEX/\3\5\8/p" | head -n 1)
+          if [ -z "$VERSION" ] && echo -n "$COMMIT_SUBJECT" | grep -Eq "$REGEX"; then
+            VERSION=$(echo "$COMMIT_SUBJECT" | sed -En "s/$REGEX/\3\5\8/p" | head -n 1)
           fi
 
           if [ -n "$VERSION" ]; then
@@ -100,7 +109,8 @@ jobs:
           # no version tag yet collects nothing. Only on a branch: a tag run
           # releases its own tag. The result is `version=commit` pairs, oldest
           # first, which the tag step creates in that order, each on its own
-          # commit. Only versions and commit ids reach the log, never a message.
+          # commit. Each commit is read by its subject alone, as HEAD is above.
+          # Only versions and commit ids reach the log, never a message.
           BATCHED_RELEASES=""
           case "${BUILD_SOURCEBRANCH:-}" in
             refs/heads/*)
@@ -122,9 +132,9 @@ jobs:
                 for COMMIT in $(git rev-list --first-parent --max-count=1000 HEAD | tail -n +2); do
                   [ "$COMMIT" != "$PREVIOUS_RUN_COMMIT" ] || break
                   BUMP=""
-                  BUMP_MESSAGE="$(git log -1 --pretty=%B "$COMMIT")"
-                  if printf '%s' "$BUMP_MESSAGE" | grep -Eq "$REGEX"; then
-                    BUMP=$(printf '%s\n' "$BUMP_MESSAGE" | sed -En "s/$REGEX/\3\5\8/p" | head -n 1)
+                  BUMP_SUBJECT="$(git log -1 --pretty=%B "$COMMIT" | sed -n '1p')"
+                  if printf '%s' "$BUMP_SUBJECT" | grep -Eq "$REGEX"; then
+                    BUMP=$(printf '%s\n' "$BUMP_SUBJECT" | sed -En "s/$REGEX/\3\5\8/p" | head -n 1)
                   fi
                   [ -n "$BUMP" ] || continue
                   if printf '%s\n' "$TAG_VERSIONS" | grep -qxF "$BUMP" \

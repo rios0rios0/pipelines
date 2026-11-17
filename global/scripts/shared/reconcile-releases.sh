@@ -45,14 +45,17 @@ tag_exists() {
 
 # Resolve the commit that should carry the tag for a version: the bump commit,
 # identified by its message, falling back to the commit that first introduced
-# the changelog heading. The "($|[^0-9])" boundary stops "2.32.1" from matching
-# a "2.32.14" bump.
+# the changelog heading. A version matches only as a whole: the character after
+# it is not a digit, nor a "." or "-" followed by one. That stops "2.32.1" from
+# matching a "2.32.14" bump, and "3.8.0" a fork's "3.8.0.5" or "3.8.0-1" one,
+# which the "($|[^0-9])" boundary this replaced let through.
+boundary='($|[^0-9.-]|[.-]($|[^0-9]))'
 find_bump_commit() {
   v="$1"
   escaped="$(printf '%s' "$v" | sed 's/[.]/\\./g')"
-  sha="$(git log --format='%H' -E --grep="chore/bump-${escaped}(\$|[^0-9])" -n 1 2>/dev/null || true)"
+  sha="$(git log --format='%H' -E --grep="chore/bump-${escaped}${boundary}" -n 1 2>/dev/null || true)"
   if [ -z "$sha" ]; then
-    sha="$(git log --format='%H' -E --grep="version to ${escaped}(\$|[^0-9])" -n 1 2>/dev/null || true)"
+    sha="$(git log --format='%H' -E --grep="version to ${escaped}${boundary}" -n 1 2>/dev/null || true)"
   fi
   if [ -z "$sha" ]; then
     sha="$(git log --reverse --format='%H' -S"## [${v}]" -- "$CHANGELOG" 2>/dev/null | head -n 1 || true)"

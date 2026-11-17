@@ -450,6 +450,62 @@ assert_eq "the merge commit on the branch is tagged, not the bump commit inside 
 assert_true "...whose message also says chore(bump)" "[[ '$INNER' != '$MERGED' ]] && git -C '$R' log -1 --format=%s '$INNER' | grep -q 'chore(bump)'"
 
 echo ""
+echo "=== A fork's four-segment versions: each tagged whole, on its own commit ==="
+# given: a fork released as 1.0.0.1, then a bump in each format, the last one at HEAD
+R="$(new_repo four-segment)" || exit 1
+PREVIOUS="$(bump "$R" 1.0.0.1 'Merged PR 101: chore(bump): bumped version to 1.0.0.1')" && released "$R" 1.0.0.1
+FIRST="$(bump "$R" 1.0.0.2 "Merge branch 'chore/bump-1.0.0.2'")"
+SECOND="$(bump "$R" 1.0.0.3 'Merge pull request #8 from chore/bump-1.0.0.3 into main')"
+HEAD_SHA="$(bump "$R" 1.0.0.4 'Merged PR 104: chore(bump): bumped version to 1.0.0.4')"
+# when
+run_release "$R" refs/heads/main "$PREVIOUS"
+# then
+assert_eq "HEAD's version keeps its fourth segment" "1.0.0.4" "$VERSION_SET"
+assert_eq "the bumps below HEAD are collected whole, oldest first" "1.0.0.2=$FIRST 1.0.0.3=$SECOND" "$BATCHED"
+assert_eq "three tags, each on its own commit, and never the three-segment 1.0.0" \
+  "1.0.0.2@$FIRST 1.0.0.3@$SECOND 1.0.0.4@$HEAD_SHA" "$REQUESTS"
+assert_true "each tag carries its own version's notes" \
+  "notes_of 1 | grep -q 'notes for 1.0.0.2' && ! notes_of 1 | grep -q 'notes for 1.0.0.3' && notes_of 3 | grep -q 'notes for 1.0.0.4'"
+
+# given: the dash form, released as 1.0.1-1, with a branch-merge bump to 1.0.1-2 below HEAD
+R="$(new_repo four-segment-dash)" || exit 1
+PREVIOUS="$(bump "$R" 1.0.1-1 'Merged PR 101: chore(bump): bumped version to 1.0.1-1')" && released "$R" 1.0.1-1
+BUMP_SHA="$(bump "$R" 1.0.1-2 "Merge branch 'chore/bump-1.0.1-2'")"
+merge "$R" feat/a 'Merged PR 103: feat: added a' > /dev/null
+# when
+run_release "$R" refs/heads/main "$PREVIOUS"
+# then
+assert_eq "a dash four-segment bump below HEAD is tagged whole, on its own commit" "1.0.1-2@$BUMP_SHA" "$REQUESTS"
+
+# given: an untagged four-segment bump older than the newest release
+R="$(new_repo four-segment-older)" || exit 1
+PREVIOUS="$(bump "$R" 1.0.0.1 'Merged PR 101: chore(bump): bumped version to 1.0.0.1')" && released "$R" 1.0.0.1
+bump "$R" 1.0.0.2 'Merged PR 102: chore(bump): bumped version to 1.0.0.2' > /dev/null
+bump "$R" 1.0.0.3 'Merged PR 103: chore(bump): bumped version to 1.0.0.3' > /dev/null && released "$R" 1.0.0.3
+merge "$R" feat/a 'Merged PR 104: feat: added a' > /dev/null
+# when
+run_release "$R" refs/heads/main "$PREVIOUS"
+# then
+assert_eq "the walk stops at the newest four-segment release, and an older untagged bump stays untagged" "" "$REQUESTS"
+
+echo ""
+echo "=== Untagged bumps that earlier runs built stay untagged when the job is added ==="
+# given: a fork whose newest tag is 1.0.0.1, two later bumps that no run tagged (each built by a
+# CI run of its own, before the job existed), and the merge that adds the release job on top
+R="$(new_repo job-added)" || exit 1
+bump "$R" 1.0.0.1 'Merged PR 101: chore(bump): bumped version to 1.0.0.1' > /dev/null && released "$R" 1.0.0.1
+bump "$R" 1.0.0.2 'Merged PR 102: chore(bump): bumped version to 1.0.0.2' > /dev/null
+PREVIOUS="$(bump "$R" 1.0.0.3 'Merged PR 103: chore(bump): bumped version to 1.0.0.3')"
+merge "$R" chore/release-job 'Merged PR 104: chore: added the release job' > /dev/null
+# when: the job's first run, the CI run before it having built the newer of the two bumps
+run_release "$R" refs/heads/main "$PREVIOUS"
+# then
+assert_eq "HEAD is not a bump" "true" "$SKIP"
+assert_eq "neither untagged bump is collected" "" "$BATCHED"
+assert_eq "...nothing is asked for" "" "$REQUESTS"
+assert_true "...with no warning" "! grep -q '##\[warning\]' '$EXTRACT_OUT'"
+
+echo ""
 echo "=== Failures stay loud, and messages stay out of the log ==="
 R="$(new_repo failure)" || exit 1
 PREVIOUS="$(bump "$R" 1.0.0 'Merged PR 101: chore(bump): bumped version to 1.0.0')" && released "$R" 1.0.0

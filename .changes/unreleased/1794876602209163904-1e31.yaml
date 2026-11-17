@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the release job of all three platforms cutting the wrong tag, or none, for a fork''s four-segment version (`X.Y.Z.N` or `X.Y.Z-N`): the bump-commit patterns stopped at three segments while the tag-ref path read four, so a `1.0.0.1` bump was tagged `1.0.0` from a conventional `chore(bump)` commit (and from every format on GitHub Actions), and not at all from a `chore/bump-` branch or pull request merge on GitLab CI and Azure DevOps. Every format now releases the whole version, the batched-run walk of the Azure DevOps job included, and `make test ONLY=release-bump-formats` runs the step of each platform on every format and version shape'
+time: '2026-11-17T00:50:02.209072143Z'

@@ -90,7 +90,7 @@ script_block "$RELEASE" 2 > "$WORK/create-tag.sh"
 
 echo "=== Release job: the steps this suite runs ==="
 assert_true "the first step is 'Extract Release Version' and has a script" \
-  "[[ -s '$WORK/extract.sh' ]] && grep -q 'COMMIT_MESSAGE=\"\$(git log -1 --pretty=%B)\"' '$WORK/extract.sh'"
+  "[[ -s '$WORK/extract.sh' ]] && grep -qF 'COMMIT_SUBJECT=\"\$(git log -1 --pretty=%B | sed -n' '$WORK/extract.sh'"
 assert_true "the second step creates the tags and has a script" \
   "[[ -s '$WORK/create-tag.sh' ]] && grep -q 'annotatedtags' '$WORK/create-tag.sh'"
 assert_true "the job checks out the whole history, which the walk back to the last tag needs" \
@@ -504,6 +504,24 @@ assert_eq "HEAD is not a bump" "true" "$SKIP"
 assert_eq "neither untagged bump is collected" "" "$BATCHED"
 assert_eq "...nothing is asked for" "" "$REQUESTS"
 assert_true "...with no warning" "! grep -q '##\[warning\]' '$EXTRACT_OUT'"
+
+echo ""
+echo "=== A bump named only in a merge's description is not a bump ==="
+# given: a released 1.0.0 and a real bump to 1.1.0 whose merge carries a description, then a
+# feature merge whose pull request description reads like a bump to 1.2.0, and at HEAD one whose
+# description quotes a bump branch merge to 1.3.0
+R="$(new_repo description-only)" || exit 1
+PREVIOUS="$(bump "$R" 1.0.0 'Merged PR 101: chore(bump): bumped version to 1.0.0')" && released "$R" 1.0.0
+BUMP_SHA="$(bump "$R" 1.1.0 $'Merged PR 102: chore(bump): bumped version to 1.1.0\n\nBumped the version.')"
+merge "$R" feat/a $'Merged PR 103: feat: added a\n\nchore(bump): bumped version to 1.2.0' > /dev/null
+merge "$R" feat/b $'Merged PR 104: feat: added b\n\nMerge branch \'chore/bump-1.3.0\'' > /dev/null
+# when: the run on main reads HEAD and walks below it
+run_release "$R" refs/heads/main "$PREVIOUS"
+# then: only the subjects count -- HEAD is no bump, and the walk passes the feature merge by
+assert_eq "HEAD, whose description quotes a bump, is not a bump" "true:" "$SKIP:$VERSION_SET"
+assert_eq "only the real bump below HEAD is collected" "1.1.0=$BUMP_SHA" "$BATCHED"
+assert_eq "...and tagged, on its own commit" "1.1.0@$BUMP_SHA" "$REQUESTS"
+assert_eq "...and both steps succeed" "0 0" "$EXTRACT_EXIT $TAG_EXIT"
 
 echo ""
 echo "=== Failures stay loud, and messages stay out of the log ==="

@@ -16,7 +16,13 @@ release:
       #   - git-native merge:      "Merge branch 'chore/bump-X.Y.Z'..."
       #   - conventional commit:   "chore(bump): bumped version to X.Y.Z"
       #   - GitHub-style PR merge: "Merge pull request N from chore/bump-X.Y.Z into main"
-      #     (leading `#` and trailing ` into <target>` both optional)
+      #     (leading `#`, the `<owner>/` a GitHub merge commit puts before the
+      #     branch, and trailing ` into <target>` all optional)
+      # Only the subject, the first line of CI_COMMIT_MESSAGE, is matched. A
+      # merge commit carries its merge request's title, and whatever else its
+      # template adds, below that line, so a bump named there is not this
+      # commit's; matched line by line, such a line released the merge of a
+      # merge request that was not a bump.
       # X.Y.Z may carry a fork's fourth segment (X.Y.Z.N or X.Y.Z-N), as the tag
       # rule below already does; without it the conventional format released
       # `1.0.0` for a `1.0.0.1` bump and the two branch formats released nothing.
@@ -25,7 +31,8 @@ release:
       # segments, inside them); only one matches, the rest expand to empty. sed
       # numbers no group past `\9`, so a group added here must not push a version
       # beyond it.
-      REGEX="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?)'.*$|.*chore\(bump\):.*version to ([0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?).*|^Merge pull request #?[0-9]+ from (origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?)( into .+)?$"
+      REGEX="^Merge (remote-tracking|remote|tracking)? ?branch '(origin\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?)'.*$|.*chore\(bump\):.*version to ([0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?).*|^Merge pull request #?[0-9]+ from ([A-Za-z0-9_.-]+\/)?chore\/bump-([0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?)( into .+)?$"
+      COMMIT_SUBJECT=$(printf '%s\n' "$CI_COMMIT_MESSAGE" | sed -n '1p')
 
       # Tag-push recovery: a version tag (re-)pushed to recover a bump whose
       # default-branch run failed the quality gate derives its version straight
@@ -33,37 +40,29 @@ release:
       VERSION=""
       if [ -n "${CI_COMMIT_TAG:-}" ]; then
           VERSION=$(echo "$CI_COMMIT_TAG" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?' | head -n 1)
-      elif echo "$CI_COMMIT_MESSAGE" | grep -Eq "$REGEX"; then
-          VERSION=$(echo "$CI_COMMIT_MESSAGE" | sed -En "s/$REGEX/\3\5\8/p" | head -n 1)
+      elif echo "$COMMIT_SUBJECT" | grep -Eq "$REGEX"; then
+          VERSION=$(echo "$COMMIT_SUBJECT" | sed -En "s/$REGEX/\3\5\8/p" | head -n 1)
       fi
 
       if [ -n "$VERSION" ]; then
           RELEASE_NOTES=""
           if [ -f CHANGELOG.md ]; then
               RELEASE_NOTES=$(awk '/## \[Unreleased\]/ {skip=1; next} skip && /## \[.*\]/ {found=1; skip=0; next} found && /## \[.*\]/ {exit} found {print}' CHANGELOG.md)
-              RELEASE_NOTES=$(echo "$RELEASE_NOTES" | jq --raw-input --slurp .)
           fi
 
-          DATA="{
-            \"name\": \"Release $VERSION\",
-            \"tag_name\": \"$VERSION\",
-            \"description\": $RELEASE_NOTES,
-            \"ref\": \"$CI_COMMIT_SHA\""
-
-          # Add the build artifact link if available
-          if [ ! -z "$BUILD_ARTIFACT" ]; then
-            DATA="$DATA,
-            \"assets\": {
-              \"links\": [
-                {
-                  \"name\": \"$BUILD_ARTIFACT\",
-                  \"url\": \"$PACKAGE_REGISTRY_URL/$BUILD_ARTIFACT\"
-                }
-              ]
-            }"
-          fi
-
-          DATA="$DATA}"
+          # The request body, built by jq (installed above) so every value is
+          # escaped and the notes are always a JSON string, an empty one in a
+          # repository with no CHANGELOG.md. Put together by hand, the body read
+          # `"description": ,` there -- invalid JSON, so no release was cut. The
+          # build artifact's link is added when the build stage left one.
+          DATA=$(jq -n \
+            --arg version "$VERSION" \
+            --arg notes "$RELEASE_NOTES" \
+            --arg ref "$CI_COMMIT_SHA" \
+            --arg artifact "${BUILD_ARTIFACT:-}" \
+            --arg registry "${PACKAGE_REGISTRY_URL:-}" \
+            '{name: ("Release " + $version), tag_name: $version, description: $notes, ref: $ref}
+              + (if $artifact == "" then {} else {assets: {links: [{name: $artifact, url: ($registry + "/" + $artifact)}]}} end)')
 
           curl -XPOST "$CI_API_V4_URL/projects/$CI_PROJECT_ID/releases" \
                --header "JOB-TOKEN: $CI_JOB_TOKEN" \
@@ -73,10 +72,12 @@ release:
           echo 'Commit is not a bump and ref is not a version tag, not creating a release'
       fi
   rules:
-    # Coarse pre-filter; the script REGEX is the source of truth. Allow both the
-    # branch-name form (`chore/bump-X.Y.Z`, covers git-native and GitHub PR-merge
-    # subjects) and the conventional-commit form (`chore(bump): ... version to X.Y.Z`).
-    # Neither is anchored after the version, so a four-segment one passes both.
+    # Coarse pre-filter; the script REGEX, on the subject alone, is the source of
+    # truth. Allow both the branch-name form (`chore/bump-X.Y.Z`, covers
+    # git-native and GitHub PR-merge subjects) and the conventional-commit form
+    # (`chore(bump): ... version to X.Y.Z`). Neither is anchored after the
+    # version, so a four-segment one passes both, and both read the whole
+    # message, so a job they start for a bump named below the subject skips.
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && ($CI_COMMIT_MESSAGE =~ /chore\/bump-[0-9]+\.[0-9]+\.[0-9]+/ || $CI_COMMIT_MESSAGE =~ /chore\(bump\):.*version to [0-9]+\.[0-9]+\.[0-9]+/)
       when: 'always'
     # Tag-push recovery: a version tag (re-)pushed to recover a bump whose

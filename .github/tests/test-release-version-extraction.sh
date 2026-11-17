@@ -22,22 +22,23 @@ TESTS_FAILED=0
 #   $1 = GITHUB_REF        (e.g. "refs/tags/v1.2.3" or "refs/heads/main")
 #   $2 = GITHUB_REF_NAME   (e.g. "v1.2.3" or "main")
 #   $3 = HEAD commit message
+# A tag run reads the tag alone, and a branch run the message's subject alone.
 extract_version() {
-  local ref="$1" ref_name="$2" msg="$3" version=""
+  local ref="$1" ref_name="$2" msg="$3" version="" subject
 
   case "$ref" in
     refs/tags/*)
-      version="$(printf '%s' "$ref_name" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?' | head -n 1)"
+      version="$(printf '%s' "$ref_name" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?' | head -n 1 || true)"
+      ;;
+    *)
+      subject="$(printf '%s\n' "$msg" | sed -n '1p')"
+      if echo "$subject" | grep -Eq "chore/bump-[0-9]+\.[0-9]+\.[0-9]+"; then
+        version=$(echo "$subject" | grep -oE "chore/bump-[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?" | head -n 1 | sed 's/chore\/bump-//')
+      elif echo "$subject" | grep -Eq "chore\(bump\):.*version to [0-9]+\.[0-9]+\.[0-9]+"; then
+        version=$(echo "$subject" | grep -oE "version to [0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?" | head -n 1 | sed 's/version to //')
+      fi
       ;;
   esac
-
-  if [[ -z "$version" ]]; then
-    if echo "$msg" | grep -Eq "chore/bump-[0-9]+\.[0-9]+\.[0-9]+"; then
-      version=$(echo "$msg" | grep -oE "chore/bump-[0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?" | head -n 1 | sed 's/chore\/bump-//')
-    elif echo "$msg" | grep -Eq "chore\(bump\):.*version to [0-9]+\.[0-9]+\.[0-9]+"; then
-      version=$(echo "$msg" | grep -oE "version to [0-9]+\.[0-9]+\.[0-9]+([.-][0-9]+)?" | head -n 1 | sed 's/version to //')
-    fi
-  fi
 
   printf '%s' "$version"
 }
@@ -64,6 +65,8 @@ assert_version "real backfilled tag"         "refs/tags/2.33.0"   "2.33.0"   "" 
 assert_version "fork dot four-segment tag"   "refs/tags/1.0.0.1"  "1.0.0.1"  "" "1.0.0.1"
 assert_version "fork dash four-segment tag"  "refs/tags/v1.0.1-2" "v1.0.1-2" "" "1.0.1-2"
 assert_version "non-version tag is skipped"  "refs/tags/latest"   "latest"   "" ""
+assert_version "non-version tag over a bump commit is skipped" \
+  "refs/tags/latest" "latest" "chore(bump): bumped version to 1.2.3" ""
 
 # Main-branch delivery path
 assert_version "PR merge bump message" \
@@ -76,6 +79,10 @@ assert_version "fork dash four-segment conventional bump message" \
   "refs/heads/main" "main" "chore(bump): bumped version to 1.0.1-2" "1.0.1-2"
 assert_version "non-bump commit is skipped" \
   "refs/heads/main" "main" "fix(core): corrected an edge case" ""
+assert_version "PR merge bump message, its title below" \
+  "refs/heads/main" "main" $'Merge pull request #258 from rios0rios0/chore/bump-2.32.15\n\nchore(bump): bumped version to 2.32.15' "2.32.15"
+assert_version "bump named only below the subject is skipped" \
+  "refs/heads/main" "main" $'feat: added a (#12)\n\n* chore(bump): bumped version to 9.9.9' ""
 
 # Tag ref wins over the commit message when both are present
 assert_version "tag ref takes precedence over commit message" \

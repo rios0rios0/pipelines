@@ -2,6 +2,10 @@ parameters:
   - name: 'DEPENDS_ON'
     type: object
     default: ''
+  # The Python every job of this stage sets up; see `abstracts/pdm-python3.14.yaml`.
+  - name: 'PYTHON_VERSION'
+    type: 'string'
+    default: '3.14'
 
 stages:
   - stage: 'management'
@@ -34,6 +38,8 @@ stages:
         steps:
           # $(Scripts.Directory) was already defined in the line below
           - template: '../../abstracts/pdm-python3.14.yaml'
+            parameters:
+              PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
 
           - script: $(Scripts.Directory)/global/scripts/languages/python/cyclonedx/run.sh
 

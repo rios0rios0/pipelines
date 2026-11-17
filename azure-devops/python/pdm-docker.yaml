@@ -5,12 +5,28 @@ parameters:
   - name: 'RUN_BEFORE_BUILD'
     type: 'string'
     default: ''
+  # The Python minor the code check, security, tests and management jobs set up with
+  # `UsePythonVersion@0`, such as '3.15'. A project whose image ships a newer Python
+  # than the default sets it to that one, so the Python it ships is the one its jobs
+  # tested. The delivery stage builds the project's own Dockerfile, whose base image
+  # decides the Python inside it; this parameter does not change that.
+  - name: 'PYTHON_VERSION'
+    type: 'string'
+    default: '3.14'
 
 stages:
   - template: 'stages/10-code-check/pdm.yaml'
+    parameters:
+      PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
   - template: 'stages/20-security/pdm.yaml'
+    parameters:
+      PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
   - template: 'stages/30-tests/pdm.yaml'
+    parameters:
+      PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
   - template: 'stages/35-management/pdm.yaml'
+    parameters:
+      PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
   - template: 'stages/40-delivery/docker.yaml'
     parameters:
       DOCKER_BUILD_ARGS: ${{ parameters.DOCKER_BUILD_ARGS }}

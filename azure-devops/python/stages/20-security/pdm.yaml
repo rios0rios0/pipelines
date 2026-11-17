@@ -2,6 +2,10 @@ parameters:
   - name: 'DEPENDS_ON'
     type: object
     default: ''
+  # The Python every job of this stage sets up; see `abstracts/pdm-python3.14.yaml`.
+  - name: 'PYTHON_VERSION'
+    type: 'string'
+    default: '3.14'
 
 stages:
   - stage: 'security'
@@ -21,13 +25,13 @@ stages:
           CODEQL_LANGUAGE: 'python'
           # The Python extractor runs on the `python3` it finds on PATH, and this job set none up:
           # an agent without one failed the analysis -- quietly, since that step is
-          # `continueOnError`. The same pinned Python as the other Python jobs here.
+          # `continueOnError`. The same Python as the other Python jobs here.
           PRE_STEPS:
             - task: 'UsePythonVersion@0'
               inputs:
-                versionSpec: '3.14'
+                versionSpec: "${{ parameters.PYTHON_VERSION }}"
                 architecture: 'x64'
-              displayName: 'Use Python 3.14'
+              displayName: "Use Python ${{ parameters.PYTHON_VERSION }}"
 
       - template: '../../../global/stages/20-security/hadolint.yaml'
 
@@ -35,6 +39,8 @@ stages:
         displayName: 'sca:safety'
         steps:
           - template: '../../abstracts/pdm-python3.14.yaml'
+            parameters:
+              PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
           - script: |
               # Azure DevOps substitutes nothing for an UNDEFINED variable, so the
               # mapping below delivers the macro text itself rather than an empty

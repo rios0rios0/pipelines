@@ -1,3 +1,16 @@
+# The Python of every Azure DevOps PDM job, and the project installed on it.
+#
+# `PYTHON_VERSION` is the Python `UsePythonVersion@0` sets up, a minor such as '3.15'.
+# This file is named after its default, 3.14, and keeps that name when a project picks
+# another: consumers include the abstracts by PATH, so renaming one breaks them at
+# expansion time. Every PDM stage forwards its own `PYTHON_VERSION` here, and the entry
+# point (`pdm-docker.yaml`) forwards one to every stage, so a project sets the Python of
+# all its jobs in one place.
+parameters:
+  - name: 'PYTHON_VERSION'
+    type: 'string'
+    default: '3.14'
+
 steps:
   # The cache holds the project's `.venv`, and a virtualenv cannot be moved: the
   # console scripts PDM installs (`black`, `isort`, `flake8`, `mypy`, ...) start
@@ -6,12 +19,21 @@ steps:
   # the sources lived at one path is restored under another -- a hosted image
   # whose agent runs as a different user moves the whole workspace -- and then
   # `pdm install` reports every package in sync while each `pdm run <tool>` fails
-  # with `No such file or directory` on a script that is right there. The
-  # directory is quoted so that the Cache task reads it as a string, not as a
-  # file whose contents it should hash.
+  # with `No such file or directory` on a script that is right there.
+  #
+  # The key names the Python too. A `.venv` keeps the interpreter that created it,
+  # and PDM reuses an in-project virtualenv for as long as that interpreter exists,
+  # as it does on a hosted agent that carries several Pythons. Restored after a
+  # project moves to another `PYTHON_VERSION` with an unchanged `pdm.lock`, the
+  # old one would keep every job on the old Python while the step below reports
+  # the new one.
+  #
+  # Both segments are quoted so that the Cache task reads them as strings: it
+  # takes any segment that looks like a path, one with a `.` in it included, for
+  # a file whose contents it should hash.
   - task: 'Cache@2'
     inputs:
-      key: "$(Agent.JobName)|$(Agent.OS)|\"$(System.DefaultWorkingDirectory)\"|pdm.lock"
+      key: "$(Agent.JobName)|$(Agent.OS)|\"$(System.DefaultWorkingDirectory)\"|\"Python ${{ parameters.PYTHON_VERSION }}\"|pdm.lock"
       path: '.venv'
     displayName: 'Cache for Python modules'
     continueOnError: true
@@ -20,9 +42,9 @@ steps:
 
   - task: 'UsePythonVersion@0'
     inputs:
-      versionSpec: '3.14'
+      versionSpec: "${{ parameters.PYTHON_VERSION }}"
       architecture: 'x64'
-    displayName: 'Use Python 3.14'
+    displayName: "Use Python ${{ parameters.PYTHON_VERSION }}"
 
   - script: |
       python -m pip install --only-binary :all: "pdm==2.29.7" "unearth==0.19.0" "hishel==2.0.0"

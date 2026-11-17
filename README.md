@@ -548,7 +548,7 @@ toolchain its other jobs set up, so the analysis no longer depends on what the a
 | Language | GitLab CI `sast:codeql` runs in | Azure DevOps sets up first |
 |----------|---------------------------------|----------------------------|
 | Go | `.go`'s Go image | the pinned Go (`GoTool@0`) |
-| Python | the shared default, `python:3.13-slim` | Python 3.14 (`UsePythonVersion@0`) |
+| Python | the shared default, `python:3.13-slim` | the Python of its other jobs, `PYTHON_VERSION` (3.14 by default; `UsePythonVersion@0`) |
 | JavaScript / TypeScript | the shared default, with Node.js installed for TypeScript | Node.js 24, the release `NODE_PINNED_VERSION` names (`UseNode@1`) |
 | Java, Gradle | `gradle:8.7.0-jdk21`, the glibc build of `.gradle`'s Gradle and JDK | JDK 25 (`JavaToolInstaller@0`) |
 | Java, Maven | `.maven`'s `maven:3.8.8-eclipse-temurin-11` | no Maven template |
@@ -1369,6 +1369,24 @@ resources:
 stages:
   - template: 'azure-devops/golang/go-docker.yaml@pipelines'
 ```
+
+#### Usage Example (Python PDM with Docker)
+
+With the `trigger`, `pool`, `variables` and `resources` of the Go example above:
+
+```yaml
+stages:
+  - template: 'azure-devops/python/pdm-docker.yaml@pipelines'
+    parameters:
+      PYTHON_VERSION: '3.15'  # Optional: the default is '3.14'
+```
+
+`PYTHON_VERSION` is the Python of every job that sets one up: the code check, `sca:safety` and the
+CodeQL analysis, the tests and the Dependency-Track report. Set it to the Python your image ships, so
+the interpreter you release is the one your pipeline tested. The delivery stage builds your own
+`.ci/stages/40-delivery/app.Dockerfile`, whose base image decides the Python inside it; the parameter
+does not change that. The `.venv` cache is keyed on the Python as well, so a move to another one
+never restores a virtualenv the old one made.
 
 #### Usage Example (Dart / Flutter)
 
@@ -2652,6 +2670,7 @@ Pre-built container images optimized for CI/CD environments:
 |----------------------------|---------------------------------|--------------------------------|
 | `golang.1.27-awscli`       | Go 1.27 + AWS CLI               | `ghcr.io/rios0rios0/pipelines` |
 | `python.3.14-pdm-trixie`   | Python 3.14 + PDM               | `ghcr.io/rios0rios0/pipelines` |
+| `python.3.15-pdm-trixie`   | Python 3.15 + PDM               | `ghcr.io/rios0rios0/pipelines` |
 | `awscli.latest`            | AWS CLI tools                   | `ghcr.io/rios0rios0/pipelines` |
 | `bfg.latest`               | BFG Repo-Cleaner                | `ghcr.io/rios0rios0/pipelines` |
 | `mssql-tools18.latest`     | Microsoft SQL Server tools      | `ghcr.io/rios0rios0/pipelines` |

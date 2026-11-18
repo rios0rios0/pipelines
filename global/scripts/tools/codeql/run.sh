@@ -11,6 +11,7 @@ fileName="$(pwd)/$REPORT_PATH/codeql.sarif"
 CODEQL_DB="$(pwd)/.codeql-db"
 CODEQL_DB_ACTIVE=false
 SCAN_WORK=""
+GIT_GLOBAL_WORK=""
 
 cleanup_codeql() {
   if [ "$CODEQL_DB_ACTIVE" = true ]; then
@@ -18,6 +19,9 @@ cleanup_codeql() {
   fi
   if [ -n "$SCAN_WORK" ]; then
     rm -rf "$SCAN_WORK"
+  fi
+  if [ -n "$GIT_GLOBAL_WORK" ]; then
+    rm -rf "$GIT_GLOBAL_WORK"
   fi
   return 0
 }
@@ -144,10 +148,29 @@ if [ -f "$(pwd)/codeql-config.yml" ]; then
   echo "Using project CodeQL config: codeql-config.yml"
 fi
 
-# Load project-level configuration if available (e.g. for Go build environment)
+# Load project-level configuration if available (e.g. for Go build environment).
+#
+# It is SOURCED, in this process, because the Go build `database create` runs below is a child of
+# it: whatever `config.sh` exports -- GOPRIVATE, and the git settings that authenticate private
+# module fetches -- reaches that build and nothing else. A `config.sh` may hand git its settings in
+# either of two ways, and both work here:
+#   - through the environment (`GIT_CONFIG_COUNT`/`KEY`/`VALUE`), which is what a current one does
+#     on a developer's machine: the build inherits it, and it ends with this scan;
+#   - with `git config --global`, which an older one does everywhere and a current one does on a CI
+#     runner, where later steps of the job read what it wrote. On a developer's machine that wrote
+#     the token -- or an `Authorization` header with an empty one -- into `~/.gitconfig`, where it
+#     outlived the scan and reached every later `git` on the machine. So off CI the global
+#     configuration is isolated first (`git_isolate_global_config`): such a write lands in a file
+#     of this scan, which the build reads and the cleanup removes, while everything the developer
+#     configured still applies through it.
 if [ "$CODEQL_LANGUAGE" = "go" ]; then
   INIT_SCRIPT="config.sh"
   if [ -f "$INIT_SCRIPT" ]; then
+    if ! codeql_on_ci; then
+      . "$SCRIPTS_DIR/global/scripts/shared/git-config.sh"
+      GIT_GLOBAL_WORK="$(mktemp -d)" || exit 1
+      git_isolate_global_config "$GIT_GLOBAL_WORK" || exit 1
+    fi
     # shellcheck disable=SC1090
     . ./"$INIT_SCRIPT"
   else

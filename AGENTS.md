@@ -45,16 +45,20 @@ there is no target to add and no list to keep in step.
 | `docker-multi-arch` | 40-delivery/docker multi-arch contract |
 | `fixture-isolation` | That every suite builds its fixtures in mktemp space and guards every cd |
 | `gitignore` | The shared .gitignore block generator |
+| `gitleaks-safe-directory` | How a script makes git trust a directory another user owns (`git_trust_directory`: the global configuration, once, on a CI runner; the run's own environment, never `~/.gitconfig`, on a developer's machine), end to end through the Gitleaks runner |
 | `go-cache-trim` | The Go build-cache disk guard (threshold parsing, trim decision) |
 | `go-coverage-report` | The Go runner's `cobertura.xml`: generated files stay in by default and leave it on `GO_COVERAGE_IGNORE_GENERATED`, while `coverage.txt` stays whole, and the GitHub input that carries it |
 | `go-cross-compile` | The Go cross-compile runner (every target in one job, at most CROSS_COMPILE_JOBS at once, a failing target named) |
+| `go-free-disk-space` | The Azure DevOps Go test job's opt-in disk clean-up (`FREE_DISK_SPACE`: what the script removes and keeps -- the .NET runtime the coverage publication needs --, `sudo -n`, absent paths and failures never failing the job, `df -h` before and after, and the parameter's chain from `go-docker.yaml` to the step before `Run Tests`) |
 | `go-helpers` | Run the Go helpers' unit tests (`go test ./...`; the dependency-update tool's behaviour, policy and command line) |
 | `go-integration-scope` | Which packages the Go runner's integration phase selects, and the timeout and environment (`GO_TEST_INTEGRATION_ENV`) it runs them under |
 | `go-module-toolchain` | That every go.mod toolchain directive is readable by the images/analysers/workflows that consume it |
+| `go-project-config` | How the Go runners load a project's `config.sh`, whether it writes the global git configuration or exports its settings: in the process of the CodeQL build, with a global write isolated to a file of the scan on a developer's machine; left in the global configuration for later steps by the CI init step; sourced, not executed, by the GitLab CI SAM delivery |
 | `go-test-selection` | The Go runner's `affected` test selection (`selection.sh`: the packages a change reaches through the dependency graph, the fall-backs to everything, a documentation-only change running nothing) and the `test_selection` input that carries it |
 | `go-tmpdir-modcache` | That the Go module cache stays out of $TMPDIR |
 | `go-tool-staleness` | That a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves |
 | `go-validation` | Go validation script |
+| `golangci-fix-verdict` | That `make lint`'s `golangci-lint/run.sh --fix` fails when it rewrote a file, naming it, as CI fails on the finding it fixed; passes once nothing is left to fix; never names a file it did not rewrite |
 | `golangci-scanner-markers` | That `golangci-lint/run.sh --fix` keeps other scanners' allow markers (e.g. `//gitleaks:allow`) |
 | `goreleaser-prepare` | The GoReleaser main package detection |
 | `govulncheck-verdict` | That govulncheck fails on a vulnerability the code calls, read from its report rather than the `-json` exit code |
@@ -1130,6 +1134,33 @@ it is. A build that needs a file `.gitignore` keeps out runs with `CODEQL_SOURCE
 failed `database create` on the copy says so. `.github/tests/test-codeql-scope.sh` asserts all of
 it against a stub `codeql`.
 
+### A Developer's Git Configuration Is Never the Pipeline's
+
+On a CI runner the global git configuration belongs to the job: the runner is thrown away, and a
+later step -- a process of its own -- may need what an earlier one wrote. On a developer's machine
+it is `~/.gitconfig`, which outlives the run. Two things wrote it from `make sast`: the Gitleaks
+runner appended the project to `safe.directory` on every scan, and the CodeQL runner sourced a
+project's `config.sh`, which ran `git config --global` with a URL rewrite carrying a token, or an
+`Authorization` header with an empty one, that every later `git` on the machine then sent.
+
+`global/scripts/shared/git-config.sh` (sourced) is where a script asks for a git setting instead:
+
+| Function | On a CI runner (`CI` or `TF_BUILD`) | On a developer's machine |
+|---|---|---|
+| `git_trust_directory <dir>` | adds `safe.directory` to the global configuration, once | exports it to this process and its children (`GIT_CONFIG_COUNT`/`KEY`/`VALUE`) |
+| `git_config_env <key> <value>` | exports it, as on a developer's machine | exports it, keeping the pairs already exported and never adding one twice |
+| `git_isolate_global_config <dir>` | -- | points `GIT_CONFIG_GLOBAL` at `<dir>/gitconfig`, which includes the global configuration git read until then, so `git config --global` writes there |
+
+The Gitleaks runner and the Dart runners' Flutter SDK trust their directory through
+`git_trust_directory`; the CodeQL runner isolates the global configuration before it sources
+`config.sh` off CI, so a `config.sh` that still writes it everywhere configures the scan's build and
+nothing after it. A `config.sh` that exports its settings off CI and writes the global configuration
+only on a CI runner works everywhere: the CodeQL runner sources it in the process of the build, and
+the CI init step (`golang/init/run.sh`, a process of its own) relies on its CI path to leave the
+settings for the Go steps after it. Never call `git config --global` from a script that runs on a
+developer's machine; `make test ONLY=gitleaks-safe-directory` and `make test ONLY=go-project-config`
+hold both behaviours.
+
 ### CodeQL Fails on Findings, Never on Its Upload
 
 `global/scripts/tools/codeql/gate.sh` decides whether a CodeQL scan passes, on every platform: it
@@ -1328,6 +1359,37 @@ The other two remedies were not needed:
 - **A cap on concurrent lint jobs per host:** it would need a runner label on every host, and it
   queues each lint behind the others to absorb a spike that a longer timeout absorbs on its own.
 
+
+### `make lint` Fails on What It Fixed
+
+`golang.mk`'s `lint` runs `golangci-lint/run.sh --fix`, which rewrites what a fixer can fix --
+every formatter finding (goimports, golines) and the linters' suggested fixes -- after which
+golangci-lint reports only what is left. CI runs the same script without `--fix`. So a run that
+fixed everything used to print `0 issues` and pass locally while CI failed on each finding it had
+fixed: a golines finding reached a consumer's default branch that way. A `--fix` run now takes a
+checksum of every Go source it may rewrite before and after (in a git work tree, the files git would
+ship from the directory, so an agent's worktree or a vendored copy is not read; elsewhere every Go
+file below it), and fails when one changed, naming each file. The fixes stay in place to be
+committed, and the two runs reach the same verdict. Do not drop the check to make `make lint`
+"friendlier": a green local run over code CI rejects is the failure it exists to prevent.
+`make test ONLY=golangci-fix-verdict` holds it.
+
+### Freeing Disk Space Is the Azure Go Test Job's Opt-In
+
+`FREE_DISK_SPACE` (`go-docker.yaml` -> `golang/stages/30-tests/go.yaml` -> `golang/abstracts/test.yaml`)
+runs `global/scripts/languages/golang/free-disk-space/run.sh` before `Run Tests`, for a consumer
+whose tests fill a Microsoft-hosted agent. It is off by default because it deletes toolchains from
+the machine, which a self-hosted agent would keep missing. Two constraints are easy to break:
+
+- **The .NET runtime stays.** `PublishCodeCoverageResults@2`, later in the same job, runs a .NET
+  program and skips the publication -- with only a warning -- when no `dotnet` is on `PATH`. The
+  script removes the SDKs, packs, templates and manifests under `/usr/share/dotnet`, nearly all of
+  its space, and keeps `dotnet`, `host/` and `shared/`.
+- **It never fails the job.** An absent path is skipped, a failed removal or prune is a `WARNING`
+  line, and the script exits 0, so the step needs no `continueOnError` (which the workflow
+  composition test would have to list).
+
+`make test ONLY=go-free-disk-space` holds both and the parameter's chain.
 
 ### Shared Ignore Rules
 

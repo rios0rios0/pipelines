@@ -1556,6 +1556,32 @@ The stage forwards it to the four shared templates under `azure-devops/global/st
 
 Before turning it on, check the security jobs of the repository's latest default-branch run: a job that is `succeededWithIssues` today fails the stage the moment the gate is on. Triaged findings belong in the tool's own suppression file (`.semgrepignore`, `.semgrepexcluderules`, `.gitleaksignore`, `.hadolint.yaml`, `.codeql-false-positives`).
 
+#### Freeing Disk Space for the Go Tests
+
+A Microsoft-hosted agent (`vmImage: 'ubuntu-latest'`) starts with its disk most of the way full: Microsoft guarantees only about 10 GB free, and the disk cannot be enlarged. A Go test job that compiles a large module twice -- the unit phase, then the integration phase with coverage instrumentation -- and pulls several GB of images for its integration suites runs out of it: the agent warns `Free disk space on / is lower than 5%`, a database container's own disk guard turns read-only, and the next large write ends in `No space left on device`.
+
+`FREE_DISK_SPACE`, a boolean defaulting to `false`, makes the `tests > test:all` job remove what a Go job never uses before the tests run. `go-docker.yaml` declares it and forwards it to the tests stage (`golang/stages/30-tests/go.yaml`), which declares it too:
+
+```yaml
+stages:
+  - template: 'azure-devops/golang/go-docker.yaml@pipelines'
+    parameters:
+      FREE_DISK_SPACE: true
+```
+
+The `Free Disk Space` step runs `global/scripts/languages/golang/free-disk-space/run.sh` once the job has checked the scripts out and set Go up, and before `Run Tests`. It logs `df -h /` before and after, and what each removal freed:
+
+| Removed | From |
+|---------|------|
+| the Android SDK | `/usr/local/lib/android` |
+| the .NET SDKs, their packs, templates and manifests -- **not** the .NET runtime (`dotnet`, `host/`, `shared/`), which the job's `PublishCodeCoverageResults@2` needs: it skips the publication, with only a warning, when no `dotnet` is on `PATH` | `/usr/share/dotnet` |
+| GHC | `/opt/ghc`, `/usr/local/.ghcup` |
+| Swift | `/usr/share/swift` |
+| the CodeQL bundles of the tool cache (the security stage's CodeQL job runs on an agent of its own) | `$AGENT_TOOLSDIRECTORY/CodeQL` |
+| the pre-pulled Docker images, never one a container uses | `docker image prune --all --force` |
+
+A path the image does not carry is skipped, and a removal that fails is reported and left: the step never fails the job. Turn it on only on Microsoft-hosted agents: it deletes toolchains from the machine, which a hosted agent throws away after the job, and a self-hosted agent would keep missing for every later one. `make test ONLY=go-free-disk-space` holds the script and the parameter's chain.
+
 #### Required Variable Groups
 
 Create these variable groups in Azure DevOps Library:
@@ -2401,7 +2427,14 @@ SCRIPTS_DIR=$HOME/Development/github.com/rios0rios0/pipelines
 ln -s $SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/.golangci.yml ~/.golangci.yml
 ```
 
-`make lint` runs with `--fix`, and nolintlint fixes an unused `//nolint` directive by deleting the
+`make lint` runs with `--fix`: the formatters (goimports, golines) and the linters' suggested fixes
+rewrite what they can in place, and golangci-lint reports only what is left. CI lints without
+`--fix` and fails on every one of those findings, so a `--fix` run that rewrote a file fails too,
+naming each file it rewrote (`fixed: <path>`): review the changes, commit them, and run the lint
+again, which then passes. Both runs reach the same verdict about the same code, and the fixes stay
+in the working tree. `.github/tests/test-golangci-fix-verdict.sh` holds that in place.
+
+nolintlint fixes an unused `//nolint` directive by deleting the
 whole comment it sits in. The shared config therefore leaves that finding alone on any line that also
 carries a scanner's allow marker (`//gitleaks:allow`, `// nosemgrep`, `ggignore`), so a fixture such
 as `"..." //nolint:gosec //gitleaks:allow` keeps its marker even though gosec never runs on tests.
@@ -2766,7 +2799,7 @@ Available language files:
 
 | File            | Language          | `lint`                                | `test`                          |
 |-----------------|-------------------|---------------------------------------|---------------------------------|
-| `golang.mk`     | Go                | `golangci-lint --fix`                 | Go test + coverage              |
+| `golang.mk`     | Go                | `golangci-lint --fix`, failing when it rewrote a file | Go test + coverage |
 | `python.mk`     | Python (PDM)      | `isort` + `black` + `flake8` + `mypy` | `pytest`                        |
 | `java.mk`       | Java (Gradle)     | `./gradlew check`                     | `./gradlew test`                |
 | `javascript.mk` | JavaScript (Yarn) | `prettier --write` + `yarn lint` + unused-code scan | `yarn test`   |
@@ -2832,6 +2865,18 @@ out exactly as on CI.
 CI is recognised by `CI` (GitHub Actions, GitLab CI) or `TF_BUILD` (Azure DevOps). If a project's
 build needs a file `.gitignore` keeps out of the repository, scan it with
 `CODEQL_SOURCE_SCOPE=tree make codeql`.
+
+For Go, the scan sources the project's `config.sh` -- the file that sets `GOPRIVATE` and the git
+settings that authenticate private module fetches -- in its own process, so the build it runs sees
+whatever the file exports. A `config.sh` should hand git those settings through the environment
+(`GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>`, `GIT_CONFIG_VALUE_<n>`) on a developer's machine, and
+write the global configuration only on a CI runner, where the job's later steps read it. One that
+still runs `git config --global` everywhere keeps working, but off CI its write lands in a file of
+the scan (`GIT_CONFIG_GLOBAL`, which includes the developer's own global configuration, so a
+credential helper still answers) and is removed with it: `make sast` never writes a token, or an
+`Authorization` header with an empty one, into `~/.gitconfig`. The Gitleaks scan likewise trusts the
+checkout (`safe.directory`) through its own environment on a developer's machine, and adds it to
+the global configuration, once, only on a CI runner.
 
 #### `make ansible-lint` in an Ansible Project
 

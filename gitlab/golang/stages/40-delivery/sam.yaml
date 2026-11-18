@@ -4,5 +4,9 @@ include:
 .delivery:
   image: 'ghcr.io/rios0rios0/pipelines/golang:1.27-awscli@sha256:8e94857a6f04aba4b84230247f98f5716453f74ddb8dfb31a3b6c38ec22e036e'
   script:
-    - '[[ -f config.sh ]] && ./config.sh'
+    # SOURCED into the shell that runs `sam build`, as every other template loads a project's
+    # `config.sh`, never executed: run as a program, its `export GOPRIVATE` died with it, and a
+    # `config.sh` written to be sourced -- no shebang, no executable bit -- stopped this job with
+    # `Permission denied`. `[ ]`, not bash's `[[ ]]`, so the line does not depend on the shell.
+    - 'if [ -f config.sh ]; then . ./config.sh; fi'
     - export BUILD_FLAGS="-ldflags='-w -s'"

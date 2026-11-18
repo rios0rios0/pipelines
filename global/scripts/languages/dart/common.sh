@@ -36,6 +36,8 @@
 # here rather than in each `run.sh` because `common.sh` is the one file every
 # Dart script already loads.
 . "$SCRIPTS_DIR/global/scripts/shared/verify-download.sh"
+# `git_trust_directory`, for the Flutter SDK (see `dart_trust_flutter_sdk`).
+. "$SCRIPTS_DIR/global/scripts/shared/git-config.sh"
 
 # dart_is_truthy <value>
 #
@@ -422,20 +424,35 @@ dart_install_flutter_sdk() {
     rm -f /tmp/flutter-sdk.tar.xz
   fi
 
-  # The Flutter SDK is a git checkout and `flutter` shells out to git on almost
-  # every invocation. When the checkout's owner differs from the process user --
-  # routine on shared and containerised runners -- git refuses with `detected
-  # dubious ownership in repository`, and `flutter` reports that as its own
-  # unrelated-looking startup failure. Marking it safe up front costs nothing
-  # and removes a failure mode that is very hard to read from the flutter side.
-  if command -v git > /dev/null 2>&1; then
-    git config --global --add safe.directory "$_dfi_root" 2>/dev/null || true
-  fi
-
+  # Git is told to trust the SDK by `dart_trust_flutter_sdk`, which
+  # `dart_ensure_sdk` runs after this, in this process and in every later one.
   ln -sf "$_dfi_root/bin/flutter" "$HOME/.local/bin/flutter"
   ln -sf "$_dfi_root/bin/dart" "$HOME/.local/bin/dart"
 
   unset _dfi_channel _dfi_root _dfi_archive _dfi_url
+  return 0
+}
+
+# dart_trust_flutter_sdk
+#
+# The Flutter SDK is a git checkout and `flutter` shells out to git on almost
+# every invocation. When the checkout's owner differs from the process user --
+# routine on shared and containerised runners -- git refuses with `detected
+# dubious ownership in repository`, and `flutter` reports that as its own
+# unrelated-looking startup failure. Marking the SDK this library unpacks safe
+# up front costs nothing and removes a failure mode that is very hard to read
+# from the flutter side. `git_trust_directory` writes it into the global git
+# configuration on a CI runner, once, where the template's later commands find
+# it too; on a developer's machine it hands it to this process and its children
+# only, through the environment, and never writes the developer's own
+# `~/.gitconfig`. That is why this runs on every call rather than once, at
+# install: every Dart runner is a process of its own.
+dart_trust_flutter_sdk() {
+  _dtf_root="$(dart_sdk_install_dir)/flutter"
+  if [ -d "$_dtf_root" ] && command -v git > /dev/null 2>&1; then
+    git_trust_directory "$_dtf_root"
+  fi
+  unset _dtf_root
   return 0
 }
 
@@ -474,6 +491,7 @@ dart_ensure_sdk() {
     if ! command -v flutter > /dev/null 2>&1; then
       dart_install_flutter_sdk
     fi
+    dart_trust_flutter_sdk
     # A pre-installed Flutter (e.g. `subosito/flutter-action`, or a self-hosted
     # agent's own SDK) puts `flutter` on PATH but not always `dart`. Recover the
     # bundled one from the SDK root rather than installing a second SDK.

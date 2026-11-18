@@ -76,10 +76,17 @@ FIXTURE="$MODULE/markers_test.go"
 
 echo ""
 echo "Test 1: run.sh --fix keeps the comments that carry a scanner marker"
+# The fix removes the plain unused directive, a finding CI fails on, so the run that made it fails
+# and names the file (see test-golangci-fix-verdict.sh); the run after it has nothing to fix.
+STATUS=0
+(cd "$MODULE" && "$RUN_SH" --fix) > "$TEST_DIR/lint.log" 2>&1 || STATUS=$?
+grep -q 'fixed: ./markers_test.go' "$TEST_DIR/lint.log" || cat "$TEST_DIR/lint.log"
+assert_true "the run that fixed the fixture fails, naming it" \
+  "[ $STATUS -ne 0 ] && grep -q 'fixed: ./markers_test.go' '$TEST_DIR/lint.log'"
 STATUS=0
 (cd "$MODULE" && "$RUN_SH" --fix) > "$TEST_DIR/lint.log" 2>&1 || STATUS=$?
 [ "$STATUS" -eq 0 ] || cat "$TEST_DIR/lint.log"
-assert_true "the lint run succeeds" "[ $STATUS -eq 0 ]"
+assert_true "the next lint run succeeds" "[ $STATUS -eq 0 ]"
 # gofmt aligns the trailing comments of adjacent lines, so the gap before `//nolint` may grow.
 assert_true "the gitleaks marker survives the fix" \
   "grep -Eq 'gitleaksFixture := \"fixture-token-placeholder\" +//nolint:gosec //gitleaks:allow\$' '$FIXTURE'"

@@ -247,6 +247,36 @@ if go_minor_is_newer "${GO_TOOLCHAIN#go}" "${GOLANGCI_BUILT_WITH#go}"; then
   exit 1
 fi
 
+# go_sources_fingerprint <file>: writes one `<checksum> <size> <path>` line per Go source a `--fix`
+# run may rewrite, sorted. In a git work tree that is every Go file git would ship from here -- the
+# tracked ones still on disk and the untracked ones no ignore rule excludes -- so an agent's worktree
+# or a vendored copy under the directory is neither read nor reported; elsewhere it is every Go
+# file below the directory. A tracked file deleted from disk has no line: `cksum` fails on it alone.
+go_sources_fingerprint() {
+  if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    git ls-files -z --cached --others --exclude-standard -- '*.go' 2> /dev/null
+  else
+    find . -name .git -prune -o -type f -name '*.go' -print0
+  fi > "$GOLANGCI_TMP/sources"
+  if [ -s "$GOLANGCI_TMP/sources" ]; then
+    xargs -0 cksum -- < "$GOLANGCI_TMP/sources" 2> /dev/null | LC_ALL=C sort > "$1"
+  else
+    : > "$1"
+  fi
+  return 0
+}
+
+# `--fix` rewrites what a fixer can fix -- every formatter finding (goimports, golines), and the
+# linters' suggested fixes -- and golangci-lint then reports only what is left, so a run that fixed
+# everything reported `0 issues` and passed. CI lints the commit without `--fix`, and failed on each
+# of those findings: a local `make lint` and CI disagreed about the same code, and a golines finding
+# reached a default branch that way. So a `--fix` run takes the fingerprint of the sources before
+# and after, and fails when the two differ, naming every file it rewrote: the fixes stay in the
+# working tree, ready to review and commit, and the verdict is the one CI reaches.
+if [ -n "$FIX_FLAG" ]; then
+  go_sources_fingerprint "$GOLANGCI_TMP/before"
+fi
+
 # How long the analysis may run before golangci-lint gives up. It was 10m, and with about twenty
 # runs sharing one self-hosted host a clean analysis outran that and exited 4. That went unseen
 # where the lint job was advisory (GitHub Actions, GitLab); now that a failed lint fails the run
@@ -292,6 +322,22 @@ fi
 # failure that reads as if the code were at fault.
 if [ "$EXIT_CODE" -eq 4 ]; then
   echo "::error::golangci-lint ran out of time (--timeout $GOLANGCI_LINT_TIMEOUT) before it finished; no finding caused this failure. On a busy runner, raise GOLANGCI_LINT_TIMEOUT."
+fi
+
+# A file the fix rewrote is a finding CI fails on (see go_sources_fingerprint above). A run that
+# failed anyway keeps its own exit code, and still names what it rewrote.
+if [ -n "$FIX_FLAG" ]; then
+  go_sources_fingerprint "$GOLANGCI_TMP/after"
+  LC_ALL=C comm -13 "$GOLANGCI_TMP/before" "$GOLANGCI_TMP/after" | cut -d ' ' -f 3- > "$GOLANGCI_TMP/fixed"
+  if [ -s "$GOLANGCI_TMP/fixed" ]; then
+    echo "::error::golangci-lint --fix rewrote $(wc -l < "$GOLANGCI_TMP/fixed" | tr -d ' ') file(s) in" \
+      "place. CI lints without --fix and fails on each finding fixed here, so this run fails too:" \
+      "review the changes below, commit them, and run the lint again."
+    sed 's/^/  fixed: /' "$GOLANGCI_TMP/fixed"
+    if [ "$EXIT_CODE" -eq 0 ]; then
+      EXIT_CODE=1
+    fi
+  fi
 fi
 
 rm "$mergedYamlFile"

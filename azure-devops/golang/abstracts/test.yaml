@@ -6,9 +6,25 @@ parameters:
   - name: 'TEST_ENV'
     type: object
     default: {}
+  # Remove what a Go job never uses from a Microsoft-hosted agent before the
+  # tests run: the Android SDK, the .NET SDKs, GHC, Swift, the CodeQL bundles
+  # of the tool cache and the pre-pulled Docker images, logging `df -h /`
+  # before and after (global/scripts/languages/golang/free-disk-space/run.sh).
+  # Off by default: it deletes toolchains from the machine, which a hosted
+  # agent throws away after the job and a self-hosted one would keep missing.
+  - name: 'FREE_DISK_SPACE'
+    type: boolean
+    default: false
 
 steps:
   - template: 'go.yaml'
+
+  # Once `go.yaml` has checked the scripts out and set Go up, and before the
+  # tests build anything or pull an image: a large module compiled twice and the
+  # images of its integration suites are what fill the agent.
+  - ${{ if eq(parameters.FREE_DISK_SPACE, true) }}:
+      - script: $(Scripts.Directory)/global/scripts/languages/golang/free-disk-space/run.sh
+        displayName: 'Free Disk Space'
 
   - script: $(Scripts.Directory)/global/scripts/languages/golang/test/run.sh
     displayName: 'Run Tests'

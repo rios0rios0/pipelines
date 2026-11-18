@@ -88,6 +88,10 @@ else
 fi
 EOF
       ;;
+    *)
+      echo "write_config: unknown kind '$2'" >&2
+      return 1
+      ;;
   esac
   chmod 0644 "$1/config.sh"
 }

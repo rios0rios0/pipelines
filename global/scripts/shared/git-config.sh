@@ -29,6 +29,7 @@ git_config_env() {
   _gce_count="${GIT_CONFIG_COUNT:-0}"
   case "$_gce_count" in
     '' | *[!0-9]*) _gce_count=0 ;;
+    *) ;;
   esac
   _gce_index=0
   _gce_key=''

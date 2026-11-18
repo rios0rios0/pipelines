@@ -5,10 +5,19 @@ parameters:
     type: 'stepList'
     default: []
 
+  # The pool this stage's jobs run on, as the mapping a `pool:` takes. Empty by
+  # default, which declares no pool, so the jobs keep the pipeline's own; see
+  # `azure-devops/terra/terra.yaml`, which forwards it.
+  - name: 'POOL'
+    type: 'object'
+    default: {}
+
 stages:
   - stage: 'security'
     displayName: 'security (sca/sast)'
     condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    ${{ if gt(length(parameters.POOL), 0) }}:
+      pool: ${{ parameters.POOL }}
     jobs:
       - template: '../../../global/stages/20-security/semgrep.yaml'
         parameters:

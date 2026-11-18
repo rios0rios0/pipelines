@@ -19,6 +19,9 @@
 #     - template: 'azure-devops/terra/terra.yaml@pipelines'
 #     # Add your project-specific delivery stage here:
 #     - template: '.ci/stages/40-delivery/terra.yaml'
+#
+# None of these stages declares a pool unless `POOL` below is set, so by default
+# every job runs on the pool the pipeline itself names.
 
 parameters:
   # Steps injected before the Terraform SAST scanner (`sast:semgrep`) runs.
@@ -66,20 +69,43 @@ parameters:
     type: 'string'
     default: "$(Build.SourcesDirectory)"
 
+  # Forwarded to every stage below. The agent pool their jobs run on, written
+  # as the mapping a `pool:` takes (`vmImage: 'ubuntu-latest'`, or `name:` with
+  # `demands:`). Empty by default, which declares no pool at all, so every job
+  # keeps the pipeline's own pool, exactly as before. A pipeline whose own pool
+  # is there for its delivery -- a small self-hosted pool with network access
+  # only a plan or an apply needs, say -- passes another pool here, so these
+  # stages, which need none of that access, stop queueing for its agents.
+  #
+  # Spell out every key the pool needs (`name` and `vmImage` for a hosted
+  # image) instead of counting on the pipeline's pool to supply any of them.
+  # It is fixed when the pipeline compiles, so a literal or a template
+  # expression can choose it, and a variable that a step sets cannot.
+  - name: 'POOL'
+    type: 'object'
+    default: {}
+
 stages:
   - template: 'stages/10-code-check/terra.yaml'
+    parameters:
+      POOL: ${{ parameters.POOL }}
   - template: 'stages/20-security/terra.yaml'
     parameters:
       PRE_STEPS: ${{ parameters.PRE_STEPS }}
+      POOL: ${{ parameters.POOL }}
   - template: 'stages/30-tests/terra.yaml'
     parameters:
       PRE_STEPS: ${{ parameters.PRE_STEPS }}
       ENABLE_VALIDATE: ${{ parameters.ENABLE_VALIDATE }}
       VALIDATE_ROOTS: ${{ parameters.VALIDATE_ROOTS }}
       TERRA_TEST_ROOTS: ${{ parameters.TERRA_TEST_ROOTS }}
+      POOL: ${{ parameters.POOL }}
   - template: 'stages/35-management/terra.yaml'
     parameters:
       DOWNLOAD_COVERAGE_ARTIFACT: ${{ parameters.DOWNLOAD_COVERAGE_ARTIFACT }}
       COVERAGE_ARTIFACT_NAME: ${{ parameters.COVERAGE_ARTIFACT_NAME }}
       COVERAGE_ARTIFACT_TARGET_PATH: ${{ parameters.COVERAGE_ARTIFACT_TARGET_PATH }}
+      POOL: ${{ parameters.POOL }}
   - template: 'stages/40-delivery/release.yaml'
+    parameters:
+      POOL: ${{ parameters.POOL }}

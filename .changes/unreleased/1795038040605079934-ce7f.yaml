@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added `POOL` to the terra pipeline''s `azure-devops/terra/terra.yaml`: a `pool` mapping it forwards to its code check, security, tests, management and release stages, so a pipeline whose own pool is kept for its delivery can run those checks on another pool; it is empty by default, which declares no pool and leaves every existing pipeline as it compiled before'
+time: '2026-11-18T21:40:40.604989751Z'

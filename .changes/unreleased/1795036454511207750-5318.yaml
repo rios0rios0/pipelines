@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed `make lint` passing code CI fails: `golang.mk` runs `golangci-lint/run.sh --fix`, which rewrites every formatter finding (goimports, golines) and every suggested fix in place and then reports only what is left, so a run that fixed everything printed `0 issues` and passed while CI, which lints without `--fix`, failed on each of those findings. A `--fix` run now compares the Go sources before and after and fails when it rewrote any, naming each file (`fixed: <path>`), so both runs reach the same verdict and the fixes stay in the working tree to be committed; `make test ONLY=golangci-fix-verdict` holds it'
+time: '2026-11-18T21:14:14.511136437Z'

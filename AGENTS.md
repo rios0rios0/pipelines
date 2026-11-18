@@ -55,6 +55,7 @@ there is no target to add and no list to keep in step.
 | `go-tmpdir-modcache` | That the Go module cache stays out of $TMPDIR |
 | `go-tool-staleness` | That a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves |
 | `go-validation` | Go validation script |
+| `golangci-fix-verdict` | That `make lint`'s `golangci-lint/run.sh --fix` fails when it rewrote a file, naming it, as CI fails on the finding it fixed; passes once nothing is left to fix; never names a file it did not rewrite |
 | `golangci-scanner-markers` | That `golangci-lint/run.sh --fix` keeps other scanners' allow markers (e.g. `//gitleaks:allow`) |
 | `goreleaser-prepare` | The GoReleaser main package detection |
 | `govulncheck-verdict` | That govulncheck fails on a vulnerability the code calls, read from its report rather than the `-json` exit code |
@@ -1328,6 +1329,20 @@ The other two remedies were not needed:
 - **A cap on concurrent lint jobs per host:** it would need a runner label on every host, and it
   queues each lint behind the others to absorb a spike that a longer timeout absorbs on its own.
 
+
+### `make lint` Fails on What It Fixed
+
+`golang.mk`'s `lint` runs `golangci-lint/run.sh --fix`, which rewrites what a fixer can fix --
+every formatter finding (goimports, golines) and the linters' suggested fixes -- after which
+golangci-lint reports only what is left. CI runs the same script without `--fix`. So a run that
+fixed everything used to print `0 issues` and pass locally while CI failed on each finding it had
+fixed: a golines finding reached a consumer's default branch that way. A `--fix` run now takes a
+checksum of every Go source it may rewrite before and after (in a git work tree, the files git would
+ship from the directory, so an agent's worktree or a vendored copy is not read; elsewhere every Go
+file below it), and fails when one changed, naming each file. The fixes stay in place to be
+committed, and the two runs reach the same verdict. Do not drop the check to make `make lint`
+"friendlier": a green local run over code CI rejects is the failure it exists to prevent.
+`make test ONLY=golangci-fix-verdict` holds it.
 
 ### Shared Ignore Rules
 

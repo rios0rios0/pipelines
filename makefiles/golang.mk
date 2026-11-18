@@ -26,6 +26,8 @@ VERSION ?= $(shell { grep -m1 -oE '^\#\# \[[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.m
 
 .PHONY: lint test cross-compile cyclonedx migration-order
 
+# `--fix` rewrites what golangci-lint can fix, and the run fails when it rewrote a file: CI lints
+# without `--fix` and fails on every finding fixed here, so both reach the same verdict.
 lint:
 	@$(SCRIPTS_DIR)/global/scripts/languages/golang/golangci-lint/run.sh --fix .
 

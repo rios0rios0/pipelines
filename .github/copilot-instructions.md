@@ -736,7 +736,8 @@ ln -s $SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/.golangci.yml ~
 # Run linting in your project
 $SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/run.sh
 
-# Run with auto-fix
+# Run with auto-fix: rewrites what it can, and fails when it rewrote a file, as CI fails on the
+# finding it fixed -- commit the rewritten files and run it again
 $SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/run.sh --fix
 ```
 

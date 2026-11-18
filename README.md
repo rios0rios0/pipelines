@@ -2401,7 +2401,14 @@ SCRIPTS_DIR=$HOME/Development/github.com/rios0rios0/pipelines
 ln -s $SCRIPTS_DIR/global/scripts/languages/golang/golangci-lint/.golangci.yml ~/.golangci.yml
 ```
 
-`make lint` runs with `--fix`, and nolintlint fixes an unused `//nolint` directive by deleting the
+`make lint` runs with `--fix`: the formatters (goimports, golines) and the linters' suggested fixes
+rewrite what they can in place, and golangci-lint reports only what is left. CI lints without
+`--fix` and fails on every one of those findings, so a `--fix` run that rewrote a file fails too,
+naming each file it rewrote (`fixed: <path>`): review the changes, commit them, and run the lint
+again, which then passes. Both runs reach the same verdict about the same code, and the fixes stay
+in the working tree. `.github/tests/test-golangci-fix-verdict.sh` holds that in place.
+
+nolintlint fixes an unused `//nolint` directive by deleting the
 whole comment it sits in. The shared config therefore leaves that finding alone on any line that also
 carries a scanner's allow marker (`//gitleaks:allow`, `// nosemgrep`, `ggignore`), so a fixture such
 as `"..." //nolint:gosec //gitleaks:allow` keeps its marker even though gosec never runs on tests.
@@ -2766,7 +2773,7 @@ Available language files:
 
 | File            | Language          | `lint`                                | `test`                          |
 |-----------------|-------------------|---------------------------------------|---------------------------------|
-| `golang.mk`     | Go                | `golangci-lint --fix`                 | Go test + coverage              |
+| `golang.mk`     | Go                | `golangci-lint --fix`, failing when it rewrote a file | Go test + coverage |
 | `python.mk`     | Python (PDM)      | `isort` + `black` + `flake8` + `mypy` | `pytest`                        |
 | `java.mk`       | Java (Gradle)     | `./gradlew check`                     | `./gradlew test`                |
 | `javascript.mk` | JavaScript (Yarn) | `prettier --write` + `yarn lint` + unused-code scan | `yarn test`   |

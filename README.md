@@ -2840,6 +2840,18 @@ CI is recognised by `CI` (GitHub Actions, GitLab CI) or `TF_BUILD` (Azure DevOps
 build needs a file `.gitignore` keeps out of the repository, scan it with
 `CODEQL_SOURCE_SCOPE=tree make codeql`.
 
+For Go, the scan sources the project's `config.sh` -- the file that sets `GOPRIVATE` and the git
+settings that authenticate private module fetches -- in its own process, so the build it runs sees
+whatever the file exports. A `config.sh` should hand git those settings through the environment
+(`GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>`, `GIT_CONFIG_VALUE_<n>`) on a developer's machine, and
+write the global configuration only on a CI runner, where the job's later steps read it. One that
+still runs `git config --global` everywhere keeps working, but off CI its write lands in a file of
+the scan (`GIT_CONFIG_GLOBAL`, which includes the developer's own global configuration, so a
+credential helper still answers) and is removed with it: `make sast` never writes a token, or an
+`Authorization` header with an empty one, into `~/.gitconfig`. The Gitleaks scan likewise trusts the
+checkout (`safe.directory`) through its own environment on a developer's machine, and adds it to
+the global configuration, once, only on a CI runner.
+
 #### `make ansible-lint` in an Ansible Project
 
 There is no `ansible.mk`: an Ansible project includes `common.mk` and calls the target from its own

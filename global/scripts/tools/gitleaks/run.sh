@@ -93,12 +93,13 @@ fi
 # Gitleaks scans the project's full Git history. In CI the working tree is
 # often owned by a different user than the one running the scan, so Git
 # refuses to operate until the directory is explicitly marked as trusted.
-# `--add` appends a line on every run, so a machine that scans many checkouts would grow its global
-# Git config by one entry per scan: add the directory only when it is not trusted yet.
-SAFE_DIRECTORY="$(pwd)"
-if ! git config --global --get-all safe.directory 2>/dev/null | grep -Fqx -- "$SAFE_DIRECTORY"; then
-  git config --global --add safe.directory "$SAFE_DIRECTORY" > /dev/null 2>&1 || true
-fi
+# `git_trust_directory` adds it to the global configuration once on a CI
+# runner, as this script always did, and on a developer's machine hands it only
+# to this scan -- the `git` calls below and the ones `gitleaks` makes -- through
+# the environment: every scan used to append the project to the developer's own
+# `~/.gitconfig`, where it stayed.
+. "$SCRIPTS_DIR/global/scripts/shared/git-config.sh"
+git_trust_directory "$(pwd)"
 
 # Determine the scan scope.
 #

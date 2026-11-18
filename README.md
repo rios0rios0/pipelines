@@ -1302,6 +1302,39 @@ Get the target path wrong and nothing says so: the download succeeds, the scan r
 
 This is an **Azure DevOps parameter set only**. The GitLab CI and GitHub Actions terra pipelines have no equivalent, and the sibling raw-Terraform pipeline (`azure-devops/terraform/`) still pins the download off.
 
+##### Agent Pool for the Shared Stages (`POOL`, opt-in)
+
+No stage that `azure-devops/terra/terra.yaml` emits declares a pool, so every job runs on the pool the pipeline names. That stops being the right default once the pipeline's pool is chosen for its delivery: a small self-hosted pool whose network access only a plan or an apply needs then spends its few agents on formatting checks, SAST, the test tiers, the Sonar scan and the release job, none of which needs that access. `POOL` sends them elsewhere. It is a `pool` mapping, forwarded to every stage the template emits (`code_check`, `security`, `tests`, `management` and `release`), while the consumer's own delivery stage keeps the pipeline's pool:
+
+| Parameter | Type     | Default | What it controls                                                  |
+|-----------|----------|---------|-------------------------------------------------------------------|
+| `POOL`    | `object` | `{}`    | The pool every stage of the template runs on; `{}` declares none |
+
+The default declares no pool at all, so **a consumer that does not pass it compiles exactly the pipeline it compiled before**. Spell out every key the pool needs (a hosted image takes its pool `name` and its `vmImage`) instead of counting on the pipeline's pool to supply one. The parameter is expanded when the pipeline compiles, so a literal or a template expression can choose the pool, and a variable that a step sets cannot:
+
+```yaml
+pool:
+  name: 'delivery-agents' # the self-hosted pool the delivery needs
+
+stages:
+  - template: 'azure-devops/terra/terra.yaml@pipelines'
+    parameters:
+      POOL:
+        name: 'checks-agents' # any other pool
+  - template: '.ci/stages/40-delivery/terra.yaml' # keeps the pipeline's pool
+```
+
+A pipeline that picks its own pool per run, a hosted pool for a pull request and the self-hosted pool otherwise, say, passes the parameter under the same compile-time condition, so the runs that are hosted already pass nothing and compile as they did:
+
+```yaml
+    parameters:
+      ${{ if ne(variables['Build.Reason'], 'PullRequest') }}:
+        POOL:
+          name: 'checks-agents'
+```
+
+`.github/tests/test-terra-pipeline.sh` holds the chain: the entry point forwards `POOL` to every stage template, each stage sets its pool from it only when one was passed, and no job those stages run declares a pool of its own, which would win over the stage's. Only this template takes it; the GitLab CI and GitHub Actions terra pipelines have no equivalent.
+
 #### Required GitLab Variables
 
 Configure these in your GitLab project settings:

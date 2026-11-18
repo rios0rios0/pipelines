@@ -22,6 +22,14 @@
 #
 # `SucceededWithIssues` must release; `Skipped`, `Failed`, and `Canceled` must
 # not. This is the same gate the delivery stages of `terra` consumers use.
+parameters:
+  # The pool this stage's job runs on, as the mapping a `pool:` takes. Empty by
+  # default, which declares no pool, so the job keeps the pipeline's own; see
+  # `azure-devops/terra/terra.yaml`, which forwards it.
+  - name: 'POOL'
+    type: 'object'
+    default: {}
+
 stages:
   - stage: 'release'
     displayName: 'release'
@@ -31,5 +39,7 @@ stages:
         in(dependencies.management.result, 'Succeeded', 'SucceededWithIssues'),
         eq(variables['Build.SourceBranch'], 'refs/heads/main')
       )
+    ${{ if gt(length(parameters.POOL), 0) }}:
+      pool: ${{ parameters.POOL }}
     jobs:
       - template: '../../../global/stages/40-delivery/release.yaml'

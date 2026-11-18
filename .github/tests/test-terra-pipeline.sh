@@ -16,6 +16,9 @@ set -e
 # undoes, so this suite defends it on every platform and in both Makefile includes
 # (`terra.mk` pairs with this workflow, `terraform.mk` with the raw Terraform one).
 #
+# Sections 3 and 4 hold two parameter chains of the entry point: the
+# coverage hand-off to the Sonar job, and `POOL`, the agent pool its stages run on.
+#
 # Runs OFFLINE with nothing but bash and grep.
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -132,6 +135,134 @@ for hop in "$TERRA_ROOT|stages/35-management/terra.yaml" \
 
   assert_true "$hop_label: passes no literal DOWNLOAD_COVERAGE_ARTIFACT, so the opt-in is not re-pinned" \
     "! grep -qE '^[^#]*DOWNLOAD_COVERAGE_ARTIFACT: *(true|false)' '$hop_file'"
+done
+
+echo ""
+echo "--- 4. Terra hands an optional agent pool to every stage it emits ---"
+
+# `POOL` lets a pipeline run these stages somewhere other than its own pool: one whose own pool is
+# a small self-hosted pool kept for its delivery sends the checks, which need none of that pool's
+# network access, elsewhere. Nothing about a template fails when the parameter stops reaching a
+# stage -- that stage just goes back to the pipeline's pool, silently -- so the chain is asserted
+# hop by hop: the entry point declares it and forwards it to every stage template it includes, and
+# each of those declares it and sets its stage's pool from it only behind the guard that renders
+# no pool for the empty default, so a consumer that passes nothing compiles the pipeline it
+# compiled before. No job those stages run may declare a pool of its own either: a job's pool
+# wins over its stage's.
+
+TERRA_DIR="$SCRIPTS_DIR/azure-devops/terra"
+TERRA_STAGES=(
+  'stages/10-code-check/terra.yaml'
+  'stages/20-security/terra.yaml'
+  'stages/30-tests/terra.yaml'
+  'stages/35-management/terra.yaml'
+  'stages/40-delivery/release.yaml'
+)
+# The exact lines each hop must carry, written once so no assertion can spell them differently.
+# shellcheck disable=SC2016 # `${{ }}` is template-expression syntax, meant literally
+POOL_FORWARD='      POOL: ${{ parameters.POOL }}'
+# shellcheck disable=SC2016
+POOL_GUARD='    ${{ if gt(length(parameters.POOL), 0) }}:'
+# shellcheck disable=SC2016
+POOL_LINE='      pool: ${{ parameters.POOL }}'
+
+# declares_pool FILE: whether FILE declares `POOL` as an object parameter defaulting to `{}`.
+# shellcheck disable=SC2329 # called from the condition string assert_true evaluates
+declares_pool() {
+  grep -A3 -F -e "- name: 'POOL'" "$1" | grep -qF "type: 'object'" &&
+    grep -A3 -F -e "- name: 'POOL'" "$1" | grep -qF 'default: {}'
+}
+
+# unforwarded_stages FILE: prints every stage template FILE includes without passing `POOL` on.
+unforwarded_stages() {
+  local line current='' forwarded=1
+  while IFS= read -r line; do
+    case "$line" in
+      '  - template: '*)
+        [ "$forwarded" -eq 1 ] || echo "$current"
+        current="${line#  - template: }"
+        forwarded=0
+        ;;
+      "$POOL_FORWARD") forwarded=1 ;;
+    esac
+  done < "$1"
+  [ "$forwarded" -eq 1 ] || echo "$current"
+}
+
+# stage_pool_gaps FILE: prints every stage of FILE that does not take its pool from `POOL` behind
+# the guard, and every pool FILE sets any other way.
+stage_pool_gaps() {
+  local line previous='' stage='' pooled=1
+  while IFS= read -r line; do
+    case "$line" in
+      '  - stage: '*)
+        [ "$pooled" -eq 1 ] || echo "stage $stage takes no pool from POOL"
+        stage="${line#  - stage: }"
+        pooled=0
+        ;;
+      "$POOL_LINE")
+        if [ "$previous" = "$POOL_GUARD" ]; then
+          pooled=1
+        else
+          echo "stage $stage sets its pool from POOL without the guard, so the empty default renders one"
+        fi
+        ;;
+      *)
+        case "${line%%#*}" in
+          *pool:*) echo "a pool set some other way: $line" ;;
+        esac
+        ;;
+    esac
+    previous="$line"
+  done < "$1"
+  [ "$pooled" -eq 1 ] || echo "stage $stage takes no pool from POOL"
+}
+
+# included_job_pools FILE: prints every pool declared by a shared job template FILE includes,
+# naming the template by its path in this repository.
+included_job_pools() {
+  local dir template target
+  dir="$(dirname "$1")"
+  while IFS= read -r template; do
+    template="${template#"template: '"}"
+    template="${template%"'"}"
+    if [ ! -f "$dir/$template" ]; then
+      echo "$template is included but does not exist"
+      continue
+    fi
+    target="$(cd "$(dirname "$dir/$template")" && pwd)/$(basename "$template")"
+    (cd "$SCRIPTS_DIR" && grep -HnE '^[^#]*pool:' "${target#"$SCRIPTS_DIR"/}") || true
+  done < <(grep -oE "template: '[^']*global/stages/[^']+'" "$1" || true)
+}
+
+# show_findings TEXT: prints what a failed assertion found, one finding per line.
+show_findings() {
+  local finding
+  [ -n "$1" ] || return 0
+  while IFS= read -r finding; do
+    echo "         $finding"
+  done <<< "$1"
+}
+
+assert_true "terra.yaml: declares POOL as an object parameter defaulting to {}" \
+  "declares_pool '$TERRA_ROOT'"
+assert_true "terra.yaml: includes exactly the ${#TERRA_STAGES[@]} stage templates this section checks" \
+  "[ \"\$(grep -cE \"^  - template: 'stages/\" '$TERRA_ROOT')\" -eq ${#TERRA_STAGES[@]} ]"
+UNFORWARDED="$(unforwarded_stages "$TERRA_ROOT")"
+assert_true "terra.yaml: forwards POOL to every stage template it includes" "[ -z \"\$UNFORWARDED\" ]"
+show_findings "$UNFORWARDED"
+
+for stage_file in "${TERRA_STAGES[@]}"; do
+  file="$TERRA_DIR/$stage_file"
+  assert_true "terra.yaml: includes $stage_file" "grep -qxF \"  - template: '$stage_file'\" '$TERRA_ROOT'"
+  assert_true "$stage_file: declares POOL as an object parameter defaulting to {}" "declares_pool '$file'"
+  assert_true "$stage_file: defines a stage" "grep -qE '^  - stage: ' '$file'"
+  GAPS="$(stage_pool_gaps "$file")"
+  assert_true "$stage_file: every stage takes its pool from POOL, and only when one is passed" "[ -z \"\$GAPS\" ]"
+  show_findings "$GAPS"
+  JOB_POOLS="$(included_job_pools "$file")"
+  assert_true "$stage_file: no job it runs declares a pool that would win over the stage's" "[ -z \"\$JOB_POOLS\" ]"
+  show_findings "$JOB_POOLS"
 done
 
 echo ""

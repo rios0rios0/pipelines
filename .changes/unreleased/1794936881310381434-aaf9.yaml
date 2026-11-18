@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed `terraform_init_cached` giving up inside a resolver or registry outage: an `init` now gets up to 6 attempts (`TF_INIT_MAX_ATTEMPTS`), waiting 15, 30, 45, 60 and 75 s (`TF_INIT_RETRY_DELAY` 15), and every wait of a run draws on one budget (`TF_INIT_RETRY_BUDGET`, 300 s), so the first directories to fail get that patience while, once it is spent, a failure every directory shares fails after a single attempt instead of running into the job''s time limit'
-time: '2026-11-17T17:34:41.310325871Z'

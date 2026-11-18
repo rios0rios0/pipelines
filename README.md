@@ -1556,6 +1556,32 @@ The stage forwards it to the four shared templates under `azure-devops/global/st
 
 Before turning it on, check the security jobs of the repository's latest default-branch run: a job that is `succeededWithIssues` today fails the stage the moment the gate is on. Triaged findings belong in the tool's own suppression file (`.semgrepignore`, `.semgrepexcluderules`, `.gitleaksignore`, `.hadolint.yaml`, `.codeql-false-positives`).
 
+#### Freeing Disk Space for the Go Tests
+
+A Microsoft-hosted agent (`vmImage: 'ubuntu-latest'`) starts with its disk most of the way full: Microsoft guarantees only about 10 GB free, and the disk cannot be enlarged. A Go test job that compiles a large module twice -- the unit phase, then the integration phase with coverage instrumentation -- and pulls several GB of images for its integration suites runs out of it: the agent warns `Free disk space on / is lower than 5%`, a database container's own disk guard turns read-only, and the next large write ends in `No space left on device`.
+
+`FREE_DISK_SPACE`, a boolean defaulting to `false`, makes the `tests > test:all` job remove what a Go job never uses before the tests run. `go-docker.yaml` declares it and forwards it to the tests stage (`golang/stages/30-tests/go.yaml`), which declares it too:
+
+```yaml
+stages:
+  - template: 'azure-devops/golang/go-docker.yaml@pipelines'
+    parameters:
+      FREE_DISK_SPACE: true
+```
+
+The `Free Disk Space` step runs `global/scripts/languages/golang/free-disk-space/run.sh` once the job has checked the scripts out and set Go up, and before `Run Tests`. It logs `df -h /` before and after, and what each removal freed:
+
+| Removed | From |
+|---------|------|
+| the Android SDK | `/usr/local/lib/android` |
+| the .NET SDKs, their packs, templates and manifests -- **not** the .NET runtime (`dotnet`, `host/`, `shared/`), which the job's `PublishCodeCoverageResults@2` needs: it skips the publication, with only a warning, when no `dotnet` is on `PATH` | `/usr/share/dotnet` |
+| GHC | `/opt/ghc`, `/usr/local/.ghcup` |
+| Swift | `/usr/share/swift` |
+| the CodeQL bundles of the tool cache (the security stage's CodeQL job runs on an agent of its own) | `$AGENT_TOOLSDIRECTORY/CodeQL` |
+| the pre-pulled Docker images, never one a container uses | `docker image prune --all --force` |
+
+A path the image does not carry is skipped, and a removal that fails is reported and left: the step never fails the job. Turn it on only on Microsoft-hosted agents: it deletes toolchains from the machine, which a hosted agent throws away after the job, and a self-hosted agent would keep missing for every later one. `make test ONLY=go-free-disk-space` holds the script and the parameter's chain.
+
 #### Required Variable Groups
 
 Create these variable groups in Azure DevOps Library:

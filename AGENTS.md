@@ -49,6 +49,7 @@ there is no target to add and no list to keep in step.
 | `go-cache-trim` | The Go build-cache disk guard (threshold parsing, trim decision) |
 | `go-coverage-report` | The Go runner's `cobertura.xml`: generated files stay in by default and leave it on `GO_COVERAGE_IGNORE_GENERATED`, while `coverage.txt` stays whole, and the GitHub input that carries it |
 | `go-cross-compile` | The Go cross-compile runner (every target in one job, at most CROSS_COMPILE_JOBS at once, a failing target named) |
+| `go-free-disk-space` | The Azure DevOps Go test job's opt-in disk clean-up (`FREE_DISK_SPACE`: what the script removes and keeps -- the .NET runtime the coverage publication needs --, `sudo -n`, absent paths and failures never failing the job, `df -h` before and after, and the parameter's chain from `go-docker.yaml` to the step before `Run Tests`) |
 | `go-helpers` | Run the Go helpers' unit tests (`go test ./...`; the dependency-update tool's behaviour, policy and command line) |
 | `go-integration-scope` | Which packages the Go runner's integration phase selects, and the timeout and environment (`GO_TEST_INTEGRATION_ENV`) it runs them under |
 | `go-module-toolchain` | That every go.mod toolchain directive is readable by the images/analysers/workflows that consume it |
@@ -1372,6 +1373,23 @@ file below it), and fails when one changed, naming each file. The fixes stay in 
 committed, and the two runs reach the same verdict. Do not drop the check to make `make lint`
 "friendlier": a green local run over code CI rejects is the failure it exists to prevent.
 `make test ONLY=golangci-fix-verdict` holds it.
+
+### Freeing Disk Space Is the Azure Go Test Job's Opt-In
+
+`FREE_DISK_SPACE` (`go-docker.yaml` -> `golang/stages/30-tests/go.yaml` -> `golang/abstracts/test.yaml`)
+runs `global/scripts/languages/golang/free-disk-space/run.sh` before `Run Tests`, for a consumer
+whose tests fill a Microsoft-hosted agent. It is off by default because it deletes toolchains from
+the machine, which a self-hosted agent would keep missing. Two constraints are easy to break:
+
+- **The .NET runtime stays.** `PublishCodeCoverageResults@2`, later in the same job, runs a .NET
+  program and skips the publication -- with only a warning -- when no `dotnet` is on `PATH`. The
+  script removes the SDKs, packs, templates and manifests under `/usr/share/dotnet`, nearly all of
+  its space, and keeps `dotnet`, `host/` and `shared/`.
+- **It never fails the job.** An absent path is skipped, a failed removal or prune is a `WARNING`
+  line, and the script exits 0, so the step needs no `continueOnError` (which the workflow
+  composition test would have to list).
+
+`make test ONLY=go-free-disk-space` holds both and the parameter's chain.
 
 ### Shared Ignore Rules
 

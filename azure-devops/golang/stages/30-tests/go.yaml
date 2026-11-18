@@ -7,6 +7,11 @@ parameters:
   - name: 'TEST_ENV'
     type: object
     default: {}
+  # Free disk space on a Microsoft-hosted agent before the tests run, forwarded
+  # to the test job. See README.md, "Freeing Disk Space for the Go Tests".
+  - name: 'FREE_DISK_SPACE'
+    type: boolean
+    default: false
 
 stages:
   - stage: 'tests'
@@ -24,5 +29,6 @@ stages:
           - template: '../../abstracts/test.yaml'
             parameters:
               TEST_ENV: ${{ parameters.TEST_ENV }}
+              FREE_DISK_SPACE: ${{ parameters.FREE_DISK_SPACE }}
 
         continueOnError: false

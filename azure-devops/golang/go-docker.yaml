@@ -12,12 +12,21 @@ parameters:
     type: 'boolean'
     default: false
 
+  # Whether the test job frees disk space on its Microsoft-hosted agent before the tests run,
+  # forwarded to the tests stage. `false` (the default) leaves the agent as it is. See README.md,
+  # "Freeing Disk Space for the Go Tests".
+  - name: 'FREE_DISK_SPACE'
+    type: 'boolean'
+    default: false
+
 stages:
   - template: 'stages/10-code-check/go.yaml'
   - template: 'stages/20-security/go.yaml'
     parameters:
       ENABLE_SECURITY_GATE: ${{ parameters.ENABLE_SECURITY_GATE }}
   - template: 'stages/30-tests/go.yaml'
+    parameters:
+      FREE_DISK_SPACE: ${{ parameters.FREE_DISK_SPACE }}
   - template: 'stages/35-management/go.yaml'
   - template: 'stages/40-delivery/docker.yaml'
     parameters:

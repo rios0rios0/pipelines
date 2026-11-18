@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'changed the terra pin in `global/scripts/shared/pinned-versions.sh` back to the default seven-day cooldown: the one-time `cooldown=1` on its `# upstream:` annotation, which let #801 adopt terra 1.18.18 a day after its release, was removed now that 1.18.18 is past the default cooldown, so the next terra release waits the full week again. The pinned version stays 1.18.18'
-time: '2026-11-16T19:48:49.174157424Z'

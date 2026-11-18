@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added the `ghcr.io/rios0rios0/pipelines/python:3.15-pdm-trixie` image (`global/containers/python.3.15-pdm-trixie`): Python 3.15 on Debian 13 trixie with the pinned PDM and the unprivileged `app_user` (uid/gid 1001), built beside `python:3.14-pdm-trixie` rather than in its place, so a project whose shipped image runs Python 3.15 can develop on that Python while every other project keeps the image it has. The GitLab CI PDM template still runs the 3.14 image, and the new `make test ONLY=python-version` holds every PDM image to the Python and Debian release its tag names'
-time: '2026-11-17T00:52:57.678959469Z'

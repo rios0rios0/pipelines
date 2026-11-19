@@ -38,8 +38,8 @@ stages:
           PRE_STEPS:
             - task: 'UseNode@1'
               inputs:
-                version: '24.22.2'
-              displayName: 'Use Node.js 24.22.2'
+                version: '24.22.3'
+              displayName: 'Use Node.js 24.22.3'
 
       - template: '../../../global/stages/20-security/hadolint.yaml'
         parameters:

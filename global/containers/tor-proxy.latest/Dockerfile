@@ -8,7 +8,7 @@
 # it, never the other way round. Lowering the directive to suit an old builder would quietly
 # give up whatever the module is entitled to use. `.github/tests/test-go-module-toolchain.sh`
 # holds the two together from now on, and fails the build if this image ever falls behind again.
-FROM golang:1.27.4-alpine3.24@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS health_builder
+FROM golang:1.27.4-alpine3.24@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS health_builder
 
 COPY health src/health
 RUN cd src/health && go build -o /go/health -ldflags="-w -s"

@@ -227,10 +227,10 @@ OSV_SCANNER_SHA256_ARM64="983d22fbad9724514e3fcc6acc83b5fa64c5ffa6b0d9f510028f22
 # digest the way it does for any release binary. The wheel's dependencies are
 # resolved by pip within the ranges the wheel declares, binary-only.
 # upstream: pypi checkov
-CHECKOV_PINNED_VERSION="3.4.3"
+CHECKOV_PINNED_VERSION="3.4.4"
 CHECKOV_VERSION="${CHECKOV_VERSION:-${CHECKOV_PINNED_VERSION}}"
 # asset: https://files.pythonhosted.org/packages/py3/c/checkov/checkov-{version}-py3-none-any.whl
-CHECKOV_SHA256="666f376019f6a9fdbeb5c9d2a57be3fb83a4acd2d924d447942450a926ba0f55"
+CHECKOV_SHA256="4b01d4ecfe9be74723619bad2095af9f1cc44890d62c8372809bdc3d10a7991d"
 
 # --- Language tooling --------------------------------------------------------
 
@@ -326,12 +326,12 @@ TFLINT_SHA256_ARM64="1105a0a5ddee7cdac7957a3475571a946b839192ea1bc0c722c6c468600
 # upstream: github-release gruntwork-io/terragrunt
 # osv: Go github.com/gruntwork-io/terragrunt
 # checksums: https://github.com/gruntwork-io/terragrunt/releases/download/v{version}/SHA256SUMS
-TERRAGRUNT_PINNED_VERSION="1.2.1"
+TERRAGRUNT_PINNED_VERSION="1.2.2"
 TERRAGRUNT_VERSION="${TERRAGRUNT_VERSION:-${TERRAGRUNT_PINNED_VERSION}}"
 # asset: https://github.com/gruntwork-io/terragrunt/releases/download/v{version}/terragrunt_linux_amd64
-TERRAGRUNT_SHA256_AMD64="f2f6238ad2348855a4e876b90fd31f3f5d106bb234794202a00b2bcc139fa753"
+TERRAGRUNT_SHA256_AMD64="1ba4ad11cf6ac277e8ba59a3fdceb8576778e22f6a24bedd542e91bad9f36491"
 # asset: https://github.com/gruntwork-io/terragrunt/releases/download/v{version}/terragrunt_linux_arm64
-TERRAGRUNT_SHA256_ARM64="01c0768aab01e0c183209ba7edce9d2ebc8f8a7690763bb52f1b8900aec224bc"
+TERRAGRUNT_SHA256_ARM64="a730c7daf2fb7dd13e6e7b016b3a89fd4f546bc81a31f8ff19474866c566b755"
 
 # `rios0rios0/terra` is first-party, which changes nothing about the download:
 # the templates fetched `install.sh` from the `main` BRANCH and piped it into a
@@ -402,12 +402,12 @@ KUBERNETES_JSON_SCHEMA_VERSION="${KUBERNETES_JSON_SCHEMA_VERSION:-${KUBERNETES_J
 # upstream: github-release superfly/flyctl
 # osv: Go github.com/superfly/flyctl
 # checksums: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_checksums.txt
-FLYCTL_PINNED_VERSION="0.5.5"
+FLYCTL_PINNED_VERSION="0.5.8"
 FLYCTL_VERSION="${FLYCTL_VERSION:-${FLYCTL_PINNED_VERSION}}"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_x86_64.tar.gz
-FLYCTL_SHA256_X86_64="2c64e1c7f320fafed0452fbce9adff57fcaf733619f0faa315ae883ec03d7ef6"
+FLYCTL_SHA256_X86_64="0115ae5202c9984695e22e4e99a375565ae3d7edc462377ce00c833406c877ac"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_arm64.tar.gz
-FLYCTL_SHA256_ARM64="3d471f692a1ec597b68bcfba73ac613add7c227f7cfdf0bb7083cc0bb992ba25"
+FLYCTL_SHA256_ARM64="9fa85f52c3d266887f1958164568ea9995f1ee4ce5214506ee0f095ebe9888d1"
 
 # crane, from google/go-containerregistry. The Fly.io deploy copies the image
 # the pipeline already delivered into registry.fly.io with it -- registry to
@@ -467,7 +467,7 @@ YQ_SHA256_DARWIN_ARM64="a2aebb93b5bdcb61bb76f630e42a0ef6a3ee10842a6516cd7b9e4080
 # upstream: npm wrangler
 WRANGLER_CLI_SPEC="${WRANGLER_CLI_SPEC:-wrangler@4}"
 # upstream: npm vercel
-VERCEL_CLI_SPEC="${VERCEL_CLI_SPEC:-vercel@65}"
+VERCEL_CLI_SPEC="${VERCEL_CLI_SPEC:-vercel@66}"
 # upstream: npm netlify-cli
 NETLIFY_CLI_SPEC="${NETLIFY_CLI_SPEC:-netlify-cli@27}"
 
@@ -491,7 +491,7 @@ NETLIFY_CLI_SPEC="${NETLIFY_CLI_SPEC:-netlify-cli@27}"
 # upstream: github-release SonarSource/sonar-scanner-cli-docker
 # osv: none
 # image: sonarsource/sonar-scanner-cli
-SONAR_SCANNER_CLI_PINNED_VERSION="12.3.1.4302_8.3.1"
+SONAR_SCANNER_CLI_PINNED_VERSION="12.4.0.4321_8.4.0"
 
 # Node.js, as the GitLab CI JavaScript images (`node:<release>-trixie` in
 # `gitlab/javascript/abstracts/`) and the Azure DevOps `UseNode@1` inputs name
@@ -509,7 +509,7 @@ SONAR_SCANNER_CLI_PINNED_VERSION="12.3.1.4302_8.3.1"
 # upstream: github-release nodejs/node track=24
 # osv: Bitnami node
 # image: node
-NODE_PINNED_VERSION="24.22.2"
+NODE_PINNED_VERSION="24.22.3"
 
 # --- Miscellaneous -----------------------------------------------------------
 
@@ -590,10 +590,10 @@ HISHEL_SPEC="${HISHEL_SPEC:-hishel==2.0.0}"
 # upstream: pypi vulture
 VULTURE_SPEC="${VULTURE_SPEC:-vulture==2.16}"
 # upstream: pypi semgrep
-SEMGREP_SPEC="${SEMGREP_SPEC:-semgrep==1.184.0}"
+SEMGREP_SPEC="${SEMGREP_SPEC:-semgrep==1.185.0}"
 # upstream: rubygems bundler-audit
 BUNDLER_AUDIT_SPEC="${BUNDLER_AUDIT_SPEC:-bundler-audit:0.9.3}"
 # upstream: rubygems debride
 DEBRIDE_SPEC="${DEBRIDE_SPEC:-debride:1.15.2}"
 # upstream: npm knip
-KNIP_SPEC="${KNIP_SPEC:-knip@6.44.2}"
+KNIP_SPEC="${KNIP_SPEC:-knip@6.45.1}"

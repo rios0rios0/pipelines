@@ -10,7 +10,7 @@ include:
 # supply-chain suite's `image:` match did not look.
 .sonarqube:
   image:
-    name: 'sonarsource/sonar-scanner-cli:12.3.1.4302_8.3.1@sha256:38207bba3d98c8ce6f6c051ea2b9f05a24480da78c9ee5945ceafc3d9de02b88'
+    name: 'sonarsource/sonar-scanner-cli:12.4.0.4321_8.4.0@sha256:6e6eca4d552695a98fb7dab84f0c1bd0885ebbfe272654d1552e24bd7f452d51'
     entrypoint: [ '' ]
   stage: 'management'
   variables:

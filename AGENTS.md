@@ -64,7 +64,7 @@ there is no target to add and no list to keep in step.
 | `govulncheck-verdict` | That govulncheck fails on a vulnerability the code calls, read from its report rather than the `-json` exit code |
 | `hadolint-discovery` | Which files the Hadolint runner lints as Dockerfiles (every name the delivery templates build) |
 | `javascript-pipeline` | The JavaScript formatting gate (Prettier runner + cross-platform wiring) |
-| `lambda-templates` | Lambda template validation |
+| `lambda-templates` | Lambda template validation, and where the SAM delivery builds: in a plain step of its own, never inside the `AWSShellScript@1` step that holds the credentials, before every `sam package` step, with the region that step packages in, and each of them running only once the steps before it succeeded |
 | `memory-detection` | The cgroup-aware memory ceiling detection |
 | `migration-order` | The goose migration-order check (a new migration newer than the target branch's newest in its directory; detection, fetch, shallow clones, version parsing, `GOOSE_MIGRATION_DIRS`) and its pull-request-only wiring on all three platforms and in `golang.mk` |
 | `no-python` | That the repository runs no Python of its own: no `.py` file, and no interpreter outside the Python pipelines and the Semgrep, Checkov and ansible-lint installs, |

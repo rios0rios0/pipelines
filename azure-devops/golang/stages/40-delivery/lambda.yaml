@@ -90,19 +90,38 @@ stages:
               LAMBDA_HANDLER_NAME: ${{ parameters.LAMBDA_HANDLER }}
               LAMBDA_ARTIFACT_DIR: $(LAMBDA_ARTIFACT_DIR)
 
+          # `sam build` runs in a plain step of its own, ahead of both packaging steps, because it
+          # needs no AWS credentials. `AWSShellScript@1` takes the service connection's credentials
+          # once, as it starts, and those of a connection that assumes a role last 15 minutes unless
+          # the pipeline sets `aws.rolecredential.maxduration`. Building inside that step spent their
+          # lifetime on compiling, so a build that took nearly as long left `sam package` holding
+          # expired credentials (`ExpiredToken`); built here, their clock starts when packaging does.
+          - script: |
+              set -e
+
+              echo "Building with AWS SAM..."
+              export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
+              sam build
+            displayName: 'Build with AWS SAM'
+            # `succeeded()` here and on both packaging steps: building and packaging used to be one
+            # script under `set -e`, and a condition without it runs its step after a failed one, so
+            # `sam package` would package the unbuilt source template after a failed build.
+            condition: and(succeeded(), eq(variables['DEPLOY_STRATEGY'], 'sam'))
+            # The region `AWSShellScript@1` gave the build when it ran inside that step: `sam build`
+            # resolves the template's `AWS::Region` from `AWS_REGION`.
+            env:
+              AWS_REGION: $(AWS_REGION)
+              AWS_DEFAULT_REGION: $(AWS_REGION)
+
           - task: 'AWSShellScript@1'
-            displayName: 'Build and Package with AWS SAM (AWS Service Connection)'
-            condition: and(eq(variables['DEPLOY_STRATEGY'], 'sam'), ne(variables['AWS_SERVICE_CONNECTION'], ''))
+            displayName: 'Package with AWS SAM (AWS Service Connection)'
+            condition: and(succeeded(), eq(variables['DEPLOY_STRATEGY'], 'sam'), ne(variables['AWS_SERVICE_CONNECTION'], ''))
             inputs:
               awsCredentials: "$(AWS_SERVICE_CONNECTION)"
               regionName: "$(AWS_REGION)"
               scriptType: 'inline'
               inlineScript: |
                 set -e
-
-                echo "Building with AWS SAM..."
-                export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
-                sam build
 
                 echo "Packaging with AWS SAM..."
                 SAM_PACKAGE_ARGS="--output-template-file packaged.yaml --region $AWS_REGION_NAME"
@@ -139,10 +158,6 @@ stages:
                 exit 1
               fi
 
-              echo "Building with AWS SAM..."
-              export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
-              sam build
-
               echo "Packaging with AWS SAM..."
               SAM_PACKAGE_ARGS="--output-template-file packaged.yaml --region $AWS_REGION_NAME"
               RESOLVE_S3=$(echo "$SAM_RESOLVE_S3" | tr '[:upper:]' '[:lower:]')
@@ -160,8 +175,8 @@ stages:
                 echo "ERROR: Provide S3_BUCKET or set RESOLVE_S3=true to enable --resolve-s3"
                 exit 1
               fi
-            displayName: 'Build and Package with AWS SAM'
-            condition: and(eq(variables['DEPLOY_STRATEGY'], 'sam'), eq(variables['AWS_SERVICE_CONNECTION'], ''))
+            displayName: 'Package with AWS SAM'
+            condition: and(succeeded(), eq(variables['DEPLOY_STRATEGY'], 'sam'), eq(variables['AWS_SERVICE_CONNECTION'], ''))
             env:
               AWS_REGION_NAME: $(AWS_REGION)
               SAM_RESOLVE_S3: ${{ parameters.RESOLVE_S3 }}

@@ -31,10 +31,15 @@ func mainTemplates() []template {
 	}
 }
 
+// deliveryTemplate is the stage that builds and packages the function.
+func deliveryTemplate() template {
+	return template{name: "delivery/lambda.yaml", path: "azure-devops/golang/stages/40-delivery/lambda.yaml"}
+}
+
 // stageTemplates are the stages those entry templates include.
 func stageTemplates() []template {
 	return []template{
-		{name: "delivery/lambda.yaml", path: "azure-devops/golang/stages/40-delivery/lambda.yaml"},
+		deliveryTemplate(),
 		{name: "deployment/lambda.yaml", path: "azure-devops/golang/stages/50-deployment/lambda.yaml"},
 	}
 }

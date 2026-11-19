@@ -161,6 +161,18 @@ fi
 
 print_result $DOC_VALID "Documentation validation"
 
+# Test 6: `sam build` runs in a plain step of its own, before every step that runs
+# `sam package` and only once the steps before it succeeded. `AWSShellScript@1`
+# takes the service connection's credentials as it starts, and an assumed role's
+# last 15 minutes by default, so a build inside that step left the packaging after
+# it holding expired credentials whenever the build took nearly as long.
+echo ""
+echo "Test 6: Validating where the SAM delivery builds"
+echo "================================================"
+TEST_RESULT=0
+"$LAMBDA" credentials || TEST_RESULT=$?
+print_result $TEST_RESULT "SAM build outside the steps holding AWS credentials"
+
 # Print summary
 echo ""
 echo "===================================="

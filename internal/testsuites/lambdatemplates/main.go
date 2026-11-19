@@ -5,11 +5,12 @@
 //	lambdatemplates syntax       every Lambda template parses
 //	lambdatemplates structure    the main and stage templates carry their keys
 //	lambdatemplates parameters   every parameter a main template references is defined
+//	lambdatemplates credentials  the SAM delivery builds before, and apart from, the steps holding AWS credentials
 //	lambdatemplates sam <file>   a SAM template, CloudFormation's tags accepted, with its keys
 //	lambdatemplates yaml <file>  the file is YAML
 //	lambdatemplates json <file>  the file is JSON
 //
-// The first three print a line per template and exit 1 when one fails; the
+// The first four print a line per template and exit 1 when one fails; the
 // last three print nothing and answer with their exit status alone.
 package main
 
@@ -27,7 +28,8 @@ const (
 	exitUsage  = 2
 )
 
-const usage = "usage: lambdatemplates syntax | structure | parameters | sam <file> | yaml <file> | json <file>"
+const usage = "usage: lambdatemplates syntax | structure | parameters | credentials | " +
+	"sam <file> | yaml <file> | json <file>"
 
 // errFailed is a check that ran and found a problem it already reported.
 var errFailed = errors.New("the check failed")
@@ -67,6 +69,8 @@ func dispatch(arguments []string, output io.Writer) error {
 			return checkStructure(".", output)
 		case "parameters":
 			return checkParameters(".", output)
+		case "credentials":
+			return checkCredentials(".", output)
 		}
 		return errUsage
 	}

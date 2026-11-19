@@ -6,6 +6,7 @@ This document describes how to use the Go Lambda pipeline templates for Azure De
 
 - [Overview](#overview)
 - [IAM Permissions](#iam-permissions)
+- [Credential Lifetime](#credential-lifetime)
 - [Examples](#examples)
 
 ## Overview
@@ -27,6 +28,12 @@ The pipeline requires AWS credentials with the following permissions:
 - **IAM** — `PassRole` to `lambda.amazonaws.com` (when creating new functions)
 
 See [`iam-policy-example.json`](.docs/examples/go-lambda-example/iam-policy-example.json) for a complete IAM policy.
+
+## Credential Lifetime
+
+The SAM delivery builds the function (`sam build`) in a step of its own, which holds no AWS credentials, and only then packages it (`sam package`) in the step that does: the `AWSShellScript@1` task of `AWS_SERVICE_CONNECTION`, or the environment-variable step when no service connection is set. The task takes the service connection's credentials once, as it starts, and when the connection assumes a role they last 15 minutes unless the pipeline sets the `aws.rolecredential.maxduration` variable (in seconds, up to the role's maximum session duration). A build that takes nearly that long therefore no longer leaves the packaging with expired credentials (`ExpiredToken`).
+
+The deployment's `sam deploy` holds credentials of the same lifetime while it waits for the CloudFormation stack update, so a stack whose update can take longer than 15 minutes needs `aws.rolecredential.maxduration` raised.
 
 ## Examples
 

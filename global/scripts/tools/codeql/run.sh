@@ -257,6 +257,19 @@ else
   echo "Scanning $SOURCE_ROOT as it is (CODEQL_SOURCE_SCOPE=$CODEQL_SOURCE_SCOPE)."
 fi
 
+# The Go build uses a workspace only when the source root holds it: a checkout or worktree kept
+# below a directory whose go.work does not list it was built inside that workspace, which loaded no
+# package, and the scan passed over a database without one line of Go. `go-workspace.sh` says why
+# and how; the GitHub Actions composite asks it the same question before its own autobuild.
+if [ "$CODEQL_LANGUAGE" = "go" ]; then
+  . "$SCRIPTS_DIR/global/scripts/tools/codeql/go-workspace.sh"
+  codeql_go_workspace "$SOURCE_ROOT"
+  if [ -n "$CODEQL_GOWORK" ]; then
+    GOWORK="$CODEQL_GOWORK"
+    export GOWORK
+  fi
+fi
+
 echo "Creating CodeQL database for language: $CODEQL_LANGUAGE${CODEQL_BUILD_MODE:+ (build mode: $CODEQL_BUILD_MODE)}"
 CODEQL_DB_ACTIVE=true
 # shellcheck disable=SC2086
@@ -304,6 +317,16 @@ CODEQL_DB_ACTIVE=false
 # ("Could not open file", "[: Illegal number") that masked the real cause.
 if [ ! -f "$fileName" ]; then
   echo "ERROR: CodeQL completed but SARIF report was not produced at $fileName." >&2
+  exit 1
+fi
+
+# A scan must have read code: a database can hold none of the language's code and still be
+# created -- a Go build whose packages all failed to load extracts its go.mod alone -- and the gate
+# then passes an analysis of nothing as clean. `extraction.sh` reads how much code the report says
+# the database held, and fails a report that says none. --strict, because every language this script
+# is handed carries the metric it reads, so a report that says nothing fails too. The report stays
+# where the job publishes it.
+if ! "$SCRIPTS_DIR/global/scripts/tools/codeql/extraction.sh" --strict --language "$CODEQL_LANGUAGE" "$fileName"; then
   exit 1
 fi
 

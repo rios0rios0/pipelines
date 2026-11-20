@@ -98,7 +98,8 @@ EOF
 
 # The stub CodeQL. `database create` records what a Go build it started would see -- GOPRIVATE, the
 # URL rewrite as git resolves it, and the global configuration file git writes to -- and makes the
-# database directory; `database analyze` writes a report with no finding.
+# database directory; `database analyze` writes a report with no finding and the lines-of-code
+# metric run.sh reads to know the database held code.
 STUB_BIN="$TEST_DIR/bin"
 mkdir -p "$STUB_BIN"
 cat > "$STUB_BIN/codeql" << STUB
@@ -118,7 +119,7 @@ case "\$command" in
     for argument in "\$@"; do
       case "\$argument" in --output=*) output="\${argument#--output=}" ;; esac
     done
-    printf '%s\n' '{"runs":[{"results":[]}]}' > "\$output"
+    printf '%s\n' '{"runs":[{"results":[],"properties":{"metricResults":[{"ruleId":"go/summary/lines-of-code","value":1}]}}]}' > "\$output"
     ;;
 esac
 exit 0

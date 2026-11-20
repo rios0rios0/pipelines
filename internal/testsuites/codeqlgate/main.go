@@ -2,7 +2,9 @@
 // `.github/tests/test-codeql-gate.sh`, which explains why each exists:
 //
 //	codeqlgate composite <action.yaml> <repository root>
-//	    the GitHub composite analyses, gates, then uploads at best
+//	    the GitHub composite builds Go in the repository's own workspace,
+//	    analyses, fails an analysis that read no code, gates, then uploads
+//	    at best
 //	codeqlgate own-scan <repository root>
 //	    this repository's own scan narrows nothing it has not explained
 //

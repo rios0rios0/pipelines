@@ -11,27 +11,32 @@ import (
 	"github.com/rios0rios0/pipelines/internal/testsuites/yamldoc"
 )
 
-// The gate script, and the analysis output both the gate and the upload read.
+// The scripts the composite runs, and the analysis output the extraction check,
+// the gate and the upload read.
 const (
-	gateScript     = "global/scripts/tools/codeql/gate.sh"
-	analysisOutput = "steps.analyze.outputs.sarif-output"
+	gateScript       = "global/scripts/tools/codeql/gate.sh"
+	extractionScript = "global/scripts/tools/codeql/extraction.sh"
+	workspaceHelper  = "global/scripts/tools/codeql/go-workspace.sh"
+	analysisOutput   = "steps.analyze.outputs.sarif-output"
 )
 
-// actionPathReference is how the gate step reaches the script: through the
-// directory the runner unpacked the action into.
+// actionPathReference is how a step reaches a script: through the directory
+// the runner unpacked the action into.
 var actionPathReference = regexp.MustCompile(`\$GITHUB_ACTION_PATH/([^"[:space:]]+)`)
 
 // executableBits are the permission bits that let a script run.
 const executableBits = 0o111
 
-// composite is the parsed composite action and the positions of its four steps.
+// composite is the parsed composite action and the positions of its six steps.
 type composite struct {
-	steps    []*yamldoc.Node
-	init     int
-	analyze  int
-	upload   int
-	gate     int
-	findings []string
+	steps       []*yamldoc.Node
+	init        int
+	goWorkspace int
+	analyze     int
+	extraction  int
+	upload      int
+	gate        int
+	findings    []string
 }
 
 // absent is the position of a step the composite does not have.
@@ -56,9 +61,16 @@ func usesAction(prefix string) func(*yamldoc.Node) bool {
 	}
 }
 
+func runsScript(script string) func(*yamldoc.Node) bool {
+	return func(step *yamldoc.Node) bool {
+		return strings.Contains(step.Get("run").StrOr(""), script)
+	}
+}
+
 // checkComposite holds the GitHub CodeQL composite at `actionPath` to running
-// the suite `run.sh` runs, never uploading from the analysis, gating on its
-// output unconditionally, and uploading last and at best.
+// the suite `run.sh` runs, building Go in the repository's own workspace,
+// never uploading from the analysis, failing an analysis that read no code,
+// gating on its output unconditionally, and uploading last and at best.
 func checkComposite(actionPath, root string, output io.Writer) error {
 	document, err := yamldoc.Load(actionPath, yamldoc.Options{})
 	if err != nil {
@@ -66,15 +78,17 @@ func checkComposite(actionPath, root string, output io.Writer) error {
 	}
 	c := &composite{steps: document.Get("runs").Get("steps").Items()}
 	c.init = c.indexOf(usesAction("github/codeql-action/init@"))
+	c.goWorkspace = c.indexOf(runsScript(workspaceHelper))
 	c.analyze = c.indexOf(usesAction("github/codeql-action/analyze@"))
+	c.extraction = c.indexOf(runsScript(extractionScript))
 	c.upload = c.indexOf(usesAction("github/codeql-action/upload-sarif@"))
-	c.gate = c.indexOf(func(step *yamldoc.Node) bool {
-		return strings.Contains(step.Get("run").StrOr(""), gateScript)
-	})
+	c.gate = c.indexOf(runsScript(gateScript))
 	if c.init == absent || !c.steps[c.init].Get("with").Get("queries").Is("security-and-quality") {
 		c.report("init does not run the security-and-quality suite run.sh runs")
 	}
+	c.checkGoWorkspace(actionPath, root)
 	c.checkAnalyze()
+	c.checkExtraction(actionPath, root)
 	c.checkGate(actionPath, root)
 	c.checkUpload()
 	for index, step := range c.steps {
@@ -122,35 +136,106 @@ func (c *composite) checkGate(actionPath, root string) {
 	if !strings.Contains(step.Get("env").StrOr("")+run, analysisOutput) {
 		c.report("the gate does not read the analysis output")
 	}
-	if match := actionPathReference.FindStringSubmatch(run); match == nil {
-		c.report("the gate is not reached through the action path")
-	} else {
-		c.checkGatePath(actionPath, root, match[1])
-	}
+	c.checkScriptPath(actionPath, root, run, script{gateScript, "the gate", "the gate script", true})
 	if c.analyze != absent && c.gate < c.analyze {
 		c.report("the gate runs before the analysis")
 	}
 }
 
-// checkGatePath holds the path the gate step names, from the action's own
-// directory, to the gate script, and that script to being executable.
-func (c *composite) checkGatePath(actionPath, root, reference string) {
+// checkGoWorkspace holds the step that keeps a Go build in the repository's
+// own workspace to running for a Go analysis alone and before `init`, so the
+// autobuild runs under the GOWORK it decides; to sourcing the helper `run.sh`
+// sources, through the action path; and to handing GOWORK to the later steps.
+func (c *composite) checkGoWorkspace(actionPath, root string) {
+	if c.goWorkspace == absent {
+		c.report("no step keeps the Go build in the repository's own workspace")
+		return
+	}
+	step := c.steps[c.goWorkspace]
+	run := step.Get("run").StrOr("")
+	if !strings.Contains(step.Get("if").StrOr(""), "inputs.codeql_language == 'go'") {
+		c.report("the Go workspace step does not run for a Go analysis alone")
+	}
+	if !strings.Contains(run, "GITHUB_ENV") {
+		c.report("the Go workspace step does not hand GOWORK to the later steps through GITHUB_ENV")
+	}
+	c.checkScriptPath(actionPath, root, run,
+		script{workspaceHelper, "the Go workspace step", "the Go workspace helper", false})
+	if c.init != absent && c.goWorkspace > c.init {
+		c.report("the Go workspace step runs after init, so the autobuild never sees its GOWORK")
+	}
+}
+
+// checkExtraction holds the step that fails an analysis which read no code to
+// running whenever the analysis succeeded, after it and before the gate -- the
+// gate passes an analysis of nothing as clean -- over the analysis output,
+// through the action path, and leniently: --strict fails a language without a
+// lines-of-code metric, such as this repository's own `actions`.
+func (c *composite) checkExtraction(actionPath, root string) {
+	if c.extraction == absent {
+		c.report("no step checks that the analysis read code")
+		return
+	}
+	step := c.steps[c.extraction]
+	run := step.Get("run").StrOr("")
+	if step.Has("if") {
+		c.report("the extraction check carries an if:, so something can skip it")
+	}
+	if !strings.Contains(step.Get("env").StrOr("")+run, analysisOutput) {
+		c.report("the extraction check does not read the analysis output")
+	}
+	if strings.Contains(run, "--strict") {
+		c.report("the extraction check is strict, so a language without a lines-of-code metric fails")
+	}
+	c.checkScriptPath(actionPath, root, run,
+		script{extractionScript, "the extraction check", "the extraction script", true})
+	if c.analyze != absent && c.extraction < c.analyze {
+		c.report("the extraction check runs before the analysis")
+	}
+	if c.gate != absent && c.extraction > c.gate {
+		c.report("the extraction check runs after the gate, which has passed an analysis of nothing by then")
+	}
+}
+
+// script is what a step's `run` must reach through the action path: the path
+// from the repository root, how the findings name the step and the script, and
+// whether the step runs it (it must be executable) or sources it.
+type script struct {
+	path       string
+	step       string
+	name       string
+	executable bool
+}
+
+// checkScriptPath holds the path `run` reaches through the action path, from
+// the action's own directory, to `want.path`, and that script to existing --
+// and to being executable, when the step runs it.
+func (c *composite) checkScriptPath(actionPath, root, run string, want script) {
+	match := actionPathReference.FindStringSubmatch(run)
+	if match == nil {
+		c.report(want.step + " is not reached through the action path")
+		return
+	}
+	reference := match[1]
 	target := filepath.Join(filepath.Dir(actionPath), reference)
 	if filepath.IsAbs(reference) {
 		target = filepath.Clean(reference)
 	}
-	if target != filepath.Join(root, gateScript) {
+	if target != filepath.Join(root, want.path) {
 		relative, err := filepath.Rel(root, target)
 		if err != nil {
 			relative = target
 		}
-		c.report(fmt.Sprintf("the gate path resolves to %s, not the gate script", relative))
+		c.report(fmt.Sprintf("%s path resolves to %s, not %s", want.step, relative, want.name))
 		return
 	}
-	// G703: the path is the gate script the action names; checking it is the point.
+	// G703: the path is the script the action names; checking it is the point.
 	info, err := os.Stat(target) //nolint:gosec // see above
-	if err != nil || info.Mode().Perm()&executableBits == 0 {
-		c.report("the gate script is not executable")
+	switch {
+	case want.executable && (err != nil || info.Mode().Perm()&executableBits == 0):
+		c.report(want.name + " is not executable")
+	case err != nil:
+		c.report(want.name + " does not exist")
 	}
 }
 

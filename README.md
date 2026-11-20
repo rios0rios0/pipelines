@@ -508,6 +508,14 @@ the analysis does, and GitHub acts on findings through code scanning -- so with 
 can now see findings fail a job that used to pass; `make codeql` reports the same ones locally.
 `make test ONLY=codeql-gate` holds the contract.
 
+A scan that read no code fails as well: when the report's lines-of-code metric says the database
+holds no line of the language's code, the job fails before the gate with `CodeQL extracted no
+<language> code`, listing what the extractor reported, instead of passing an analysis of nothing as
+clean. On GitLab CI, Azure DevOps and `make codeql` a report without that metric fails too, since
+every language they analyse has one. The GitHub Actions job fails only when the metric is there and
+says 0: a language without it (`actions`), or a report the analysis did not write, is a warning
+annotation. `make test ONLY=codeql-extraction` holds it.
+
 On a pull request the job judges only the change. `github/codeql-action` analyses a pull request
 diff-informed, so a dataflow query such as `actions/code-injection` reports only the findings in
 lines the pull request changed. A finding in code it never touched passes the pull request and fails
@@ -519,7 +527,8 @@ its merge push on 29.
 CodeQL's Go analysis builds the module, so the job needs a Go at least as new as the module's `go`
 directive. So does the bundle's Go extractor: it refuses a language version newer than the Go it
 was built with, and the scan still reports success over the broken types. Every bundle from
-`codeql-bundle-v2.26.4` reads `go 1.27`; the pinned one is `codeql-bundle-v2.27.3`.
+`codeql-bundle-v2.26.4` reads `go 1.27`; the pinned one is `CODEQL_BUNDLE_PINNED_VERSION` in
+`global/scripts/shared/pinned-versions.sh`, named only there so this page cannot fall behind it.
 
 | Platform       | The Go the Go analysis builds with                                                                  |
 |----------------|-----------------------------------------------------------------------------------------------------|
@@ -532,6 +541,15 @@ Before, GitLab CI ran the job in the pipeline's default Alpine image, where Code
 (`java: not found`) and there is no Go, so no Go project was analysed there. Azure DevOps took
 whatever Go the agent carried, 1.24 to 1.26 on a Microsoft-hosted one, and on an agent without one
 the analysis failed as "succeeded with issues". The other languages are below.
+
+The Go analysis builds only the workspace the repository holds. `go` joins the first `go.work` in or
+above the directory it runs in, so a checkout or worktree kept below a directory whose `go.work` did
+not list it built nothing, and the scan passed over a database without one line of Go. A workspace
+outside the repository is now set aside on every platform -- on GitHub Actions that matters on a
+self-hosted runner -- and the build runs with the repository's own `go.work`, or with `GOWORK=off`
+when it has none; the log says so. A `go.work` at the repository's root is used as before. One
+below it, with none at the root, goes unread under `GOWORK=off`, which the log names in a warning:
+scan a checkout that no outside `go.work` reaches to analyse its modules.
 
 Wherever a Makefile exists, CodeQL's Go autobuilder runs `make` with no target before it builds the
 module itself, so your default goal runs inside the analysis:

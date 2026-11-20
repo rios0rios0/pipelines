@@ -32,6 +32,7 @@ there is no target to add and no list to keep in step.
 | `build-env-vars` | The step that resolves `build_env_vars` in the three Cloudflare deployment workflows (one identical step, what it writes, no Python) |
 | `build-version` | The version build argument (shared helper, GitHub image delivery, Fly.io deploy, Go workflow wiring) and the delivered image's way to the Fly.io deploy |
 | `checkov` | The Checkov IaC scanner tier (verified install, report verdict, advisory default, wiring on every platform) |
+| `codeql-extraction` | That a CodeQL scan never builds Go inside a `go.work` from outside the source root (the repository's own `go.work` kept, `GOWORK=off` without one), and fails before the gate when its report says the database holds no line of the language's code, or says nothing |
 | `codeql-gate` | That CodeQL fails on findings `.codeql-false-positives` does not list, on every platform, and that the GitHub upload cannot fail the job, |
 | `codeql-runtime` | Where each language's CodeQL analysis runs and with what (GitLab CI images and installs, run.sh's report and build mode, the Azure DevOps and GitHub Actions toolchains, every Node.js the templates name against its end of life) |
 | `codeql-scope` | That a local CodeQL scan builds from the files git would ship, on every core, |
@@ -1264,6 +1265,30 @@ Eight constraints shape it; do not "simplify" any of them away:
 
 The findings gate reads the SARIF with `jq`. GitHub-hosted runners and Microsoft-hosted agents carry
 it, and no job installs it on a self-hosted one, where the gate fails closed without it.
+
+### A CodeQL Scan That Read No Code Fails
+
+**Enforced by `.github/tests/test-codeql-extraction.sh` (`make test ONLY=codeql-extraction`).**
+`global/scripts/tools/codeql/run.sh` passed a scan that analysed nothing. A Go checkout or worktree
+kept below a directory whose `go.work` did not list it showed how: CodeQL's Go autobuilder looks for
+`go.work` files under the source root only ("Found no go.work files in the workspace"), but every
+`go` command of its build walked up past the repository, joined that workspace and loaded no package
+(`directory prefix . does not contain modules listed in go.work`). The extractor recorded the
+`go.mod` alone. `database create` refuses a database with no file of a language CodeQL knows, and the
+Go autobuilder a build that matched no package, but neither noticed a build whose packages all failed
+to load, so every query ran over a database without one line of Go and the gate passed the empty
+report. `make sast` and CI read that as a clean scan.
+
+| Constraint | Why |
+|------------|-----|
+| **The Go build uses a workspace only when the source root holds it** | `go env GOWORK`, asked from the source root under `GOTOOLCHAIN=local` (so it downloads no toolchain an outside `go.work` names), says which workspace the build would join: `$GOWORK`, `go env -w`, or the nearest `go.work` in or above the source root. One outside is set aside, for the source root's own `go.work` when it has one (only an explicit `GOWORK` can outrank that), else with `GOWORK=off`, and the modules build as in a clean checkout, which is what CI scans. The log says which. The scratch copy of a local scan is covered too: it sits under `TMPDIR`, which can itself be below a workspace |
+| **A workspace inside the source root is left alone** | `GOWORK=off` on every scan would stop a repository's own workspace whose modules import each other from building. The one layout this cannot serve keeps `go.work` files only below its root, none at it, and is scanned under an outside workspace: `GOWORK=off` sets those aside too |
+| **A database holding no line of the language's code fails the scan, before the gate** | Read from the report's `<language>/summary/lines-of-code` metric, which the `security-and-quality` suite runs for every language `run.sh` is handed (`go`, `python`, `java`, `javascript`, `csharp`; Java's counts Kotlin too). The failure lists the extractor's error notifications, at most ten, and the lines the CLI counted under the source root when the metric carries that `baseline`, and the report stays where the job publishes it |
+| **A report without the metric fails too, and so does one whose metric is not a number** | Then nothing says the analysis read anything. The database's own counts cannot stand in: `codeql database print-baseline`, `baselineLinesOfCode` and `baseline-info.json` count the files on disk, and read the same over an empty database as over a full one |
+| **The GitHub Actions composite does not run the check** | It analyses with `github/codeql-action`, not `run.sh`, and shares only `gate.sh` with it. The check cannot move into the gate as it is: this repository's own scan analyses `actions`, which has no lines-of-code metric |
+
+The suite's stub `codeql` builds with the real `go`, as the autobuilder does, so each layout above is
+proven to load or to fail rather than assumed to.
 
 ### Report Uploads Never Gate a Job
 

@@ -641,7 +641,8 @@ main() {
   # deletes `build/` as Gradle's `clean` does -- the Java autobuilder runs it, and on a CI runner
   # the build runs in the checkout, so the report directory `cleanup.sh` made before the build went
   # with it -- and its `database analyze` refuses to write into a directory that does not exist, as
-  # the real one does (`Could not write SARIF file`).
+  # the real one does (`Could not write SARIF file`). The report it writes carries the lines-of-code
+  # metric run.sh reads to know the database held code.
   local stub_bin status record
   stub_bin="$TEST_DIR/stub-bin"
   mkdir -p "$stub_bin" "$TEST_DIR/stub-home" || exit 1
@@ -671,7 +672,7 @@ case "$command" in
       echo 'A fatal error occurred: Could not write SARIF file' >&2
       exit 2
     fi
-    printf '%s\n' '{"version":"2.1.0","runs":[{"results":[]}]}' > "$output"
+    printf '%s\n' '{"version":"2.1.0","runs":[{"results":[],"properties":{"metricResults":[{"ruleId":"java/summary/lines-of-code","value":1}]}}]}' > "$output"
     ;;
 esac
 exit 0

@@ -92,7 +92,8 @@ trap cleanup EXIT
 
 # The stub CodeQL. `database create` records the source root, the thread count and every file
 # under the root, and makes the database directory; `database analyze` records its threads and
-# writes one finding whose fingerprint the fixture lists as a false positive. CODEQL_STUB_RECORD
+# writes one finding whose fingerprint the fixture lists as a false positive, beside the
+# lines-of-code metric run.sh reads to know the database held code. CODEQL_STUB_RECORD
 # names where the records go; CODEQL_STUB_CREATE_EXIT scripts a failing build, and
 # CODEQL_STUB_SIGNAL interrupts the parent scan after the database directory is created.
 STUB_BIN="$TEST_DIR/bin"
@@ -127,7 +128,7 @@ case "$command" in
         --threads=*) echo "${argument#--threads=}" > "$record/analyze-threads" ;;
       esac
     done
-    printf '%s\n' '{"runs":[{"results":[{"ruleId":"go/fixture","message":{"text":"fixture"},"partialFingerprints":{"primaryLocationLineHash":"fixture-fingerprint:1"},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"main.go"},"region":{"startLine":1}}}]}]}]}' > "$output"
+    printf '%s\n' '{"runs":[{"results":[{"ruleId":"go/fixture","message":{"text":"fixture"},"partialFingerprints":{"primaryLocationLineHash":"fixture-fingerprint:1"},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"main.go"},"region":{"startLine":1}}}]}],"properties":{"metricResults":[{"ruleId":"go/summary/lines-of-code","value":1}]}}]}' > "$output"
     ;;
 esac
 exit 0

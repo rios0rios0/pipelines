@@ -73,7 +73,8 @@ setup:
 #
 #   codeql      non-zero only when results REMAIN after the fingerprints in
 #               `.codeql-false-positives` are subtracted; `exit 1` when the
-#               scan itself broke (database create, analyze, or missing SARIF)
+#               scan itself broke (database create, analyze, missing SARIF, or
+#               a database holding no line of the language's code)
 #   semgrep     run with `--error`, so non-zero on a finding; `.semgrepignore`
 #               and `.semgrepexcluderules` narrow what counts as one
 #   hadolint    non-zero on a finding; `.hadolint.yaml` selects the rules

@@ -23,6 +23,9 @@
 #   * `run.sh` delegates its verdict to it, end to end, with `codeql` replaced by a stub
 # and, against the composite's YAML:
 #   * the analysis runs the suite `run.sh` runs (`security-and-quality`) and never uploads
+#   * before `init`, a Go analysis hands its build the GOWORK `go-workspace.sh` decides; between the
+#     analysis and the gate, `extraction.sh` fails an analysis that read no code, never `--strict`
+#     (`make test ONLY=codeql-extraction` holds what both decide)
 #   * a gate step runs this script on the analysis output, unconditionally fatal
 #   * the SARIF upload is its own step, after the gate, `if: always()` and `continue-on-error`
 #   * GitLab CI and Azure DevOps still reach the same script through `run.sh`
@@ -311,9 +314,9 @@ assert_true "run.sh calls the gate and exits with its status" \
 assert_true "run.sh keeps no fingerprint filter of its own" "! grep -q 'partialFingerprints' '$RUN_SH'"
 echo ""
 
-echo "Test 8: the GitHub composite analyses, gates, then uploads at best"
+echo "Test 8: the GitHub composite analyses, checks it read code, gates, then uploads at best"
 FINDINGS="$("$CODEQL_CHECKS" composite "$ACTION" "$SCRIPTS_DIR")"
-assert_empty "the analysis never uploads, the gate is fatal, the upload is best-effort and last" "$FINDINGS"
+assert_empty "Go builds in its own workspace, the analysis never uploads, an analysis of nothing fails, the gate is fatal, the upload is best-effort and last" "$FINDINGS"
 echo ""
 
 echo "Test 9: GitLab CI and Azure DevOps reach the same gate through run.sh"

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Test script for what a CodeQL scan reads: `global/scripts/tools/codeql/run.sh` keeps the Go build
-# out of a go.work the source root does not hold, and fails a scan whose database holds none of the
-# language's code.
+# Test script for what a CodeQL scan reads: the Go build stays out of a go.work the source root does
+# not hold (`global/scripts/tools/codeql/go-workspace.sh`), and a scan whose database holds none of
+# the language's code fails (`global/scripts/tools/codeql/extraction.sh`), in `run.sh` and in the
+# GitHub Actions `20-security/codeql` composite.
 #
 # A checkout or worktree kept below a directory whose go.work did not list it was scanned as
 # passing while CodeQL analysed nothing. CodeQL's Go autobuilder looks for go.work files under the
@@ -25,9 +26,18 @@
 #     what the CLI counted under the source root, and leaves the report where the job publishes it
 #   * a report without the metric, or whose metric is not a number, fails too
 #   * every language run.sh is handed is judged by its own metric: go, py, java, js and cs
+#   * a go.work below the source root that GOWORK=off leaves unread is named in a warning
+# and, against synthetic reports, of `extraction.sh` as the GitHub composite runs it -- without
+# --strict -- that a report whose metric is 0 fails, while one without the metric (`actions`), a
+# report that cannot be read and no report at all only warn, as annotations on GitHub Actions; and
+# the composite's Go workspace step, cut out of action.yaml and run as the runner runs it, hands
+# the steps after it the GOWORK `run.sh` would use. The composite's step order and flags are held
+# by `make test ONLY=codeql-gate`.
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)" || exit 1
 RUN_SH="$SCRIPTS_DIR/global/scripts/tools/codeql/run.sh"
+EXTRACTION="$SCRIPTS_DIR/global/scripts/tools/codeql/extraction.sh"
+ACTION="$SCRIPTS_DIR/github/global/stages/20-security/codeql/action.yaml"
 TEST_DIR="$(mktemp -d)" || exit 1
 
 RED='\033[0;31m'
@@ -214,8 +224,8 @@ run_scan() {
   local status=0
   (
     cd "$project" || exit 1
-    env -u CI -u TF_BUILD -u CODEQL_THREADS -u CODEQL_SOURCE_SCOPE -u CODEQL_RAM -u CODEQL_BUILD_MODE \
-      -u GOWORK -u GOFLAGS -u GOMODCACHE \
+    env -u CI -u TF_BUILD -u GITHUB_ACTIONS -u CODEQL_THREADS -u CODEQL_SOURCE_SCOPE -u CODEQL_RAM \
+      -u CODEQL_BUILD_MODE -u GOWORK -u GOFLAGS -u GOMODCACHE \
       HOME="$TEST_DIR/home" PATH="$STUB_BIN:$PATH" SCRIPTS_DIR="$SCRIPTS_DIR" \
       GOENV=off GOTOOLCHAIN=local GOPROXY=off GOCACHE="$TEST_DIR/gocache" GOPATH="$TEST_DIR/gopath" \
       CODEQL_STUB_RECORD="$record" "$@" "$RUN_SH" "$language"
@@ -362,6 +372,155 @@ assert_no_output "...before the gate" "CodeQL found" "$OUT"
 RECORD="$(run_scan "$PLAIN" python CI=true CODEQL_STUB_METRIC=text)"
 assert_equals "a metric that is not a number fails" "1" "$(record_of "$RECORD" status)"
 assert_output "...as unreadable" "could not read how much code CodeQL extracted" "$(record_of "$RECORD" output)"
+
+echo ""
+echo "Test 10: a go.work below the source root that GOWORK=off leaves unread is named"
+# `svc` stands alone; `nested/go.work` is a workspace of its own whose `a` imports `b`. CodeQL's
+# autobuilder builds that workspace from `nested/`, which GOWORK=off leaves outside any module, so
+# none of its modules is extracted -- a gap the scan cannot see, since `svc` has code.
+NESTED="$OUTSIDE/nested-repo"
+go_module "$NESTED/svc" 'example.com/svc' || exit 1
+go_module "$NESTED/nested/b" 'example.com/b' || exit 1
+go_module "$NESTED/nested/a" 'example.com/a' 'example.com/b' || exit 1
+printf 'go 1.21\n\nuse (\n\t./a\n\t./b\n)\n' > "$NESTED/nested/go.work"
+commit_all "$NESTED" || exit 1
+RECORD="$(run_scan "$NESTED" go CI=true)"
+OUT="$(record_of "$RECORD" output)"
+assert_equals "the build runs with GOWORK=off" "off" "$(record_of "$RECORD" gowork)"
+assert_output "...and warns that the nested workspace goes unread" \
+  "WARNING: GOWORK=off leaves the go.work below the source root unread (nested/go.work), so CodeQL extracts none of its modules" "$OUT"
+assert_no_output "...without an annotation off GitHub Actions" "::warning" "$OUT"
+RECORD="$(run_scan "$PROJECT" go CI=true)"
+assert_no_output "a repository with no go.work below its root gets no warning" "WARNING" "$(record_of "$RECORD" output)"
+
+echo ""
+echo "Test 11: extraction.sh fails a report that says 0, and only warns when it cannot tell"
+REPORTS="$TEST_DIR/reports"
+mkdir -p "$REPORTS/one" "$REPORTS/mixed" "$REPORTS/zero-among" "$REPORTS/empty" || exit 1
+# report <path> <lines|none|text> [<baseline>] [<rule prefix>]: a report shaped as CodeQL writes it,
+# whose lines-of-code metric holds <lines>, a string with `text`, or is left out with `none`.
+report() {
+  jq -n --arg lines "$2" --arg baseline "${3:-}" --arg prefix "${4:-go}" '{version: "2.1.0", runs: [{
+    tool: {driver: {name: "CodeQL"}}, results: [],
+    invocations: [{toolExecutionNotifications: [{descriptor: {id: ($prefix + "/diagnostics/extraction-errors")},
+      level: "error", message: {text: "Extraction failed with error fixture"}}]}],
+    properties: {metricResults: (if $lines == "none" then [] else [
+      {ruleId: ($prefix + "/summary/lines-of-code"), value: (if $lines == "text" then "many" else ($lines | tonumber) end)}
+      + (if $baseline == "" then {} else {baseline: ($baseline | tonumber)} end)] end)}}]}' > "$1"
+}
+# extract <argument>...: runs extraction.sh off GitHub Actions; prints its output and `exit=<n>`.
+extract() { env -u GITHUB_ACTIONS "$EXTRACTION" "$@" 2>&1; echo "exit=$?"; }
+status_of() { printf '%s\n' "$1" | tail -n 1; }
+report "$REPORTS/one/go.sarif" 7
+report "$REPORTS/one/python.sarif" 0 3 py
+report "$REPORTS/one/actions.sarif" none '' actions
+report "$REPORTS/one/text.sarif" text
+printf 'not json\n' > "$REPORTS/one/broken.sarif"
+OUT="$(extract "$REPORTS/one/go.sarif")"
+assert_equals "a report with code passes" "exit=0" "$(status_of "$OUT")"
+assert_output "...named by its file" "CodeQL extracted 7 line(s) of go code." "$OUT"
+OUT="$(extract --language javascript-typescript "$REPORTS/one/go.sarif")"
+assert_output "--language names it instead" "CodeQL extracted 7 line(s) of javascript-typescript code." "$OUT"
+OUT="$(extract "$REPORTS/one/python.sarif")"
+assert_equals "a report that says 0 fails" "exit=1" "$(status_of "$OUT")"
+assert_output "...against what was counted" \
+  "ERROR: CodeQL extracted no python code: the database holds 0 lines of it, of the 3 counted under the source root" "$OUT"
+assert_output "...listing what the extractor reported" "  - Extraction failed with error fixture" "$OUT"
+for case_ in "actions.sarif|carries no lines-of-code metric for 'actions'" \
+  "text.sarif|could not read how much code CodeQL extracted" \
+  "broken.sarif|is not a readable SARIF report" \
+  "missing.sarif|SARIF report not found"; do
+  name="${case_%%|*}"
+  message="${case_#*|}"
+  OUT="$(extract "$REPORTS/one/$name")"
+  assert_equals "$name: only a warning" "exit=0" "$(status_of "$OUT")"
+  assert_output "$name: ...saying why" "WARNING: " "$OUT"
+  assert_output "$name: ...$message" "$message" "$OUT"
+  OUT="$(extract --strict "$REPORTS/one/$name")"
+  assert_equals "$name: --strict fails" "exit=1" "$(status_of "$OUT")"
+  assert_output "$name: ...as an error" "ERROR: " "$OUT"
+done
+OUT="$(extract "")"
+assert_equals "no report named is a warning" "exit=0" "$(status_of "$OUT")"
+assert_output "...that says so" "WARNING: no SARIF report was named" "$OUT"
+OUT="$(extract "$REPORTS/empty")"
+assert_equals "a directory with no report is a warning" "exit=0" "$(status_of "$OUT")"
+assert_equals "...and an error under --strict" "exit=1" "$(status_of "$(extract --strict "$REPORTS/empty")")"
+report "$REPORTS/mixed/go.sarif" 5
+report "$REPORTS/mixed/actions.sarif" none '' actions
+OUT="$(extract "$REPORTS/mixed")"
+assert_equals "a directory of a report with code and one without the metric passes" "exit=0" "$(status_of "$OUT")"
+assert_output "...reading both" "CodeQL extracted 5 line(s) of go code." "$OUT"
+assert_output "...and warning about the second" "carries no lines-of-code metric for 'actions'" "$OUT"
+report "$REPORTS/zero-among/go.sarif" 5
+report "$REPORTS/zero-among/python.sarif" 0 '' py
+OUT="$(extract "$REPORTS/zero-among")"
+assert_equals "one report that says 0 fails the directory" "exit=1" "$(status_of "$OUT")"
+assert_output "...after reading every report" "CodeQL extracted 5 line(s) of go code." "$OUT"
+OUT="$(GITHUB_ACTIONS=true "$EXTRACTION" "$REPORTS/one/actions.sarif" "$REPORTS/one/python.sarif" 2> /dev/null)"
+assert_output "on GitHub Actions a warning is an annotation" \
+  "::warning title=CodeQL::the CodeQL report carries no lines-of-code metric for 'actions'" "$OUT"
+assert_output "...and so is a failure" "::error title=CodeQL::CodeQL extracted no python code" "$OUT"
+assert_no_output "off GitHub Actions there is none" "::" "$(extract "$REPORTS/one/actions.sarif" "$REPORTS/one/python.sarif")"
+NO_JQ_BIN="$TEST_DIR/no-jq-bin"
+mkdir -p "$NO_JQ_BIN" || exit 1
+ln -s "$(command -v sh)" "$NO_JQ_BIN/sh" || exit 1
+OUT="$(PATH="$NO_JQ_BIN" "$EXTRACTION" "$REPORTS/one/go.sarif" 2>&1; echo "exit=$?")"
+assert_equals "no jq is a warning" "exit=0" "$(status_of "$OUT")"
+assert_output "...naming jq" "needs 'jq', and it is not installed" "$OUT"
+assert_equals "...and an error under --strict" "exit=1" \
+  "$(status_of "$(PATH="$NO_JQ_BIN" "$EXTRACTION" --strict "$REPORTS/one/go.sarif" 2>&1; echo "exit=$?")")"
+assert_equals "no argument is a usage error" "exit=1" "$(status_of "$(extract)")"
+assert_equals "an unknown option is a usage error" "exit=1" "$(status_of "$(extract --bogus "$REPORTS/one/go.sarif")")"
+assert_equals "--language without a value is a usage error" "exit=1" "$(status_of "$(extract --language)")"
+
+echo ""
+echo "Test 12: the composite's Go workspace step hands the later steps the GOWORK run.sh would use"
+# block <file> <anchor> <opening>: the body of the first literal block scalar whose opening line
+# matches <opening>, at or after the first line matching <anchor>, dedented -- the shell the runner
+# executes for that step (as `test-release-bump-formats.sh` cuts its steps out). A literal `|` in a
+# pattern is written `[|]`: gawk turns `\|` into an alternation that matches every line.
+block() {
+  awk -v anchor="$2" -v opening="$3" '
+    function indent(s) { match(s, /^ */); return RLENGTH }
+    !anchored && $0 ~ anchor { anchored = 1 }
+    anchored && !inside && $0 ~ opening { inside = 1; body = -1; stop = indent($0); next }
+    inside {
+      if ($0 ~ /^ *$/) { lines[++n] = ""; next }
+      if (indent($0) <= stop) { exit }
+      if (body < 0) { body = indent($0) }
+      lines[++n] = substr($0, body + 1)
+    }
+    END { while (n > 0 && lines[n] == "") { n-- } for (i = 1; i <= n; i++) { print lines[i] } }
+  ' "$1"
+}
+STEP="$TEST_DIR/go-workspace-step.sh"
+block "$ACTION" "^ *id: 'go_workspace'$" '^ *run: [|]$' > "$STEP"
+assert_true "the step is cut out of action.yaml" "grep -q 'codeql_go_workspace' '$STEP' && grep -q 'GITHUB_ENV' '$STEP'"
+# run_step <workspace> [NAME=value...]: runs the step in bash, as the runner does, from the action's
+# own directory; prints what it wrote to GITHUB_ENV, then its output.
+run_step() {
+  local workspace="$1" env_file
+  shift
+  env_file="$(mktemp "$TEST_DIR/github-env.XXXXXX")" || exit 1
+  (
+    cd "$workspace" || exit 1
+    "${GO_ENV[@]}" GITHUB_ACTIONS=true GITHUB_ACTION_PATH="$(dirname "$ACTION")" GITHUB_WORKSPACE="$workspace" \
+      GITHUB_ENV="$env_file" "$@" bash -e "$STEP"
+  ) > "$env_file.output" 2>&1
+  cat "$env_file"
+  echo "---"
+  cat "$env_file.output"
+}
+OUT="$(run_step "$PROJECT")"
+assert_output "under an outside go.work: GOWORK=off" "GOWORK=off" "$OUT"
+OUT="$(run_step "$OWN" GOWORK="$OUTSIDE/go.work")"
+assert_output "an explicit GOWORK outside gives way to the repository's own go.work" "GOWORK=$OWN/go.work" "$OUT"
+OUT="$(run_step "$OWN")"
+assert_no_output "the repository's own go.work is kept" "GOWORK=" "$OUT"
+OUT="$(run_step "$NESTED")"
+assert_output "a nested go.work left unread is a warning annotation" \
+  "::warning title=CodeQL::GOWORK=off leaves the go.work below the source root unread (nested/go.work)" "$OUT"
 
 echo ""
 echo "Passed: $TESTS_PASSED, Failed: $TESTS_FAILED"

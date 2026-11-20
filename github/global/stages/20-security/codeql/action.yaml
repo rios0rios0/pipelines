@@ -116,6 +116,22 @@ runs:
         # a lockfile this action never resolves would cost more to warm than it saves.
         cache: false
 
+    # BEFORE `init`, so the autobuild below runs under it. The autobuild is CodeQL's Go
+    # autobuilder, the one `run.sh` runs, and every `go` command it starts joins the first go.work
+    # in or above the checkout: on a self-hosted runner whose workspace sits below a go.work that
+    # does not list this repository, it loaded no package and the analysis read nothing. The same
+    # helper `run.sh` sources decides the GOWORK, here handed to the steps after this one.
+    - name: 'Keep the Go Build in the Repository''s Own Workspace'
+      id: 'go_workspace'
+      if: inputs.codeql_language == 'go'
+      run: |
+        . "$GITHUB_ACTION_PATH/../../../../../global/scripts/tools/codeql/go-workspace.sh"
+        codeql_go_workspace "$GITHUB_WORKSPACE"
+        if [ -n "$CODEQL_GOWORK" ]; then
+          echo "GOWORK=$CODEQL_GOWORK" >> "$GITHUB_ENV"
+        fi
+      shell: 'bash'
+
     # BEFORE `init`, for the same reason as Go's: the JavaScript extractor parses TypeScript by
     # running the TypeScript compiler on the `node` on PATH, which the CodeQL bundle does not ship.
     # A GitHub-hosted runner has one; a self-hosted runner, where `npm.yaml` and `yarn.yaml` can
@@ -168,6 +184,20 @@ runs:
         output: "${{ runner.temp }}/codeql-sarif"
         upload: 'never'
         upload-database: "${{ inputs.upload != 'never' }}"
+
+    # Before the gate, which reads an analysis of nothing as clean. `analyze` fails only when the
+    # analysis does, and the CLI refuses some databases that hold no code but not every one: a Go
+    # build whose packages all failed to load still leaves its go.mod, and the job passed over a
+    # database without one line of Go. The script reads each report's lines-of-code metric
+    # and fails one that says 0. A report without the metric -- the `actions` language has none --
+    # or no report at all is a warning, never a failure, so this can stop only a job that read
+    # nothing; `run.sh` runs it strictly, over languages that all carry the metric.
+    - name: 'Check the Analysis Read Code'
+      env:
+        SARIF_DIRECTORY: "${{ steps.analyze.outputs.sarif-output }}"
+        CODEQL_LANGUAGE: "${{ inputs.codeql_language }}"
+      run: '"$GITHUB_ACTION_PATH/../../../../../global/scripts/tools/codeql/extraction.sh" --language "$CODEQL_LANGUAGE" "$SARIF_DIRECTORY"'
+      shell: 'bash'
 
     # The verdict. `analyze` fails only when the analysis itself fails, never on a finding, so
     # before this step a job whose results went nowhere -- `upload: 'never'`, or an upload code

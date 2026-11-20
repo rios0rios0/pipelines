@@ -257,43 +257,17 @@ else
   echo "Scanning $SOURCE_ROOT as it is (CODEQL_SOURCE_SCOPE=$CODEQL_SOURCE_SCOPE)."
 fi
 
-# The Go build joins the workspace `go` resolves where it runs: `$GOWORK` (or `go env -w GOWORK`),
-# else the first go.work in that directory or in ANY directory above it -- the repository's parents
-# included. CodeQL's Go autobuilder looks for go.work files under the source root only, so a
-# checkout or worktree kept below a directory whose go.work does not list it is built as a plain
-# module ("Found no go.work files in the workspace") while every `go` command of that build joins
-# the outside workspace and loads nothing: `pattern ./...: directory prefix . does not contain
-# modules listed in go.work or their selected dependencies`. The extractor recorded the go.mod
-# alone, and the scan passed over a database without one line of Go.
-#
-# So the build uses a workspace only when the source root holds it. One resolved outside is set
-# aside -- for the source root's own go.work, which only an explicit GOWORK can outrank, or with
-# GOWORK=off when there is none -- and the modules build as in a clean checkout, which is what CI
-# scans. A go.work inside the source root is the repository's own and is left to the autobuilder.
-# The one layout this cannot serve keeps go.work files below its root and none at it: under
-# GOWORK=off those go unread too. The question is asked under GOTOOLCHAIN=local, so it downloads
-# nothing an outside go.work asks for; without a `go` on PATH the build itself reports the gap.
-if [ "$CODEQL_LANGUAGE" = "go" ] && command -v go > /dev/null 2>&1; then
-  goWorkspace="$(cd "$SOURCE_ROOT" && GOTOOLCHAIN=local go env GOWORK 2> /dev/null)" || goWorkspace=''
-  case "$goWorkspace" in
-    '' | off) ;;
-    *)
-      sourceRootDir="$(cd "$SOURCE_ROOT" && pwd -P)"
-      goWorkspaceDir="$(cd "$SOURCE_ROOT" && cd "$(dirname "$goWorkspace")" 2> /dev/null && pwd -P)" || goWorkspaceDir=''
-      case "$goWorkspaceDir/" in
-        "$sourceRootDir"/*) ;;
-        *)
-          if [ -f "$SOURCE_ROOT/go.work" ]; then
-            GOWORK="$SOURCE_ROOT/go.work"
-          else
-            GOWORK=off
-          fi
-          export GOWORK
-          echo "The Go workspace $goWorkspace is outside the source root; building with GOWORK=$GOWORK, as a clean checkout would."
-          ;;
-      esac
-      ;;
-  esac
+# The Go build uses a workspace only when the source root holds it: a checkout or worktree kept
+# below a directory whose go.work does not list it was built inside that workspace, which loaded no
+# package, and the scan passed over a database without one line of Go. `go-workspace.sh` says why
+# and how; the GitHub Actions composite asks it the same question before its own autobuild.
+if [ "$CODEQL_LANGUAGE" = "go" ]; then
+  . "$SCRIPTS_DIR/global/scripts/tools/codeql/go-workspace.sh"
+  codeql_go_workspace "$SOURCE_ROOT"
+  if [ -n "$CODEQL_GOWORK" ]; then
+    GOWORK="$CODEQL_GOWORK"
+    export GOWORK
+  fi
 fi
 
 echo "Creating CodeQL database for language: $CODEQL_LANGUAGE${CODEQL_BUILD_MODE:+ (build mode: $CODEQL_BUILD_MODE)}"
@@ -346,51 +320,15 @@ if [ ! -f "$fileName" ]; then
   exit 1
 fi
 
-# A scan must have read code. `database create` refuses some databases that hold none -- one with
-# no file of a language CodeQL knows, a Go build that matched no package -- but not every one: a Go
-# build whose packages all failed to load still extracts its go.mod (an outside go.work did that
-# before the block above set it aside), and a source file holding nothing but comments is
-# extracted like any other. The database then holds no line of code, every query ran over nothing,
-# the report carried no finding, and the gate passed it: an empty result that read exactly like a
-# clean one. The report says how much code the database holds, in the
-# `<language>/summary/lines-of-code` metric that the `security-and-quality` suite runs for every
-# language this script is handed (go, python, java, javascript, csharp), beside the `baseline` the
-# CLI counted under the source root -- which reads the files on disk, as `codeql database
-# print-baseline` does, and so cannot tell an empty database from a full one. Zero fails the scan,
-# listing the extractor's own errors, and so does a report without the metric, or with one that is
-# not a number: then nothing says the analysis read anything. The report stays where the job
-# publishes it.
-if ! command -v jq > /dev/null 2>&1; then
-  echo "ERROR: telling how much code CodeQL extracted needs 'jq', and it is not installed." >&2
+# A scan must have read code: a database can hold none of the language's code and still be
+# created -- a Go build whose packages all failed to load extracts its go.mod alone -- and the gate
+# then passes an analysis of nothing as clean. `extraction.sh` reads how much code the report says
+# the database held, and fails a report that says none. --strict, because every language this script
+# is handed carries the metric it reads, so a report that says nothing fails too. The report stays
+# where the job publishes it.
+if ! "$SCRIPTS_DIR/global/scripts/tools/codeql/extraction.sh" --strict --language "$CODEQL_LANGUAGE" "$fileName"; then
   exit 1
 fi
-LINES_OF_CODE_METRICS='[.runs[]?.properties.metricResults[]? | select((.ruleId // .rule.id // "") | type == "string" and endswith("/summary/lines-of-code"))]'
-extractedLines="$(jq -r "$LINES_OF_CODE_METRICS"' | if length == 0 then "none" elif all(.value | type == "number") then [.[].value] | add else "unreadable" end' "$fileName" 2> /dev/null)" || extractedLines=''
-case "$extractedLines" in
-  none)
-    echo "ERROR: the CodeQL report carries no lines-of-code metric for '$CODEQL_LANGUAGE', so nothing says the analysis read any code: $fileName" >&2
-    exit 1
-    ;;
-  0)
-    baselineLines="$(jq -r "$LINES_OF_CODE_METRICS"' | [.[].baseline | numbers] | if length == 0 then "" else add end' "$fileName" 2> /dev/null)" || baselineLines=''
-    case "$baselineLines" in
-      '' | *[!0-9]*) counted='' ;;
-      0) counted=", and none was counted under the source root either: is '$CODEQL_LANGUAGE' this project's language?" ;;
-      *) counted=", of the $baselineLines counted under the source root" ;;
-    esac
-    echo "ERROR: CodeQL extracted no $CODEQL_LANGUAGE code: the database holds 0 lines of it$counted" >&2
-    echo "Every query ran over nothing, so this scan cannot pass. What the extractor reported as errors:" >&2
-    jq -r '[.runs[]?.invocations[]?.toolExecutionNotifications[]? | select(.level == "error") | .message.text // "" | split("\n")[0] | select(length > 0)] | unique
-      | if length == 0 then "  (nothing)" else (.[:10][] | "  - " + .), (if length > 10 then "  ... and \(length - 10) more" else empty end) end' "$fileName" >&2
-    echo "Every diagnostic CodeQL recorded is in $fileName, under runs[].invocations[].toolExecutionNotifications." >&2
-    exit 1
-    ;;
-  '' | *[!0-9]*)
-    echo "ERROR: could not read how much code CodeQL extracted from $fileName." >&2
-    exit 1
-    ;;
-esac
-echo "CodeQL extracted $extractedLines line(s) of $CODEQL_LANGUAGE code."
 
 # Whether the scan passes is the shared gate's decision, so every platform fails on the same
 # findings: the GitHub Actions composite runs the same script on the report

@@ -17,11 +17,20 @@ const actionPath = "github/global/stages/20-security/codeql/action.yaml"
 const goodAction = `runs:
   using: composite
   steps:
+    - name: 'Keep the Go Build in the Repository''s Own Workspace'
+      if: inputs.codeql_language == 'go'
+      run: |
+        . "$GITHUB_ACTION_PATH/../../../../../global/scripts/tools/codeql/go-workspace.sh"
+        codeql_go_workspace "$GITHUB_WORKSPACE"
+        echo "GOWORK=$CODEQL_GOWORK" >> "$GITHUB_ENV"
     - uses: 'github/codeql-action/init@x'
       with: {queries: 'security-and-quality'}
     - id: 'analyze'
       uses: 'github/codeql-action/analyze@x'
       with: {upload: 'never'}
+    - name: 'Check the Analysis Read Code'
+      env: {SARIF_DIRECTORY: "${{ steps.analyze.outputs.sarif-output }}"}
+      run: '"$GITHUB_ACTION_PATH/../../../../../global/scripts/tools/codeql/extraction.sh" "$SARIF_DIRECTORY"'
     - name: 'Gate on Findings'
       env: {SARIF_DIRECTORY: "${{ steps.analyze.outputs.sarif-output }}"}
       run: '"$GITHUB_ACTION_PATH/../../../../../global/scripts/tools/codeql/gate.sh" "$SARIF_DIRECTORY"'
@@ -49,8 +58,12 @@ func repository(t *testing.T, files map[string]string) string {
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
 		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 	}
-	gate := filepath.Join(root, filepath.FromSlash(gateScript))
-	require.NoError(t, os.WriteFile(gate, []byte("#!/bin/sh\n"), 0o700))
+	for _, executable := range []string{gateScript, extractionScript} {
+		path := filepath.Join(root, filepath.FromSlash(executable))
+		require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\n"), 0o700))
+	}
+	helper := filepath.Join(root, filepath.FromSlash(workspaceHelper))
+	require.NoError(t, os.WriteFile(helper, []byte("# shellcheck shell=sh\n"), 0o600))
 	return root
 }
 
@@ -117,8 +130,10 @@ func TestCheckComposite(t *testing.T) {
 		// then
 		assert.Equal(t, []string{
 			"init does not run the security-and-quality suite run.sh runs",
+			"no step keeps the Go build in the repository's own workspace",
 			"the analyze step is not id 'analyze', which the gate and the upload read",
 			"analyze uploads, so code scanning being unavailable can fail the analysis step",
+			"no step checks that the analysis read code",
 			"the gate step carries an if:, so something can skip it",
 			"the gate step is continue-on-error, so a finding fails nothing",
 			"the gate does not read the analysis output",
@@ -144,11 +159,77 @@ func TestCheckComposite(t *testing.T) {
 		// then
 		assert.Equal(t, []string{
 			"init does not run the security-and-quality suite run.sh runs",
+			"no step keeps the Go build in the repository's own workspace",
 			"no analyze step",
+			"no step checks that the analysis read code",
 			"no step runs the gate",
 			"no upload-sarif step",
 		}, findings)
 	})
+
+	t.Run("should report every rule of the Go workspace step and the extraction check when both break them",
+		func(t *testing.T) {
+			t.Parallel()
+			// given
+			root := repository(t, map[string]string{actionPath: `runs:
+  using: composite
+  steps:
+    - uses: 'github/codeql-action/init@x'
+      with: {queries: 'security-and-quality'}
+    - name: 'Workspace'
+      run: '. "$GITHUB_ACTION_PATH/../go-workspace.sh" global/scripts/tools/codeql/go-workspace.sh'
+    - name: 'Gate on Findings'
+      env: {SARIF_DIRECTORY: "${{ steps.analyze.outputs.sarif-output }}"}
+      run: '"$GITHUB_ACTION_PATH/../../../../../global/scripts/tools/codeql/gate.sh" "$SARIF_DIRECTORY"'
+    - name: 'Extraction'
+      if: success()
+      run: 'global/scripts/tools/codeql/extraction.sh --strict results'
+    - id: 'analyze'
+      uses: 'github/codeql-action/analyze@x'
+      with: {upload: 'never'}
+    - if: "always() && inputs.upload == 'always'"
+      continue-on-error: true
+      uses: 'github/codeql-action/upload-sarif@x'
+      with: {sarif_file: "${{ steps.analyze.outputs.sarif-output }}"}
+`})
+
+			// when
+			findings := compositeFindings(t, root)
+
+			// then
+			assert.Equal(t, []string{
+				"the Go workspace step does not run for a Go analysis alone",
+				"the Go workspace step does not hand GOWORK to the later steps through GITHUB_ENV",
+				"the Go workspace step path resolves to github/global/stages/20-security/go-workspace.sh, " +
+					"not the Go workspace helper",
+				"the Go workspace step runs after init, so the autobuild never sees its GOWORK",
+				"the extraction check carries an if:, so something can skip it",
+				"the extraction check does not read the analysis output",
+				"the extraction check is strict, so a language without a lines-of-code metric fails",
+				"the extraction check is not reached through the action path",
+				"the extraction check runs before the analysis",
+				"the extraction check runs after the gate, which has passed an analysis of nothing by then",
+				"the gate runs before the analysis",
+			}, findings)
+		})
+
+	t.Run("should report the extraction script and the Go workspace helper when they are not there to run",
+		func(t *testing.T) {
+			t.Parallel()
+			// given
+			root := repository(t, nil)
+			require.NoError(t, os.Chmod(filepath.Join(root, filepath.FromSlash(extractionScript)), 0o600))
+			require.NoError(t, os.Remove(filepath.Join(root, filepath.FromSlash(workspaceHelper))))
+
+			// when
+			findings := compositeFindings(t, root)
+
+			// then
+			assert.Equal(t, []string{
+				"the Go workspace helper does not exist",
+				"the extraction script is not executable",
+			}, findings)
+		})
 
 	t.Run("should report the gate when it is not reached through the action path", func(t *testing.T) {
 		t.Parallel()

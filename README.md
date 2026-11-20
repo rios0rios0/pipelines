@@ -527,7 +527,8 @@ its merge push on 29.
 CodeQL's Go analysis builds the module, so the job needs a Go at least as new as the module's `go`
 directive. So does the bundle's Go extractor: it refuses a language version newer than the Go it
 was built with, and the scan still reports success over the broken types. Every bundle from
-`codeql-bundle-v2.26.4` reads `go 1.27`; the pinned one is `codeql-bundle-v2.27.3`.
+`codeql-bundle-v2.26.4` reads `go 1.27`; the pinned one is `CODEQL_BUNDLE_PINNED_VERSION` in
+`global/scripts/shared/pinned-versions.sh`, named only there so this page cannot fall behind it.
 
 | Platform       | The Go the Go analysis builds with                                                                  |
 |----------------|-----------------------------------------------------------------------------------------------------|

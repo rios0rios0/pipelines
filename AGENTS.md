@@ -96,6 +96,7 @@ there is no target to add and no list to keep in step.
 | `workflow-composition` | The GitHub Actions workflow composition standard |
 | `working-directory` | The `working_directory` threading contract (bundler/npm/yarn and their variants) |
 | `yaml-merge` | Golangci-lint/run.sh (config merge, binary reuse and install, toolchain guard) |
+| `yarn-test-shards` | The Yarn workflows' `test_shards` (the input on `yarn.yaml` and every workflow composed on it; one job named `tests > test:all` in both modes, gated -- evaluated, not matched -- to run and fail after a failed shard; the shard table; each mode's steps; the coverage hand-off; `Verify the shards` and the staging step executed; the documentation) |
 
 Test scripts live in `.github/tests/`. The CI workflow (`.github/workflows/default.yaml`) validates YAML syntax, script permissions, and runs ShellCheck on all shell scripts. A suite whose checks parse YAML or read files structurally keeps them as Go test support under `internal/testsuites/<suite>/`, which the suite builds from the checkout for its run (`go build -C "$SCRIPTS_DIR" ...`) and stops on if the build fails; `make test ONLY=go-helpers` runs their unit tests.
 
@@ -1311,7 +1312,9 @@ requires — and two cases keep the upload from weakening a gate:
   right before the upload. Do not use `if-no-files-found: 'error'` for this: under
   `continue-on-error` it fails nothing.
 - **A deliverable** (the upload IS the job's product, like `dart/stages/40-delivery/build`)
-  stays fatal, because a refused upload means nothing was delivered.
+  stays fatal, because a refused upload means nothing was delivered. A test shard's coverage is
+  one too: `tests > test:all` cannot judge the coverage without it. A workflow that also uploads
+  reports names that one job in `DELIVERABLES`, as `<file> :: job <id>`.
 
 **An upload never asks to be kept longer than the repository keeps artifacts.** `actions/upload-artifact`
 cuts a `retention-days` above the repository's own retention down to it and adds a warning
@@ -1326,6 +1329,31 @@ changes where the repository keeps artifacts longer.
 
 `.github/tests/test-report-uploads.sh` holds all four rules; a new stage that is mandatory or a
 deliverable must be added to that test's `MANDATORY` or `DELIVERABLES` set.
+
+### Sharded `test:all` on the Yarn Workflows
+
+**Enforced by `.github/tests/test-yarn-test-shards.sh` (`make test ONLY=yarn-test-shards`).** Read this
+before changing the tests stage of `yarn.yaml`.
+
+`test_shards` above 1 runs the suite as `tests > test:all (shard <i>/<n>)` jobs of
+`yarn test:ci:shard --shard=<i>/<n>`, and `tests > test:all` merges their coverage with
+`yarn test:ci:merge`; at 1, the default, `tests > test:all` runs `yarn test:ci` as it always did. The
+contract a project keeps is in README.md, "Splitting `test:all` Across Runners". Six constraints shape
+it; do not "simplify" any of them away:
+
+| Constraint | Why |
+|------------|-----|
+| **One job is named `tests > test:all`, in both modes** | It is the check consumers require, the name a `deployment_required_checks` entry gives and the job the management stage needs. A second job of that name, skipped in one mode, is a second check run of one name, and a skipped check run satisfies a required check whatever the other did |
+| **`tests > test:all` runs after a failed shard, to fail** | Its `if:` reads `(!failure() \|\| needs.tests-test_all_shards.result == 'failure')` where every other job reads `!failure()`. With `!failure()` alone a failed shard SKIPS it, and a skipped job passes a required check: the pull request would merge with its tests red. The suite evaluates the gate at every moment that matters rather than matching it |
+| **The shard numbers are a table indexed by the input** | GitHub's expressions have no range, so entry n of the `fromJSON('[[],[1],[1,2],...]')` table is 1..n, up to 16. A plan job computing the list would cost every run a job and, inside the stage model, a runner hop before the shards. A value past the table cannot start the shards, and `Verify the shards` names the input; the table, its end, the step's `TEST_SHARDS_MAX` and the documented range move together |
+| **The merge reads exactly the shards 1..n** | `test:ci:merge` merges every `coverage-final.json` under `coverage/shards`, so a missing shard or a stray `coverage-shard-*` artifact would make the merged figure one over a suite that did not run in full. `Verify the shards` fails on either, and on any result of the shards but `success` |
+| **A shard's upload is a deliverable, not a report** | The merge cannot judge the coverage without it, so a refused upload fails the shard where it happened; the `report-uploads` suite lists the job in `DELIVERABLES`. Kept a day: the merge reads it in the same run |
+| **No test-runner cache per shard** | Jest's transform cache measured about 1 GB for one configuration on the consuming frontend, and the self-hosted runners are ephemeral, their temporary directory wiped after every job, so restoring it through the cache service would cost about what it saves (Caches on a Self-Hosted Runner, above) |
+
+It is GitHub Actions only. A caller of a reusable workflow cannot add a job to its tests stage, which
+is what the input does for it; a GitLab CI consumer can, with `parallel:` on the included `test:all`,
+and the GitLab CI and Azure DevOps JavaScript test jobs keep test contracts of their own that read
+none of these files.
 
 ### A Failing Check Fails the Run
 

@@ -484,6 +484,65 @@ run does not reach are the uses it was added for. `go.yaml` takes the three inpu
 every workflow composed on it. It is GitHub Actions only: on GitLab CI and Azure DevOps a consumer
 adds its own job to the tests stage.
 
+#### Splitting `test:all` Across Runners (`test_shards`)
+
+A JavaScript test suite that takes most of a pipeline's time runs faster split across runners.
+`yarn.yaml` takes `test_shards`, how many jobs run the suite, from 1 to 16:
+
+```yaml
+jobs:
+  default:
+    uses: 'rios0rios0/pipelines/.github/workflows/yarn-cloudflare.yaml@main'
+    with:
+      test_shards: 4
+```
+
+`1`, the default, runs the suite in one job, `tests > test:all`, exactly as before the input
+existed. Above 1, the tests stage runs:
+
+| Job | What it does |
+|-----|--------------|
+| `tests > test:all (shard <i>/<n>)`, one per shard | installs the dependencies, runs `yarn test:ci:shard --shard=<i>/<n>`, and uploads the shard's `coverage/coverage-final.json` as the artifact `coverage-shard-<i>` |
+| `tests > test:all` | waits for every shard and fails when one did, unpacks each shard's report at `coverage/shards/<i>/`, runs `yarn test:ci:merge`, then publishes the coverage comment, the test results and the coverage artifact and runs `e2e:typecheck`, as before |
+
+`tests > test:all` keeps its name in both modes, so a required check, a `deployment_required_checks`
+entry and the management stage, which needs it, read the same job. It runs after a failed shard in
+order to fail: a skipped `tests > test:all` would pass a required check.
+
+**What the project defines.** Both scripts are the project's own, in its `package.json`, and
+`test:ci` stays what the single job runs:
+
+- `test:ci:shard` runs the tests with coverage for the shard named by the `--shard=<i>/<n>` the job
+  appends (Jest 28 or newer and Vitest take that argument as it is), writes
+  `coverage/coverage-final.json`, and does not enforce the coverage threshold: one shard covers
+  part of the code.
+- `test:ci:merge [directory]` merges every `coverage-final.json` under the directory --
+  `coverage/shards` by default, where the job puts shard `<i>`'s report at `coverage/shards/<i>/` --
+  into `coverage/`: `coverage-summary.json`, `coverage-final.json` and `lcov`. It fails when the
+  merged coverage misses the project's threshold. Each shard ran in a workspace of its own, so the
+  absolute paths in their reports differ, and the merge re-roots them; the job hands them over as
+  they are.
+
+**What it costs.** Every shard checks out, installs and waits for a runner again, so a short suite
+gains nothing. The coverage crosses between jobs as artifacts kept a day, and a shard whose upload
+is refused fails, since the merge cannot judge the coverage without it: an account whose artifact
+storage quota is spent goes back to `test_shards: 1` until it has room. A re-run of
+`tests > test:all` alone after the shards' artifacts expired fails naming the shards; re-run every
+job. No test-runner cache is carried between the shards: Jest's transform cache measured about 1 GB
+for one configuration, and restoring it onto an ephemeral self-hosted runner costs about what it
+saves (`AGENTS.md`, "Caches on a Self-Hosted Runner"). In the sharded mode `Test Results` reads the
+`junit-report.xml` the merge leaves, if it leaves one; the shards' own are not collected.
+
+`yarn-cloudflare.yaml`, `yarn-docker.yaml` and `yarn-library.yaml` take the input and pass it on. It
+is GitHub Actions only, like `e2e_typecheck` and `build_env`: a caller of a reusable workflow cannot
+add a job to its tests stage or change what `test:all` runs, which is what the input does for it,
+while a GitLab CI consumer can extend the included `test:all` with `parallel:` (`CI_NODE_INDEX`,
+`CI_NODE_TOTAL`) and add the merge job to the stage itself. The GitLab CI and Azure DevOps JavaScript
+test jobs keep a contract of their own besides -- `yarn test:ci` with a Cobertura report, and
+`yarn test:coverage` with JUnit and Cobertura -- which reads none of the files this merge writes; on
+Azure DevOps sharding would take a change to the tests stage template, made when a consumer of it
+needs one. `make test ONLY=yarn-test-shards` holds all of it.
+
 #### CodeQL Fails on Findings, Not on Its Upload (`codeql_upload`)
 
 The `sast:codeql` job fails on every finding the repository's `.codeql-false-positives` does not

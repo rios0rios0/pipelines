@@ -64,6 +64,11 @@ on:
         required: false
         default: false
         description: 'Type-check the end-to-end suite too. See yarn.yaml.'
+      test_shards:
+        type: 'number'
+        required: false
+        default: 1
+        description: 'How many jobs run the test suite, from 1 to 16; 1 runs it in one. See yarn.yaml.'
       node_version:
         type: 'string'
         required: false
@@ -251,6 +256,7 @@ jobs:
       codeql_upload: ${{ inputs.codeql_upload }}
       build_env: ${{ inputs.build_env }}
       e2e_typecheck: ${{ inputs.e2e_typecheck }}
+      test_shards: ${{ inputs.test_shards }}
       node_version: ${{ inputs.node_version }}
     secrets:
       sonar_token: ${{ secrets.sonar_token }}

@@ -441,6 +441,12 @@ most likely to break, in order of how expensive the mistake was:
     `workflow_dispatch` run asks for it; a branch run and a tag that is not SemVer deploy as before.
     `make test ONLY=release-guard` holds the wiring; see AGENTS.md, "A Tag Older Than the Newest
     Release Is Not Deployed".
+14. **A failed shard fails `tests > test:all`; it never skips it.** With `test_shards` above 1,
+    `yarn.yaml`'s `tests > test:all` merges the shards' coverage, and its `if:` reads
+    `(!failure() || needs.tests-test_all_shards.result == 'failure')` so that it runs after a failed
+    shard and fails in `Verify the shards`: `!failure()` alone would skip it, and a skipped job passes
+    a required check. Keep ONE job of that name in both modes. `make test ONLY=yarn-test-shards`
+    holds it; see AGENTS.md, "Sharded `test:all` on the Yarn Workflows".
 
 ### Platform and Language Support Matrix
 

@@ -14,10 +14,15 @@ import (
 )
 
 // deliverables are stages whose uploaded files ARE the job's product rather than
-// a report about it: a failed upload means nothing was delivered.
+// a report about it: a failed upload means nothing was delivered. A workflow that
+// also uploads reports names the one job whose upload is a deliverable, the way a
+// finding names it: `<file> :: job <id>`.
 func deliverables() map[string]bool {
 	return map[string]bool{
 		"github/dart/stages/40-delivery/build/action.yaml": true,
+		// A test shard's coverage, handed to `tests > test:all`, which cannot judge the
+		// coverage without it: refused, it fails the shard where it happened.
+		".github/workflows/yarn.yaml :: job tests-test_all_shards": true,
 	}
 }
 
@@ -113,7 +118,7 @@ func (c *checker) checkUpload(relative string, list stepList, index int, step *y
 	optional := step.Get("continue-on-error").IsTrue()
 	with := step.Get("with")
 	c.checkRetention(label, with)
-	if deliverables()[relative] {
+	if deliverables()[relative] || deliverables()[list.where] {
 		if optional {
 			c.report("deliverable", label+" uploads the job's product but is continue-on-error")
 		}

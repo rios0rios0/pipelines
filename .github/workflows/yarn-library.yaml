@@ -38,6 +38,11 @@ on:
         required: false
         default: '[""]'
         description: 'JSON array of tag prefixes (e.g., ''["", "v"]''). Use ''[""]'' for no prefix.'
+      test_shards:
+        type: 'number'
+        required: false
+        default: 1
+        description: 'How many jobs run the test suite, from 1 to 16; 1 runs it in one. See yarn.yaml.'
       working_directory:
         type: 'string'
         required: false
@@ -62,6 +67,7 @@ jobs:
       codeql_upload: "${{ inputs.codeql_upload }}"
       install_run_scripts: ${{ inputs.install_run_scripts }}
       sonar_host: "${{ inputs.sonar_host }}"
+      test_shards: ${{ inputs.test_shards }}
     secrets:
       sonar_token: "${{ secrets.sonar_token }}"
 

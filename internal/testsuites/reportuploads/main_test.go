@@ -164,6 +164,32 @@ func TestCheck(t *testing.T) {
 		}, deliverable)
 	})
 
+	t.Run("should hold a deliverable named by its job while the other jobs of its workflow keep reports optional",
+		func(t *testing.T) {
+			t.Parallel()
+			// given
+			root := repository(t, map[string]string{
+				".github/workflows/yarn.yaml": "jobs:\n" +
+					"  tests-test_all_shards:\n    steps:\n" +
+					"      - name: 'Hand-off'\n        uses: 'actions/upload-artifact@x'\n        continue-on-error: true\n" +
+					"  tests-test_all:\n    steps:\n" +
+					"      - name: 'Report'\n        uses: 'actions/upload-artifact@x'\n",
+			})
+
+			// when
+			deliverable := findings(t, root, "deliverable")
+			optional := findings(t, root, "optional")
+
+			// then
+			assert.Equal(t, []string{
+				".github/workflows/yarn.yaml :: job tests-test_all_shards :: step 0 (Hand-off) uploads the job's " +
+					"product but is continue-on-error",
+			}, deliverable)
+			assert.Equal(t, []string{
+				".github/workflows/yarn.yaml :: job tests-test_all :: step 0 (Report) is not continue-on-error",
+			}, optional)
+		})
+
 	t.Run("should report a retention the repository does not bound when an upload asks for a bare or uneven number",
 		func(t *testing.T) {
 			t.Parallel()

@@ -441,12 +441,15 @@ most likely to break, in order of how expensive the mistake was:
     `workflow_dispatch` run asks for it; a branch run and a tag that is not SemVer deploy as before.
     `make test ONLY=release-guard` holds the wiring; see AGENTS.md, "A Tag Older Than the Newest
     Release Is Not Deployed".
-14. **A failed shard fails `tests > test:all`; it never skips it.** With `test_shards` above 1,
-    `yarn.yaml`'s `tests > test:all` merges the shards' coverage, and its `if:` reads
-    `(!failure() || needs.tests-test_all_shards.result == 'failure')` so that it runs after a failed
-    shard and fails in `Verify the shards`: `!failure()` alone would skip it, and a skipped job passes
-    a required check. Keep ONE job of that name in both modes. `make test ONLY=yarn-test-shards`
-    holds it; see AGENTS.md, "Sharded `test:all` on the Yarn Workflows".
+14. **Test sharding is opt-in, and the default `tests > test:all` is never touched by it.** In
+    `yarn.yaml` the default job stays the one `.github/tests/fixtures/yarn-test-all.yaml` holds, but
+    for `&& inputs.test_shards <= 1` in its `if:`. With `test_shards` above 1 it is skipped, and the
+    verdict is `tests > test:all (merged)`, a name of its own: one name for both would give every run
+    two check runs of it, one skipped, and a skipped run passes a required check. The merged job's
+    `if:` reads `(!failure() || needs.tests-test_all_shards.result == 'failure')`, so it runs after a
+    failed shard and fails in `Verify the shards`. A consumer that opts in requires
+    `tests > test:all (merged)` instead. `make test ONLY=yarn-test-shards` holds it; see AGENTS.md,
+    "Sharded `test:all` on the Yarn Workflows".
 
 ### Platform and Language Support Matrix
 

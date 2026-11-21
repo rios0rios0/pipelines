@@ -96,7 +96,7 @@ there is no target to add and no list to keep in step.
 | `workflow-composition` | The GitHub Actions workflow composition standard |
 | `working-directory` | The `working_directory` threading contract (bundler/npm/yarn and their variants) |
 | `yaml-merge` | Golangci-lint/run.sh (config merge, binary reuse and install, toolchain guard) |
-| `yarn-test-shards` | The Yarn workflows' `test_shards` (the input on `yarn.yaml` and every workflow composed on it; one job named `tests > test:all` in both modes, gated -- evaluated, not matched -- to run and fail after a failed shard; the shard table; each mode's steps; the coverage hand-off; `Verify the shards` and the staging step executed; the documentation) |
+| `yarn-test-shards` | The Yarn workflows' opt-in `test_shards` (the input on `yarn.yaml` and every workflow composed on it; the default `tests > test:all` equal to `.github/tests/fixtures/yarn-test-all.yaml` but for `&& inputs.test_shards <= 1`; one job per check name, `tests > test:all (merged)` gated -- evaluated, not matched -- to run and fail after a failed shard; the shard table; the shards' and the merge's steps; the coverage hand-off; `Verify the shards` and the staging step executed; the documentation) |
 
 Test scripts live in `.github/tests/`. The CI workflow (`.github/workflows/default.yaml`) validates YAML syntax, script permissions, and runs ShellCheck on all shell scripts. A suite whose checks parse YAML or read files structurally keeps them as Go test support under `internal/testsuites/<suite>/`, which the suite builds from the checkout for its run (`go build -C "$SCRIPTS_DIR" ...`) and stops on if the build fails; `make test ONLY=go-helpers` runs their unit tests.
 
@@ -480,7 +480,11 @@ runs on pull requests only, an opt-in check only when asked for, and GitHub skip
 dependency chain from a skipped one onwards unless its `if:` calls a status function, so every job
 past the first stage gates on `!cancelled() && !failure() && (…)` -- without it, every push to
 `main` would skip SAST, tests and delivery, green. A skip further down may propagate on purpose (a
-job that runs only after a release was cut). The eighteenth assertion holds both halves.
+job that runs only after a release was cut). The eighteenth assertion holds both halves. It excuses
+exactly the edges `barrierExemptions` (in `internal/testsuites/workflowcomposition/stagebarrier.go`)
+lists, each with its reason, and fails on an entry that excuses nothing any more. Today that is
+yarn.yaml's SonarQube job, which keeps the needs of the default path and so does not wait for the
+opt-in test shards (see Sharded `test:all` on the Yarn Workflows below).
 
 **A consumer's extra test run goes in the tests stage, through an input.** A caller's job can only
 `needs:` a reusable workflow as a whole, delivery included, so a test job declared beside the call
@@ -1313,8 +1317,8 @@ requires — and two cases keep the upload from weakening a gate:
   `continue-on-error` it fails nothing.
 - **A deliverable** (the upload IS the job's product, like `dart/stages/40-delivery/build`)
   stays fatal, because a refused upload means nothing was delivered. A test shard's coverage is
-  one too: `tests > test:all` cannot judge the coverage without it. A workflow that also uploads
-  reports names that one job in `DELIVERABLES`, as `<file> :: job <id>`.
+  one too: `tests > test:all (merged)` cannot judge the coverage without it. A workflow that also
+  uploads reports names that one job in `DELIVERABLES`, as `<file> :: job <id>`.
 
 **An upload never asks to be kept longer than the repository keeps artifacts.** `actions/upload-artifact`
 cuts a `retention-days` above the repository's own retention down to it and adds a warning
@@ -1335,16 +1339,20 @@ deliverable must be added to that test's `MANDATORY` or `DELIVERABLES` set.
 **Enforced by `.github/tests/test-yarn-test-shards.sh` (`make test ONLY=yarn-test-shards`).** Read this
 before changing the tests stage of `yarn.yaml`.
 
-`test_shards` above 1 runs the suite as `tests > test:all (shard <i>/<n>)` jobs of
-`yarn test:ci:shard --shard=<i>/<n>`, and `tests > test:all` merges their coverage with
-`yarn test:ci:merge`; at 1, the default, `tests > test:all` runs `yarn test:ci` as it always did. The
-contract a project keeps is in README.md, "Splitting `test:all` Across Runners". Six constraints shape
-it; do not "simplify" any of them away:
+Test sharding is OPT-IN. At 1, the default, `tests > test:all` runs `yarn test:ci` as it always did.
+Above 1, `tests > test:all` is skipped, the suite runs as `tests > test:all (shard <i>/<n>)` jobs of
+`yarn test:ci:shard --shard=<i>/<n>`, and `tests > test:all (merged)` merges their coverage with
+`yarn test:ci:merge`. A consumer that opts in names `tests > test:all (merged)` instead of
+`tests > test:all` in its required checks and its `deployment_required_checks`. The contract a project
+keeps is in README.md, "Splitting `test:all` Across Runners". Eight constraints shape it; do not
+"simplify" any of them away:
 
 | Constraint | Why |
 |------------|-----|
-| **One job is named `tests > test:all`, in both modes** | It is the check consumers require, the name a `deployment_required_checks` entry gives and the job the management stage needs. A second job of that name, skipped in one mode, is a second check run of one name, and a skipped check run satisfies a required check whatever the other did |
-| **`tests > test:all` runs after a failed shard, to fail** | Its `if:` reads `(!failure() \|\| needs.tests-test_all_shards.result == 'failure')` where every other job reads `!failure()`. With `!failure()` alone a failed shard SKIPS it, and a skipped job passes a required check: the pull request would merge with its tests red. The suite evaluates the gate at every moment that matters rather than matching it |
+| **The default job is the one it always was** | `tests > test:all` is what every Yarn consumer runs, and a change merged here reaches all of them at once, untried. So it equals `.github/tests/fixtures/yarn-test-all.yaml`, the job from before sharding, key for key, but for `&& inputs.test_shards <= 1` in its `if:`; its `needs:` name no sharding job. A deliberate change to it updates the fixture in the same change |
+| **The merge has a check name of its own** | Were it also `tests > test:all`, every run would carry two check runs of that name, one of them skipped -- in the default mode too, in every consumer -- and a skipped check run satisfies a required check whatever the other did |
+| **`tests > test:all (merged)` runs after a failed shard, to fail** | Its `if:` reads `(!failure() \|\| needs.tests-test_all_shards.result == 'failure')` where every other job reads `!failure()`. With `!failure()` alone a failed shard SKIPS it, and a skipped job passes a required check: the pull request would merge with its tests red. The suite evaluates all three gates at every moment that matters rather than matching them |
+| **SonarQube does not wait for the merge** | `management > report:sonarqube` keeps the needs of the default path, so with shards it can scan before the merged coverage is uploaded. The workflow-composition barrier (Test 18) excuses exactly those two edges in `barrierExemptions`; README.md tells a consumer that reports to SonarQube to keep one shard |
 | **The shard numbers are a table indexed by the input** | GitHub's expressions have no range, so entry n of the `fromJSON('[[],[1],[1,2],...]')` table is 1..n, up to 16. A plan job computing the list would cost every run a job and, inside the stage model, a runner hop before the shards. A value past the table cannot start the shards, and `Verify the shards` names the input; the table, its end, the step's `TEST_SHARDS_MAX` and the documented range move together |
 | **The merge reads exactly the shards 1..n** | `test:ci:merge` merges every `coverage-final.json` under `coverage/shards`, so a missing shard or a stray `coverage-shard-*` artifact would make the merged figure one over a suite that did not run in full. `Verify the shards` fails on either, and on any result of the shards but `success` |
 | **A shard's upload is a deliverable, not a report** | The merge cannot judge the coverage without it, so a refused upload fails the shard where it happened; the `report-uploads` suite lists the job in `DELIVERABLES`. Kept a day: the merge reads it in the same run |

@@ -38,6 +38,21 @@ func stageRanks() map[string]int {
 	}
 }
 
+// barrierExemptions are the barrier edges a workflow leaves out ON PURPOSE, keyed
+// `<file> <job> <job it may start before>`, each with its reason. One workflow has them: test
+// sharding in yarn.yaml is opt-in and must leave the default path as it was, so
+// `management > report:sonarqube` keeps the needs it had -- with `test_shards` above 1 it does not
+// wait for the shards or their merge, and README.md, "Splitting `test:all` Across Runners", tells a
+// consumer that reports to SonarQube to keep one shard. An entry that stops excusing a gap of the
+// file it names is a finding too, so the list cannot outlive what it excuses.
+func barrierExemptions() map[string]string {
+	const sharding = "opt-in test sharding leaves the needs of the default path as they were"
+	return map[string]string{
+		"yarn.yaml management-report_sonarqube tests-test_all_shards": sharding,
+		"yarn.yaml management-report_sonarqube tests-test_all_merged": sharding,
+	}
+}
+
 // stagedJob is what the barrier needs to know about one job.
 type stagedJob struct {
 	name      string
@@ -85,26 +100,29 @@ func checkStageBarrier(directory string, out *printer) error {
 			problems = append(problems, fmt.Sprintf("canary %d does not parse: %v", index+1, err))
 			continue
 		}
-		found, _, err := barrierFindings(fmt.Sprintf("canary %d", index+1), document)
+		found, _, err := barrierFindings(fmt.Sprintf("canary %d", index+1), document, map[string]bool{})
 		if err != nil || len(found) != canary.findings {
 			problems = append(problems, fmt.Sprintf("the barrier check reports %d finding(s) about canary %d, not %d",
 				len(found), index+1, canary.findings))
 		}
 	}
 	staged := 0
+	scanned, excused := map[string]bool{}, map[string]bool{}
 	for _, name := range globFiles(directory, "*.yaml") {
 		document, err := loadFile(filepath.Join(directory, name), standardYAML)
 		if err != nil {
 			problems = append(problems, fmt.Sprintf("%s: unreadable (%v)", name, err))
 			continue
 		}
-		found, counted, err := barrierFindings(name, document)
+		scanned[name] = true
+		found, counted, err := barrierFindings(name, document, excused)
 		problems = append(problems, found...)
 		staged += counted
 		if err != nil {
 			problems = append(problems, name+": "+err.Error())
 		}
 	}
+	problems = append(problems, staleExemptions(scanned, excused)...)
 	if staged == 0 {
 		problems = append(problems,
 			fmt.Sprintf("no job under %s is named for a stage -- the scan read nothing", directory))
@@ -113,9 +131,23 @@ func checkStageBarrier(directory string, out *printer) error {
 	return nil
 }
 
+// staleExemptions are the exemptions of a scanned file that excused no gap.
+func staleExemptions(scanned, excused map[string]bool) []string {
+	var stale []string
+	for edge := range barrierExemptions() {
+		file, _, _ := strings.Cut(edge, " ")
+		if scanned[file] && !excused[edge] {
+			stale = append(stale, fmt.Sprintf("the barrier exemption `%s` excuses nothing any more -- remove it "+
+				"from barrierExemptions", edge))
+		}
+	}
+	slices.Sort(stale)
+	return stale
+}
+
 // barrierFindings is every barrier and skip finding about one workflow, and how many of its jobs are
-// named for a stage.
-func barrierFindings(name string, document *value) ([]string, int, error) {
+// named for a stage. An edge `barrierExemptions` names is left out and recorded in `excused`.
+func barrierFindings(name string, document *value, excused map[string]bool) ([]string, int, error) {
 	jobs, order, err := stagedJobs(document)
 	if err != nil {
 		return nil, 0, err
@@ -127,7 +159,7 @@ func barrierFindings(name string, document *value) ([]string, int, error) {
 			staged++
 		}
 		upstream := closure(id, jobs)
-		problems = append(problems, barrierGaps(name, id, jobs, order, upstream)...)
+		problems = append(problems, barrierGaps(name, id, jobs, order, upstream, excused)...)
 		if skipped := skippedCheck(jobs[id], jobs, order, upstream); skipped != "" {
 			problems = append(problems, fmt.Sprintf("%s: job %s needs %s, which can be skipped, and its `if:` "+
 				"calls no status function, so GitHub skips it too whenever %s is skipped -- gate it on "+
@@ -137,16 +169,24 @@ func barrierFindings(name string, document *value) ([]string, int, error) {
 	return problems, staged, nil
 }
 
-// barrierGaps is a finding for every job `id` must wait for and can start before.
-func barrierGaps(name, id string, jobs map[string]stagedJob, order []string, upstream map[string]bool) []string {
+// barrierGaps is a finding for every job `id` must wait for and can start before, but for the gaps
+// `barrierExemptions` names, which it records in `excused`.
+func barrierGaps(
+	name, id string, jobs map[string]stagedJob, order []string, upstream, excused map[string]bool,
+) []string {
 	var problems []string
 	job := jobs[id]
 	for _, waited := range barrierFor(job, jobs, order) {
-		if waited != id && !upstream[waited] {
-			problems = append(problems, fmt.Sprintf("%s: job %s (%s) can start before %s (%s) finishes -- add it "+
-				"to `needs:`, so each stage waits for the whole stage before it", name, id, job.name, waited,
-				jobs[waited].name))
+		if waited == id || upstream[waited] {
+			continue
 		}
+		if edge := name + " " + id + " " + waited; barrierExemptions()[edge] != "" {
+			excused[edge] = true
+			continue
+		}
+		problems = append(problems, fmt.Sprintf("%s: job %s (%s) can start before %s (%s) finishes -- add it "+
+			"to `needs:`, so each stage waits for the whole stage before it", name, id, job.name, waited,
+			jobs[waited].name))
 	}
 	return problems
 }

@@ -599,6 +599,9 @@ echo "Test 18: the stages run one after another"
 # pull request, so without it the barrier would skip every later stage on every push to `main`,
 # green and silently. A skip further down -- a job that runs only after a release was cut -- may
 # still propagate, on purpose. Canaries run first, so a parser that stops reading stages fails here.
+# The edges `barrierExemptions` lists are excused, each with its reason, and an entry that excuses
+# nothing any more fails: today yarn.yaml's SonarQube job, which keeps the needs of the default path
+# and so does not wait for the opt-in test shards.
 BAD_STAGE_BARRIER="$(composition_check stage-barrier "$WORKFLOWS_DIR")"
 assert_empty "every stage waits for the whole stage before it, and survives a skipped check" "$BAD_STAGE_BARRIER"
 echo ""

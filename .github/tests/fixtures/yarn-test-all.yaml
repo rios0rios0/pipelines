@@ -1,0 +1,97 @@
+# The default `tests > test:all` job of `.github/workflows/yarn.yaml`, as it was before test sharding
+# existed (rios0rios0/pipelines a2e919a9). Test sharding is opt-in, so the job every Yarn consumer
+# runs by default must stay this one: `make test ONLY=yarn-test-shards` holds the job in yarn.yaml
+# equal to this one, key for key and value for value, except its `if:`, which gains
+# `&& inputs.test_shards <= 1`. A change to the default job changes the test job of every Yarn
+# consumer at once, so it is made on purpose, here and in yarn.yaml together. The scheduled
+# dependency updates move the pins below with yarn.yaml's, since they scan every YAML file.
+jobs:
+  tests-test_all:
+    name: 'tests > test:all'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
+
+      - name: 'Enable Corepack'
+        run: |
+          command -v corepack > /dev/null 2>&1 || npm i -g --ignore-scripts corepack@0.34.7
+          corepack_dir="$(mktemp -d "$RUNNER_TEMP/corepack.XXXXXX")"
+          corepack enable --install-directory "$corepack_dir" yarn
+          echo "$corepack_dir" >> "$GITHUB_PATH"
+        shell: 'bash'
+
+      - name: 'Setup Node.js'
+        uses: 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1' # v7.1.0
+        with:
+          node-version: "${{ inputs.node_version }}"
+          cache: 'yarn'
+          # Named explicitly because the action only looks for a lockfile in the WORKSPACE
+          # ROOT when this is empty, and fails the job outright with "Dependencies lock file
+          # is not found" for a project one directory down -- on its second step, before
+          # anything has run. With `working_directory` left at `.` these are the same files
+          # it would have found on its own.
+          cache-dependency-path: |
+            ${{ inputs.working_directory }}/yarn.lock
+
+      - name: 'Export the build environment'
+        if: "inputs.build_env != ''"
+        run: printf '%s\n' "$BUILD_ENV" >> "$GITHUB_ENV"
+        shell: 'bash'
+        env:
+          BUILD_ENV: "${{ inputs.build_env }}"
+
+      - run: |
+          # `--mode=skip-build`: Yarn 2+ enables lifecycle scripts by default, so a plain
+          # install executes arbitrary code from the whole transitive tree as the CI user.
+          # Projects that need them set `install_run_scripts: true` and get `yarn rebuild`.
+          yarn install --immutable --mode=skip-build
+          if [ "$INSTALL_RUN_SCRIPTS" = 'true' ]; then
+            yarn rebuild
+          fi
+          yarn test:ci
+        shell: 'bash'
+        working-directory: "${{ inputs.working_directory }}"
+        env:
+          INSTALL_RUN_SCRIPTS: "${{ inputs.install_run_scripts }}"
+
+      - name: 'Type check the end-to-end specs'
+        if: 'inputs.e2e_typecheck'
+        run: 'yarn e2e:typecheck'
+        shell: 'bash'
+        working-directory: "${{ inputs.working_directory }}"
+
+      # Every path here is read through `env`, which resolves it against `working_directory`.
+      # A literal `coverage/` would keep the `hashFiles()` guard permanently false for a project
+      # in a subfolder -- so the step would SKIP rather than fail, and the coverage comment would
+      # simply stop appearing with nothing in the log to say why.
+      - name: 'Coverage Report'
+        if: "always() && hashFiles(env.COVERAGE_SUMMARY_PATH) != '' && hashFiles(env.COVERAGE_FINAL_PATH) != ''"
+        uses: 'davelosert/vitest-coverage-report-action@74c2d9210b4fc44c84d8213f61d7ec99837b7aa0' # v2.13.2
+        with:
+          json-summary-path: "${{ env.COVERAGE_SUMMARY_PATH }}"
+          json-final-path: "${{ env.COVERAGE_FINAL_PATH }}"
+          vite-config-path: "${{ env.VITE_CONFIG_PATH }}"
+
+      - name: 'Test Results'
+        if: "always() && hashFiles(env.JUNIT_REPORT_PATH) != ''"
+        uses: 'dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2' # v3.0.0
+        with:
+          name: 'Test Results'
+          path: "${{ env.JUNIT_REPORT_PATH }}"
+          reporter: 'java-junit'
+
+      - name: 'Upload Coverage Report'
+        if: "always() && hashFiles(env.COVERAGE_INDEX_PATH) != ''"
+        uses: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9' # v7.0.2
+        with:
+          name: 'coverage-report'
+          path: "${{ env.COVERAGE_DIR }}/"
+          # Never past the repository's own retention: a longer request is cut to it anyway, with a
+          # warning on every run (`.github/tests/test-report-uploads.sh`).
+          retention-days: "${{ github.retention_days < 30 && github.retention_days || 30 }}"
+        # A refused upload (e.g. `Artifact storage quota has been hit`) must not fail the job:
+        # the report is evidence, and the step above already decided pass or fail.
+        continue-on-error: true
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_yarn_audit' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"

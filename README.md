@@ -487,7 +487,7 @@ adds its own job to the tests stage.
 #### Splitting `test:all` Across Runners (`test_shards`)
 
 A JavaScript test suite that takes most of a pipeline's time runs faster split across runners.
-`yarn.yaml` takes `test_shards`, how many jobs run the suite, from 1 to 16:
+`yarn.yaml` takes `test_shards`, how many jobs run the suite, from 1 to 16. Sharding is opt-in:
 
 ```yaml
 jobs:
@@ -498,16 +498,25 @@ jobs:
 ```
 
 `1`, the default, runs the suite in one job, `tests > test:all`, exactly as before the input
-existed. Above 1, the tests stage runs:
+existed: that job is unchanged but for `inputs.test_shards <= 1` in its `if:`. Above 1, the tests
+stage runs other jobs, and `tests > test:all` is SKIPPED:
 
 | Job | What it does |
 |-----|--------------|
 | `tests > test:all (shard <i>/<n>)`, one per shard | installs the dependencies, runs `yarn test:ci:shard --shard=<i>/<n>`, and uploads the shard's `coverage/coverage-final.json` as the artifact `coverage-shard-<i>` |
-| `tests > test:all` | waits for every shard and fails when one did, unpacks each shard's report at `coverage/shards/<i>/`, runs `yarn test:ci:merge`, then publishes the coverage comment, the test results and the coverage artifact and runs `e2e:typecheck`, as before |
+| `tests > test:all (merged)` | waits for every shard and fails when one did, unpacks each shard's report at `coverage/shards/<i>/`, runs `yarn test:ci:merge`, then publishes the coverage comment, the test results and the coverage artifact and runs `e2e:typecheck`, as `tests > test:all` does |
 
-`tests > test:all` keeps its name in both modes, so a required check, a `deployment_required_checks`
-entry and the management stage, which needs it, read the same job. It runs after a failed shard in
-order to fail: a skipped `tests > test:all` would pass a required check.
+**A consumer that opts in renames its checks in the same change.** The verdict of a sharded run is
+`tests > test:all (merged)`, so name it instead of `tests > test:all` in the branch's required
+checks and in `deployment_required_checks`. A required check left on `tests > test:all` reads the
+skipped job, and a skipped job passes a required check: pull requests would merge whatever the
+shards found. `deployment_required_checks` would refuse every tag's deploy instead, since it wants
+a run of that name that succeeded. The two names are distinct on purpose: were the merge also
+`tests > test:all`, every run would carry two check runs of that name, one of them skipped -- in
+the default mode too, in every consumer.
+
+`tests > test:all (merged)` runs after a failed shard in order to fail, and is skipped as
+`tests > test:all` is when something before the tests stage failed.
 
 **What the project defines.** Both scripts are the project's own, in its `package.json`, and
 `test:ci` stays what the single job runs:
@@ -527,11 +536,16 @@ order to fail: a skipped `tests > test:all` would pass a required check.
 gains nothing. The coverage crosses between jobs as artifacts kept a day, and a shard whose upload
 is refused fails, since the merge cannot judge the coverage without it: an account whose artifact
 storage quota is spent goes back to `test_shards: 1` until it has room. A re-run of
-`tests > test:all` alone after the shards' artifacts expired fails naming the shards; re-run every
-job. No test-runner cache is carried between the shards: Jest's transform cache measured about 1 GB
-for one configuration, and restoring it onto an ephemeral self-hosted runner costs about what it
-saves (`AGENTS.md`, "Caches on a Self-Hosted Runner"). In the sharded mode `Test Results` reads the
-`junit-report.xml` the merge leaves, if it leaves one; the shards' own are not collected.
+`tests > test:all (merged)` alone after the shards' artifacts expired fails naming the shards;
+re-run every job. No test-runner cache is carried between the shards: Jest's transform cache
+measured about 1 GB for one configuration, and restoring it onto an ephemeral self-hosted runner
+costs about what it saves (`AGENTS.md`, "Caches on a Self-Hosted Runner"). In the sharded mode
+`Test Results` reads the `junit-report.xml` the merge leaves, if it leaves one; the shards' own are
+not collected.
+
+**SonarQube does not wait for the merge.** `management > report:sonarqube` keeps the needs of the
+default path, so with shards it can scan before the merged coverage is uploaded and report none. A
+consumer that reports to SonarQube keeps `test_shards: 1` for now.
 
 `yarn-cloudflare.yaml`, `yarn-docker.yaml` and `yarn-library.yaml` take the input and pass it on. It
 is GitHub Actions only, like `e2e_typecheck` and `build_env`: a caller of a reusable workflow cannot
@@ -541,7 +555,8 @@ while a GitLab CI consumer can extend the included `test:all` with `parallel:` (
 test jobs keep a contract of their own besides -- `yarn test:ci` with a Cobertura report, and
 `yarn test:coverage` with JUnit and Cobertura -- which reads none of the files this merge writes; on
 Azure DevOps sharding would take a change to the tests stage template, made when a consumer of it
-needs one. `make test ONLY=yarn-test-shards` holds all of it.
+needs one. `make test ONLY=yarn-test-shards` holds all of it, the default job included: it must stay
+the job `.github/tests/fixtures/yarn-test-all.yaml` holds, but for that one condition.
 
 #### CodeQL Fails on Findings, Not on Its Upload (`codeql_upload`)
 

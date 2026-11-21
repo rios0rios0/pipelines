@@ -330,6 +330,19 @@ func stagedWorkflow(needs, condition string) string {
 		"  scan:\n    name: 'security > sast:scan'\n    needs: " + needs + "\n    if: \"" + condition + "\"\n"
 }
 
+// shardedWorkflow is the tests stage of a sharded Yarn pipeline -- the single run, the shards and
+// their merge -- under a management job that needs `needs`.
+func shardedWorkflow(needs string) string {
+	tolerant := "\n    if: \"!cancelled() && !failure()\"\n"
+	return "jobs:\n" +
+		"  scan:\n    name: 'security > sast:scan'\n" +
+		"  tests-test_all:\n    name: 'tests > test:all'\n    needs: [ scan ]" + tolerant +
+		"  tests-test_all_shards:\n    name: 'tests > test:all (shard)'\n    needs: [ scan ]" + tolerant +
+		"  tests-test_all_merged:\n    name: 'tests > test:all (merged)'\n    needs: [ scan, tests-test_all_shards ]" +
+		tolerant +
+		"  management-report_sonarqube:\n    name: 'management > report:sonarqube'\n    needs: " + needs + tolerant
+}
+
 func TestCheckStageBarrier(t *testing.T) {
 	t.Parallel()
 
@@ -370,6 +383,32 @@ func TestCheckStageBarrier(t *testing.T) {
 			files: map[string]string{"release.yaml": "jobs:\n" +
 				"  release:\n    name: 'delivery > release'\n    if: \"github.event_name == 'push'\"\n" +
 				"  tag:\n    name: 'delivery > tag'\n    needs: [ release ]\n"},
+		},
+		{
+			name: "should excuse the edges an exemption names, in the file it names alone",
+			files: map[string]string{
+				"yarn.yaml": shardedWorkflow("[ tests-test_all ]"),
+				"npm.yaml":  shardedWorkflow("[ tests-test_all ]"),
+			},
+			expected: []string{
+				"npm.yaml: job management-report_sonarqube (management > report:sonarqube) can start before " +
+					"tests-test_all_shards (tests > test:all (shard)) finishes -- add it to `needs:`, so each stage " +
+					"waits for the whole stage before it",
+				"npm.yaml: job management-report_sonarqube (management > report:sonarqube) can start before " +
+					"tests-test_all_merged (tests > test:all (merged)) finishes -- add it to `needs:`, so each stage " +
+					"waits for the whole stage before it",
+			},
+		},
+		{
+			name: "should report an exemption that excuses nothing any more",
+			files: map[string]string{"yarn.yaml": shardedWorkflow(
+				"[ tests-test_all, tests-test_all_shards, tests-test_all_merged ]")},
+			expected: []string{
+				"the barrier exemption `yarn.yaml management-report_sonarqube tests-test_all_merged` excuses nothing " +
+					"any more -- remove it from barrierExemptions",
+				"the barrier exemption `yarn.yaml management-report_sonarqube tests-test_all_shards` excuses nothing " +
+					"any more -- remove it from barrierExemptions",
+			},
 		},
 	}
 	for _, tc := range cases {

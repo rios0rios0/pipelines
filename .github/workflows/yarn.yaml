@@ -85,14 +85,18 @@ on:
         required: false
         default: 1
         description: |
-          How many jobs run the test suite, from 1 to 16. `1`, the default, runs it in one job,
-          `tests > test:all`, exactly as before this input existed.
+          Opt-in test sharding: how many jobs run the test suite, from 1 to 16. `1`, the default,
+          runs it in one job, `tests > test:all`, exactly as before this input existed.
 
-          Above 1, `tests > test:all (shard <i>/<n>)` runs `yarn test:ci:shard --shard=<i>/<n>` on a
-          runner of its own for each shard and hands the shard's `coverage/coverage-final.json` on,
-          and `tests > test:all` waits for every shard, fails when one did, merges their coverage
-          with `yarn test:ci:merge` and reports it as before. Both scripts are the project's:
-          README.md, "Splitting `test:all` Across Runners", has the contract they keep.
+          Above 1, `tests > test:all` is SKIPPED. `tests > test:all (shard <i>/<n>)` runs
+          `yarn test:ci:shard --shard=<i>/<n>` on a runner of its own for each shard and hands the
+          shard's `coverage/coverage-final.json` on, and `tests > test:all (merged)` waits for every
+          shard, fails when one did, merges their coverage with `yarn test:ci:merge` and reports it.
+          A consumer that opts in names `tests > test:all (merged)` in its required checks and its
+          `deployment_required_checks` instead of `tests > test:all`, which would pass as skipped;
+          one that reports to SonarQube keeps one shard, since that job does not wait for the merge.
+          Both scripts are the project's: README.md, "Splitting `test:all` Across Runners", has the
+          contract they keep.
       node_version:
         type: 'string'
         required: false
@@ -357,21 +361,116 @@ jobs:
 
 
   # third stage
+  tests-test_all:
+    name: 'tests > test:all'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
+
+      - name: 'Enable Corepack'
+        run: |
+          command -v corepack > /dev/null 2>&1 || npm i -g --ignore-scripts corepack@0.34.7
+          corepack_dir="$(mktemp -d "$RUNNER_TEMP/corepack.XXXXXX")"
+          corepack enable --install-directory "$corepack_dir" yarn
+          echo "$corepack_dir" >> "$GITHUB_PATH"
+        shell: 'bash'
+
+      - name: 'Setup Node.js'
+        uses: 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1' # v7.1.0
+        with:
+          node-version: "${{ inputs.node_version }}"
+          cache: 'yarn'
+          # Named explicitly because the action only looks for a lockfile in the WORKSPACE
+          # ROOT when this is empty, and fails the job outright with "Dependencies lock file
+          # is not found" for a project one directory down -- on its second step, before
+          # anything has run. With `working_directory` left at `.` these are the same files
+          # it would have found on its own.
+          cache-dependency-path: |
+            ${{ inputs.working_directory }}/yarn.lock
+
+      - name: 'Export the build environment'
+        if: "inputs.build_env != ''"
+        run: printf '%s\n' "$BUILD_ENV" >> "$GITHUB_ENV"
+        shell: 'bash'
+        env:
+          BUILD_ENV: "${{ inputs.build_env }}"
+
+      - run: |
+          # `--mode=skip-build`: Yarn 2+ enables lifecycle scripts by default, so a plain
+          # install executes arbitrary code from the whole transitive tree as the CI user.
+          # Projects that need them set `install_run_scripts: true` and get `yarn rebuild`.
+          yarn install --immutable --mode=skip-build
+          if [ "$INSTALL_RUN_SCRIPTS" = 'true' ]; then
+            yarn rebuild
+          fi
+          yarn test:ci
+        shell: 'bash'
+        working-directory: "${{ inputs.working_directory }}"
+        env:
+          INSTALL_RUN_SCRIPTS: "${{ inputs.install_run_scripts }}"
+
+      - name: 'Type check the end-to-end specs'
+        if: 'inputs.e2e_typecheck'
+        run: 'yarn e2e:typecheck'
+        shell: 'bash'
+        working-directory: "${{ inputs.working_directory }}"
+
+      # Every path here is read through `env`, which resolves it against `working_directory`.
+      # A literal `coverage/` would keep the `hashFiles()` guard permanently false for a project
+      # in a subfolder -- so the step would SKIP rather than fail, and the coverage comment would
+      # simply stop appearing with nothing in the log to say why.
+      - name: 'Coverage Report'
+        if: "always() && hashFiles(env.COVERAGE_SUMMARY_PATH) != '' && hashFiles(env.COVERAGE_FINAL_PATH) != ''"
+        uses: 'davelosert/vitest-coverage-report-action@74c2d9210b4fc44c84d8213f61d7ec99837b7aa0' # v2.13.2
+        with:
+          json-summary-path: "${{ env.COVERAGE_SUMMARY_PATH }}"
+          json-final-path: "${{ env.COVERAGE_FINAL_PATH }}"
+          vite-config-path: "${{ env.VITE_CONFIG_PATH }}"
+
+      - name: 'Test Results'
+        if: "always() && hashFiles(env.JUNIT_REPORT_PATH) != ''"
+        uses: 'dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2' # v3.0.0
+        with:
+          name: 'Test Results'
+          path: "${{ env.JUNIT_REPORT_PATH }}"
+          reporter: 'java-junit'
+
+      - name: 'Upload Coverage Report'
+        if: "always() && hashFiles(env.COVERAGE_INDEX_PATH) != ''"
+        uses: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9' # v7.0.2
+        with:
+          name: 'coverage-report'
+          path: "${{ env.COVERAGE_DIR }}/"
+          # Never past the repository's own retention: a longer request is cut to it anyway, with a
+          # warning on every run (`.github/tests/test-report-uploads.sh`).
+          retention-days: "${{ github.retention_days < 30 && github.retention_days || 30 }}"
+        # A refused upload (e.g. `Artifact storage quota has been hit`) must not fail the job:
+        # the report is evidence, and the step above already decided pass or fail.
+        continue-on-error: true
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_yarn_audit' ]
+    if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/') && inputs.test_shards <= 1"
+
+  # Test sharding, which is OPT-IN: the two jobs below run only when `test_shards` is above 1, and
+  # the default path never meets them -- at 1, `tests > test:all` above is the job it always was,
+  # with `inputs.test_shards <= 1` added to its `if:` and nothing else. Above 1, `tests > test:all`
+  # is SKIPPED, `tests > test:all (shard <i>/<n>)` runs one shard of the suite per runner, and
+  # `tests > test:all (merged)` waits for all of them, merges their coverage and reports it.
   #
-  # `test_shards` above 1 splits `test:all` in two. `tests > test:all (shard <i>/<n>)` runs one
-  # shard of the suite per runner, and `tests > test:all` waits for all of them, merges their
-  # coverage and reports it. At 1, the default, the shards are skipped and `tests > test:all` runs
-  # the whole suite itself, as it always did. So ONE job carries that name in both modes -- the
-  # check a consumer requires, the name a `deployment_required_checks` entry gives, the job
-  # `management > report:sonarqube` needs. Two jobs of that name, one of them skipped, would be two
-  # check runs of one name, and a skipped job passes a required check.
+  # The verdict has a name of its own on purpose. Were it also `tests > test:all`, every run would
+  # carry two check runs of that name, one of them skipped -- in the default mode too, in every
+  # consumer -- and a skipped run satisfies a required check whatever the other one did. So a
+  # consumer that opts in names `tests > test:all (merged)` in its required checks and its
+  # `deployment_required_checks`, where `tests > test:all` would now pass as skipped.
+  # `management > report:sonarqube` keeps the needs of the default path, so with shards it does not
+  # wait for the merged coverage: a consumer that reports to SonarQube keeps one shard for now.
   #
   # The shard numbers are looked up rather than computed: GitHub's expressions have no range, so
-  # entry n of the table below is 1..n, up to 16, and `tests > test:all` refuses a `test_shards`
-  # past its end by name. `>-` and not `>`: a trailing newline would make the value a string
-  # instead of the expression's array. `fail-fast: false`, so every shard reports its failures in
-  # one run, as the single job always did, and "Re-run failed jobs" re-runs only the shards that
-  # failed. `make test ONLY=yarn-test-shards` holds all of it.
+  # entry n of the table below is 1..n, up to 16, and `tests > test:all (merged)` refuses a
+  # `test_shards` past its end by name. `>-` and not `>`: a trailing newline would make the value a
+  # string instead of the expression's array. `fail-fast: false`, so every shard reports its
+  # failures in one run, as the single job always did, and "Re-run failed jobs" re-runs only the
+  # shards that failed. `make test ONLY=yarn-test-shards` holds all of it.
   #
   # No cache of the test runner's own is restored per shard. Jest's transform cache, measured on the
   # frontend this was written for, is about 1 GB for one configuration, and restoring that through
@@ -442,12 +541,12 @@ jobs:
           TEST_SHARDS: "${{ inputs.test_shards }}"
 
       # Under `coverage/shards/<i>/`, so the artifact holds `<i>/coverage-final.json` and every
-      # shard's report lands in a directory of its own when `tests > test:all` unpacks them all
-      # into one.
+      # shard's report lands in a directory of its own when `tests > test:all (merged)` unpacks
+      # them all into one.
       - name: 'Stage the coverage of the shard'
         run: |
           if [ ! -s coverage/coverage-final.json ]; then
-            echo '::error::yarn test:ci:shard left no coverage/coverage-final.json, which tests > test:all merges (README.md, "Splitting test:all Across Runners")'
+            echo '::error::yarn test:ci:shard left no coverage/coverage-final.json, which tests > test:all (merged) merges (README.md, "Splitting test:all Across Runners")'
             exit 1
           fi
           mkdir -p "coverage/shards/$SHARD"
@@ -457,10 +556,10 @@ jobs:
         env:
           SHARD: "${{ matrix.shard }}"
 
-      # The hand-off, not a report, so a refused upload FAILS the shard: `tests > test:all` cannot
-      # judge the coverage without it, and the refusal is read best where it happened rather than as
-      # a shard missing from the merge (`.github/tests/test-report-uploads.sh` lists this job's
-      # upload as a deliverable). Kept a day: the merge reads it in the same run.
+      # The hand-off, not a report, so a refused upload FAILS the shard: `tests > test:all (merged)`
+      # cannot judge the coverage without it, and the refusal is read best where it happened rather
+      # than as a shard missing from the merge (`.github/tests/test-report-uploads.sh` lists this
+      # job's upload as a deliverable). Kept a day: the merge reads it in the same run.
       - name: 'Upload the coverage of the shard'
         uses: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9' # v7.0.2
         with:
@@ -471,8 +570,13 @@ jobs:
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_yarn_audit' ]
     if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/') && inputs.test_shards > 1"
 
-  tests-test_all:
-    name: 'tests > test:all'
+  # The verdict of a sharded run. It runs after a FAILED shard too, and the second clause of its
+  # `if:` is that: `!failure()` alone would skip this job then, and a skipped job passes a required
+  # check, so a pull request whose tests failed in a shard would merge. It runs to fail, in
+  # `Verify the shards`. A failure further up (a security job) still skips it, as it skips
+  # `tests > test:all`: the shards are skipped then, not failed.
+  tests-test_all_merged:
+    name: 'tests > test:all (merged)'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
       - name: 'Checkout code'
@@ -482,19 +586,17 @@ jobs:
       # `<i>/coverage-final.json`, so shard i's report is at `coverage/shards/<i>/` however many
       # artifacts there are. After the checkout, which would otherwise clean them away.
       - name: 'Download the coverage of the shards'
-        if: 'inputs.test_shards > 1'
         uses: 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333' # v8.0.2
         with:
           pattern: 'coverage-shard-*'
           merge-multiple: true
           path: "${{ env.COVERAGE_DIR }}/shards/"
 
-      # This is where `tests > test:all` FAILS when a shard did -- the job runs after a failed shard
-      # for exactly this (see its `if:`). And it merges nothing it cannot account for: every shard
-      # 1..n must have left its coverage, and nothing else may sit beside them, or the merged figure
-      # would be computed over a suite that did not run in full, or over another run's coverage.
+      # This is where the job FAILS when a shard did -- it runs after a failed shard for exactly
+      # this (see its `if:`). And it merges nothing it cannot account for: every shard 1..n must
+      # have left its coverage, and nothing else may sit beside them, or the merged figure would be
+      # computed over a suite that did not run in full, or over another run's coverage.
       - name: 'Verify the shards'
-        if: 'inputs.test_shards > 1'
         run: |
           # A value the shards could not start on -- past the table's end, or not a whole number --
           # left them failed with GitHub's own words for it; these are the ones naming the input.
@@ -577,27 +679,11 @@ jobs:
         env:
           BUILD_ENV: "${{ inputs.build_env }}"
 
-      - if: 'inputs.test_shards <= 1'
-        run: |
-          # `--mode=skip-build`: Yarn 2+ enables lifecycle scripts by default, so a plain
-          # install executes arbitrary code from the whole transitive tree as the CI user.
-          # Projects that need them set `install_run_scripts: true` and get `yarn rebuild`.
-          yarn install --immutable --mode=skip-build
-          if [ "$INSTALL_RUN_SCRIPTS" = 'true' ]; then
-            yarn rebuild
-          fi
-          yarn test:ci
-        shell: 'bash'
-        working-directory: "${{ inputs.working_directory }}"
-        env:
-          INSTALL_RUN_SCRIPTS: "${{ inputs.install_run_scripts }}"
-
       # Merges every `coverage/shards/<i>/coverage-final.json` into `coverage/` -- the summary, the
       # final report and `lcov`, so the steps below read what `yarn test:ci` leaves -- and fails on
       # the project's coverage threshold, which no shard enforced. Each shard ran in a workspace of
       # its own, so the absolute paths in their reports differ: re-rooting them is the script's.
       - name: 'Merge the coverage of the shards'
-        if: 'inputs.test_shards > 1'
         run: |
           # `--mode=skip-build`: Yarn 2+ enables lifecycle scripts by default, so a plain
           # install executes arbitrary code from the whole transitive tree as the CI user.
@@ -613,9 +699,10 @@ jobs:
           INSTALL_RUN_SCRIPTS: "${{ inputs.install_run_scripts }}"
 
       # Out of `coverage/` once merged, so the reports below and the coverage artifact hold what one
-      # job running the whole suite leaves there, not a second copy of it per shard.
+      # job running the whole suite leaves there, not a second copy of it per shard -- `always()`,
+      # so a merge that failed on the threshold does not leave them in the artifact either.
       - name: 'Remove the coverage of the shards'
-        if: 'inputs.test_shards > 1'
+        if: 'always()'
         run: 'rm -rf coverage/shards'
         shell: 'bash'
         working-directory: "${{ inputs.working_directory }}"
@@ -659,12 +746,7 @@ jobs:
         # the report is evidence, and the step above already decided pass or fail.
         continue-on-error: true
     needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_yarn_audit', 'tests-test_all_shards' ]
-    # Runs after a FAILED shard too, and the second clause is that: `!failure()` alone would skip
-    # this job then, and a skipped job passes a required check, so a pull request whose tests failed
-    # in a shard would merge. It runs to fail, in `Verify the shards`. A failure further up (a
-    # security job) still skips it, as before -- the shards are skipped then, not failed -- and on
-    # the default of one shard the shards job is skipped and this is the gate it always was.
-    if: "!cancelled() && (!failure() || needs.tests-test_all_shards.result == 'failure') && !startsWith(github.ref, 'refs/tags/')"
+    if: "!cancelled() && (!failure() || needs.tests-test_all_shards.result == 'failure') && !startsWith(github.ref, 'refs/tags/') && inputs.test_shards > 1"
 
   tests-test_build:
     name: 'tests > test:build'

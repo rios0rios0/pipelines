@@ -227,10 +227,10 @@ OSV_SCANNER_SHA256_ARM64="983d22fbad9724514e3fcc6acc83b5fa64c5ffa6b0d9f510028f22
 # digest the way it does for any release binary. The wheel's dependencies are
 # resolved by pip within the ranges the wheel declares, binary-only.
 # upstream: pypi checkov
-CHECKOV_PINNED_VERSION="3.4.4"
+CHECKOV_PINNED_VERSION="3.4.5"
 CHECKOV_VERSION="${CHECKOV_VERSION:-${CHECKOV_PINNED_VERSION}}"
 # asset: https://files.pythonhosted.org/packages/py3/c/checkov/checkov-{version}-py3-none-any.whl
-CHECKOV_SHA256="4b01d4ecfe9be74723619bad2095af9f1cc44890d62c8372809bdc3d10a7991d"
+CHECKOV_SHA256="64210c48a957ecb85dfb38057e00faa150b5e46e76b08e710d29beb687b7ced2"
 
 # --- Language tooling --------------------------------------------------------
 
@@ -360,12 +360,12 @@ TERRA_SHA256_ARM64="7f0fb4263574f1132cbab579c824c5282b35928dfc302b246630b1c9702a
 # both digests below were compared with those files when this pin was taken.
 # upstream: github-release helm/helm track=4
 # osv: Go helm.sh/helm/v4
-HELM_PINNED_VERSION="4.3.1"
+HELM_PINNED_VERSION="4.3.2"
 HELM_VERSION="${HELM_VERSION:-${HELM_PINNED_VERSION}}"
 # asset: https://get.helm.sh/helm-v{version}-linux-amd64.tar.gz
-HELM_SHA256_AMD64="0403a88ae20913d11b10a2467b50087721fea7581736da6b9d3992f5357fe54b"
+HELM_SHA256_AMD64="d1c0278d46beab79582d7e50f5b3dc206944ba8e577cde618513fd07daa53983"
 # asset: https://get.helm.sh/helm-v{version}-linux-arm64.tar.gz
-HELM_SHA256_ARM64="8cf8f66ecbc252ac8f7f06cca68aba88508ddfde3a6a34feb1678ad1694b4f88"
+HELM_SHA256_ARM64="df31cb61680ef728f82c770e5280dd565617bee6b039d37e85c677288be4bbb0"
 
 # upstream: github-release yannh/kubeconform
 # osv: Go github.com/yannh/kubeconform
@@ -402,12 +402,12 @@ KUBERNETES_JSON_SCHEMA_VERSION="${KUBERNETES_JSON_SCHEMA_VERSION:-${KUBERNETES_J
 # upstream: github-release superfly/flyctl
 # osv: Go github.com/superfly/flyctl
 # checksums: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_checksums.txt
-FLYCTL_PINNED_VERSION="0.5.8"
+FLYCTL_PINNED_VERSION="0.5.10"
 FLYCTL_VERSION="${FLYCTL_VERSION:-${FLYCTL_PINNED_VERSION}}"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_x86_64.tar.gz
-FLYCTL_SHA256_X86_64="0115ae5202c9984695e22e4e99a375565ae3d7edc462377ce00c833406c877ac"
+FLYCTL_SHA256_X86_64="2f96f16e9ccaf273acb17ef39bd018de4fea8bf4ee905e85de93ca2a723b03fb"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_arm64.tar.gz
-FLYCTL_SHA256_ARM64="9fa85f52c3d266887f1958164568ea9995f1ee4ce5214506ee0f095ebe9888d1"
+FLYCTL_SHA256_ARM64="aaa52bbf00405ec5d35d5d7148f261e870a88060f7b90eb028c51930540caaf0"
 
 # crane, from google/go-containerregistry. The Fly.io deploy copies the image
 # the pipeline already delivered into registry.fly.io with it -- registry to

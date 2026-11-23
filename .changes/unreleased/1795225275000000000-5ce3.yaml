@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'bumped the pinned dependencies the scheduled `Dependency Updates` workflow found outdated: 1 GitHub Action (`actions/setup-java` `v6.3.0`), 5 container image digests (`amazon/aws-cli:latest`, `bitnami/kubectl:latest`, `ghcr.io/rios0rios0/pipelines/awscli:latest`, `ghcr.io/rios0rios0/pipelines/golang:1.27-awscli`, `ubuntu:24.04`) and 3 tool pins (`CHECKOV` `3.4.5`, `FLYCTL` `0.5.10`, `HELM` `4.3.2`), each binary''s new SHA-256 taken from its release asset'
+time: '2026-11-21T01:41:15.000000000Z'

@@ -12,6 +12,8 @@
 
 CODEQL_LANGUAGE ?= python
 SEMGREP_LANGUAGE ?= python
+# The suite `make test-pyramid` (common.mk) judges.
+export TEST_PYRAMID_LANGUAGE ?= python
 export PREFIX ?= .
 export REPORT_PATH ?= ./reports
 

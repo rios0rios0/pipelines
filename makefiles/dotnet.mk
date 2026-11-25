@@ -12,6 +12,8 @@
 
 CODEQL_LANGUAGE ?= csharp
 SEMGREP_LANGUAGE ?= csharp
+# The suite `make test-pyramid` (common.mk) judges.
+export TEST_PYRAMID_LANGUAGE ?= dotnet
 
 .PHONY: lint test
 

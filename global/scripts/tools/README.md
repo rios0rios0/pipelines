@@ -13,6 +13,7 @@ This directory contains **language-agnostic** security and quality tools used ac
 | `hadolint/`         | Dockerfile linting and best practices                              |
 | `semgrep/`          | Pattern-based static analysis (OWASP, secrets, best practices)     |
 | `sonarqube/`        | Code quality and security analysis                                 |
+| `test-pyramid/`     | Whether a pull request worsens the test pyramid (unit/integration/functional/e2e), every pipeline's `test:pyramid` |
 
 ## Convention
 

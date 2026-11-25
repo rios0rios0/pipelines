@@ -25,6 +25,13 @@ stages:
     ${{ if ne(parameters.DEPENDS_ON, '') }}:
       dependsOn: ${{ parameters.DEPENDS_ON }}
     jobs:
+      # Does this pull request worsen the shape of the test suite? Pull requests only; advisory
+      # unless the target branch's `.test-pyramid` says `blocking true`. See
+      # azure-devops/global/stages/30-tests/test-pyramid.yaml and README.md, "Test Pyramid".
+      - template: '../../../global/stages/30-tests/test-pyramid.yaml'
+        parameters:
+          LANGUAGE: 'javascript'
+
       - job: 'test_all'
         displayName: 'test:all'
         steps:

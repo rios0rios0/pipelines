@@ -1,6 +1,7 @@
 include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/terra/abstracts/terra.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/30-tests/test-pyramid.yaml'
 
 # Single unified job that orchestrates both tiers of Terraform testing
 # behind one `test:all` entry: native `terraform test` over
@@ -110,3 +111,11 @@ test:structural:
       - "${REPORT_PATH}/"
     reports:
       junit: "${REPORT_PATH}/junit-structural.xml"
+
+# Does this merge request worsen the shape of the test suite? Merge requests only; advisory
+# unless the target branch's `.test-pyramid` says `blocking true`. See
+# gitlab/global/stages/30-tests/test-pyramid.yaml and README.md, "Test Pyramid".
+test:pyramid:
+  extends: '.test-pyramid'
+  variables:
+    TEST_PYRAMID_LANGUAGE: 'terraform'

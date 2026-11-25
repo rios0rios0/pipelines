@@ -166,13 +166,26 @@ jobs:
     if: "!cancelled() && !failure() && !startsWith(github.ref, 'refs/tags/')"
 
 
+  # Does this pull request worsen the shape of the suite? Pull requests only; advisory unless the
+  # target branch's `.test-pyramid` says `blocking true`. See `go.yaml` and README.md, "Test Pyramid".
+  tests-test_pyramid:
+    name: 'tests > test:pyramid'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/30-tests/test-pyramid@main'
+        with:
+          language: 'java'
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_dependency_check' ]
+    if: "!cancelled() && !failure() && github.event_name == 'pull_request'"
+
+
   # management stage (optional)
   management-report_sonarqube:
     name: 'management > report:sonarqube'
     runs-on: 'ubuntu-latest'
     container:
       image: 'sonarsource/sonar-scanner-cli:12.4.0.4321_8.4.0@sha256:6e6eca4d552695a98fb7dab84f0c1bd0885ebbfe272654d1552e24bd7f452d51'
-    needs: [ 'tests-test_all' ]
+    needs: [ 'tests-test_all', 'tests-test_pyramid' ]
     if: "!cancelled() && !failure() && inputs.sonar_host != '' && !startsWith(github.ref, 'refs/tags/')"
     continue-on-error: true
     steps:

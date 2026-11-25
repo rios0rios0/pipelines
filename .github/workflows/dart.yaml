@@ -381,6 +381,19 @@ jobs:
   # `sca:osv-scanner` still covers the vulnerability scanning.
 
 
+  # Does this pull request worsen the shape of the suite? Pull requests only; advisory unless the
+  # target branch's `.test-pyramid` says `blocking true`. See `go.yaml` and README.md, "Test Pyramid".
+  tests-test_pyramid:
+    name: 'tests > test:pyramid'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/30-tests/test-pyramid@main'
+        with:
+          language: 'dart'
+    needs: [ 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_osv_scanner' ]
+    if: "!cancelled() && !failure() && github.event_name == 'pull_request'"
+
+
 # 1 - this file MUST be inside ".github/workflows" because of GitHub Actions limitations
 # 2 - the recommended events to trigger this workflow and permissions are:
 #   on:

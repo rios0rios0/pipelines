@@ -14,6 +14,8 @@
 
 CODEQL_LANGUAGE ?= java
 SEMGREP_LANGUAGE ?= java
+# The suite `make test-pyramid` (common.mk) judges.
+export TEST_PYRAMID_LANGUAGE ?= java
 
 .PHONY: lint test
 

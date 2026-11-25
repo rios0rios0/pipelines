@@ -425,13 +425,31 @@ jobs:
     if: "!cancelled() && !failure() && inputs.extra_test_command != '' && !startsWith(github.ref, 'refs/tags/')"
 
 
+  # The test pyramid (README.md, "Test Pyramid"): does this pull request worsen the shape of the
+  # suite -- no tier may outnumber every tier below it, and the mix stays near 80/15/5? A job of this
+  # stage, beside `test:all` rather than inside it or `basic-checks`: it judges the suite's shape
+  # without building or running anything, and as a code-check job its failure would withhold the
+  # test results from the very pull request that changed the tests. Pull requests only, because the
+  # verdict compares the pull request with its target branch. Advisory unless the target branch's
+  # `.test-pyramid` says `blocking true`.
+  tests-test_pyramid:
+    name: 'tests > test:pyramid'
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/30-tests/test-pyramid@main'
+        with:
+          language: 'go'
+    needs: [ 'security-sast_codeql', 'security-sast_semgrep', 'security-sast_gitleaks', 'security-sast_hadolint', 'security-sca_govulncheck' ]
+    if: "!cancelled() && !failure() && github.event_name == 'pull_request'"
+
+
   # management stage (optional)
   management-report_sonarqube:
     name: 'management > report:sonarqube'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     container:
       image: 'sonarsource/sonar-scanner-cli:12.4.0.4321_8.4.0@sha256:6e6eca4d552695a98fb7dab84f0c1bd0885ebbfe272654d1552e24bd7f452d51'
-    needs: [ 'tests-test_all', 'tests-test_extra' ]
+    needs: [ 'tests-test_all', 'tests-test_extra', 'tests-test_pyramid' ]
     if: "!cancelled() && !failure() && inputs.sonar_host != '' && !startsWith(github.ref, 'refs/tags/')"
     continue-on-error: true
     steps:

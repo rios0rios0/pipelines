@@ -91,6 +91,7 @@ there is no target to add and no list to keep in step.
 | `terra-test-roots` | The terra-test tier's opt-in root-module run (`TERRA_TEST_ROOTS`) |
 | `terraform-provider-mirror` | The local Terraform provider mirror |
 | `terraform-validate` | The root-module `terraform validate` tier |
+| `test-pyramid` | The test-pyramid check end to end against fixture repositories (the verdict, the policy read from the target branch and never from the pull request, the merge base rather than the target's tip, a merge commit and a shallow clone, the GitHub and Azure DevOps annotations and summaries, the exit statuses), its wiring -- every GitHub base workflow, GitLab CI and Azure DevOps tests stage runs it on pull requests only, for a language a profile exists for -- and `make test-pyramid`; the classification and the verdict are unit-tested in Go (`go-helpers`) |
 | `tftest-gen` | Tftest-gen generator |
 | `var-catalog` | The shared variable-declaration generator |
 | `workflow-composition` | The GitHub Actions workflow composition standard |
@@ -117,7 +118,7 @@ All platforms follow consistent numbered stages:
 - `.github/workflows/` — GitHub Actions reusable workflows (e.g., `go-docker.yaml`, `pdm-docker.yaml`)
 - `gitlab/<language>/` — GitLab CI templates with `stages/`, `scripts/`, `abstracts/` subdirs
 - `azure-devops/<language>/` — Azure DevOps templates, same structure as GitLab. A delivery or deployment stage whose `condition:` replaces the implicit `succeeded()` carries `not(canceled())` beside `not(failed())`: a cancelled run is not a failed one, so `not(failed())` alone lets a cancelled run deliver
-- `global/scripts/tools/` — Platform-agnostic security tools (codeql, gitleaks, semgrep, hadolint, shellcheck, checkov, sonarqube, dependency-track, osv-scanner — the last only an installer, for the dependency-update image scans), `ansible-lint/` (a linter, run by `make ansible-lint` from an Ansible project's own `lint`, never by `make sast`), and `dependency-updates/`, the Go checker described in Keeping the Pins Current
+- `global/scripts/tools/` — Platform-agnostic security tools (codeql, gitleaks, semgrep, hadolint, shellcheck, checkov, sonarqube, dependency-track, osv-scanner — the last only an installer, for the dependency-update image scans), `ansible-lint/` (a linter, run by `make ansible-lint` from an Ansible project's own `lint`, never by `make sast`), `dependency-updates/`, the Go checker described in Keeping the Pins Current, and `test-pyramid/`, the Go checker described in The Test Pyramid Check
 - `global/scripts/languages/` — Language-specific scripts (argocd, golang, java, javascript, php, python, ruby, dart, terraform). Most `run.sh` scripts follow shared conventions, but the Terraform helpers below are documented exceptions: they write reports directly under `build/reports/` and do not rely on the common `cleanup.sh` report-directory pattern.
   - `argocd/` — the runners of the Argo CD pipeline: `helm-lint`, `render` and `schema`, a sourced `common.sh` (not executable) that walks every chart and scenario, and `helm/install.sh` and `kubeconform/install.sh`, pinned and checksum-verified. See Argo CD Pipeline below
   - `dart/` — Dart and Flutter runners: `setup`, `format`, `analyze`, `test`, `unused`, `sca`, `build`, `publish`, plus a sourced `common.sh` (not executable — it is sourced, never run). All honour `DART_DRY_RUN=true`, which resolves and records commands without installing or executing anything; that is what makes the whole family testable offline. The report converters beside two of them — `test/lcov-to-cobertura.sh`, `test/lcov-to-markdown.sh`, `test/filter-test-events.sh` and `analyze/analyze-report.sh` — are POSIX sh around awk programs (`*.awk`, loaded with `awk -f` after the shared `common.awk`, so they carry no executable bit), and a Dart job needs no Python. See Dart & Flutter Support below
@@ -1362,6 +1363,34 @@ It is GitHub Actions only. A caller of a reusable workflow cannot add a job to i
 is what the input does for it; a GitLab CI consumer can, with `parallel:` on the included `test:all`,
 and the GitLab CI and Azure DevOps JavaScript test jobs keep test contracts of their own that read
 none of these files.
+
+### The Test Pyramid Check
+
+**Enforced by `.github/tests/test-test-pyramid.sh` (`make test ONLY=test-pyramid`) and the Go unit tests of
+`global/scripts/tools/test-pyramid/` (`make test ONLY=go-helpers`).** Read this before changing the
+check, its tiers, or the tests stage of any pipeline.
+
+Every pipeline that tests runs `tests > test:pyramid` (`test:pyramid` on GitLab CI and Azure DevOps) on
+pull requests only: the merge base's suite and the pull request's are each classified into unit,
+integration, functional and e2e, and the pull request fails when it WORSENS the shape -- a tier's excess
+over every tier below it combined grows, or, past the reference mix (Software Engineering at Google's
+80/15/5 by test-case count), a boundary's share grows. README.md, "Test Pyramid", has the rules and the
+sources. A Go helper (`main.go` + `internal/`, built through `go_helper_run`): the classification is a
+rule engine over nine profiles, and RE2 is the one regex dialect every platform agrees on. Ten
+decisions shape it; do not "simplify" any of them away:
+
+| Decision | Why |
+|----------|-----|
+| **A job of the tests stage, neither in `basic-checks` nor in `test:all`** | `basic-checks` is change hygiene in a minimal image that never fetches this repository's scripts (see the header of `changelog-check.sh`); a check that knows nine languages' test conventions cannot live there, and inlining it per platform is the duplication that file already pays for. `test:all` executes the suite and runs on the default branch too; one red check meaning two things, and a check with no pull request to judge, are both wrong. Not the code-check stage: a failed code-check job stops security and tests, withholding the test results from the very pull request that changed the tests, while in the tests stage the check costs no wall-clock time beside `test:all` and still blocks delivery |
+| **Tiers are ordered by scope and defined by the boundary a test crosses, never by its name** | Microsoft's L0-L4 call a test with SQL "functional" and Google calls it "integration"; Rails calls its routed request tests "integration". The classifier keys on what a file declares or uses, so the same file is the same tier whatever its team calls it |
+| **One fixed precedence: the target's path rules, then evidence (highest tier), then the path, then unit** | Deterministic by construction: the first source that says anything decides, and within it the highest tier wins. A file's every decision is written to the report with its reason, so a surprising tier is traced to one rule |
+| **A signature is chosen for precision, never recall** | A signature that fires on a unit test raises it and blames a pull request for a shape it did not make. Only drivers and clients whose sole use is the boundary qualify (`testcontainers`, Playwright, MockMvc); a double never raises a tier, and Go's `httptest.NewServer` -- the standard library's stand-in for a remote service in unit tests -- is deliberately not one. Paths follow the same rule: `integration` and `functional` are ordinary package names (and Java mirrors every package under `src/test/java/`), so as directories they name a tier only beside "test" (`integration-tests/`, `tests/integration/`) |
+| **Go reads no path** | The build tag decides which phase of the Go runner runs a test, so a path must not contradict it: an untagged file in a package named `integration` is a unit test |
+| **The shape rule compares a tier with the SUM of the tiers below it** | Comparing with the tier right below would condemn every project without a functional tier the moment it holds an e2e test. The hourglass this lets through is a proportion problem, which the mix catches |
+| **A ratchet, not a threshold** | A suite already past the reference on the target branch would otherwise fail every pull request until somebody rewrote it. Shares are compared as cross-products of whole numbers, and each allowance is rounded up to a whole test, so a new repository's first integration test passes and the verdict is the same on every machine |
+| **The policy is read from the TARGET branch, and both trees are classified with it** | A pull request cannot turn `blocking` off or add a path rule that reclassifies its own e2e tests as unit tests; the change applies once it is merged, after review. The pull request's own `.test-pyramid` is parsed only to refuse an invalid one, which would otherwise reach the target branch and break every later run |
+| **Advisory until the target's `.test-pyramid` says `blocking true`; `TEST_PYRAMID_BLOCKING=true` can only add blocking** | The Checkov precedent: every consumer meets the check on the same day. The environment variable can never make a blocking policy advisory, because a pipeline file is part of the pull request |
+| **Compared with the merge base, from a full-history checkout** | Changes the target branch gained after the fork are not the pull request's. GitHub Actions and Azure DevOps check out a merge commit, whose merge base with the target is the target's tip; GitLab CI checks out the branch. A shallow clone is deepened once, and only a clone that still reaches no merge base is compared with the target's tip, with a warning |
 
 ### A Failing Check Fails the Run
 

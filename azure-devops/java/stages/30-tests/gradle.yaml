@@ -11,6 +11,13 @@ stages:
     displayName: 'tests'
     condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
     jobs:
+      # Does this pull request worsen the shape of the test suite? Pull requests only; advisory
+      # unless the target branch's `.test-pyramid` says `blocking true`. See
+      # azure-devops/global/stages/30-tests/test-pyramid.yaml and README.md, "Test Pyramid".
+      - template: '../../../global/stages/30-tests/test-pyramid.yaml'
+        parameters:
+          LANGUAGE: 'java'
+
       - job: 'test_all'
         displayName: 'test:all'
         variables:

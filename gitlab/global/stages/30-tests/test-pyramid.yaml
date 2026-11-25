@@ -1,0 +1,34 @@
+include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
+
+# Does this merge request worsen the shape of the test suite? Every test case of the target branch
+# (the merge base) and of the merge request is put in a tier -- unit, integration, functional or
+# e2e -- and the two suites are compared by the book: no tier may outnumber every tier below it, and
+# the suite stays within the reference mix (80/15/5 by default). See README.md, "Test Pyramid".
+#
+# A job of the tests stage, beside `test:all` rather than inside it or `quality:basic-checks`: it
+# judges the suite's shape without building or running anything, and as a code-check job its
+# failure would withhold the test results from the very merge request that changed the tests.
+# Merge requests only, because the verdict is relative to the target branch, which the checker reads
+# from CI_MERGE_REQUEST_TARGET_BRANCH_NAME.
+#
+# ADVISORY unless the TARGET branch's `.test-pyramid` says `blocking true`, so a merge request cannot
+# loosen the policy it is judged by; the CI/CD variable `TEST_PYRAMID_BLOCKING: 'true'` makes it
+# blocking too. Each language's tests stage extends this job with its `TEST_PYRAMID_LANGUAGE`. The
+# Go image carries the toolchain the checker is built with, and git; nothing of the project builds.
+.test-pyramid:
+  extends: '.scripts-repo'
+  image: 'golang:1.27.4@sha256:205c7636d74e0ffbe3d007162df7d74f859f5a8c8322dfb9f907977686c126cf'
+  stage: 'tests'
+  variables:
+    # The whole history: the merge request is compared with its merge base with the target branch.
+    GIT_DEPTH: 0
+  script:
+    - $SCRIPTS_DIR/global/scripts/tools/test-pyramid/run.sh
+  artifacts:
+    when: 'always'
+    paths:
+      - "$REPORT_PATH/test-pyramid/"
+  dependencies: [] # prevent from fetching artifacts
+  rules:
+    - if: "$CI_MERGE_REQUEST_IID"

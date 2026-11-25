@@ -44,7 +44,7 @@ const (
 // and returns the exit status.
 func Run(arguments []string, getenv func(string) string, stdout, stderr io.Writer) int {
 	setup := func(err error) int {
-		_, _ = fmt.Fprintf(stderr, "test-pyramid: %s\n", err)
+		_, _ = fmt.Fprintf(stderr, "test-pyramid: %s\n", neutralize(err.Error()))
 		return exitSetup
 	}
 	argument, err := targetArgument(arguments)
@@ -202,4 +202,19 @@ func (p publisher) publish(report entities.Report) int {
 		"The check is advisory here, so the job passes; 'blocking true' in the target branch's .test-pyramid "+
 		"makes it fail.\n", worsened)
 	return exitKept
+}
+
+// neutralize keeps an error message, which may quote a pull request's own `.test-pyramid`, from
+// being read by the platform as a command: GitHub Actions' `::` at the start of a line, Azure
+// DevOps' `##vso[` and `##[` anywhere in one.
+func neutralize(message string) string {
+	lines := strings.Split(message, "\n")
+	for index, line := range lines {
+		line = strings.NewReplacer("##vso[", "##vso?", "##[", "##?").Replace(line)
+		if strings.HasPrefix(strings.TrimLeft(line, " \t"), "::") {
+			line = "?" + line
+		}
+		lines[index] = line
+	}
+	return strings.Join(lines, "\n")
 }

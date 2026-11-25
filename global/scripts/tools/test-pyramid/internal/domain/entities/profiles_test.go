@@ -633,3 +633,58 @@ func TestProfilesPrecision(t *testing.T) {
 		},
 	})
 }
+
+// TestProfilesReviewedPrecision holds the classification the automated review of the pull request
+// that added the check questioned, each now pinned.
+func TestProfilesReviewedPrecision(t *testing.T) {
+	t.Parallel()
+	assertClassified(t, []classified{
+		{
+			"should keep a Cypress component spec under cypress/component with the unit tests",
+			"javascript",
+			"cypress/component/Button.cy.tsx",
+			"it('renders', () => {\n  cy.mount(<Button />);\n});\n",
+			entities.TierUnit,
+			"default",
+			1,
+		},
+		{
+			"should put a spec of Cypress's e2e folder in the e2e tier, whatever it calls",
+			"javascript",
+			"cypress/e2e/api.cy.ts",
+			"it('calls the API', () => {\n  cy.request('/api');\n});\n",
+			entities.TierE2E,
+			"path",
+			1,
+		},
+		{
+			"should read a Laravel request behind a chained helper as functional, over the database it resets",
+			"php",
+			"tests/Feature/ProfileTest.php",
+			"<?php\nclass ProfileTest extends TestCase\n{\n    use RefreshDatabase;\n\n    public function testShows(): void\n" +
+				"    {\n        $this->actingAs($user)->get('/profile');\n    }\n}\n",
+			entities.TierFunctional,
+			"evidence",
+			1,
+		},
+		{
+			"should not read a collaborator's method named like an HTTP verb as a request",
+			"php",
+			"tests/Unit/ServiceTest.php",
+			"<?php\nclass ServiceTest extends TestCase\n{\n    public function testDeletes(): void\n    {\n" +
+				"        $this->repository->delete(1);\n    }\n}\n",
+			entities.TierUnit,
+			"default",
+			1,
+		},
+		{
+			"should not read a Terraform override as a mock: the rest of the run still applies",
+			"terraform",
+			"modules/net/tests/override.tftest.hcl",
+			"run \"applies\" {\n  override_resource {\n    target = aws_instance.web\n  }\n}\n",
+			entities.TierIntegration,
+			"apply",
+			1,
+		},
+	})
+}

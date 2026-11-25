@@ -226,10 +226,11 @@ func javascriptProfile(shared []PathConvention) Profile {
 			)+
 				`|cy\.visit\(|@group\s+(e2e|acceptance)\b`,
 		),
+		// Cypress's end-to-end folders, never `cypress/component/`, where its component specs live.
 		Paths: paths(
 			`\.(int|integration)\.(test|spec)\.[cm]?[jt]sx?$`,
 			`\.functional\.(test|spec)\.[cm]?[jt]sx?$`,
-			`(^|/)(cypress|playwright)/`,
+			`(^|/)cypress/(e2e|integration|tests?|specs?)/|(^|/)playwright/`,
 		),
 		Conventions: shared,
 	}
@@ -259,8 +260,13 @@ func phpProfile(shared []PathConvention) Profile {
 				`|Illuminate\\Foundation\\Testing\\(RefreshDatabase|DatabaseMigrations|DatabaseTransactions|DatabaseTruncation|LazilyRefreshDatabase)`+
 				`|^\s*use\s+(RefreshDatabase|DatabaseMigrations|DatabaseTransactions|DatabaseTruncation|LazilyRefreshDatabase)[\s;,]`+
 				`|(extends|use)\s+[\w\\]*KernelTestCase\b|^\s*use\s+Testcontainers\\`,
+			// A request, also behind Laravel's chained helpers (`$this->actingAs($user)->get(...)`),
+			// never a method of a collaborator (`$this->repository->delete(...)`).
 			group(`functional|feature`)+
-				`|\$this->(get|post|put|patch|delete|options|json|call|getJson|postJson|putJson|patchJson|deleteJson|optionsJson)\(`+
+				`|\$this->((actingAs|be|withHeaders?|withToken|withBasicAuth|withCookies?|withSession|withMiddleware`+
+				`|withoutMiddleware|withExceptionHandling|withoutExceptionHandling|withServerVariables|withCredentials`+
+				`|followingRedirects|from)\(.*\)->)*`+
+				`(get|post|put|patch|delete|options|json|call|getJson|postJson|putJson|patchJson|deleteJson|optionsJson)\(`+
 				`|(extends|use)\s+[\w\\]*WebTestCase\b|(static|self)::createClient\(`,
 			// Pest's browser plugin drives a real browser through the global `visit()`, a function
 			// call, never a method (`$this->visit()` is BrowserKit's in-process crawler) nor a declaration.
@@ -373,11 +379,13 @@ func dartProfile(shared []PathConvention) Profile {
 }
 
 // terraformProfile, for `terraform test` and Terratest: each `run` block is a test case with a tier
-// of its own, as HashiCorp's testing guidance names them -- one in a file with a `mock_provider` or
-// an `override_*` block, or with `command = plan`, touches no real infrastructure and is a unit
-// test; any other applies with the real providers and is an integration test. `tests/e2e/` holds
-// the apply-time suite this repository runs on a disposable cluster. A Terratest test that applies
-// is end-to-end, one that only plans an integration test, one that reads HCL offline a unit test.
+// of its own, as HashiCorp's testing guidance names them -- one in a file with a `mock_provider`, or
+// with `command = plan`, touches no real infrastructure and is a unit test; any other applies with
+// the real providers and is an integration test. An `override_*` block does not mock: it replaces
+// the one resource, data source or module it names, and every other one of the run is real.
+// `tests/e2e/` holds the apply-time suite this repository runs on a disposable cluster. A Terratest
+// test that applies is end-to-end, one that only plans an integration test, one that reads HCL
+// offline a unit test.
 func terraformProfile(shared []PathConvention) Profile {
 	return Profile{
 		Language: "terraform",
@@ -386,7 +394,7 @@ func terraformProfile(shared []PathConvention) Profile {
 		Dialect:  DialectTerraform,
 		Run:      regexp.MustCompile(`^\s*run\s+"[^"]*"\s*\{`),
 		Plan:     regexp.MustCompile(`^\s*command\s*=\s*plan\b`),
-		Mock:     regexp.MustCompile(`^\s*(mock_provider|override_resource|override_data|override_module)\b`),
+		Mock:     regexp.MustCompile(`^\s*mock_provider\b`),
 		GoTest:   regexp.MustCompile(`^func\s+(\([^)]*\)\s*)?Test([^a-z]|$)`),
 		Skip:     regexp.MustCompile(`^func\s+TestMain\s*\(`),
 		Evidence: evidence(

@@ -150,3 +150,21 @@ func TestReportDirectory(t *testing.T) {
 		assert.Equal(t, "/work/repo/build/reports/test-pyramid", fallback)
 	})
 }
+
+func TestNeutralize(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should keep a quoted .test-pyramid from reading as a CI command", func(t *testing.T) {
+		t.Parallel()
+		// given
+		message := "line 1: unknown setting \"##vso[task.setvariable variable=x]1\"\n::error::forged\n" +
+			"  ::warning::indented\n##[error]formatted"
+
+		// when
+		neutralized := cli.Neutralize(message)
+
+		// then
+		assert.Equal(t, "line 1: unknown setting \"##vso?task.setvariable variable=x]1\"\n?::error::forged\n"+
+			"?  ::warning::indented\n##?error]formatted", neutralized)
+	})
+}

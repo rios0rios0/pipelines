@@ -125,3 +125,22 @@ func TestParsePolicy(t *testing.T) {
 		assert.Equal(t, second.String(), first.String())
 	})
 }
+
+func TestParsePolicySeparators(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should split a key from its value at a tab as at a space", func(t *testing.T) {
+		t.Parallel()
+		// given
+		text := "blocking\ttrue\nintegration\t^it/\n"
+
+		// when
+		policy, err := entities.ParsePolicy(text)
+
+		// then
+		require.NoError(t, err)
+		assert.True(t, policy.Blocking)
+		require.Len(t, policy.Rules, 1)
+		assert.Equal(t, "^it/", policy.Rules[0].Pattern.String())
+	})
+}

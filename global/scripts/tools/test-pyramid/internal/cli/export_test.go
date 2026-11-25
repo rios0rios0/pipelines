@@ -19,3 +19,8 @@ func ResolveTarget(argument string, getenv func(string) string, defaultBranch fu
 func ReportDirectory(root, path string) string {
 	return reportDirectory(root, path)
 }
+
+// Neutralize exposes neutralize to the external tests.
+func Neutralize(message string) string {
+	return neutralize(message)
+}

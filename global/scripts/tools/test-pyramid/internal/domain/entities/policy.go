@@ -55,7 +55,11 @@ func ParsePolicy(text string) (Policy, error) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		key, value, _ := strings.Cut(line, " ")
+		// The key ends at the first space or tab; the rest of the line is its value.
+		key, value := line, ""
+		if index := strings.IndexAny(line, " \t"); index >= 0 {
+			key, value = line[:index], line[index+1:]
+		}
 		if problem := parser.apply(key, strings.TrimSpace(value)); problem != "" {
 			problems = append(problems, fmt.Sprintf("line %d: %s", number+1, problem))
 		}

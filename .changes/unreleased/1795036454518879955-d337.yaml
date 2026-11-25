@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added `FREE_DISK_SPACE` (default `false`) to the Azure DevOps Go Docker pipeline (`go-docker.yaml`) and its tests stage: the `test:all` job then removes what a Go job never uses from its Microsoft-hosted agent before the tests run -- the Android SDK, the .NET SDKs (keeping the .NET runtime `PublishCodeCoverageResults@2` needs), GHC, Swift, the CodeQL bundles of the tool cache and the pre-pulled Docker images -- logging `df -h /` before and after and what each removal freed, skipping a path the image does not carry and never failing the job, for a module whose double compilation and integration-test images fill the agent past `Free disk space on / is lower than 5%`'
-time: '2026-11-18T21:14:14.518809681Z'

@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the Gitleaks runner adding the scanned project to the global `safe.directory` on a developer''s machine, where it stayed in `~/.gitconfig` after every scan, and the Dart runners doing the same for the Flutter SDK: the new `git_trust_directory` (`global/scripts/shared/git-config.sh`) still adds the directory to the global configuration, once, on a CI runner, and on a developer''s machine hands it to the run alone through `GIT_CONFIG_COUNT`/`KEY`/`VALUE`; `make test ONLY=gitleaks-safe-directory` runs the real runner against a repository git takes for another user''s'
-time: '2026-11-18T21:14:14.516206241Z'

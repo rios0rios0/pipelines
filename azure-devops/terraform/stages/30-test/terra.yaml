@@ -28,6 +28,13 @@ stages:
       # per run across the project.
       KIND_CLUSTER_NAME: "tfmod-e2e-$(Build.BuildId)"
     jobs:
+      # Does this pull request worsen the shape of the test suite? Pull requests only; advisory
+      # unless the target branch's `.test-pyramid` says `blocking true`. See
+      # azure-devops/global/stages/30-tests/test-pyramid.yaml and README.md, "Test Pyramid".
+      - template: '../../../global/stages/30-tests/test-pyramid.yaml'
+        parameters:
+          LANGUAGE: 'terraform'
+
       # =========================================================
       # Tier 0 -- plan-time smoke.
       # =========================================================

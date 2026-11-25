@@ -16,6 +16,8 @@
 # the pipelines checkout on every run (`global/scripts/shared/go-helper.sh`).
 
 SEMGREP_LANGUAGE ?= terraform
+# The suite `make test-pyramid` (common.mk) judges.
+export TEST_PYRAMID_LANGUAGE ?= terraform
 
 # Checkov joins `make sast` for infrastructure code. It is advisory until the
 # project sets `CHECKOV_BLOCKING = true`; see the `checkov` target in common.mk.

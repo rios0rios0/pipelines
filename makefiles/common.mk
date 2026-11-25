@@ -4,7 +4,7 @@
 #   SCRIPTS_DIR ?= $(HOME)/Development/github.com/rios0rios0/pipelines
 #   -include $(SCRIPTS_DIR)/makefiles/common.mk
 #
-# Targets provided: setup codeql semgrep hadolint shellcheck gitleaks checkov sast
+# Targets provided: setup codeql semgrep hadolint shellcheck gitleaks checkov sast test-pyramid
 #                   ansible-lint gitignore gitignore-check
 # Requires: SCRIPTS_DIR to be set. SEMGREP_LANGUAGE and CODEQL_LANGUAGE should be set by a language
 #           .mk file (e.g. golang.mk) or manually before including this file.
@@ -20,8 +20,10 @@
 #            SAST_TOOLS_EXTRA    appended to by language fragments; never set here
 #            CHECKOV_BLOCKING    `true` makes `checkov` fail on findings (default: advisory)
 #            CHECKOV_DIRECTORIES what `checkov` scans, space-separated (default: `.`)
+#            TEST_PYRAMID_LANGUAGE the suite `test-pyramid` judges, set by the language fragment
+#            TARGET_BRANCH       what `test-pyramid` compares with (default: the remote's default branch)
 
-.PHONY: setup codeql semgrep hadolint shellcheck gitleaks checkov ansible-lint sast gitignore gitignore-check
+.PHONY: setup codeql semgrep hadolint shellcheck gitleaks checkov ansible-lint sast gitignore gitignore-check test-pyramid
 
 # Bootstraps the local checkout of this repository that every other target
 # reads its scripts from.
@@ -225,3 +227,12 @@ gitignore:
 
 gitignore-check:
 	@$(SCRIPTS_DIR)/global/scripts/tools/gitignore/run.sh --check .
+
+# The test pyramid CI judges on every pull request (README.md, "Test Pyramid"): whether this branch
+# worsens the shape of its test suite against its merge base with TARGET_BRANCH (the default branch
+# of `origin` when unset) -- no tier outnumbering every tier below it, and the suite within the
+# reference mix. It judges the COMMITTED branch, so commit first. TEST_PYRAMID_LANGUAGE comes from
+# the language fragment; the exit status follows the target branch's `.test-pyramid`, advisory
+# unless it says `blocking true`.
+test-pyramid:
+	@$(SCRIPTS_DIR)/global/scripts/tools/test-pyramid/run.sh $(TARGET_BRANCH)

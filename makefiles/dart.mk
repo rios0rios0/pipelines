@@ -22,6 +22,8 @@
 # Google's release archive, and the toolchain is chosen from your pubspec.yaml.
 
 SEMGREP_LANGUAGE ?= dart
+# The suite `make test-pyramid` (common.mk) judges.
+export TEST_PYRAMID_LANGUAGE ?= dart
 export PREFIX ?= .
 export REPORT_PATH ?= ./reports
 

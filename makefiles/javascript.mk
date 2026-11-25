@@ -12,6 +12,8 @@
 
 CODEQL_LANGUAGE ?= javascript
 SEMGREP_LANGUAGE ?= javascript
+# The suite `make test-pyramid` (common.mk) judges.
+export TEST_PYRAMID_LANGUAGE ?= javascript
 
 .PHONY: lint format test
 

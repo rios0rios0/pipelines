@@ -61,6 +61,13 @@ stages:
     variables:
       REPORT_PATH: 'build/reports'
     jobs:
+      # Does this pull request worsen the shape of the test suite? Pull requests only; advisory
+      # unless the target branch's `.test-pyramid` says `blocking true`. See
+      # azure-devops/global/stages/30-tests/test-pyramid.yaml and README.md, "Test Pyramid".
+      - template: '../../../global/stages/30-tests/test-pyramid.yaml'
+        parameters:
+          LANGUAGE: 'terraform'
+
       # Single unified job that orchestrates both tiers of Terraform testing
       # behind one `test:all` entry: native `terraform test` over
       # `modules/*/tests/*.tftest.hcl`, plus the root modules

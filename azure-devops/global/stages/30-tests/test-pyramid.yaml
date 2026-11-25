@@ -1,0 +1,56 @@
+# Does this pull request worsen the shape of the test suite? Every test case of the target branch
+# (the merge base) and of the pull request is put in a tier -- unit, integration, functional or
+# e2e -- and the two suites are compared by the book: no tier may outnumber every tier below it, and
+# the suite stays within the reference mix (80/15/5 by default). See README.md, "Test Pyramid".
+#
+# A job of the tests stage, beside `test:all` rather than inside it or `quality:basic-checks`: it
+# judges the suite's shape without building or running anything, and as a code-check job its
+# failure would withhold the test results from the very pull request that changed the tests. Pull
+# requests only, because the verdict is relative to the target branch, which the checker reads from
+# SYSTEM_PULLREQUEST_TARGETBRANCH, an agent environment variable, never a `$(...)` macro.
+#
+# ADVISORY unless the TARGET branch's `.test-pyramid` says `blocking true`, so a pull request cannot
+# loosen the policy it is judged by; the pipeline variable `TEST_PYRAMID_BLOCKING: 'true'` makes it
+# blocking too, and reaches the script as an environment variable with no mapping here.
+parameters:
+  # The suite to judge: `go`, `python`, `java`, `javascript`, `dotnet`, `dart` or `terraform`.
+  - name: 'LANGUAGE'
+    type: 'string'
+
+jobs:
+  - job: 'test_pyramid'
+    displayName: 'test:pyramid'
+    condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))
+    steps:
+      # The whole history: the pull request is compared with its merge base with the target branch.
+      # The credentials stay for the checker's fetch of the target branch; without them it cannot
+      # reach a private repository.
+      - checkout: 'self'
+        fetchDepth: 0
+        fetchTags: false
+        persistCredentials: true
+
+      - template: '../../abstracts/scripts-repo.yaml'
+
+      # The checker is a Go helper built from the scripts checked out above, at least the `go`
+      # directive of their `go.mod`. The toolchain download can drop mid-way (`Failed to download
+      # version ... Aborted`); the task retries itself with a growing wait instead of failing.
+      - task: 'GoTool@0'
+        displayName: 'Use Go (the test-pyramid checker is a Go helper)'
+        retryCountOnTaskFailure: 3
+        inputs:
+          version: '1.27.4'
+
+      - script: $(Scripts.Directory)/global/scripts/tools/test-pyramid/run.sh
+        displayName: 'Check the test pyramid'
+        env:
+          TEST_PYRAMID_LANGUAGE: '${{ parameters.LANGUAGE }}'
+
+      # The per-file decisions, the summary and the JSON report. Named after the attempt: an artifact
+      # name is taken once per run, and a re-run of a failed job would otherwise fail on the upload.
+      - task: 'PublishPipelineArtifact@1'
+        inputs:
+          artifactName: 'test-pyramid-$(System.JobAttempt)'
+          targetPath: 'build/reports/test-pyramid'
+        displayName: 'Upload Report'
+        condition: succeededOrFailed()

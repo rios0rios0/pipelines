@@ -22,9 +22,9 @@ This repository provides comprehensive SDLC pipeline templates for GitHub Action
 
 **SAST Tools:** Gitleaks, CodeQL, Semgrep, Hadolint, ShellCheck, Checkov (IaC misconfiguration, Terraform pipelines; advisory unless `CHECKOV_BLOCKING` is `true`)
 **SCA Tools:** govulncheck (Go), Safety (Python), OWASP Dependency-Check (Java), yarn npm audit (JavaScript/Yarn), npm audit (JavaScript/npm), Composer Audit (PHP), bundler-audit (Ruby), OSV-Scanner (Dart, and container image rebuilds in the dependency-update checks)
-**Quality Tools:** SonarQube, Dependency Track, ansible-lint (Ansible playbooks, roles and collections; `make ansible-lint`, which an Ansible project calls from its own `lint`)
+**Quality Tools:** SonarQube, Dependency Track, ansible-lint (Ansible playbooks, roles and collections; `make ansible-lint`, which an Ansible project calls from its own `lint`), test-pyramid (`tests > test:pyramid` on every pull request: whether the change worsens the unit/integration/functional/e2e shape of the suite; advisory unless the target branch's `.test-pyramid` says `blocking true`; `make test-pyramid`)
 **Performance:** Security scans 2-10min, Container builds 5-30min
-**Architecture:** numbered stages 10 Code Check [lint + basic-checks] → 20 Security → 30 Tests → 35 Management → 40 Delivery → 50 Deployment
+**Architecture:** numbered stages 10 Code Check [lint + basic-checks] → 20 Security → 30 Tests [test:all + test:pyramid] → 35 Management → 40 Delivery → 50 Deployment
 
 ## Supply-Chain Pinning (non-negotiable)
 

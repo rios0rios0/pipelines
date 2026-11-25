@@ -12,6 +12,8 @@
 
 CODEQL_LANGUAGE ?= go
 SEMGREP_LANGUAGE ?= golang
+# The suite `make test-pyramid` (common.mk) judges.
+export TEST_PYRAMID_LANGUAGE ?= go
 export PREFIX ?= .
 export REPORT_PATH ?= ./reports
 

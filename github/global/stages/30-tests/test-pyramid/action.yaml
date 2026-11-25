@@ -1,0 +1,62 @@
+name: 'Test Pyramid'
+description: |
+  Judges whether a pull request worsens the repository's test pyramid. Every test case of the
+  target branch (the merge base) and of the pull request is put in a tier -- unit, integration,
+  functional or e2e -- by fixed rules per language and the repository's `.test-pyramid`, and the two
+  suites are compared by the book: no tier may outnumber every tier below it, and the suite stays
+  within the reference mix (Software Engineering at Google's 80/15/5 by default). A pull request is
+  held only to what it worsens. Static: nothing is built or run, both trees are read with git.
+
+  Advisory unless the TARGET branch's `.test-pyramid` says `blocking true`: a pull request cannot
+  loosen the policy it is judged by. See README.md, "Test Pyramid".
+
+inputs:
+  language:
+    required: true
+    description: |
+      The suite to judge: `go`, `python`, `java`, `javascript`, `php`, `ruby`, `dotnet`, `dart` or
+      `terraform`, space-separated for several. `languages` in `.test-pyramid` overrides it.
+
+runs:
+  using: 'composite'
+  steps:
+    # The whole history: the pull request is compared with its merge base with the target branch,
+    # which a shallow clone may not reach.
+    - name: 'Checkout code'
+      uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
+      with:
+        fetch-depth: 0
+
+    - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+
+    # The checker is a Go helper, built from the scripts checked out above, at least the `go`
+    # directive of their `go.mod`: setup-go sets `GOTOOLCHAIN=local`, so an older Go would refuse
+    # the module. No cache: the build downloads no module, and a restore on a self-hosted runner
+    # untars over files a previous job left behind (`make test ONLY=runner-cache-gating`).
+    - name: 'Setup Go'
+      uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
+      with:
+        go-version: '1.27.4'
+        cache: false
+
+    # The language reaches the script through `env:`, never interpolated into `run:`. The target
+    # branch is read from `GITHUB_BASE_REF`, which GitHub sets on every pull_request run.
+    - name: 'Check the test pyramid'
+      shell: 'bash'
+      env:
+        TEST_PYRAMID_LANGUAGE: "${{ inputs.language }}"
+      run: $SCRIPTS_DIR/global/scripts/tools/test-pyramid/run.sh
+
+    - name: 'Upload Report'
+      uses: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9' # v7.0.2
+      with:
+        name: 'test-pyramid'
+        path: 'build/reports/test-pyramid/'
+        if-no-files-found: 'warn'
+        # Never past the repository's own retention: a longer request is cut to it anyway, with a
+        # warning on every run (`.github/tests/test-report-uploads.sh`).
+        retention-days: "${{ github.retention_days < 10 && github.retention_days || 10 }}"
+      if: always()
+      # A refused upload (e.g. `Artifact storage quota has been hit`) must not fail the job: the
+      # report is evidence, and the step above already decided pass or fail.
+      continue-on-error: true

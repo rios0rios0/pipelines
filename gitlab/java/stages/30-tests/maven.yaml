@@ -1,6 +1,7 @@
 include:
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/default-variables.yaml'
   - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/java/abstracts/maven.yaml'
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/stages/30-tests/test-pyramid.yaml'
 
 test:all:
   extends: '.maven'
@@ -16,3 +17,11 @@ test:all:
       - "$REPORT_PATH/jacoco/test/html/*"
       - 'target/surefire-reports/TEST-*.xml'
       - 'target/failsafe-reports/TEST-*.xml'
+
+# Does this merge request worsen the shape of the test suite? Merge requests only; advisory
+# unless the target branch's `.test-pyramid` says `blocking true`. See
+# gitlab/global/stages/30-tests/test-pyramid.yaml and README.md, "Test Pyramid".
+test:pyramid:
+  extends: '.test-pyramid'
+  variables:
+    TEST_PYRAMID_LANGUAGE: 'java'

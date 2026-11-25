@@ -425,7 +425,8 @@ job, the management job every tests job, and a delivery or deployment job the wh
 ships. A run reads code-check -> security -> tests -> management -> delivery, the jobs of one stage
 in parallel, and a failed check stops the stages after it.
 
-`basic-checks` runs on pull requests only, as does the Go pipeline's `migration-order` check, and
+`basic-checks` runs on pull requests only, as do the Go pipeline's `migration-order` check and every
+pipeline's `tests > test:pyramid` (see "Test Pyramid"), and
 GitHub skips every job downstream of a skipped one unless its `if:` calls a status function, so
 every job past the first stage gates on
 `!cancelled() && !failure()`: it runs when a check was skipped by design, never when one failed,
@@ -2297,6 +2298,120 @@ Every pipeline includes **basic checks** that run in parallel with linting durin
 
    The rule is implemented four times — once inline per platform template, plus the standalone `global/scripts/shared/changelog-check.sh` — because `quality:basic-checks` runs in a minimal image holding only the consumer's repository and cannot reach this repository's scripts. `.github/tests/test-basic-checks.sh` runs the same fixtures against the shared script and asserts that all four still carry the chlog path and the automation arm, so the copies cannot drift apart quietly.
 
+### Test Pyramid
+
+Every pipeline with a test stage runs a **test-pyramid check** on pull requests: `tests > test:pyramid`
+on GitHub Actions, `test:pyramid` on GitLab CI (merge requests) and Azure DevOps. It answers one
+question: **does this pull request worsen the shape of the test suite?** Every test case of the
+target branch (the merge base) and of the pull request is put in a tier — unit, integration,
+functional or e2e — and the two suites are compared. Nothing is built or run: both trees are read
+with git, so the job takes seconds, and the same two commits always give the same verdict.
+
+#### The rules, by the book
+
+| Source | What it says | Used as |
+|---|---|---|
+| [Software Engineering at Google](https://abseil.io/resources/swe-book/html/ch11.html), ch. 11 (2020) | "around 80% ... unit tests ... 15% ... integration tests ... 5% end-to-end tests", by test-case count, "a very rough guideline"; functional, end-to-end and system tests share the large scope | the default reference mix, `80/15/5` |
+| [Google Testing Blog](https://testing.googleblog.com/2015/04/just-say-no-to-more-end-to-end-tests.html) (2015) | "As a good first guess, Google often suggests a 70/20/10 split" | the looser alternative, `mix 70/20/10` |
+| [Martin Fowler](https://martinfowler.com/bliki/TestPyramid.html), [Ham Vocke](https://martinfowler.com/articles/practical-test-pyramid.html), [Mike Cohn](https://www.mountaingoatsoftware.com/blog/the-forgotten-layer-of-the-test-automation-pyramid) | "many more low-level UnitTests than high level BroadStackTests"; "the more high-level you get the fewer tests you should have" — no numbers | the shape rule |
+
+Two rules, and a ratchet over each:
+
+- **Shape** — no tier holds more test cases than every tier below it combined. It is measured against
+  the sum of the lower tiers, not the tier right below, so a project that has no functional tier is
+  not condemned for a tier it does not use (an inverted suite is Google's "ice-cream cone").
+- **Mix** — the suite stays within the reference mix at two boundaries: integration and above
+  (20% by default), and functional plus e2e (5%). Each allowance is rounded up to a whole test, so a
+  small suite is never failed for holding one integration test. `mix off` judges the shape alone.
+- **Ratchet** — a pull request fails only for what it **worsens**: a tier's excess over the tiers
+  below it that grows, or a boundary's share that grows while the suite is past it. A target branch
+  that already breaks a rule does not hold every later pull request hostage; a pull request may leave
+  it as it is, or improve it.
+
+The verdict names the shape too: `pyramid`, `ice-cream cone`, `hourglass` (thin integration tier,
+large share past the mix — Google's other anti-pattern) or `top-heavy`.
+
+#### The four tiers, decided deterministically
+
+The tiers are ordered by **scope** — how much of the system a test exercises — and defined by the
+boundary a test crosses, not by what it is called (Microsoft's [L0–L4](https://learn.microsoft.com/en-us/devops/develop/shift-left-make-testing-fast-reliable)
+call a test with SQL "functional" where Google calls it "integration", so names cannot decide):
+
+| Tier | Exercises | By the book |
+|---|---|---|
+| unit | one unit, in one process, no I/O | Google small/narrow, Bazel `small`, Microsoft L0/L1 |
+| integration | a unit with a real collaborator beyond its process: a database, a container, a server on localhost | Google medium, Fowler's narrow integration test, Microsoft L2 |
+| functional | the application booted and driven through its public interface, below the UI | Fowler's subcutaneous test, Microsoft L3 |
+| e2e | the whole system through its outermost interface: a UI, a browser, a device | Fowler's broad-stack test, Google large, Microsoft L4 |
+
+Each test file is in **one** tier, decided by the first of these that says anything:
+
+1. a path rule of the target branch's `.test-pyramid` (first match wins, and may lower a tier);
+2. **evidence** in the file — the highest tier it *declares* (the build tag, test category or marker
+   the test runner selects on) or *crosses* (a browser driver, an in-process HTTP client of the
+   application, a container); a test double never raises a tier;
+3. its **path** — the language's naming conventions, then the shared ones (`integration/`,
+   `e2e-tests/`, `*_integration_test.*`, `*IntegrationTest.*`), whole words only (`integrations/`
+   names nothing);
+4. otherwise, unit.
+
+| Language | Test cases counted | Declarations | Signatures (examples) |
+|---|---|---|---|
+| Go | `func Test…`, suite methods; not `TestMain` | `//go:build integration` / `functional` / `e2e` (paths are not read) | Testcontainers, dockertest → integration; httpexpect → functional; chromedp, rod → e2e |
+| Python | `def test…` | `@pytest.mark.integration` / `functional` / `e2e`; `medium` / `large` sizes; `django_db` | Testcontainers → integration; FastAPI's `TestClient`, Django's client → functional; Playwright, Selenium → e2e |
+| Java/Kotlin | `@Test`, `@ParameterizedTest`, …; Spock features | `@Tag("integration")`, JUnit 4 categories; `src/integrationTest/`, `*IT.java` | `@SpringBootTest`, Testcontainers → integration; MockMvc, WebTestClient, RestAssured → functional; Selenium, Playwright → e2e |
+| JavaScript/TypeScript | `it(…)`, `test(…)`, `.each`; not `describe` | `@group integration`; `*.int.test.*`, `cypress/`, `playwright/` | Testcontainers → integration; supertest → functional; Playwright, `cy.visit`, WebdriverIO → e2e |
+| PHP | PHPUnit `test…` methods, `@test`, `#[Test]` (once each); Pest | `@group`, `#[Group]`; `tests/Feature/` → functional | `RefreshDatabase` → integration; `$this->getJson()`, `WebTestCase` → functional; Dusk, Panther → e2e |
+| Ruby | `it`, `specify`, `scenario`; Minitest | `type: :request` / `:system`; `spec/system/`, `spec/requests/` | Rails `IntegrationTest` → functional; Capybara `visit` → e2e |
+| .NET | one per test method, however many attributes | `[Trait("Category", "Integration")]`, NUnit and MSTest categories; `*.IntegrationTests/` | Testcontainers → integration; `WebApplicationFactory` → functional; Playwright → e2e |
+| Dart/Flutter | `test(…)`, `testWidgets(…)`, `blocTest(…)` | `@Tags(['integration'])`; `integration_test/` → e2e | `package:integration_test`, Patrol → e2e |
+| Terraform | each `run` block, each Terratest test | `mock_provider` or `command = plan` → unit, any other run → integration; `tests/e2e/` → e2e | Terratest `InitAndApply` → e2e |
+
+The full rules are data in `global/scripts/tools/test-pyramid/internal/domain/entities/profiles.go`,
+each pinned by a unit test. The report records, for every test file of both trees, its tier and the
+rule that put it there (`<language>-target.tsv`, `<language>-pull-request.tsv`).
+
+#### Where it runs, and why
+
+A job of its own in the **tests stage**, beside `test:all` — neither inside `basic-checks` nor
+inside `test:all`:
+
+- `basic-checks` is change hygiene: language-agnostic, pure git plumbing in a minimal image that
+  never fetches this repository's scripts. A check that knows every language's test conventions is
+  a different concern, and inlining it there four times over is not maintainable.
+- `test:all` *executes* the suite; this *judges its shape*, with no build. Folding it in would make
+  one red check mean two things, and `test:all` also runs on the default branch, where there is no
+  pull request to judge.
+- Not the code-check stage either: a failed code-check job stops the security and test stages, so
+  the very pull request that changed the tests would get no test results. In the tests stage it
+  costs no wall-clock time — `test:all` is the long pole — and it still blocks delivery.
+
+#### Advisory first, and the target branch decides
+
+The check reports a worsened pyramid — in the log, a warning annotation, the job summary and the
+`test-pyramid` report — and **passes**, until the target branch's `.test-pyramid` says
+`blocking true`. The policy is read from the **target branch**, never from the pull request, so a
+pull request cannot turn blocking off, or reclassify its own tests, to get past the rules it is
+judged by; a change to the file applies once it is merged, and the pull request that makes it is
+only checked for being valid. `TEST_PYRAMID_BLOCKING: 'true'`, a CI/CD variable on GitLab or a
+pipeline variable on Azure DevOps, makes the check blocking whatever the file says.
+
+```text
+# .test-pyramid, at the repository's root. A comment is a line of its own.
+blocking true
+# unit / integration / functional+e2e, by test-case count; `off` judges the shape alone
+mix 80/15/5
+# the suites to judge, instead of the one the pipeline names
+languages go javascript
+# path rules, `<tier> <regular expression>`, the first match winning; `ignore` leaves a file out
+e2e ^qa/
+ignore ^benchmarks/
+```
+
+An unknown setting, a value it does not take or a setting given twice is an error, never a setting
+quietly ignored; a `#` after a setting is part of its value, since a path rule may need one. Locally, `make test-pyramid` (`common.mk`, with the language from your language
+fragment) judges the committed branch against `TARGET_BRANCH`.
+
 ### OWASP Dependency-Check and the NVD Database
 
 The Java `sca:dependency-check` job scans dependencies against a local copy of the [NVD](https://nvd.nist.gov/) (~350,000 CVE records). Building that copy is the only slow part of the job, and the NVD API rate limits it **per source IP**: 5 requests per rolling 30 seconds anonymously, 50 with an API key. Hosted CI runners share their egress IPs with every other project on the platform, so an unauthenticated first run spends most of its time in `429` backoff.
@@ -2917,6 +3032,7 @@ This gives you the following targets for free:
 | `make setup` | `common.mk`       | Clone or update the pipelines repository |
 | `make sast`  | `common.mk`       | Run all security SAST tools — **fails** on findings |
 | `make ansible-lint` | `common.mk` | Lint an Ansible project with the pinned ansible-lint — **fails** on violations; not part of `sast` |
+| `make test-pyramid` | `common.mk` | Judge whether the branch worsens its test pyramid against `TARGET_BRANCH` (see "Test Pyramid") |
 | `make lint`  | `<language>.mk`   | Run language-specific linter             |
 | `make test`  | `<language>.mk`   | Run language-specific tests              |
 

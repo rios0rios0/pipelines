@@ -569,3 +569,67 @@ func TestProfileRules(t *testing.T) {
 		assert.Zero(t, classification.Counts.Total())
 	})
 }
+
+// TestProfilesPrecision holds what must NOT raise a tier, and the test-scoped directory forms that
+// must: a signature or a path that fires on a unit test blames a pull request for a shape it did
+// not make.
+func TestProfilesPrecision(t *testing.T) {
+	t.Parallel()
+	assertClassified(t, []classified{
+		{
+			"should not read a PHP method named visit as a browser",
+			"php",
+			"tests/Unit/VisitorTest.php",
+			"<?php\nclass VisitorTest extends TestCase\n{\n    public function visit($node) {}\n" +
+				"    public function testVisits(): void {}\n}\n",
+			entities.TierUnit,
+			"default",
+			1,
+		},
+		{
+			"should not read a functional-programming folder as the functional tier",
+			"javascript",
+			"src/utils/functional/compose.test.ts",
+			"it('composes', () => {});\n",
+			entities.TierUnit,
+			"default",
+			1,
+		},
+		{
+			"should not read a Java test of an integration package, mirrored under src/test/java, as integration",
+			"java",
+			"src/test/java/com/acme/integration/SlackClientTest.java",
+			"class SlackClientTest {\n  @Test void posts() {}\n}\n",
+			entities.TierUnit,
+			"default",
+			1,
+		},
+		{
+			"should not read a production integration module's unit tests as integration",
+			"javascript",
+			"src/integration/slack.test.ts",
+			"it('posts', () => {});\n",
+			entities.TierUnit,
+			"default",
+			1,
+		},
+		{
+			"should read a functional directory directly below a test root",
+			"python",
+			"tests/functional/test_api.py",
+			"def test_lists():\n    pass\n",
+			entities.TierFunctional,
+			"path",
+			1,
+		},
+		{
+			"should read a test project whose name puts integration after tests",
+			"dotnet",
+			"tests/MyApp.Tests.Integration/RepoTests.cs",
+			"public class RepoTests\n{\n    [Fact]\n    public void Saves() {}\n}\n",
+			entities.TierIntegration,
+			"path",
+			1,
+		},
+	})
+}

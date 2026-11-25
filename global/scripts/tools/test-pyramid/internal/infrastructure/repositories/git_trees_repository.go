@@ -39,13 +39,20 @@ func NewGitTreesRepository(directory string) (*GitTreesRepository, error) {
 	return &GitTreesRepository{git: git}, nil
 }
 
-// FindFileByPath is a file's content at a commit, and whether the commit holds it.
+// FindFileByPath is a file's content at a commit, and whether the commit holds it as a regular
+// file. Absence is an empty listing and a git that fails is an error, so a failure can never be
+// read as "no such file" -- for `.test-pyramid`, as an advisory policy nobody wrote.
 func (r *GitTreesRepository) FindFileByPath(commit, path string) (string, bool, error) {
-	object := commit + ":" + path
-	if _, err := r.git.output("cat-file", "-e", object); err != nil {
-		return "", false, nil //nolint:nilerr // `cat-file -e` fails exactly when the commit does not hold the file
+	listing, err := r.git.raw("ls-tree", "-z", "--full-tree", commit, "--", path)
+	if err != nil {
+		return "", false, err
 	}
-	content, err := r.git.raw(nil, "cat-file", "blob", object)
+	header, _, listed := strings.Cut(strings.TrimSuffix(listing, "\x00"), "\t")
+	fields := strings.Fields(header)
+	if !listed || len(fields) != treeFields || (fields[0] != regularFile && fields[0] != executableFile) {
+		return "", false, nil
+	}
+	content, err := r.git.raw("cat-file", "blob", fields[2])
 	if err != nil {
 		return "", true, err
 	}
@@ -58,7 +65,7 @@ func (r *GitTreesRepository) FindAllFilesByFilter(
 	commit string,
 	keep func(path string) bool,
 ) ([]entities.TestFile, error) {
-	listing, err := r.git.raw(nil, "ls-tree", "-r", "-z", "--full-tree", commit)
+	listing, err := r.git.raw("ls-tree", "-r", "-z", "--full-tree", commit)
 	if err != nil {
 		return nil, err
 	}

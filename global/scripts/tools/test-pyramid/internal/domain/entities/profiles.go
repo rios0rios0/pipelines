@@ -26,30 +26,42 @@ func Profiles() map[string]Profile {
 
 // sharedConventions are the naming conventions every language but Go shares, matched on the
 // lower-cased directory and file name, and on the file name as written for CamelCase.
+//
+// An e2e word names a tier wherever it is a whole directory segment: no production package is
+// called `e2e/` or `end-to-end/`. `integration` and `functional` are ordinary package names too --
+// an `integration` module of third-party clients, a `functional/` folder of utilities, mirrored
+// under every Java `src/test/java/` -- so they name a tier only beside "test": `integration-tests/`,
+// `MyApp.IntegrationTests/`, `MyApp.Tests.Integration/`, or directly below a test root,
+// `tests/integration/`.
 func sharedConventions() []PathConvention {
-	convention := func(tier Tier, words, tokens, camel string) PathConvention {
+	convention := func(tier Tier, directory, tokens, camel string) PathConvention {
 		return PathConvention{
 			Tier:      tier,
-			Directory: regexp.MustCompile(`(^|/)([^/]*[._-])?(` + words + `)([._-][^/]*)?/`),
+			Directory: regexp.MustCompile(directory),
 			Token:     regexp.MustCompile(`(^|[._-])(` + tokens + `)[._-]`),
 			Camel:     regexp.MustCompile(`(^|[a-z0-9])(` + camel + `)\.\w+$`),
 		}
 	}
+	beside := func(word string) string {
+		return `(^|/)([^/]*[._-])?` + word + `[._-]?tests?([._-][^/]*)?/` +
+			`|(^|/)[^/]*tests?[._-]` + word + `([._-][^/]*)?/` +
+			`|(^|/)(tests?|specs?|__tests__)/` + word + `/`
+	}
 	return []PathConvention{
 		convention(
 			TierE2E,
-			`e2e|e2etests?|end-to-end|end_to_end|endtoend|endtoendtests?|acceptance|acceptancetests?|uitests?|ui-tests?|ui_tests?`,
+			`(^|/)([^/]*[._-])?(e2e|e2etests?|end-to-end|end_to_end|endtoend|endtoendtests?|acceptance|acceptancetests?`+
+				`|uitests?|ui-tests?|ui_tests?)([._-][^/]*)?/`,
 			`e2e|end-to-end|end_to_end|endtoend|acceptance`,
 			`(E2E|E2e|EndToEnd|Acceptance)(Test|Tests|Spec|Specs|IT)?`,
 		),
-		convention(TierFunctional,
-			`functional|functionaltests?`,
-			`functional`,
-			`Functional(Test|Tests|Spec|Specs)`),
-		convention(TierIntegration,
-			`integration|integrationtests?`,
+		convention(TierFunctional, beside("functional"), `functional`, `Functional(Test|Tests|Spec|Specs)`),
+		convention(
+			TierIntegration,
+			beside("integration"),
 			`integration`,
-			`Integration(Test|Tests|Spec|Specs)|IT|ITCase`),
+			`Integration(Test|Tests|Spec|Specs)|IT|ITCase`,
+		),
 	}
 }
 
@@ -251,9 +263,9 @@ func phpProfile(shared []PathConvention) Profile {
 				`|\$this->(get|post|put|patch|delete|options|json|call|getJson|postJson|putJson|patchJson|deleteJson|optionsJson)\(`+
 				`|(extends|use)\s+[\w\\]*WebTestCase\b|(static|self)::createClient\(`,
 			// Pest's browser plugin drives a real browser through the global `visit()`, a function
-			// call rather than a method (`$this->visit()` is BrowserKit's in-process crawler).
+			// call, never a method (`$this->visit()` is BrowserKit's in-process crawler) nor a declaration.
 			group(`e2e|acceptance|browser`)+
-				`|(extends|use)\s+[\w\\]*(DuskTestCase|PantherTestCase)\b|\$this->browse\(|(^|[^\w>:$])visit\(`+
+				`|(extends|use)\s+[\w\\]*(DuskTestCase|PantherTestCase)\b|\$this->browse\(|(^\s*|[=(,]\s*|\breturn\s+)visit\(`+
 				`|^\s*use\s+(Facebook\\WebDriver|Symfony\\Component\\Panther|Laravel\\Dusk)`,
 		),
 		Paths: paths(

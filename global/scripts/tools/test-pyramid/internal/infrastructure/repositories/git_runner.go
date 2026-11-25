@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -60,16 +59,16 @@ func FindRepositoryRoot(directory string) (string, error) {
 
 // output is what a git command prints, its trailing newline removed.
 func (g *gitRunner) output(arguments ...string) (string, error) {
-	stdout, err := g.raw(nil, arguments...)
+	stdout, err := g.raw(arguments...)
 	return strings.TrimRight(stdout, "\n"), err
 }
 
 // raw is what a git command prints, as it prints it.
-func (g *gitRunner) raw(stdin io.Reader, arguments ...string) (string, error) {
+func (g *gitRunner) raw(arguments ...string) (string, error) {
 	command, cancel := g.command(arguments...)
 	defer cancel()
 	var stdout, stderr bytes.Buffer
-	command.Stdin, command.Stdout, command.Stderr = stdin, &stdout, &stderr
+	command.Stdout, command.Stderr = &stdout, &stderr
 	if err := command.Run(); err != nil {
 		return stdout.String(), fmt.Errorf("git %s: %w: %s", arguments[0], err, tail(stderr.String()))
 	}

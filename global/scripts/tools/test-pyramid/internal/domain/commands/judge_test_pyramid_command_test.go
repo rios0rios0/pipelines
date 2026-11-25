@@ -200,7 +200,7 @@ func TestJudgeTestPyramidCommand(t *testing.T) {
 
 		// then
 		require.Equal(t, "OnError", result.called)
-		assert.ErrorContains(t, result.err, "the .test-pyramid of the target branch is invalid")
+		require.ErrorContains(t, result.err, "the .test-pyramid of the target branch is invalid")
 		assert.ErrorContains(t, result.err, "the one that fixes it included: merge that fix past this check")
 	})
 

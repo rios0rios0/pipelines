@@ -2350,9 +2350,10 @@ Each test file is in **one** tier, decided by the first of these that says anyth
 2. **evidence** in the file — the highest tier it *declares* (the build tag, test category or marker
    the test runner selects on) or *crosses* (a browser driver, an in-process HTTP client of the
    application, a container); a test double never raises a tier;
-3. its **path** — the language's naming conventions, then the shared ones (`integration/`,
-   `e2e-tests/`, `*_integration_test.*`, `*IntegrationTest.*`), whole words only (`integrations/`
-   names nothing);
+3. its **path** — the language's naming conventions, then the shared ones, whole words only:
+   `e2e/` or `acceptance/` anywhere, but `integration` and `functional` — ordinary package names
+   too — only beside "test" (`integration-tests/`, `MyApp.IntegrationTests/`, `tests/integration/`),
+   and a file name's token or suffix (`*_integration_test.*`, `*.e2e.ts`, `*IntegrationTest.*`);
 4. otherwise, unit.
 
 | Language | Test cases counted | Declarations | Signatures (examples) |

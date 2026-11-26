@@ -59,6 +59,7 @@ there is no target to add and no list to keep in step.
 | `go-integration-scope` | Which packages the Go runner's integration phase selects, and the timeout and environment (`GO_TEST_INTEGRATION_ENV`) it runs them under |
 | `go-module-toolchain` | That every go.mod toolchain directive is readable by the images/analysers/workflows that consume it |
 | `go-project-config` | How the Go runners load a project's `config.sh`, whether it writes the global git configuration or exports its settings: in the process of the CodeQL build, with a global write isolated to a file of the scan on a developer's machine; left in the global configuration for later steps by the CI init step; sourced, not executed, by the GitLab CI SAM delivery |
+| `go-test-race` | The Go runner's opt-in race detector (`GO_TEST_RACE`: `off` by default, `unit` or `true` for the unit phase, `all` for both; fixtures that race on purpose, so each case pins which phases ran `-race`; the failure without a C compiler or with cgo off; `atomic` coverage), and the GitHub `race` input that carries it |
 | `go-test-selection` | The Go runner's `affected` test selection (`selection.sh`: the packages a change reaches through the dependency graph, the fall-backs to everything, a documentation-only change running nothing) and the `test_selection` input that carries it |
 | `go-tmpdir-modcache` | That the Go module cache stays out of $TMPDIR |
 | `go-tool-staleness` | That a source-built Go tool (govulncheck) is rebuilt when its toolchain/pin moves |

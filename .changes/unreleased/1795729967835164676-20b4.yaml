@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added `GO_TEST_RACE` to the shared Go test run, and the `race` input that carries it on `go.yaml`, `go-docker.yaml`, `go-flyio.yaml` and `go-render.yaml`: Go''s race detector, which no test run used, so a real data race in a service showed up only on a developer''s machine. It is opt-in and off by default; `unit` (or `true`) runs the unit phase with `-race`, and `all` the integration phase too, which about doubled a database-backed integration phase. `-race` needs cgo and a C compiler, so the run fails with the reason when either is missing, and it records `atomic` coverage while the detector is on; `make test ONLY=go-test-race` holds it'
+time: '2026-11-26T21:52:47.835104186Z'

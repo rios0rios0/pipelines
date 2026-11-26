@@ -194,6 +194,18 @@ on:
           On GitLab CI and Azure DevOps the runner reads `GO_TEST_SELECTION` and
           `GO_TEST_SELECTION_BASE` (GitLab merge requests fall back to
           `CI_MERGE_REQUEST_DIFF_BASE_SHA`).
+      race:
+        type: 'string'
+        required: false
+        default: 'off'
+        description: |
+          Go's race detector for the test job: `off` (the default), `unit` (`-race` in the unit phase;
+          `true` means the same) or `all` (in both phases). It reports two goroutines touching the
+          same memory without synchronisation, which no test run caught before. `all` about doubles a
+          database-backed integration phase, so it is a separate choice from `unit`. It needs cgo
+          and a C compiler, which the hosted runners have, and the job fails saying so when either is
+          missing; the coverage profiles are recorded in `atomic` mode while it is on. On GitLab CI
+          and Azure DevOps the runner reads the same thing from a `GO_TEST_RACE` variable.
       openapi_sync_path:
         type: 'string'
         required: false
@@ -378,6 +390,7 @@ jobs:
           integration_timeout: "${{ inputs.integration_timeout }}"
           integration_env: "${{ inputs.integration_env }}"
           test_selection: "${{ inputs.test_selection }}"
+          race: "${{ inputs.race }}"
 
       - name: 'Test Results'
         if: "always() && hashFiles('junit.xml') != ''"

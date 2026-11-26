@@ -2179,7 +2179,7 @@ Set `enforce` in a project that wants the gate, such as one the refresh does not
 
 | Tool                 | Purpose                                 | Script Location                                               | Configuration         |
 |----------------------|-----------------------------------------|---------------------------------------------------------------|-----------------------|
-| **Basic Checks**     | PR/MR rebase and changelog verification | `global/scripts/shared/rebase-check.sh`, `changelog-check.sh` | Auto-configured       |
+| **Basic Checks**     | PR/MR rebase and changelog verification | Inline in each provider's `stages/10-code-check/basic-checks` template; `global/scripts/shared/rebase-check.sh` and `changelog-check.sh` are standalone helpers that no template calls | Auto-configured       |
 | **ansible-lint**     | Ansible playbook, role and collection linting — [`make ansible-lint`](#make-ansible-lint-in-an-ansible-project) | `global/scripts/tools/ansible-lint/` | `.ansible-lint`       |
 | **SonarQube**        | Code quality & security                 | `global/scripts/tools/sonarqube/`                             | Project settings      |
 | **Dependency Track** | SBOM tracking                           | `global/scripts/tools/dependency-track/`                      | Environment variables |

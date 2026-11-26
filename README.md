@@ -2517,6 +2517,25 @@ Optional environment variables:
   `GOLANGCI_LINT_TIMEOUT` (for example `45m`).
 - Exit code 4 means the time ran out, not that anything was found.
 
+**A project's own `.golangci.yml`** is merged onto the shared configuration, and the result is
+checked with `golangci-lint config verify` before the lint runs, so an invalid key fails with its
+name. From a version 2 file, every section arrives:
+
+- `linters.enable` and `formatters.enable` add to the shared lists.
+- `linters.disable` is written, and its linters leave `enable`. That is what turns off a linter of
+  v2's default set, such as `errcheck`.
+- `linters.default` is the project's.
+- `linters.settings`, `formatters.settings` (its goimports `local-prefixes`, say), `run`, `issues`,
+  `output` and `severity` are deep-merged. The project's keys win, and a list replaces the shared
+  one.
+- In `linters.exclusions` and `formatters.exclusions`, the project's `rules`, `paths`,
+  `paths-except` and `presets` are added to the shared ones, never replacing them.
+- The lint's own flags still win: `--timeout`, `--max-issues-per-linter` and `--max-same-issues`.
+
+A version 1 file contributes `linters.enable`, `linters.disable` and `linters-settings` only, because
+its other sections mean something else in version 2. `golangci-lint migrate` converts it.
+`make test ONLY=yaml-merge` holds the merge.
+
 ##### Goose Migration Order (`quality:migration-order`)
 
 Every Go pipeline fails a pull request whose new [goose](https://github.com/pressly/goose) migration

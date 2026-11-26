@@ -98,7 +98,7 @@ there is no target to add and no list to keep in step.
 | `var-catalog` | The shared variable-declaration generator |
 | `workflow-composition` | The GitHub Actions workflow composition standard |
 | `working-directory` | The `working_directory` threading contract (bundler/npm/yarn and their variants) |
-| `yaml-merge` | Golangci-lint/run.sh (config merge, binary reuse and install, toolchain guard) |
+| `yaml-merge` | Golangci-lint/run.sh (config merge: every section of a v2 `.golangci.yml`, `linters.disable` written, exclusions added to the shared ones, a v1 file's v2-incompatible sections left out; `config verify` before the lint; binary reuse and install, toolchain guard) |
 | `yarn-test-shards` | The Yarn workflows' opt-in `test_shards` (the input on `yarn.yaml` and every workflow composed on it; the default `tests > test:all` equal to `.github/tests/fixtures/yarn-test-all.yaml` but for `&& inputs.test_shards <= 1`; one job per check name, `tests > test:all (merged)` gated -- evaluated, not matched -- to run and fail after a failed shard; the shard table; the shards' and the merge's steps; the coverage hand-off; `Verify the shards` and the staging step executed; the documentation) |
 
 Test scripts live in `.github/tests/`. The CI workflow (`.github/workflows/default.yaml`) validates YAML syntax, script permissions, and runs ShellCheck on all shell scripts. A suite whose checks parse YAML or read files structurally keeps them as Go test support under `internal/testsuites/<suite>/`, which the suite builds from the checkout for its run (`go build -C "$SCRIPTS_DIR" ...`) and stops on if the build fails; `make test ONLY=go-helpers` runs their unit tests.

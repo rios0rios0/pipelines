@@ -91,6 +91,12 @@ if [ -f ".golangci.yml" ]; then
     done
     filter="${filter})))"
     "$YQ" eval "$filter" -i "$mergedYamlFile" || die 'could not remove the disabled linters'
+
+    # Removing a linter from `enable` is not enough: a linter of v2's default set
+    # (`linters.default`, `standard` when unset -- errcheck, govet, ineffassign, staticcheck,
+    # unused) stays on unless `linters.disable` names it. So the list is written too.
+    "$YQ" eval '.linters.disable = (((.linters.disable // []) + (load(".golangci.yml").linters.disable // [])) | unique)' \
+      -i "$mergedYamlFile" || die 'could not write the disabled linters'
   fi
 
   # Merge linter settings using yq.
@@ -106,6 +112,69 @@ if [ -f ".golangci.yml" ]; then
     "$YQ" eval '.linters.settings *= load("'"$mergedYamlFile"'.settings.tmp")' -i "$mergedYamlFile" \
       || die 'could not merge linters-settings into linters.settings'
     rm -f "$mergedYamlFile.settings.tmp"
+  fi
+
+  # Every other section of a v2 configuration (`version: "2"`), which the merge used to drop:
+  # a repository's `formatters.settings` (its own goimports `local-prefixes`), its v2
+  # `linters.settings`, its `run` (build tags), its `issues` and its exclusions never reached
+  # the run, so a repository that needed one kept a lint script of its own. Each lands on the
+  # shared configuration as follows:
+  #
+  #   linters.default                    the repository's, when it sets one
+  #   linters.settings                   deep-merged (the repository's keys win, a list replaces)
+  #   linters.exclusions,                the repository's scalars win; its `rules`, `paths`,
+  #   formatters.exclusions              `paths-except` and `presets` are ADDED to the shared ones,
+  #                                      never replace them
+  #   formatters.enable                  added to the shared ones
+  #   formatters.settings, run, issues,  deep-merged (the repository's keys win, a list replaces);
+  #   output, severity                   the command-line flags the lint run passes below
+  #                                      (`--timeout`, `--max-issues-per-linter`,
+  #                                      `--max-same-issues`) still win over a section
+  #
+  # A v1 configuration keeps its v1 meaning for these sections (`run.skip-dirs`,
+  # `issues.exclude-rules`...), which v2 does not read, so only the three merges above apply to
+  # it; `golangci-lint migrate` turns it into v2. Either way the merged file is checked with
+  # `golangci-lint config verify` before the lint runs.
+  repo_version=$("$YQ" eval '.version // ""' ".golangci.yml") || die 'could not read .version from .golangci.yml'
+  if [ "$repo_version" = '2' ]; then
+    repo_has() {
+      [ "$("$YQ" eval "($1) != null" ".golangci.yml")" = 'true' ]
+    }
+    merge_into() {
+      "$YQ" eval "$1" -i "$mergedYamlFile" || die "could not merge $2 from .golangci.yml"
+    }
+    if repo_has '.linters.default'; then
+      merge_into '.linters.default = load(".golangci.yml").linters.default' 'linters.default'
+    fi
+    if repo_has '.linters.settings'; then
+      merge_into '.linters.settings *= load(".golangci.yml").linters.settings' 'linters.settings'
+    fi
+    if repo_has '.formatters.enable'; then
+      merge_into '.formatters.enable = (((.formatters.enable // []) + load(".golangci.yml").formatters.enable) | unique)' \
+        'formatters.enable'
+    fi
+    for section in .formatters.settings .run .issues .output .severity; do
+      if repo_has "$section"; then
+        merge_into "$section *= load(\".golangci.yml\")$section" "${section#.}"
+      fi
+    done
+    for exclusions in .linters.exclusions .formatters.exclusions; do
+      repo_has "$exclusions" || continue
+      merge_into "$exclusions *= (load(\".golangci.yml\")$exclusions | del(.rules, .paths, .\"paths-except\", .presets))" \
+        "${exclusions#.}"
+      for list in rules paths paths-except presets; do
+        if repo_has "$exclusions.\"$list\""; then
+          merge_into "$exclusions.\"$list\" = (($exclusions.\"$list\" // []) + load(\".golangci.yml\")$exclusions.\"$list\")" \
+            "${exclusions#.}.$list"
+        fi
+      done
+      if repo_has "$exclusions.presets"; then
+        merge_into "$exclusions.presets |= unique" "${exclusions#.}.presets"
+      fi
+    done
+  elif [ -n "$repo_version" ] || "$YQ" eval 'has("run") or has("issues") or has("output") or has("formatters")' ".golangci.yml" | grep -q true; then
+    echo "NOTE: .golangci.yml is not a version \"2\" configuration, so only linters.enable, linters.disable and"
+    echo "      linters-settings are merged from it; \`golangci-lint migrate\` converts it to version 2."
   fi
 else
   cp "$defaultYamlFile" "$mergedYamlFile"
@@ -244,6 +313,17 @@ if go_minor_is_newer "${GO_TOOLCHAIN#go}" "${GOLANGCI_BUILT_WITH#go}"; then
     "it was built with. Bump GOLANGCI_LINT_VERSION in global/scripts/shared/pinned-versions.sh" \
     "to a release built with $GO_TOOLCHAIN or newer."
   rm -f "$mergedYamlFile"
+  exit 1
+fi
+
+# The merged configuration is checked against golangci-lint's own schema before anything runs. A
+# section a repository wrote for another major version, or a merge that produced a shape the linter
+# does not read, then fails here with the key named, instead of being ignored without a word or
+# failing the run as a configuration error halfway through. The schema ships inside the binary, so
+# this needs no network.
+if ! "$GOLANGCI_LINT" config verify --config "$mergedYamlFile"; then
+  rm -f "$mergedYamlFile"
+  echo "::error::the merged golangci-lint configuration does not validate (above); check the repository's .golangci.yml"
   exit 1
 fi
 

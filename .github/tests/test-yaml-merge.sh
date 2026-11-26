@@ -736,6 +736,23 @@ assert_true "naming the merged configuration as the cause" "grep -q 'merged gola
 unset STUB_SEQUENCE
 
 # =============================================================================
+# Test 21: the build tags the lint runs with are staged
+#
+# golangci-lint, like `go build`, leaves out a file whose build constraint its tags do not satisfy,
+# so a test under `//go:build integration` was never linted. GOLANGCI_LINT_BUILD_TAGS passes
+# `--build-tags`; it is empty by default, so no project's lint changes until it opts in.
+# =============================================================================
+echo "TEST 21: The lint's build tags are staged"
+rc=0
+lint_with_stub 0 || rc=$?
+assert_true "by default the lint passes no build tags" "[ '$rc' = 0 ] && ! grep -q -- '--build-tags' '$STUB_LOG'"
+rc=0
+GOLANGCI_LINT_BUILD_TAGS=integration lint_with_stub 0 || rc=$?
+assert_true "GOLANGCI_LINT_BUILD_TAGS reaches the lint as --build-tags" "[ '$rc' = 0 ] && grep -q -- '--build-tags integration' '$STUB_LOG'"
+assert_true "and the log says which tags the lint ran with" "grep -q 'Linting with build tags: integration' '$LINT_OUT'"
+assert_true "the other flags are kept" "grep -q -- '--config merged.yml' '$STUB_LOG' && grep -q -- '--max-same-issues 0' '$STUB_LOG'"
+
+# =============================================================================
 # Summary
 # =============================================================================
 echo ""

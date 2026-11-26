@@ -366,19 +366,31 @@ fi
 # a self-hosted GitHub runner already keeps between jobs.
 GOLANGCI_LINT_TIMEOUT="${GOLANGCI_LINT_TIMEOUT:-30m}"
 
+# The build tags the analysis is run with. golangci-lint, like `go build`, leaves out every file
+# whose build constraint the tags do not satisfy, so a test under `//go:build integration` -- most
+# of a service's database and HTTP tests -- was never linted, and its findings piled up unseen.
+# GOLANGCI_LINT_BUILD_TAGS (comma-separated, e.g. `integration`) passes `--build-tags`. It is
+# STAGED: empty by default, so no project's lint changes until it opts in, through a pipeline or
+# variable-group variable, or through `run.build-tags` in its own `.golangci.yml`. The rollout ends
+# with `integration` as the default, once every project lints clean with it.
+set -- --config "merged.yml" \
+  --color "always" \
+  --timeout "$GOLANGCI_LINT_TIMEOUT" \
+  --verbose \
+  --allow-parallel-runners \
+  --max-issues-per-linter 0 \
+  --max-same-issues 0
+if [ -n "${GOLANGCI_LINT_BUILD_TAGS:-}" ]; then
+  echo "Linting with build tags: $GOLANGCI_LINT_BUILD_TAGS (GOLANGCI_LINT_BUILD_TAGS)."
+  set -- "$@" --build-tags "$GOLANGCI_LINT_BUILD_TAGS"
+fi
+
 # The output is streamed AND kept, so a failure can be read back below. The status travels
 # through a file because a POSIX pipeline reports the status of `tee`, not of the linter.
 # The status file is read rather than defaulted: a run that was killed before writing it must
 # fail, not pass.
 {
-  "$GOLANGCI_LINT" run \
-    --config "merged.yml" \
-    --color "always" \
-    --timeout "$GOLANGCI_LINT_TIMEOUT" \
-    --verbose \
-    --allow-parallel-runners \
-    --max-issues-per-linter 0 \
-    --max-same-issues 0 $FIX_FLAG ./... 2>&1
+  "$GOLANGCI_LINT" run "$@" $FIX_FLAG ./... 2>&1
   echo "$?" > "$GOLANGCI_TMP/status"
 } | tee "$GOLANGCI_TMP/lint.log"
 EXIT_CODE="$(cat "$GOLANGCI_TMP/status" 2> /dev/null)"

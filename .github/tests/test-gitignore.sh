@@ -469,6 +469,74 @@ assert_true "nothing in the python block reaches a project that is not python" \
   "! git -C '$REPO' check-ignore -q --no-index .coverage"
 
 echo ""
+echo "The CI check reports by default (global/scripts/tools/gitignore/ci.sh)"
+# `quality:gitignore` runs on every pull request beside `quality:basic-checks`. A block goes stale
+# through no change of the pull request it is checked on -- a fragment changes here, or the
+# generator starts reading a language the CI already imports -- so by default the check reports
+# and passes. GITIGNORE_CHECK=enforce makes it fail, and `off` skips it.
+CI_SH="$SCRIPTS_DIR/global/scripts/tools/gitignore/ci.sh"
+# ci_check <repo> [VAR=value...]: runs the check in <repo>; its output goes to CI_LOG, its status to CI_RC.
+CI_LOG="$TEST_DIR/ci-check.log"
+ci_check() {
+  local repo="$1"
+  shift
+  CI_RC=0
+  (cd "$repo" && env -u GITIGNORE_CHECK -u TF_BUILD -u GITHUB_ACTIONS "$@" SCRIPTS_DIR="$SCRIPTS_DIR" sh "$CI_SH") > "$CI_LOG" 2>&1 || CI_RC=$?
+}
+CI_REPO="$TEST_DIR/ci-project"
+make_repo "$CI_REPO" golang
+printf 'bin\n' > "$CI_REPO/.gitignore"
+
+ci_check "$CI_REPO"
+assert_true "by default a project without the block passes" "[ '$CI_RC' = 0 ]"
+assert_true "and is told how to add it" "grep -q \"run 'make gitignore'\" '$CI_LOG'"
+ci_check "$CI_REPO" GITIGNORE_CHECK=enforce
+assert_true "enforce: a project without the block fails" "[ '$CI_RC' = 1 ]"
+
+gi "$CI_REPO" > /dev/null
+ci_check "$CI_REPO" GITIGNORE_CHECK=enforce
+assert_true "a current block passes even under enforce" "[ '$CI_RC' = 0 ]"
+
+sed -i '/^\/junit\.xml$/d' "$CI_REPO/.gitignore"
+ci_check "$CI_REPO"
+assert_true "by default a stale block passes, reported" "[ '$CI_RC' = 0 ] && grep -q 'WARNING: the shared .gitignore block is stale or missing' '$CI_LOG'"
+ci_check "$CI_REPO" GITIGNORE_CHECK=warn
+assert_true "and so it does under an explicit warn" "[ '$CI_RC' = 0 ]"
+ci_check "$CI_REPO" GITIGNORE_CHECK=enforce
+assert_true "enforce: a stale block fails" "[ '$CI_RC' = 1 ]"
+assert_true "naming the fix" "grep -q \"Run 'make gitignore'\" '$CI_LOG'"
+ci_check "$CI_REPO" GITIGNORE_CHECK=off
+assert_true "off: nothing is checked" "[ '$CI_RC' = 0 ] && grep -q 'GITIGNORE_CHECK=off' '$CI_LOG'"
+ci_check "$CI_REPO" GITIGNORE_CHECK=sometimes
+assert_true "an unknown value falls back to warn, saying so" "[ '$CI_RC' = 0 ] && grep -q \"GITIGNORE_CHECK='sometimes'\" '$CI_LOG'"
+ci_check "$CI_REPO" TF_BUILD=True
+assert_true "on Azure DevOps the warning is a logged issue" "grep -q '^##vso\[task.logissue type=warning\]' '$CI_LOG'"
+ci_check "$CI_REPO" GITHUB_ACTIONS=true
+assert_true "on GitHub Actions it is an annotation" "grep -q '^::warning title=.gitignore block::' '$CI_LOG'"
+
+echo ""
+echo "Every platform runs the check beside quality:basic-checks"
+AZ_BC="$SCRIPTS_DIR/azure-devops/global/stages/10-code-check/basic-checks.yaml"
+GL_BC="$SCRIPTS_DIR/gitlab/global/stages/10-code-check/basic-checks.yaml"
+GH_BC="$SCRIPTS_DIR/github/global/stages/10-code-check/basic-checks/action.yaml"
+assert_true "Azure DevOps: a quality:gitignore job, on pull requests, runs ci.sh after fetching the scripts" \
+  "grep -A12 \"job: 'quality_gitignore'\" '$AZ_BC' | grep -q \"condition: eq(variables\['Build.Reason'\], 'PullRequest')\" && grep -A12 \"job: 'quality_gitignore'\" '$AZ_BC' | grep -q 'abstracts/scripts-repo.yaml' && grep -A12 \"job: 'quality_gitignore'\" '$AZ_BC' | grep -q 'global/scripts/tools/gitignore/ci.sh'"
+assert_true "and quality:basic-checks itself still fetches no script" \
+  "! sed -n \"/job: 'quality_basic_checks'/,/job: 'quality_gitignore'/p\" '$AZ_BC' | grep -q 'scripts-repo.yaml'"
+assert_true "GitLab CI: a quality:gitignore job, on merge requests, runs ci.sh after the scripts" \
+  "grep -A10 '^quality:gitignore:' '$GL_BC' | grep -q '!reference \[ .scripts-repo, before_script \]' && grep -A10 '^quality:gitignore:' '$GL_BC' | grep -q 'global/scripts/tools/gitignore/ci.sh' && grep -A10 '^quality:gitignore:' '$GL_BC' | grep -q 'CI_MERGE_REQUEST_IID'"
+assert_true "and the file includes the scripts-repo abstract it references" \
+  "grep -q 'gitlab/global/abstracts/scripts-repo.yaml' '$GL_BC'"
+assert_true "GitHub Actions: the composite runs ci.sh from the action's own checkout" \
+  "grep -q 'PIPELINES_ROOT: \${{ github.action_path }}/../../../../..' '$GH_BC' && grep -q 'global/scripts/tools/gitignore/ci.sh' '$GH_BC'"
+assert_true "with GITIGNORE_CHECK from an input that defaults to warn" \
+  "grep -q 'GITIGNORE_CHECK: \${{ inputs.gitignore_check }}' '$GH_BC' && grep -A6 '^  gitignore_check:' '$GH_BC' | grep -q \"default: 'warn'\""
+assert_true "and neither the Azure DevOps nor the GitLab job sets one, so both take ci.sh's default" \
+  "! grep -q 'GITIGNORE_CHECK:' '$AZ_BC' && ! grep -q 'GITIGNORE_CHECK:' '$GL_BC'"
+assert_true "the action's relative path really reaches this repository's root" \
+  "[ -x \"\$(cd \"\$(dirname '$GH_BC')/../../../../..\" && pwd)/global/scripts/tools/gitignore/ci.sh\" ]"
+
+echo ""
 echo "======================================"
 echo -e "Tests passed: ${GREEN}${TESTS_PASSED}${NC}"
 if [ "$TESTS_FAILED" -gt 0 ]; then

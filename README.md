@@ -2134,6 +2134,23 @@ imports, so a project with no `Makefile` still gets the rules of the language it
 A workflow that is itself reusable (`workflow_call`) defines a pipeline rather than importing one, so
 it names no language, and neither does a language-neutral one (`checks.yaml`, `global/` stages).
 
+**Every pipeline reports the block on pull requests**, in a `quality:gitignore` job beside
+`quality:basic-checks` (on GitHub Actions, a step of that job). By default it warns and passes,
+because a block goes stale through no change of the pull request it is checked on: a fragment
+changes here, or the generator starts reading a language the project's CI already imports. The
+weekly config-and-docs refresh of [`rios0rios0/config-automation`](https://github.com/rios0rios0/config-automation)
+regenerates the block in every repository it reaches. `GITIGNORE_CHECK` (a pipeline, variable-group
+or CI/CD variable, or on GitHub Actions the `gitignore_check` input of the basic-checks action) sets
+how a stale or missing block is held:
+
+| `GITIGNORE_CHECK` | A stale or missing block |
+|-------------------|--------------------------|
+| `warn` (default)  | warns and passes         |
+| `enforce`         | fails                    |
+| `off`             | is not checked           |
+
+Set `enforce` in a project that wants the gate, such as one the refresh does not reach.
+
 ### Security & Analysis Tools
 
 #### SAST (Static Application Security Testing)

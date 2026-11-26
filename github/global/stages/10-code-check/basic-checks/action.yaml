@@ -2,6 +2,13 @@ inputs:
   target_branch:
     description: 'The target branch to check against (e.g., main, master)'
     required: true
+  gitignore_check:
+    description: >-
+      How a stale or missing shared `.gitignore` block is held
+      (`global/scripts/tools/gitignore/ci.sh`): `warn` reports it and passes, `enforce` fails on
+      it, `off` skips the check.
+    required: false
+    default: 'warn'
 
 runs:
   using: 'composite'
@@ -317,3 +324,12 @@ runs:
 
           echo "CHANGELOG.md entries are correctly placed under [Unreleased]."
         fi
+
+    # The shared `.gitignore` block (`make gitignore`). The action runs from a checkout of this
+    # repository, so the shared ignore rules are already on disk beside it: nothing is fetched.
+    - name: 'Check the shared .gitignore block'
+      shell: 'bash'
+      env:
+        GITIGNORE_CHECK: ${{ inputs.gitignore_check }}
+        PIPELINES_ROOT: ${{ github.action_path }}/../../../../..
+      run: '"$PIPELINES_ROOT/global/scripts/tools/gitignore/ci.sh"'

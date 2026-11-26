@@ -359,6 +359,15 @@ assert_true 'GitLab abstract no longer uploads from merge requests' \
 assert_true 'GitLab Go job actually uploads its BOM' \
   'grep -q "tools/dependency-track/run.sh" "$SCRIPTS_DIR/gitlab/golang/stages/35-management/go.yaml"'
 
+# The uploader reads the BOM's name and version with `jq`, and the golang image the
+# Go job runs in ships none, so every upload stopped at `has no .metadata.component.name`.
+# The install has to come before the uploader, in the job's own `script:`.
+GITLAB_GO_DT="$SCRIPTS_DIR/gitlab/golang/stages/35-management/go.yaml"
+go_jq_line="$(grep -n 'install -y --no-install-recommends jq' "$GITLAB_GO_DT" | head -1 | cut -d: -f1)"
+go_upload_line="$(grep -n 'tools/dependency-track/run.sh' "$GITLAB_GO_DT" | head -1 | cut -d: -f1)"
+assert_true 'GitLab Go job installs jq, which its golang image does not ship, before the upload' \
+  '[[ -n "$go_jq_line" && -n "$go_upload_line" && $go_jq_line -lt $go_upload_line ]]'
+
 azure_dt_files=$(grep -rl 'report_dependency_track' "$SCRIPTS_DIR/azure-devops" --include='*.yaml')
 azure_total=0
 azure_gated=0

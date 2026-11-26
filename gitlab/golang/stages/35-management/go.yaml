@@ -19,7 +19,14 @@ report:dependency-track:
   # workspace. Nothing failed: `cyclonedx/run.sh` exits 0, so the job was green
   # for as long as it existed, and the only symptom was a Go project that never
   # appeared in the portfolio.
+  #
+  # `jq` is installed first because the uploader reads the BOM's name and version
+  # with it, and the golang image ships none: its layers install curl, git and the
+  # C toolchain. Without it every upload stopped at `has no
+  # .metadata.component.name`. The other languages' upload jobs install it too,
+  # and `sast:codeql` does the same in this image.
   script:
+    - apt-get update && apt-get install -y --no-install-recommends jq
     - !reference [ .scripts-repo, before_script ]
     - $SCRIPTS_DIR/global/scripts/languages/golang/init/run.sh
     - $SCRIPTS_DIR/global/scripts/languages/golang/cyclonedx/run.sh

@@ -116,6 +116,11 @@ on:
         required: false
         default: 'all'
         description: '`all` runs every package; `affected` only those a pull request can reach. See go.yaml.'
+      race:
+        type: 'string'
+        required: false
+        default: 'off'
+        description: 'Go race detector: `off`, `unit` or `all` (both phases). See go.yaml.'
       openapi_sync_path:
         type: 'string'
         required: false
@@ -240,6 +245,7 @@ jobs:
       integration_timeout: ${{ inputs.integration_timeout }}
       integration_env: ${{ inputs.integration_env }}
       test_selection: ${{ inputs.test_selection }}
+      race: ${{ inputs.race }}
       openapi_sync_path: ${{ inputs.openapi_sync_path }}
       openapi_sync_command: ${{ inputs.openapi_sync_command }}
       promote_release: ${{ inputs.promote_release }}

@@ -469,6 +469,32 @@ did. `go.yaml`, `go-docker.yaml`, `go-flyio.yaml` and `go-render.yaml` take it.
 
 On GitLab CI and Azure DevOps, set the pipeline variable `GO_COVERAGE_IGNORE_GENERATED=true`.
 
+#### Go's Race Detector in the Tests (`race`)
+
+The Go test job can run its tests under Go's race detector, which fails a test when two goroutines touch
+the same memory without synchronisation. It is off by default, so no repository's tests change until it
+chooses one of these values:
+
+| Value | What runs with `-race` |
+|-------|------------------------|
+| `off` (the default; also empty or `false`) | nothing |
+| `unit` (also `true`) | the unit phase |
+| `all` | the unit phase and the integration phase |
+
+The detector costs run time and memory. Go's documentation puts it at 2 to 20 times the run time and 5 to
+10 times the memory. On a database-backed service's suite, with the build cache warm, it took the unit
+phase from 3–4 s to 5–6 s and about doubled the integration phase, from 6–8 s to 12–18 s. That is why the
+integration phase takes it only with `all`. A suite whose integration phase already runs close to its
+`integration_timeout`, or close to the runner's memory, should start with `unit`.
+
+`-race` needs cgo and a C compiler. The hosted runners have both, and the job fails with the reason when
+either is missing: no compiler on `PATH`, or `CGO_ENABLED=0`. While the detector is on, both phases record
+coverage in `atomic` mode instead of `count`, because `-race` requires it. It counts the same blocks, so the
+merged `coverage.txt`, the report and `coverage_threshold` read the same numbers.
+
+`go.yaml`, `go-docker.yaml`, `go-flyio.yaml` and `go-render.yaml` take `race`. On GitLab CI and Azure
+DevOps, set the pipeline variable `GO_TEST_RACE=unit` or `all`. Locally, `GO_TEST_RACE=unit make test`.
+
 #### One More Test Run in the Tests Stage (`extra_test_command`)
 
 A consumer of a reusable workflow cannot add a job in the middle of it: a caller's job can only

@@ -68,6 +68,55 @@ if ! (integration_env_apply); then
   exit 1
 fi
 
+# GO_TEST_RACE runs the tests under Go's race detector, which reports two goroutines touching the
+# same memory without synchronisation. Nothing ran it, so a real data race in a consumer's chart
+# drawing showed up only on a developer's machine. It is opt-in and off by default, so no project's
+# tests change until it sets it, and it is read from the environment like GO_TEST_INTEGRATION_ENV
+# above (a pipeline or variable-group variable; on GitHub Actions the `race` input of `go.yaml`):
+#
+#   off   (default; also empty or `false`) no race detector
+#   unit  (also `true`) the unit phase runs with `-race`
+#   all   both phases do; the integration phase then pays the detector's cost, about double the
+#         run time on a database-backed suite, so a project opts into it on its own
+#
+# `-race` needs cgo, and so a C compiler, and it refuses `-covermode=count`. So the run stops with
+# the reason when either is missing, before anything installs, and both phases record `atomic`
+# coverage when the detector is on, which counts the same blocks and keeps the profiles mergeable.
+go_test_race="${GO_TEST_RACE:-off}"
+case "$go_test_race" in
+  '' | off | false) go_test_race='off' ;;
+  true) go_test_race='unit' ;;
+  unit | all) ;;
+  *)
+    echo "WARNING: GO_TEST_RACE='$go_test_race' is none of off, unit, all; the race detector stays off." >&2
+    go_test_race='off'
+    ;;
+esac
+cover_mode='count'
+unit_race=''
+integration_race=''
+if [ "$go_test_race" != 'off' ]; then
+  go_test_race_cc="$(go env CC)"
+  if ! command -v "${go_test_race_cc%% *}" > /dev/null 2>&1; then
+    echo "ERROR: GO_TEST_RACE=$go_test_race runs the tests with -race, which needs cgo and so a C compiler," >&2
+    echo "       and the compiler '${go_test_race_cc}' (go env CC) is not on PATH. Install one (gcc), or leave GO_TEST_RACE unset." >&2
+    exit 1
+  fi
+  if [ "$(go env CGO_ENABLED)" != '1' ]; then
+    echo "ERROR: GO_TEST_RACE=$go_test_race runs the tests with -race, which needs cgo, and cgo is off here" >&2
+    echo "       (CGO_ENABLED=$(go env CGO_ENABLED)). Unset CGO_ENABLED or set it to 1, or leave GO_TEST_RACE unset." >&2
+    exit 1
+  fi
+  cover_mode='atomic'
+  unit_race='-race'
+  if [ "$go_test_race" = 'all' ]; then
+    integration_race='-race'
+    echo "Race detector: on in the unit and integration phases (GO_TEST_RACE=all)."
+  else
+    echo "Race detector: on in the unit phase (GO_TEST_RACE=$go_test_race)."
+  fi
+fi
+
 touch coverage.xml
 
 # find the directories to test
@@ -167,15 +216,15 @@ unit_start_time=$(date +%s)
 
 if [ -z "$unit_targets" ]; then
   echo "No affected package in the unit phase - nothing to run."
-  echo "mode: count" > unit_coverage.txt
+  echo "mode: $cover_mode" > unit_coverage.txt
 else
   # shellcheck disable=SC2086
   "$GOBIN_DIR"/gotestsum \
     --format pkgname \
     --junitfile junit-unit.xml \
-    -- -tags test,unit \
+    -- -tags test,unit $unit_race \
     -coverpkg="$(echo $directories | tr ' ' ',')" \
-    -covermode=count \
+    -covermode="$cover_mode" \
     -coverprofile=unit_coverage.txt \
     $unit_targets || UNIT_EXIT_CODE=$?
 fi
@@ -288,7 +337,7 @@ if [ -n "$integration_skip" ]; then
   # A lone mode line parses as zero coverage blocks, so phase 3 merges it with
   # the unit profile and emits that profile unchanged. Writing the file matters:
   # the merge step branches on its presence.
-  echo "mode: count" > integration_coverage.txt
+  echo "mode: $cover_mode" > integration_coverage.txt
 else
   echo "Testing integration code in the following packages:"
   echo "$integration_directories" | sed 's/^/  /'
@@ -339,10 +388,10 @@ else
     exec "$GOBIN_DIR"/gotestsum \
       --format pkgname \
       --junitfile junit-integration.xml \
-      -- -p "${GO_TEST_INTEGRATION_PARALLEL:-1}" -tags integration \
+      -- -p "${GO_TEST_INTEGRATION_PARALLEL:-1}" -tags integration $integration_race \
       -timeout "${GO_TEST_INTEGRATION_TIMEOUT:-30m}" \
       -coverpkg="$(echo $directories | tr ' ' ',')" \
-      -covermode=count \
+      -covermode="$cover_mode" \
       -coverprofile=integration_coverage.txt \
       $integration_directories
   ) || INTEGRATION_EXIT_CODE=$?
@@ -425,7 +474,7 @@ if ! "$GOBIN_DIR"/gocovmerge unit_coverage.txt integration_coverage.txt > covera
     cp integration_coverage.txt coverage.txt
   else
     echo "⚠ No valid coverage files found, creating empty coverage report"
-    echo "mode: count" > coverage.txt
+    echo "mode: $cover_mode" > coverage.txt
   fi
   
   echo "✓ Coverage report generated using fallback strategy"

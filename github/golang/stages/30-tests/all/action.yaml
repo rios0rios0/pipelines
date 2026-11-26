@@ -74,6 +74,15 @@ inputs:
       as `integration_parallel` above.
     required: false
     default: 'all'
+  race:
+    description: |
+      Go's race detector, which reports two goroutines touching the same memory without
+      synchronisation: `off` (the default), `unit` (`-race` in the unit phase) or `all` (in both
+      phases, which about doubles a database-backed integration phase). It needs cgo and a C
+      compiler, and records `atomic` coverage. The runner reads it as `GO_TEST_RACE`; an input for
+      the same reason as `integration_parallel` above.
+    required: false
+    default: 'off'
 
 runs:
   using: 'composite'
@@ -178,6 +187,7 @@ runs:
         GO_TEST_INTEGRATION_TIMEOUT: "${{ inputs.integration_timeout }}"
         GO_TEST_INTEGRATION_ENV: "${{ inputs.integration_env }}"
         GO_TEST_SELECTION: "${{ inputs.test_selection }}"
+        GO_TEST_RACE: "${{ inputs.race }}"
         # `origin/<base branch>` on a pull request, which the full-history checkout above
         # fetched; empty on every other event, which makes `affected` run everything.
         GO_TEST_SELECTION_BASE: "${{ github.base_ref != '' && format('origin/{0}', github.base_ref) || '' }}"

@@ -1,3 +1,7 @@
+include:
+  # `quality:gitignore` below fetches this repository's scripts; `quality:basic-checks` does not.
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/global/abstracts/scripts-repo.yaml'
+
 quality:basic-checks:
   stage: 'code check (style/quality)'
   image: 'alpine/git:2.54.0@sha256:6a1fdb962814ca11508ca8d1bab94375b5b7ac4e4a9a40981c29fc32c02f095d'
@@ -265,3 +269,17 @@ quality:basic-checks:
   rules:
     - if: "$CI_MERGE_REQUEST_IID"
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+
+# The shared `.gitignore` block (`make gitignore`), in a job of its own: `quality:basic-checks` above
+# runs with only the project's repository on disk, and this check needs the shared ignore rules.
+# It reports a stale or missing block and passes, unless GITIGNORE_CHECK, a CI/CD variable, is
+# `enforce` (fail on it) or `off`. Merge requests only, like the drift it reports. See
+# `global/scripts/tools/gitignore/ci.sh`.
+quality:gitignore:
+  stage: 'code check (style/quality)'
+  image: 'alpine/git:2.54.0@sha256:6a1fdb962814ca11508ca8d1bab94375b5b7ac4e4a9a40981c29fc32c02f095d'
+  script:
+    - !reference [ .scripts-repo, before_script ]
+    - $SCRIPTS_DIR/global/scripts/tools/gitignore/ci.sh
+  rules:
+    - if: "$CI_MERGE_REQUEST_IID"

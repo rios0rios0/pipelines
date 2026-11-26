@@ -279,3 +279,18 @@ jobs:
             echo "CHANGELOG.md entries are correctly placed under [Unreleased]."
           fi
         displayName: 'Run basic checks'
+
+  # The shared `.gitignore` block (`make gitignore`), in a job of its own. `quality:basic-checks`
+  # above runs with only the project's repository on disk, and this check needs the shared ignore
+  # rules, so it fetches this repository the way every job that runs its scripts does. It reports a
+  # stale or missing block and passes, unless GITIGNORE_CHECK, a variable of the pipeline or of its
+  # variable group, is `enforce` (fail on it) or `off`. See `global/scripts/tools/gitignore/ci.sh`.
+  - job: 'quality_gitignore'
+    displayName: 'quality:gitignore'
+    condition: eq(variables['Build.Reason'], 'PullRequest')
+    steps:
+      - checkout: 'self'
+        fetchDepth: 1
+      - template: '../../abstracts/scripts-repo.yaml'
+      - script: $(Scripts.Directory)/global/scripts/tools/gitignore/ci.sh
+        displayName: 'Check the shared .gitignore block'

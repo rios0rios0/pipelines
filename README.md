@@ -482,9 +482,14 @@ chooses one of these values:
 | `all` | the unit phase and the integration phase |
 
 The detector costs run time and memory. Go's documentation puts it at 2 to 20 times the run time and 5 to
-10 times the memory. On a database-backed service's suite, with the build cache warm, it took the unit
-phase from 3–4 s to 5–6 s and about doubled the integration phase, from 6–8 s to 12–18 s. That is why the
-integration phase takes it only with `all`. A suite whose integration phase already runs close to its
+10 times the memory. In one repository's CI runs on a hosted Azure DevOps agent, a database-backed service
+with 1,484 unit tests and 373 integration tests:
+
+- the unit tests went from 27 s to 71 s, about 2.6 times;
+- the integration tests went from 21 s to 46 s, about 2 times.
+
+These are figures from one suite, and others will vary with what their tests do. The integration phase
+takes the detector only with `all`. A suite whose integration phase already runs close to its
 `integration_timeout`, or close to the runner's memory, should start with `unit`.
 
 `-race` needs cgo and a C compiler. The hosted runners have both, and the job fails with the reason when

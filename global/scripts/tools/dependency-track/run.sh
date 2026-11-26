@@ -23,46 +23,120 @@
 # a derived accessor. Nothing here reads a project, so nothing here changes.
 
 bomFile="$PREFIX$REPORT_PATH/bom.json"
+moduleBomDir="$PREFIX$REPORT_PATH/modules"
 
+# Which layout the generator wrote. `bom.json` is one project, as it always was.
+# A repository with no Go module at its root and several below it gets one BOM
+# per module instead, at `modules/<module directory>/bom.json` (KI-08): each is
+# uploaded as a project of its own, named after its module path like any other
+# BOM, under a project for the repository (see "One project per module" below).
+#
 # Skip the upload cleanly when no CycloneDX BOM was produced. This happens
 # for consumers without a language-specific BOM generator. Without this
 # guard `jq`/`curl` would error on the missing file and red the job.
-if [ ! -f "$bomFile" ]; then
+if [ -f "$bomFile" ]; then
+  layout='single'
+elif [ -d "$moduleBomDir" ] && [ -n "$(find "$moduleBomDir" -type f -name bom.json | head -n 1)" ]; then
+  layout='modules'
+else
   echo "No CycloneDX BOM at $bomFile — skipping Dependency-Track upload."
   exit 0
 fi
 
-# `// empty` rather than a bare path, because `jq -r` prints the STRING `null`
-# for a missing key. That string is a perfectly valid project name, so a BOM
-# without `metadata.component` used to create a project literally called
-# `null` and then keep updating it on every build -- a silent, portfolio-wide
-# mess that no exit code ever reported.
-#
-# The `/` -> `-` normalisation is applied to BOTH sources, not just the
-# BOM-derived one. An override names the SAME project the BOM path would
-# produce, so if `@org/app` becomes `@org-app` from a BOM it has to become
-# `@org-app` from the variable too. Applying it to only one of them lets an
-# override re-open the exact cross-platform split this script exists to close:
-# one platform overriding with `@org/app` and another falling through to the
-# BOM would file one application under two projects, silently, with both
-# uploads returning 200.
-rawProjectName="${DEPENDENCY_TRACK_PROJECT_NAME:-$(jq -r '.metadata.component.name // empty' "$bomFile")}"
-projectName=$(printf '%s' "$rawProjectName" | sed 's|/|-|g')
-if [ -z "$projectName" ]; then
-  echo "ERROR: $bomFile has no .metadata.component.name." >&2
-  echo "       Dependency-Track identifies a project by (name, version), so an" >&2
-  echo "       upload without a name cannot be attributed to anything. Fix the" >&2
-  echo "       BOM generator, or set DEPENDENCY_TRACK_PROJECT_NAME explicitly." >&2
-  exit 1
+if [ "$layout" = 'single' ]; then
+  # `// empty` rather than a bare path, because `jq -r` prints the STRING `null`
+  # for a missing key. That string is a perfectly valid project name, so a BOM
+  # without `metadata.component` used to create a project literally called
+  # `null` and then keep updating it on every build -- a silent, portfolio-wide
+  # mess that no exit code ever reported.
+  #
+  # The `/` -> `-` normalisation is applied to BOTH sources, not just the
+  # BOM-derived one. An override names the SAME project the BOM path would
+  # produce, so if `@org/app` becomes `@org-app` from a BOM it has to become
+  # `@org-app` from the variable too. Applying it to only one of them lets an
+  # override re-open the exact cross-platform split this script exists to close:
+  # one platform overriding with `@org/app` and another falling through to the
+  # BOM would file one application under two projects, silently, with both
+  # uploads returning 200.
+  rawProjectName="${DEPENDENCY_TRACK_PROJECT_NAME:-$(jq -r '.metadata.component.name // empty' "$bomFile")}"
+  projectName=$(printf '%s' "$rawProjectName" | sed 's|/|-|g')
+  if [ -z "$projectName" ]; then
+    echo "ERROR: $bomFile has no .metadata.component.name." >&2
+    echo "       Dependency-Track identifies a project by (name, version), so an" >&2
+    echo "       upload without a name cannot be attributed to anything. Fix the" >&2
+    echo "       BOM generator, or set DEPENDENCY_TRACK_PROJECT_NAME explicitly." >&2
+    exit 1
+  fi
+
+  # A missing version is NOT fatal. Dependency-Track trims an empty
+  # `projectVersion` to null and keeps a single versionless project, which is a
+  # stable identity that every build updates -- strictly better than the old
+  # behaviour of creating one project pinned to the literal version `null`.
+  projectVersion="${DEPENDENCY_TRACK_PROJECT_VERSION:-$(jq -r '.metadata.component.version // empty' "$bomFile")}"
+  if [ -z "$projectVersion" ]; then
+    echo "WARNING: $bomFile has no .metadata.component.version — uploading as a versionless project." >&2
+  fi
+
 fi
 
-# A missing version is NOT fatal. Dependency-Track trims an empty
-# `projectVersion` to null and keeps a single versionless project, which is a
-# stable identity that every build updates -- strictly better than the old
-# behaviour of creating one project pinned to the literal version `null`.
-projectVersion="${DEPENDENCY_TRACK_PROJECT_VERSION:-$(jq -r '.metadata.component.version // empty' "$bomFile")}"
-if [ -z "$projectVersion" ]; then
-  echo "WARNING: $bomFile has no .metadata.component.version — uploading as a versionless project." >&2
+# --- One project per module ----------------------------------------------------
+#
+# The module projects are created under a project for the repository, so they
+# stay together in the portfolio. It is named after the repository --
+# `DEPENDENCY_TRACK_PROJECT_NAME` when set, as it names "this repository's
+# project" for a single BOM, else the CI platform's repository name, else the
+# directory's -- and normalised like any other name. It is versionless: a stable
+# home under which every version of every module is a child, which is the shape
+# a collection project aggregating its latest children reads.
+#
+# Every module BOM is checked BEFORE anything is uploaded: a missing name would
+# create a project called nothing, and two modules declaring the same module
+# path would silently overwrite each other's inventory.
+dt_repository_name() {
+  if [ -n "${DEPENDENCY_TRACK_PROJECT_NAME:-}" ]; then
+    printf '%s' "$DEPENDENCY_TRACK_PROJECT_NAME"
+  elif [ -n "${BUILD_REPOSITORY_NAME:-}" ]; then
+    printf '%s' "$BUILD_REPOSITORY_NAME"
+  elif [ -n "${CI_PROJECT_NAME:-}" ]; then
+    printf '%s' "$CI_PROJECT_NAME"
+  elif [ -n "${GITHUB_REPOSITORY:-}" ]; then
+    printf '%s' "${GITHUB_REPOSITORY##*/}"
+  elif _dt_top="$(git rev-parse --show-toplevel 2>/dev/null)" && [ -n "$_dt_top" ]; then
+    basename "$_dt_top"
+  else
+    basename "$(pwd)"
+  fi
+}
+
+if [ "$layout" = 'modules' ]; then
+  moduleBoms="$(find "$moduleBomDir" -type f -name bom.json | sort)"
+  repositoryName=$(dt_repository_name | sed 's|/|-|g')
+  moduleNames=''
+  # A here-document rather than a pipe, so the loop runs in this shell: its
+  # `exit` ends the script and `moduleNames` survives it. Paths may hold spaces.
+  while IFS= read -r moduleBom; do
+    moduleName=$(jq -r '.metadata.component.name // empty' "$moduleBom" | sed 's|/|-|g')
+    if [ -z "$moduleName" ]; then
+      echo "ERROR: $moduleBom has no .metadata.component.name." >&2
+      echo "       Every module is uploaded as the project its module path names, so a" >&2
+      echo "       BOM without one cannot be attributed to anything. Fix the generator." >&2
+      exit 1
+    fi
+    if printf '%s\n' "$moduleNames" | grep -qxF -- "$moduleName"; then
+      echo "ERROR: two modules both declare '$moduleName' (the second is $moduleBom)." >&2
+      echo "       Each would overwrite the other's inventory in Dependency-Track. Give" >&2
+      echo "       every module of the repository its own module path." >&2
+      exit 1
+    fi
+    moduleNames="$moduleNames$moduleName
+"
+  done <<EOF
+$moduleBoms
+EOF
+  if [ -z "$repositoryName" ]; then
+    echo "ERROR: could not name the repository's project; set DEPENDENCY_TRACK_PROJECT_NAME." >&2
+    exit 1
+  fi
 fi
 
 # normalize base URL (strip trailing slash and trailing /api to avoid /api/api)
@@ -172,71 +246,6 @@ else
   isLatest='false'
 fi
 
-# Capture the HTTP status and response body instead of `curl --fail`, which
-# hides Dependency-Track's error message and leaves only a bare
-# `curl: (22) ... 400` in the log. On failure the body is echoed so the
-# actual rejection reason is visible in the pipeline output.
-# TLS certificate verification is ON by default so the API key (sent in the
-# `X-Api-Key` header) cannot be captured via a MITM. Set
-# DEPENDENCY_TRACK_INSECURE=1 to skip verification for a DT endpoint with a
-# self-signed / private-CA certificate (prefer trusting the CA on the agent).
-# `set --` builds every flag as a quoted positional (no word-splitting), which
-# is also what keeps a project name containing a space intact.
-set --
-if [ -n "${DEPENDENCY_TRACK_INSECURE:-}" ]; then
-  set -- "$@" --insecure
-fi
-
-# Upload via the projectName + projectVersion + autoCreate path (an
-# idempotent upsert). Dependency-Track's `/api/v1/bom` treats `project`
-# (a project UUID) and `projectName`/`projectVersion` as MUTUALLY EXCLUSIVE
-# — since 4.12 a request carrying both is rejected with HTTP 400. The
-# previous implementation looked up the existing project's UUID and then
-# POSTed it *together with* `projectVersion`, so every build after the
-# project's first upload failed with 400 (the UUID lookup only misses on
-# the very first run, which is why the job was "always breaking"). Sending
-# only `projectName` + `projectVersion` with `autoCreate=true` creates the
-# project on the first upload and updates it on every subsequent one.
-#
-# Every text field goes as `--form-string`, never `-F`: curl reads a `-F` value
-# that starts with `@` or `<` as a FILE to attach, so the project name of a
-# scoped npm package (`@org/app`, normalised to `@org-app`) made curl look for a
-# file called `org-app`, exit 26 before sending anything, and the upload retry
-# as an unreachable server for five minutes before failing. `--form-string`
-# sends the value as it is; only the BOM itself is a file.
-set -- "$@" \
-  --form-string "projectName=$projectName" \
-  --form-string "projectVersion=$projectVersion" \
-  --form-string 'autoCreate=true' \
-  --form-string "isLatest=$isLatest"
-
-# Optional collection parent.
-#
-# READ THIS BEFORE RELYING ON IT. `BomResource.uploadBom` resolves and attaches
-# the parent ONLY inside its `if (project == null && autoCreate)` branch — the
-# same in 4.14 and in 5.0.5, checked in both. For a project that ALREADY exists
-# both `parentName` and `parentVersion` are read and then ignored: no error, no
-# warning, no field in the response to notice. So these fields parent the
-# projects this pipeline creates from here on, and can never re-parent one that
-# is already in the portfolio. Adopting an existing portfolio needs
-# `PATCH /api/v1/project/{uuid}` from an administrative job, not this script.
-#
-# The parent must exist before the first child upload; a missing one is
-# answered with HTTP 404 `The parent project could not be found.` even with
-# `autoCreate=true`.
-if [ -n "${DEPENDENCY_TRACK_PARENT_NAME:-}" ]; then
-  set -- "$@" --form-string "parentName=$DEPENDENCY_TRACK_PARENT_NAME"
-  if [ -n "${DEPENDENCY_TRACK_PARENT_VERSION:-}" ]; then
-    set -- "$@" --form-string "parentVersion=$DEPENDENCY_TRACK_PARENT_VERSION"
-  fi
-fi
-
-set -- "$@" -F "bom=@$bomFile"
-
-[ -n "${DEBUG:-}" ] && echo "[DEBUG] POST bom: url=$bomUploadUrl projectName=$projectName projectVersion=$projectVersion isLatest=$isLatest parentName=${DEPENDENCY_TRACK_PARENT_NAME:-<none>} bomFile=$bomFile" >&2
-
-responseFile="${TMPDIR:-/tmp}/dependency-track-response.$$"
-
 # The API key goes in through a curl config file on STDIN, never on argv.
 #
 # `-H "X-Api-Key: $DEPENDENCY_TRACK_TOKEN"` builds a byte-identical request, but
@@ -308,38 +317,174 @@ case "$uploadRetryDelay" in
   *) ;;
 esac
 
-uploadAttempt=1
-while :; do
-  httpStatus=$(printf 'header = "X-Api-Key: %s"\n' "$escapedToken" | curl --config - "$@" --silent --show-error \
-    --output "$responseFile" --write-out '%{http_code}' \
-    --request POST "$bomUploadUrl")
-  # `--write-out` always prints a status; `000` means curl never received an
-  # HTTP response (DNS/TLS/connection failure).
-  httpStatus="${httpStatus:-000}"
+responseFile="${TMPDIR:-/tmp}/dependency-track-response.$$"
 
-  if [ "$httpStatus" -ge 200 ] && [ "$httpStatus" -lt 300 ]; then
-    echo "Uploaded BOM to Dependency-Track (projectName=$projectName projectVersion=$projectVersion isLatest=$isLatest, HTTP $httpStatus)."
-    rm -f "$responseFile"
-    exit 0
+# Capture the HTTP status and response body instead of `curl --fail`, which
+# hides Dependency-Track's error message and leaves only a bare
+# `curl: (22) ... 400` in the log. On failure the body is echoed so the
+# actual rejection reason is visible in the pipeline output.
+# TLS certificate verification is ON by default so the API key (sent in the
+# `X-Api-Key` header) cannot be captured via a MITM. Set
+# DEPENDENCY_TRACK_INSECURE=1 to skip verification for a DT endpoint with a
+# self-signed / private-CA certificate (prefer trusting the CA on the agent).
+# `set --` builds every flag as a quoted positional (no word-splitting), which
+# is also what keeps a project name containing a space intact.
+#
+# dt_upload <bom file> <project name> <project version> <isLatest> <parent name> <parent version> [collection-ok]
+#
+# Returns 0 once the server took the BOM, 1 when it refused it or stayed away,
+# with its answer printed. `collection-ok` accepts one refusal as success: the
+# repository's project that the module projects live under is created by an
+# upload of a component-free BOM, and if someone has since turned it into a
+# collection project the server answers `400 BOM cannot be uploaded to a
+# collection project.` -- which means it exists, the one thing that upload asks.
+dt_upload() {
+  _dtu_file="$1"
+  _dtu_name="$2"
+  _dtu_version="$3"
+  _dtu_latest="$4"
+  _dtu_parent="$5"
+  _dtu_parent_version="$6"
+  _dtu_collection_ok="${7:-}"
+
+  set --
+  if [ -n "${DEPENDENCY_TRACK_INSECURE:-}" ]; then
+    set -- "$@" --insecure
   fi
 
-  case "$httpStatus" in
-    000 | 408 | 429 | 5??) retryable='true' ;;
-    *) retryable='false' ;;
-  esac
-  if [ "$retryable" = 'false' ] || [ "$uploadAttempt" -ge "$uploadAttempts" ]; then
-    if [ "$retryable" = 'true' ]; then
-      echo "ERROR: Dependency-Track answered HTTP $httpStatus on all $uploadAttempts attempts of the BOM upload. Response body:" >&2
-    else
-      echo "ERROR: Dependency-Track rejected the BOM upload (HTTP $httpStatus). Response body:" >&2
+  # Upload via the projectName + projectVersion + autoCreate path (an
+  # idempotent upsert). Dependency-Track's `/api/v1/bom` treats `project`
+  # (a project UUID) and `projectName`/`projectVersion` as MUTUALLY EXCLUSIVE
+  # — since 4.12 a request carrying both is rejected with HTTP 400. The
+  # previous implementation looked up the existing project's UUID and then
+  # POSTed it *together with* `projectVersion`, so every build after the
+  # project's first upload failed with 400 (the UUID lookup only misses on
+  # the very first run, which is why the job was "always breaking"). Sending
+  # only `projectName` + `projectVersion` with `autoCreate=true` creates the
+  # project on the first upload and updates it on every subsequent one.
+  #
+  # Every text field goes as `--form-string`, never `-F`: curl reads a `-F` value
+  # that starts with `@` or `<` as a FILE to attach, so the project name of a
+  # scoped npm package (`@org/app`, normalised to `@org-app`) made curl look for a
+  # file called `org-app`, exit 26 before sending anything, and the upload retry
+  # as an unreachable server for five minutes before failing. `--form-string`
+  # sends the value as it is; only the BOM itself is a file.
+  set -- "$@" \
+    --form-string "projectName=$_dtu_name" \
+    --form-string "projectVersion=$_dtu_version" \
+    --form-string 'autoCreate=true' \
+    --form-string "isLatest=$_dtu_latest"
+
+  # Optional collection parent.
+  #
+  # READ THIS BEFORE RELYING ON IT. `BomResource.uploadBom` resolves and attaches
+  # the parent ONLY inside its `if (project == null && autoCreate)` branch — the
+  # same in 4.14 and in 5.0.5, checked in both. For a project that ALREADY exists
+  # both `parentName` and `parentVersion` are read and then ignored: no error, no
+  # warning, no field in the response to notice. So these fields parent the
+  # projects this pipeline creates from here on, and can never re-parent one that
+  # is already in the portfolio. Adopting an existing portfolio needs
+  # `PATCH /api/v1/project/{uuid}` from an administrative job, not this script.
+  #
+  # The parent must exist before the first child upload; a missing one is
+  # answered with HTTP 404 `The parent project could not be found.` even with
+  # `autoCreate=true`.
+  if [ -n "$_dtu_parent" ]; then
+    set -- "$@" --form-string "parentName=$_dtu_parent"
+    if [ -n "$_dtu_parent_version" ]; then
+      set -- "$@" --form-string "parentVersion=$_dtu_parent_version"
     fi
-    [ -s "$responseFile" ] && sed 's/^/  | /' "$responseFile" >&2
-    rm -f "$responseFile"
-    exit 1
   fi
 
-  uploadWait=$((uploadAttempt * uploadRetryDelay))
-  echo "Dependency-Track answered HTTP $httpStatus to the BOM upload (attempt $uploadAttempt of $uploadAttempts), an answer a restarting or unreachable server gives; retrying in ${uploadWait}s." >&2
-  sleep "$uploadWait"
-  uploadAttempt=$((uploadAttempt + 1))
-done
+  set -- "$@" -F "bom=@$_dtu_file"
+
+  [ -n "${DEBUG:-}" ] && echo "[DEBUG] POST bom: url=$bomUploadUrl projectName=$_dtu_name projectVersion=$_dtu_version isLatest=$_dtu_latest parentName=${_dtu_parent:-<none>} bomFile=$_dtu_file" >&2
+
+  uploadAttempt=1
+  while :; do
+    httpStatus=$(printf 'header = "X-Api-Key: %s"\n' "$escapedToken" | curl --config - "$@" --silent --show-error \
+      --output "$responseFile" --write-out '%{http_code}' \
+      --request POST "$bomUploadUrl")
+    # `--write-out` always prints a status; `000` means curl never received an
+    # HTTP response (DNS/TLS/connection failure).
+    httpStatus="${httpStatus:-000}"
+
+    if [ "$httpStatus" -ge 200 ] && [ "$httpStatus" -lt 300 ]; then
+      echo "Uploaded BOM to Dependency-Track (projectName=$_dtu_name projectVersion=$_dtu_version isLatest=$_dtu_latest, HTTP $httpStatus)."
+      rm -f "$responseFile"
+      return 0
+    fi
+
+    if [ -n "$_dtu_collection_ok" ] && [ "$httpStatus" = '400' ] \
+      && grep -q 'cannot be uploaded to a collection project' "$responseFile" 2>/dev/null; then
+      echo "Dependency-Track keeps $_dtu_name as a collection project; its modules are uploaded under it."
+      rm -f "$responseFile"
+      return 0
+    fi
+
+    case "$httpStatus" in
+      000 | 408 | 429 | 5??) retryable='true' ;;
+      *) retryable='false' ;;
+    esac
+    if [ "$retryable" = 'false' ] || [ "$uploadAttempt" -ge "$uploadAttempts" ]; then
+      if [ "$retryable" = 'true' ]; then
+        echo "ERROR: Dependency-Track answered HTTP $httpStatus on all $uploadAttempts attempts of the BOM upload. Response body:" >&2
+      else
+        echo "ERROR: Dependency-Track rejected the BOM upload (HTTP $httpStatus). Response body:" >&2
+      fi
+      [ -s "$responseFile" ] && sed 's/^/  | /' "$responseFile" >&2
+      rm -f "$responseFile"
+      return 1
+    fi
+
+    uploadWait=$((uploadAttempt * uploadRetryDelay))
+    echo "Dependency-Track answered HTTP $httpStatus to the BOM upload (attempt $uploadAttempt of $uploadAttempts), an answer a restarting or unreachable server gives; retrying in ${uploadWait}s." >&2
+    sleep "$uploadWait"
+    uploadAttempt=$((uploadAttempt + 1))
+  done
+}
+
+if [ "$layout" = 'single' ]; then
+  dt_upload "$bomFile" "$projectName" "$projectVersion" "$isLatest" \
+    "${DEPENDENCY_TRACK_PARENT_NAME:-}" "${DEPENDENCY_TRACK_PARENT_VERSION:-}"
+  exit $?
+fi
+
+# One project per module. The repository's project comes first, because a child
+# naming a parent that does not exist is answered `404 The parent project could
+# not be found.` even with `autoCreate=true`. It is created, or kept, by uploading
+# a BOM with no component, so it holds nothing of its own; it is created under
+# DEPENDENCY_TRACK_PARENT_NAME when that is set, as any project this pipeline
+# creates is, and it never claims `isLatest`. Then every module is uploaded under
+# it, each with its own module path and version and the `isLatest` of this build.
+# A module the server refuses does not stop the others; the job fails at the end.
+repositoryBom="${TMPDIR:-/tmp}/dependency-track-repository.$$.json"
+jq -n --arg name "$repositoryName" \
+  '{bomFormat: "CycloneDX", specVersion: "1.6", version: 1, metadata: {component: {type: "application", name: $name}}}' \
+  > "$repositoryBom"
+echo "Uploading $(printf '%s\n' "$moduleBoms" | grep -c .) module BOM(s) under the repository's project $repositoryName."
+if ! dt_upload "$repositoryBom" "$repositoryName" '' 'false' \
+  "${DEPENDENCY_TRACK_PARENT_NAME:-}" "${DEPENDENCY_TRACK_PARENT_VERSION:-}" collection-ok; then
+  rm -f "$repositoryBom"
+  echo "ERROR: the repository's project $repositoryName could not be created, so no module was uploaded." >&2
+  exit 1
+fi
+rm -f "$repositoryBom"
+
+failedModules=''
+while IFS= read -r moduleBom; do
+  moduleName=$(jq -r '.metadata.component.name // empty' "$moduleBom" | sed 's|/|-|g')
+  moduleVersion="${DEPENDENCY_TRACK_PROJECT_VERSION:-$(jq -r '.metadata.component.version // empty' "$moduleBom")}"
+  if [ -z "$moduleVersion" ]; then
+    echo "WARNING: $moduleBom has no .metadata.component.version — uploading as a versionless project." >&2
+  fi
+  if ! dt_upload "$moduleBom" "$moduleName" "$moduleVersion" "$isLatest" "$repositoryName" ''; then
+    failedModules="$failedModules $moduleName"
+  fi
+done <<EOF
+$moduleBoms
+EOF
+if [ -n "$failedModules" ]; then
+  echo "ERROR: Dependency-Track did not take the BOM of:$failedModules" >&2
+  exit 1
+fi

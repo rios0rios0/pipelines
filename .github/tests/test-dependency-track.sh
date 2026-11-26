@@ -50,6 +50,7 @@ assert_true() {
 }
 
 WORK_DIR="$(mktemp -d)" || exit 1
+declare -A MODULE_BOMS=()
 cleanup() {
   rm -rf "$WORK_DIR"
 }
@@ -75,17 +76,31 @@ run_against_stub() {
   if [[ "$bom_content" != 'NO_BOM' ]]; then
     printf '%s' "$bom_content" > "$project_dir/build/reports/bom.json"
   fi
+  # MODULE_BOMS lays out one BOM per module directory, the way the Go generator
+  # writes a repository with no module at its root.
+  local module
+  for module in "${!MODULE_BOMS[@]}"; do
+    mkdir -p "$project_dir/build/reports/modules/$module"
+    printf '%s' "${MODULE_BOMS[$module]}" > "$project_dir/build/reports/modules/$module/bom.json"
+  done
 
   local argv_file="$project_dir/argv.txt"
   local stdin_file="$project_dir/curl-stdin.txt"
   local status_file="$project_dir/statuses.txt"
   local calls_file="$project_dir/calls.txt"
   local sleeps_file="$project_dir/sleeps.txt"
+  local argv_all_file="$project_dir/argv-all.txt"
   cat > "$project_dir/bin/curl" <<EOF
 #!/usr/bin/env sh
 printf '%s\n' "\$@" > '$argv_file'
+printf '%s\n' "\$@" >> '$argv_all_file'
+echo '=== end of call' >> '$argv_all_file'
 cat > '$stdin_file'
 echo call >> '$calls_file'
+# Every BOM handed to the upload is kept, numbered by call, for the tests that read one.
+for arg in "\$@"; do
+  case "\$arg" in bom=@*) cp "\${arg#bom=@}" "$project_dir/bom-\$(wc -l < '$calls_file' | tr -d ' ').json" ;; esac
+done
 # run.sh reads this as the HTTP status from --write-out.
 status=200
 if [ -s '$status_file' ]; then
@@ -103,7 +118,7 @@ for arg in "\$@"; do
 done
 case "\$status" in
   2??) ;;
-  *) [ -n "\$output" ] && printf 'error code: %s\n' "\$status" > "\$output" ;;
+  *) [ -n "\$output" ] && printf '%s\n' "\${STUB_BODY:-error code: \$status}" > "\$output" ;;
 esac
 printf '%s' "\$status"
 [ "\$status" = '000' ] && exit 7
@@ -117,6 +132,7 @@ EOF
   chmod +x "$project_dir/bin/sleep"
 
   : > "$argv_file"
+  : > "$argv_all_file"
   : > "$stdin_file"
   : > "$calls_file"
   : > "$sleeps_file"
@@ -135,6 +151,7 @@ EOF
     # a leaked CI variable from the host would make these results meaningless.
     unset CI_COMMIT_TAG CI_COMMIT_BRANCH CI_DEFAULT_BRANCH CI_MERGE_REQUEST_IID
     unset BUILD_SOURCEBRANCH BUILD_REASON GITHUB_REF
+    unset BUILD_REPOSITORY_NAME CI_PROJECT_NAME GITHUB_REPOSITORY
     unset DEPENDENCY_TRACK_IS_LATEST DEPENDENCY_TRACK_DEFAULT_BRANCH
     unset DEPENDENCY_TRACK_PARENT_NAME DEPENDENCY_TRACK_PARENT_VERSION
     unset DEPENDENCY_TRACK_PROJECT_NAME DEPENDENCY_TRACK_PROJECT_VERSION
@@ -151,6 +168,8 @@ EOF
   set -e
 
   ARGV="$(cat "$argv_file")"
+  ARGV_ALL="$(cat "$argv_all_file")"
+  PROJECT_DIR="$project_dir"
   CURL_STDIN="$(cat "$stdin_file")"
   STDOUT="$(cat "$project_dir/stdout.txt")"
   CALLS="$(wc -l < "$calls_file" | tr -d ' ')"
@@ -489,6 +508,97 @@ STUB_STATUSES='503 200' run_against_stub "$BOM_OK" CI_COMMIT_BRANCH=main CI_DEFA
 assert_true 'a non-integer knob warns' \
   '[[ "$STDOUT" == *"DEPENDENCY_TRACK_ATTEMPTS="*"using 5"* && "$STDOUT" == *"DEPENDENCY_TRACK_RETRY_DELAY="*"using 30"* ]]'
 assert_true 'and falls back to the default instead of giving up' '[[ $CALLS -eq 2 && $RC -eq 0 && "$SLEEPS" == "30" ]]'
+
+echo '============================================================'
+echo 'Test 12: one project per module, under the repository'"'"'s project'
+echo '============================================================'
+# A repository with no Go module at its root and several below it gets one BOM
+# per module (KI-08). Each is uploaded as the project its module path names, under
+# a project for the repository, which has to exist first: a child naming a parent
+# that does not is answered 404 even with autoCreate.
+module_bom() {
+  printf '{"bomFormat":"CycloneDX","specVersion":"1.6","metadata":{"component":{"type":"application","name":"%s","version":"%s"}},"components":[]}' "$1" "$2"
+}
+# call_args <n>: the argv of the n-th call, one argument per line.
+call_args() {
+  printf '%s\n' "$ARGV_ALL" | awk -v n="$1" '/^=== end of call$/ { call++; next } call == n - 1 { print }'
+}
+# field_of <n> <field>: the value the n-th call sent for a form field, or nothing.
+field_of() {
+  call_args "$1" | sed -n "s|^$2=||p" | head -n 1
+}
+MODULE_BOMS=(
+  ['api']="$(module_bom 'example.test/api' 'v1.2.3')"
+  ['lib/tools']="$(module_bom 'example.test/lib/tools' 'v1.2.3')"
+)
+run_against_stub NO_BOM BUILD_SOURCEBRANCH=refs/tags/v1.2.3 BUILD_REPOSITORY_NAME=tenant-template
+assert_true 'the upload succeeds' '[[ $RC -eq 0 ]]'
+assert_true 'three uploads: the repository, then each module' '[[ $CALLS -eq 3 ]]'
+assert_true 'the repository'"'"'s project comes first, named after the repository' \
+  '[[ "$(field_of 1 projectName)" == "tenant-template" ]]'
+assert_true 'it is versionless and never claims isLatest' \
+  '[[ -z "$(field_of 1 projectVersion)" && "$(field_of 1 isLatest)" == "false" && -z "$(field_of 1 parentName)" ]]'
+assert_true 'its BOM holds no component and names the repository' \
+  '[[ "$(jq -r ".metadata.component.name" "$PROJECT_DIR/bom-1.json")" == "tenant-template" && "$(jq ".components // [] | length" "$PROJECT_DIR/bom-1.json")" -eq 0 ]]'
+assert_true 'each module is named after its module path, normalised as any name is' \
+  '[[ "$(field_of 2 projectName)" == "example.test-api" && "$(field_of 3 projectName)" == "example.test-lib-tools" ]]'
+assert_true 'each keeps its version and the tag build'"'"'s isLatest' \
+  '[[ "$(field_of 2 projectVersion)" == "v1.2.3" && "$(field_of 2 isLatest)" == "true" && "$(field_of 3 isLatest)" == "true" ]]'
+assert_true 'each is created under the repository'"'"'s project' \
+  '[[ "$(field_of 2 parentName)" == "tenant-template" && "$(field_of 3 parentName)" == "tenant-template" ]]'
+assert_true 'the log says how many modules went under which project' \
+  '[[ "$STDOUT" == *"Uploading 2 module BOM(s) under the repository'"'"'s project tenant-template."* ]]'
+
+run_against_stub NO_BOM BUILD_SOURCEBRANCH=refs/heads/main BUILD_REASON=PullRequest BUILD_REPOSITORY_NAME=tenant-template
+assert_true 'a pull request uploads none of them' '[[ $RC -eq 0 && $CALLS -eq 0 ]]'
+
+run_against_stub NO_BOM CI_COMMIT_BRANCH=main CI_DEFAULT_BRANCH=main CI_PROJECT_NAME=tenant-template
+assert_true 'GitLab CI names the repository from CI_PROJECT_NAME' '[[ "$(field_of 1 projectName)" == "tenant-template" ]]'
+run_against_stub NO_BOM GITHUB_REF=refs/tags/v1.2.3 GITHUB_REPOSITORY=owner/tenant-template
+assert_true 'GitHub Actions names it from GITHUB_REPOSITORY, without the owner' '[[ "$(field_of 1 projectName)" == "tenant-template" ]]'
+
+run_against_stub NO_BOM CI_COMMIT_TAG=v1.2.3 CI_PROJECT_NAME=tenant-template \
+  DEPENDENCY_TRACK_PROJECT_NAME=my/repo DEPENDENCY_TRACK_PARENT_NAME=backend DEPENDENCY_TRACK_PROJECT_VERSION=2.0.0
+assert_true 'DEPENDENCY_TRACK_PROJECT_NAME names the repository'"'"'s project, normalised' \
+  '[[ "$(field_of 1 projectName)" == "my-repo" && "$(field_of 2 parentName)" == "my-repo" ]]'
+assert_true 'DEPENDENCY_TRACK_PARENT_NAME is where the repository'"'"'s project is created' \
+  '[[ "$(field_of 1 parentName)" == "backend" ]]'
+assert_true 'DEPENDENCY_TRACK_PROJECT_VERSION is every module'"'"'s version' \
+  '[[ "$(field_of 2 projectVersion)" == "2.0.0" && "$(field_of 3 projectVersion)" == "2.0.0" ]]'
+
+STUB_STATUSES='400 200 200' STUB_BODY='BOM cannot be uploaded to a collection project.' \
+  run_against_stub NO_BOM CI_COMMIT_TAG=v1.2.3 CI_PROJECT_NAME=tenant-template
+assert_true 'a repository project turned into a collection project still gets its modules' \
+  '[[ $RC -eq 0 && $CALLS -eq 3 && "$STDOUT" == *"keeps tenant-template as a collection project"* ]]'
+
+STUB_STATUSES='401' run_against_stub NO_BOM CI_COMMIT_TAG=v1.2.3 CI_PROJECT_NAME=tenant-template
+assert_true 'when the repository'"'"'s project cannot be created, no module is sent' \
+  '[[ $RC -ne 0 && $CALLS -eq 1 && "$STDOUT" == *"could not be created, so no module was uploaded"* ]]'
+
+STUB_STATUSES='200 400 200' run_against_stub NO_BOM CI_COMMIT_TAG=v1.2.3 CI_PROJECT_NAME=tenant-template
+assert_true 'a refused module does not stop the others, and fails the job naming it' \
+  '[[ $RC -ne 0 && $CALLS -eq 3 && "$STDOUT" == *"did not take the BOM of: example.test-api"* ]]'
+
+MODULE_BOMS=(
+  ['api']="$(module_bom 'example.test/api' 'v1.2.3')"
+  ['copy']="$(module_bom 'example.test/api' 'v1.2.3')"
+)
+run_against_stub NO_BOM CI_COMMIT_TAG=v1.2.3 CI_PROJECT_NAME=tenant-template
+assert_true 'two modules declaring one module path fail before any upload' \
+  '[[ $RC -ne 0 && $CALLS -eq 0 && "$STDOUT" == *"two modules both declare"* ]]'
+
+MODULE_BOMS=(
+  ['api']="$(module_bom 'example.test/api' 'v1.2.3')"
+  ['nameless']='{"bomFormat":"CycloneDX","specVersion":"1.6","metadata":{},"components":[]}'
+)
+run_against_stub NO_BOM CI_COMMIT_TAG=v1.2.3 CI_PROJECT_NAME=tenant-template
+assert_true 'a module BOM without a name fails before any upload' \
+  '[[ $RC -ne 0 && $CALLS -eq 0 && "$STDOUT" == *"has no .metadata.component.name"* ]]'
+
+MODULE_BOMS=(['api']="$(module_bom 'example.test/api' 'v1.2.3')")
+run_against_stub "$BOM_OK" CI_COMMIT_TAG=v1.2.3 CI_PROJECT_NAME=tenant-template
+assert_true 'a root bom.json wins over module BOMs left beside it' '[[ $RC -eq 0 && $CALLS -eq 1 && "$ARGV" == *"projectName=my-app"* ]]'
+MODULE_BOMS=()
 
 echo
 echo '============================================================'

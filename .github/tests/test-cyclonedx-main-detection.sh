@@ -61,8 +61,10 @@ mkdir -p "$FAKE_GOPATH/bin" "$TEST_DIR/shim"
 
 cat > "$FAKE_GOPATH/bin/cyclonedx-gomod" <<'STUB'
 #!/usr/bin/env bash
-# Record the invocation, then write a placeholder BOM at the -output path.
-echo "$@" > "$INVOCATION_LOG"
+# Record the invocation and the directory it ran in, one line each per call, then write a
+# placeholder BOM at the -output path.
+echo "$@" >> "$INVOCATION_LOG"
+pwd >> "$INVOCATION_LOG.cwd"
 previous=""
 for arg in "$@"; do
   if [ "$previous" = "-output" ]; then
@@ -90,6 +92,7 @@ run_generator() {
   local workdir="$1"
   export INVOCATION_LOG="$workdir/invocation.log"
   : > "$INVOCATION_LOG"
+  : > "$INVOCATION_LOG.cwd"
 
   (
     cd "$workdir" || exit 1
@@ -310,6 +313,87 @@ if [[ "$invocation" == app\ * ]] && [[ "$invocation" == *"-main ." ]]; then
   print_result 0 "the root package resolves to 'app -main .'"
 else
   print_result 1 "expected 'app ... -main .', got: $invocation $(cat "$workdir/stdout.log")"
+fi
+
+# =============================================================================
+# Test 12: no go.mod at the root -- one BOM per module (KI-08)
+# =============================================================================
+echo "TEST 12: a repository of several modules and none at the root gets one BOM per module"
+workdir="$(mktemp -d "$TEST_DIR/modules-XXXXXX")" || exit 1
+mkdir -p "$workdir/api/cmd" "$workdir/lib" "$workdir/lib/tools/cmd/a" "$workdir/lib/tools/cmd/b" \
+  "$workdir/vendor/example.test/dep" "$workdir/testdata/fixture" "$workdir/.go/pkg/mod/example.test/cached"
+printf 'module example.test/api\n\ngo 1.24\n' > "$workdir/api/go.mod"
+echo 'package main' > "$workdir/api/cmd/main.go"
+printf 'module example.test/lib\n\ngo 1.24\n' > "$workdir/lib/go.mod"
+echo 'package lib' > "$workdir/lib/lib.go"
+printf 'module example.test/lib/tools\n\ngo 1.24\n' > "$workdir/lib/tools/go.mod"
+echo 'package main' > "$workdir/lib/tools/cmd/a/main.go"
+echo 'package main' > "$workdir/lib/tools/cmd/b/main.go"
+for skipped in vendor/example.test/dep testdata/fixture .go/pkg/mod/example.test/cached; do
+  printf 'module example.test/skipped\n\ngo 1.24\n' > "$workdir/$skipped/go.mod"
+done
+if run_generator "$workdir"; then
+  print_result 0 "the generator exits 0"
+else
+  print_result 1 "the generator failed: $(cat "$workdir/stdout.log")"
+fi
+written="$(cd "$workdir/build/reports" && find . -name bom.json | sort | tr '\n' ' ')"
+if [ "$written" = "./modules/api/bom.json ./modules/lib/bom.json ./modules/lib/tools/bom.json " ]; then
+  print_result 0 "one BOM per module, nested module included, under build/reports/modules"
+else
+  print_result 1 "expected the three module BOMs, got: $written $(cat "$workdir/stdout.log")"
+fi
+cwds="$(sed "s|^$workdir/||" "$workdir/invocation.log.cwd" | tr '\n' ' ')"
+if [ "$cwds" = "api lib lib/tools " ]; then
+  print_result 0 "each module is described from its own directory, and vendor/, testdata/ and .go/ are skipped"
+else
+  print_result 1 "expected the runs in api, lib and lib/tools, got: $cwds"
+fi
+invocations="$(cat "$workdir/invocation.log")"
+if [[ "$(sed -n 1p "$workdir/invocation.log")" == app\ *"-main ./cmd" ]] \
+  && [[ "$(sed -n 2p "$workdir/invocation.log")" == mod\ * ]] \
+  && [[ "$(sed -n 3p "$workdir/invocation.log")" == mod\ * ]]; then
+  print_result 0 "a module takes 'app' for one main, 'mod' for several, and 'mod' as a library"
+else
+  print_result 1 "unexpected modes: $invocations"
+fi
+if [ ! -e "$workdir/build/reports/bom.json" ]; then
+  print_result 0 "no repository-wide bom.json is written beside the module BOMs"
+else
+  print_result 1 "a bom.json was written at the root of the reports"
+fi
+
+# =============================================================================
+# Test 13: no go.mod anywhere fails loudly
+# =============================================================================
+echo "TEST 13: a repository with no Go module at all fails loudly"
+workdir="$(mktemp -d "$TEST_DIR/nomodule-XXXXXX")" || exit 1
+mkdir -p "$workdir/cmd"
+echo 'package main' > "$workdir/cmd/main.go"
+if run_generator "$workdir"; then
+  print_result 1 "expected a non-zero exit when no go.mod exists"
+else
+  print_result 0 "a repository without a go.mod exits non-zero"
+fi
+if grep -q "Could not find a go.mod in" "$workdir/stdout.log"; then
+  print_result 0 "the failure names the missing module"
+else
+  print_result 1 "the failure message is missing: $(cat "$workdir/stdout.log")"
+fi
+
+# =============================================================================
+# Test 14: a layout change never leaves the other layout's BOMs behind
+# =============================================================================
+echo "TEST 14: each layout removes the BOMs the other one wrote"
+workdir="$(new_module)"
+mkdir -p "$workdir/cmd" "$workdir/build/reports/modules/old"
+echo 'package main' > "$workdir/cmd/main.go"
+echo '{}' > "$workdir/build/reports/modules/old/bom.json"
+run_generator "$workdir" || true
+if [ -f "$workdir/build/reports/bom.json" ] && [ ! -e "$workdir/build/reports/modules" ]; then
+  print_result 0 "a root module's run removes stale module BOMs"
+else
+  print_result 1 "stale module BOMs survived a root module's run: $(cd "$workdir" && find build -type f)"
 fi
 
 # =============================================================================

@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed every Go CodeQL scan cloning this repository into the runner''s home, or fast-forwarding a developer''s own pipelines checkout in the middle of `make sast` (KI-03): the Go autobuilder runs a bare `make` before it builds the module, and in a project that includes `common.mk` first that is `setup`. `codeql/run.sh` now runs `codeql database create` with `PIPELINES_SETUP_SKIP` set, and `setup` then leaves `PIPELINES_HOME` alone. A bare `make` outside a scan still runs `setup`, the default goal kept by the decision recorded in KI-03; `make test ONLY=codeql-autobuild-setup` holds both'
+time: '2026-11-26T05:47:05.861705849Z'

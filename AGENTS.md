@@ -33,6 +33,7 @@ there is no target to add and no list to keep in step.
 | `build-version` | The version build argument (shared helper, GitHub image delivery, Fly.io deploy, Go workflow wiring) and the delivered image's way to the Fly.io deploy |
 | `checkov` | The Checkov IaC scanner tier (verified install, report verdict, advisory default, wiring on every platform) |
 | `codeql-extraction` | That a CodeQL scan never builds Go inside a `go.work` from outside the source root (the repository's own `go.work` kept, `GOWORK=off` without one, a nested `go.work` it leaves unread named), in `run.sh` and in the composite's step, and fails before the gate when its report says the database holds no line of the language's code -- in `run.sh` also when it says nothing, while the GitHub composite only warns then |
+| `codeql-autobuild-setup` | What a Go scan's build does to the pipelines checkout (KI-03): the autobuilder's bare `make` in a consumer that includes `common.mk` first runs `setup`, which leaves `PIPELINES_HOME` alone because `codeql/run.sh` sets `PIPELINES_SETUP_SKIP` for `database create` alone; outside a scan a bare `make` still fast-forwards it |
 | `codeql-gate` | That CodeQL fails on findings `.codeql-false-positives` does not list, on every platform, and that the GitHub upload cannot fail the job, |
 | `codeql-runtime` | Where each language's CodeQL analysis runs and with what (GitLab CI images and installs, run.sh's report and build mode, the Azure DevOps and GitHub Actions toolchains, every Node.js the templates name against its end of life) |
 | `codeql-scope` | That a local CodeQL scan builds from the files git would ship, on every core, |
@@ -1076,6 +1077,12 @@ vulnerable package. Because `SAST_TOOLS_EXTRA` is only ever appended to and only
 read, include order no longer changes which tools run.
 
 The `-include` prefix makes includes optional (no error if pipelines not cloned).
+
+`setup` is `common.mk`'s first target, so it is the default goal of a project that includes it
+first, and that stays (KI-03). CodeQL's Go autobuilder runs that bare `make` in every Go scan, so
+`codeql/run.sh` runs `database create` with `PIPELINES_SETUP_SKIP` set, and `setup` then changes
+nothing: a scan never clones this repository or fast-forwards a developer's checkout.
+`make test ONLY=codeql-autobuild-setup` holds both halves.
 
 ### The SAST Gate Fails
 

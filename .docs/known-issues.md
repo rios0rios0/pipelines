@@ -18,7 +18,7 @@ privately and fix them.
 |---|---|---|---|
 | [KI-01](#ki-01--the-dart-test-job-has-no-timeout) | `.github/workflows/dart.yaml`, `tests > test:all` | The Dart test job has no timeout | Open |
 | [KI-02](#ki-02--gitlab-ci-cannot-start-codeql-in-the-default-image) | `gitlab/global/stages/20-security/codeql.yaml`, `sast:codeql` | GitLab CI cannot start CodeQL in the default image | Fixed in #775 |
-| [KI-03](#ki-03--the-go-autobuild-runs-the-default-goal-of-a-consumer-makefile) | `global/scripts/tools/codeql/run.sh` and the `20-security/codeql` action, Go | The Go autobuild runs the default goal of a consumer Makefile | Won't fix |
+| [KI-03](#ki-03--the-go-autobuild-runs-the-default-goal-of-a-consumer-makefile) | `global/scripts/tools/codeql/run.sh` and the `20-security/codeql` action, Go | The Go autobuild runs the default goal of a consumer Makefile | Fixed in #829 (the default goal is unchanged) |
 | [KI-04](#ki-04--gitlab-cis-debian-11-images-can-no-longer-install-packages) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml`, `gitlab/java/abstracts/maven.yaml` | GitLab CI's Debian 11 images can no longer install packages | Fixed in #775 |
 | [KI-05](#ki-05--gitlab-cis-javascript-images-run-a-nodejs-past-its-end-of-life) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml` | GitLab CI's JavaScript images run a Node.js past its end of life | Fixed in #775 |
 | [KI-06](#ki-06--terra-install-stops-when-github-rate-limits-its-lookup) | `.github/workflows/terra.yaml`, `code-check > style:terra-format` and `tests > test:all`; `gitlab/terra/abstracts/terra.yaml`; `azure-devops/terra/abstracts/terra.yaml` | `terra install` stops when GitHub rate-limits its lookup | Fixed in #801 |
@@ -142,9 +142,13 @@ privately and fix them.
 - **The fix it needs:** end `common.mk` and each language fragment with `.DEFAULT_GOAL :=`. GNU make
   then takes the next target it reads, the consumer's first own target, as the default goal. That
   changes what a bare `make` does in every consumer, so it needs its own change and changelog entry.
-- **Status:** Won't fix. On 2026-10-29 the owner decided not to change the default goal of the shared
-  makefiles: a bare `make` keeps meaning what it means in every consumer today, and the cost above
-  stays. Do not propose `.DEFAULT_GOAL :=` again without a new reason.
+- **Status:** Fixed in #829, with the default goal unchanged. On 2026-10-29 the owner decided not to
+  change the default goal of the shared makefiles: a bare `make` keeps meaning what it means in
+  every consumer today. Do not propose `.DEFAULT_GOAL :=` again without a new reason. The cost above
+  is removed instead where it arises. `codeql/run.sh` runs `codeql database create` with
+  `PIPELINES_SETUP_SKIP` set, so the autobuilder's `make` still runs `setup`, and `setup` then leaves
+  `PIPELINES_HOME` alone: a scan clones nothing and pulls nothing. A bare `make` outside a scan still
+  clones or fast-forwards it. `make test ONLY=codeql-autobuild-setup` holds both halves.
 
 ## KI-04 — GitLab CI's Debian 11 images can no longer install packages
 

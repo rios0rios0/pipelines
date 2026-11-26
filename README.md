@@ -156,6 +156,13 @@ call and fast-forwards afterwards. Override the location with `PIPELINES_HOME`:
 make setup PIPELINES_HOME=/opt/pipelines
 ```
 
+`setup` is the first target of `common.mk`, so in a project that includes it
+first, a bare `make` runs it too. A Go CodeQL scan is the exception: its
+autobuilder runs a bare `make` before it builds the module, and the CodeQL
+runner sets `PIPELINES_SETUP_SKIP` for that build. `setup` then leaves
+`PIPELINES_HOME` alone, so a scan clones nothing and never fast-forwards your
+checkout.
+
 ### The `clone.sh` one-liner
 
 ```bash

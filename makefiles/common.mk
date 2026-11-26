@@ -39,8 +39,16 @@
 PIPELINES_HOME ?= $(HOME)/Development/github.com/rios0rios0/pipelines
 PIPELINES_REPO ?= https://github.com/rios0rios0/pipelines.git
 
+# This is the first target of the file, so a bare `make` runs it in every project that includes
+# this file before its own targets -- a choice kept on purpose (KI-03 in `.docs/known-issues.md`).
+# One caller never asks for it: CodeQL's Go autobuilder runs a bare `make` in the source root
+# before it builds the module, so every Go scan used to clone this repository into the runner's
+# home, or fast-forward a developer's own checkout in the middle of `make sast`. The CodeQL runner
+# sets PIPELINES_SETUP_SKIP for its build, and then `setup` changes nothing.
 setup:
-	@if [ -d "$(PIPELINES_HOME)/.git" ]; then \
+	@if [ -n "$${PIPELINES_SETUP_SKIP:-}" ]; then \
+		echo "Skipping setup inside $${PIPELINES_SETUP_SKIP}: $(PIPELINES_HOME) is left as it is."; \
+	elif [ -d "$(PIPELINES_HOME)/.git" ]; then \
 		echo "Updating pipelines repository at $(PIPELINES_HOME)..."; \
 		git -C "$(PIPELINES_HOME)" pull --ff-only; \
 	else \

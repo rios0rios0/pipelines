@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the Go SBOM generator stopping with `Could not find a directory containing Go files` in a module whose `func main` is not in a file called `main.go`, such as an AWS SAM function''s `main/bootstrap.go`: `golang/cyclonedx/run.sh` looked for `main.go` files, so no BOM was written and `report:dependency-track` failed on every default-branch build of such a project (KI-07). It now lists the module''s `main` packages with `go list`, which also leaves out a nested module''s `main.go`, `vendor/`, `testdata/` and a `//go:build ignore` generator; one entry point still takes `cyclonedx-gomod app` and several take `mod`. `make test ONLY=cyclonedx-main-detection` holds it'
+time: '2026-11-26T05:43:01.419517622Z'

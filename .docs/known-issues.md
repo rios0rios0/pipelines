@@ -22,7 +22,7 @@ privately and fix them.
 | [KI-04](#ki-04--gitlab-cis-debian-11-images-can-no-longer-install-packages) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml`, `gitlab/java/abstracts/maven.yaml` | GitLab CI's Debian 11 images can no longer install packages | Fixed in #775 |
 | [KI-05](#ki-05--gitlab-cis-javascript-images-run-a-nodejs-past-its-end-of-life) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml` | GitLab CI's JavaScript images run a Node.js past its end of life | Fixed in #775 |
 | [KI-06](#ki-06--terra-install-stops-when-github-rate-limits-its-lookup) | `.github/workflows/terra.yaml`, `code-check > style:terra-format` and `tests > test:all`; `gitlab/terra/abstracts/terra.yaml`; `azure-devops/terra/abstracts/terra.yaml` | `terra install` stops when GitHub rate-limits its lookup | Fixed in #801 |
-| [KI-07](#ki-07--the-go-sbom-generator-finds-no-main-package-outside-a-maingo) | `global/scripts/languages/golang/cyclonedx/run.sh`, `report:dependency-track` | The Go SBOM generator finds no `main` package outside a `main.go` | Open |
+| [KI-07](#ki-07--the-go-sbom-generator-finds-no-main-package-outside-a-maingo) | `global/scripts/languages/golang/cyclonedx/run.sh`, `report:dependency-track` | The Go SBOM generator finds no `main` package outside a `main.go` | Fixed in #829 |
 | [KI-08](#ki-08--the-go-sbom-generator-needs-a-module-at-the-repository-root) | `global/scripts/languages/golang/cyclonedx/run.sh`, `report:dependency-track` | The Go SBOM generator needs a module at the repository root | Open |
 
 ## KI-01 — The Dart test job has no timeout
@@ -309,12 +309,17 @@ privately and fix them.
   - Between 2026-11-13 and 2026-11-18, four consumer services failed `report:dependency-track` on
     their default branch at exactly that line, and a fifth one has the same layout. Their entry
     points are `main/bootstrap.go` or `cmd/<name>/bootstrap.go`, the layout of an AWS SAM function.
-- **The fix:** find the `main` packages rather than the files called `main.go`, for example the
-  directories `go list -f '{{if eq .Name "main"}}{{.Dir}}{{end}}' ./...` prints, and keep the rule
-  that one entry point takes `app` and several take `mod`.
-- **How to prove it:** a case in `.github/tests/test-cyclonedx-main-detection.sh` whose only
-  entry point is `main/bootstrap.go`, which resolves to `app -main ./main`.
-- **Status:** Open.
+- **The fix:** the script lists the module's `main` packages with
+  `go list -e -f '{{if eq .Name "main"}}{{.Dir}}{{end}}' ./...` rather than the files called
+  `main.go`, and keeps the rule that one entry point takes `app` and several take `mod`. `go list`
+  also leaves out what the build leaves out: a nested module's `main.go`, `vendor/`, `testdata/`
+  and a `//go:build ignore` generator.
+- **How it is proven:** `.github/tests/test-cyclonedx-main-detection.sh`, Tests 9 to 11: an entry
+  point in `main/bootstrap.go` resolves to `app -main ./main`, a nested module and an ignored
+  generator are not entry points, and a root package resolves to `-main .`. Run on the five
+  consumer services, the script wrote a BOM for each, and Dependency-Track's own validator accepted
+  all five.
+- **Status:** Fixed in #829.
 
 ## KI-08 — The Go SBOM generator needs a module at the repository root
 

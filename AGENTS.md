@@ -37,7 +37,7 @@ there is no target to add and no list to keep in step.
 | `codeql-runtime` | Where each language's CodeQL analysis runs and with what (GitLab CI images and installs, run.sh's report and build mode, the Azure DevOps and GitHub Actions toolchains, every Node.js the templates name against its end of life) |
 | `codeql-scope` | That a local CodeQL scan builds from the files git would ship, on every core, |
 | `containers-detect` | The container delivery's change detection (deleted/renamed folders, dispatch inputs) |
-| `cyclonedx-main-detection` | The Go CycloneDX entry-point detection |
+| `cyclonedx-main-detection` | The Go CycloneDX entry-point detection: the module's `main` packages as `go list` resolves them, whatever their files are called (`main/bootstrap.go`), never a nested module's or an ignored generator's; one takes `app`, several or a `pkg/` directory take `mod` |
 | `cyclonedx-licenses` | The Go CycloneDX generator's license ids, end to end through `run.sh`: every `cyclonedx-gomod` mode hands its BOM to the license helper, an id the SPDX list Dependency-Track validates against does not hold is restored (`deprecated_<id>` becomes `<id>`) or written as the license's `name`, a BOM with nothing to rewrite is left byte for byte, and a BOM that is not JSON fails the job; the rules are unit-tested in Go (`go-helpers`) |
 | `dart-pipeline` | The Dart/Flutter pipeline (scripts, report converters, Semgrep rules, cross-platform wiring) |
 | `dependency-check` | The OWASP Dependency-Check NVD cache / API-key contract |

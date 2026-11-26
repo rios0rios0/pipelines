@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the README''s cost figures for `GO_TEST_RACE`, which came from a local run with a warm build cache and understated CI: in one repository''s CI runs the detector took the unit tests from 27 s to 71 s, about 2.6 times, and the integration tests from 21 s to 46 s, about 2 times, and the README now says those figures come from one suite and will vary'
+time: '2026-11-26T22:45:43.030188078Z'

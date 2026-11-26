@@ -158,7 +158,7 @@ asking the network nothing -- `test-dependency-updates.sh` runs it live with eve
 
 | Tool                 | Purpose                   | Script Location                          | Configuration         |
 |----------------------|---------------------------|------------------------------------------|-----------------------|
-| **Basic Checks**     | PR/MR rebase and changelog verification | `global/scripts/shared/rebase-check.sh`, `changelog-check.sh` | Auto-configured       |
+| **Basic Checks**     | PR/MR rebase and changelog verification | Inline in each provider's `stages/10-code-check/basic-checks` template; `global/scripts/shared/rebase-check.sh` and `changelog-check.sh` are standalone helpers that no template calls | Auto-configured       |
 | **SonarQube**        | Code quality & security   | `global/scripts/tools/sonarqube/`        | Project settings      |
 | **Dependency Track** | SBOM tracking             | `global/scripts/tools/dependency-track/` | Environment variables |
 

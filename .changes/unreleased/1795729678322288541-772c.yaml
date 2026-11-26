@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the GitLab rebase check of `quality:basic-checks` passing every merge request in a merged results pipeline or merge train, rebased or not: those run on the merge commit GitLab prepares, which always contains the target branch, and the check compared `HEAD`. It now judges `CI_MERGE_REQUEST_SOURCE_BRANCH_SHA`, which GitLab sets in those pipelines only, and `HEAD`, the merge request''s own commit, in an ordinary merge request pipeline, for the rebase comparison, the already-merged guard and the count of commits behind; a failed fetch of the target branch, or a target or source commit it cannot resolve, now fails the job with a line that says so. `make test ONLY=gitlab-rebase-check` holds it'
+time: '2026-11-26T21:47:58.322221797Z'

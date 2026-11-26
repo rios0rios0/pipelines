@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the README, `AGENTS.md` and the Copilot instructions, which said the basic checks run `global/scripts/shared/rebase-check.sh` and `changelog-check.sh`: each provider''s `basic-checks` template runs both checks inline, and the two scripts are standalone helpers that no template calls'
+time: '2026-11-26T21:47:58.3244952Z'

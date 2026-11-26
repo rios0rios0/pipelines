@@ -2121,6 +2121,19 @@ an external file (`core.excludesFile`, `$GIT_DIR/info/exclude`) are local to a c
 reach CI or a bot running `git add -A`. The block sits first in the file on purpose — gitignore is
 last-match-wins, so your own entries below it, including a `!` negation, still win.
 
+Which language fragments the block carries follows the pipeline the project consumes, read from the two
+places that declare it: the `makefiles/<language>.mk` its `Makefile` includes, and the pipeline its CI
+imports, so a project with no `Makefile` still gets the rules of the language its CI runs:
+
+| Platform       | Read from                                   | Names the language                                                       |
+|----------------|---------------------------------------------|--------------------------------------------------------------------------|
+| GitHub Actions | `.github/workflows/*.yml`, `*.yaml`         | a reusable workflow by its toolchain (`go-binary.yaml` → `golang`), a composite action by its directory (`github/python/...`) |
+| Azure DevOps   | `azure-pipelines*.yml`, `*.yaml` at the root | a template by its directory (`azure-devops/terra/terra.yaml@pipelines`), whatever the resource alias |
+| GitLab CI      | `.gitlab-ci.yml`, `.gitlab-ci.yaml`         | an include by its directory (`.../gitlab/dart/dart-library.yaml`)        |
+
+A workflow that is itself reusable (`workflow_call`) defines a pipeline rather than importing one, so
+it names no language, and neither does a language-neutral one (`checks.yaml`, `global/` stages).
+
 ### Security & Analysis Tools
 
 #### SAST (Static Application Security Testing)

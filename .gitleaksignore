@@ -1,0 +1,9 @@
+# Findings suppressed by fingerprint (`<commit>:<file>:<rule>:<line>`), each with the reason it is
+# safe. A suppression covers that one finding in that one commit, never a file or a rule.
+
+# 2026-11-26: a false positive of the GitLab-customised ruleset (the second pass of
+# `global/scripts/tools/gitleaks/run.sh`) in the code-review skill as commit 943940ba added it. The
+# flagged line is prose that lists the prefixes of well-known token formats as examples of what a
+# reviewer should look for, each cut off by an ellipsis, with no token value anywhere on it; the
+# line has been rewritten since, and the file no longer matches the rule.
+943940bad8e17992e545b29ead8f873819f939c3:.github/skills/code-review/SKILL.md:Slack token:159

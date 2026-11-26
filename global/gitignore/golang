@@ -17,3 +17,14 @@
 # Written by the same runner after a run narrowed to the affected packages, for the
 # coverage gate that reads it.
 /go-test-selection.txt
+
+# `global/scripts/languages/golang/golangci-lint/run.sh` (`make lint`) installs the pinned
+# golangci-lint at `./bin/golangci-lint` when no binary of that version is on PATH, staging it
+# under a temporary name beside it first. Only those names: the rest of `bin/` is the project's.
+/bin/golangci-lint
+/bin/.golangci-lint.*
+
+# `global/scripts/shared/go-modcache.sh` falls back to GOPATH=$(pwd)/.go when none is exported --
+# Go's own default on a developer's machine, where GOPATH is usually unset -- so `make test` and
+# `make cyclonedx` keep a whole module cache inside the project.
+/.go/

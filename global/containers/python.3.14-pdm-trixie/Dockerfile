@@ -17,7 +17,7 @@
 # needs them. A project that compiles a C extension with no wheel, or renders with
 # Pango, extends this image with what it needs. The unprivileged user is the 3.13
 # image's `app_user`, which images built on this one switch to.
-FROM python:3.14-slim-trixie@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f
+FROM python:3.14-slim-trixie@sha256:22eafb370920ad8b429e0aec3fff433e0669968519f5d60469d83729c138b28b
 
 # Pinned and binary-only, matching global/scripts/shared/pinned-versions.sh.
 # An unversioned install bakes whatever PyPI served on build day into the

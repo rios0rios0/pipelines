@@ -12,7 +12,7 @@
 # The folder name IS the published tag, codename included: `detect-changed-folders.sh`
 # splits it into the image name and the tag for the container delivery of
 # .github/workflows/default.yaml.
-FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
+FROM python:3.15-slim-trixie@sha256:63bb298d2b7b88f176f51b5189f54ce6535c997682ea70885d2132f5d473a8a5
 
 # Pinned and binary-only, matching global/scripts/shared/pinned-versions.sh.
 # An unversioned install bakes whatever PyPI served on build day into the

@@ -342,12 +342,12 @@ TERRAGRUNT_SHA256_ARM64="a730c7daf2fb7dd13e6e7b016b3a89fd4f546bc81a31f8ff1947486
 # upstream: github-release rios0rios0/terra
 # osv: none
 # checksums: https://github.com/rios0rios0/terra/releases/download/{version}/checksums.txt
-TERRA_PINNED_VERSION="1.18.18"
+TERRA_PINNED_VERSION="1.18.20"
 TERRA_VERSION="${TERRA_VERSION:-${TERRA_PINNED_VERSION}}"
 # asset: https://github.com/rios0rios0/terra/releases/download/{version}/terra-{version}-linux-amd64.tar.gz
-TERRA_SHA256_AMD64="6d2a1f3ed2c2bb89497e82956524568a4e458bd53835daeda81f763e5606a779"
+TERRA_SHA256_AMD64="4ae97e5c08f8e45132f40c2b1597f79403d11eb3935cbac479c6bb6a4d0bafb8"
 # asset: https://github.com/rios0rios0/terra/releases/download/{version}/terra-{version}-linux-arm64.tar.gz
-TERRA_SHA256_ARM64="7f0fb4263574f1132cbab579c824c5282b35928dfc302b246630b1c9702ab514"
+TERRA_SHA256_ARM64="035031457365e761fa4acb345767751beb665209be4e93eda9d7a0f39e47d63b"
 
 # --- Helm charts and Argo CD tooling -----------------------------------------
 
@@ -402,12 +402,12 @@ KUBERNETES_JSON_SCHEMA_VERSION="${KUBERNETES_JSON_SCHEMA_VERSION:-${KUBERNETES_J
 # upstream: github-release superfly/flyctl
 # osv: Go github.com/superfly/flyctl
 # checksums: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_checksums.txt
-FLYCTL_PINNED_VERSION="0.5.10"
+FLYCTL_PINNED_VERSION="0.5.13"
 FLYCTL_VERSION="${FLYCTL_VERSION:-${FLYCTL_PINNED_VERSION}}"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_x86_64.tar.gz
-FLYCTL_SHA256_X86_64="2f96f16e9ccaf273acb17ef39bd018de4fea8bf4ee905e85de93ca2a723b03fb"
+FLYCTL_SHA256_X86_64="f1ae6fc1d0151d9a3a0086d22e0552e33cf9ab6f8f9c7c2baf7daa96d3ee0870"
 # asset: https://github.com/superfly/flyctl/releases/download/v{version}/flyctl_{version}_Linux_arm64.tar.gz
-FLYCTL_SHA256_ARM64="aaa52bbf00405ec5d35d5d7148f261e870a88060f7b90eb028c51930540caaf0"
+FLYCTL_SHA256_ARM64="e53f5668aa82c737815ce9c897aa6d0d557af034eb6b4f209566bf115337b41f"
 
 # crane, from google/go-containerregistry. The Fly.io deploy copies the image
 # the pipeline already delivered into registry.fly.io with it -- registry to
@@ -467,7 +467,7 @@ YQ_SHA256_DARWIN_ARM64="a2aebb93b5bdcb61bb76f630e42a0ef6a3ee10842a6516cd7b9e4080
 # upstream: npm wrangler
 WRANGLER_CLI_SPEC="${WRANGLER_CLI_SPEC:-wrangler@4}"
 # upstream: npm vercel
-VERCEL_CLI_SPEC="${VERCEL_CLI_SPEC:-vercel@66}"
+VERCEL_CLI_SPEC="${VERCEL_CLI_SPEC:-vercel@67}"
 # upstream: npm netlify-cli
 NETLIFY_CLI_SPEC="${NETLIFY_CLI_SPEC:-netlify-cli@27}"
 
@@ -539,7 +539,7 @@ STOML_SHA256_AMD64="8420ad10d39ca568234186be89a60f8a8ece29bc2a91b4c8ad2e00ef73b6
 # ever proved the bytes matched whatever version it chose -- integrity without
 # identity.
 # upstream: goproxy golang.org/x/vuln
-GOVULNCHECK_PINNED_VERSION="v1.9.0"
+GOVULNCHECK_PINNED_VERSION="v1.10.0"
 GOVULNCHECK_VERSION="${GOVULNCHECK_VERSION:-${GOVULNCHECK_PINNED_VERSION}}"
 # upstream: goproxy gotest.tools/gotestsum
 GOTESTSUM_PINNED_VERSION="v1.13.0"
@@ -590,10 +590,10 @@ HISHEL_SPEC="${HISHEL_SPEC:-hishel==2.0.0}"
 # upstream: pypi vulture
 VULTURE_SPEC="${VULTURE_SPEC:-vulture==2.16}"
 # upstream: pypi semgrep
-SEMGREP_SPEC="${SEMGREP_SPEC:-semgrep==1.185.0}"
+SEMGREP_SPEC="${SEMGREP_SPEC:-semgrep==1.186.0}"
 # upstream: rubygems bundler-audit
 BUNDLER_AUDIT_SPEC="${BUNDLER_AUDIT_SPEC:-bundler-audit:0.9.3}"
 # upstream: rubygems debride
 DEBRIDE_SPEC="${DEBRIDE_SPEC:-debride:1.15.2}"
 # upstream: npm knip
-KNIP_SPEC="${KNIP_SPEC:-knip@6.45.1}"
+KNIP_SPEC="${KNIP_SPEC:-knip@6.46.1}"

@@ -20,7 +20,7 @@ include:
 # the bundle, and `jq` because the findings gate reads the SARIF with it.
 .codeql-runtime:
   extends: '.scripts-repo'
-  image: 'python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90'
+  image: 'python:3.13-slim@sha256:7249d5587b78209a006dc4a3b5340678f84ea729239193aa559962cd8c1fce50'
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends git jq curl
     - !reference [ .scripts-repo, before_script ]

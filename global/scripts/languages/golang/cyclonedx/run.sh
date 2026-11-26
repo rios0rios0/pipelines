@@ -54,55 +54,7 @@ if git rev-parse --git-dir >/dev/null 2>&1 && ! git sparse-checkout list >/dev/n
   git config --unset-all extensions.worktreeConfig 2>/dev/null || true
 fi
 
-if [ -d "pkg" ]; then
-  echo "Found 'pkg' directory, using 'cyclonedx-gomod mod' command..."
-  "$(go env GOPATH)/bin/cyclonedx-gomod" mod -json -output "$BOM_PATH/bom.json" -licenses
-else
-  # One line per `main` package of the module, as `go list` resolves them, relative to the module
-  # root (`.` for the root itself). A module may legitimately hold SEVERAL -- a server plus a
-  # scheduled worker, a CLI plus its daemon -- and `-main` accepts exactly one path, so handing it
-  # a multi-line list made cyclonedx-gomod refuse the whole run with
-  # `invalid options: - main: "..." does not exist`. No BOM was written, the SBOM upload that
-  # consumes it had nothing to send, and the job failed on every single build.
-  #
-  # `go list` rather than `find -name main.go`: what makes a directory an entry point is its
-  # `package main`, not the name of a file in it. An AWS SAM function keeps `func main` in
-  # `main/bootstrap.go`, and searching for `main.go` stopped every such repository with "no
-  # directory containing Go files" before a BOM was written (KI-07). `go list` also skips what the
-  # build skips: a nested module's own `main.go`, `vendor/`, `testdata/`, a `.go/` GOPATH, and a
-  # `//go:build ignore` generator.
-  if ! main_dirs="$(go list -e -f '{{if eq .Name "main"}}{{.Dir}}{{end}}' ./...)"; then
-    echo "Could not list the packages of the Go module in $(pwd) (see the error above)."
-    exit 1
-  fi
-  folders="$(printf '%s\n' "$main_dirs" | while IFS= read -r dir; do
-    case "$dir" in
-      '') ;;
-      "$PWD") echo '.' ;;
-      "$PWD"/*) echo "./${dir#"$PWD"/}" ;;
-      *) echo "$dir" ;;
-    esac
-  done)"
-  if [ -z "$folders" ]; then
-    echo "Could not find a main package in the Go module in $(pwd)."
-    exit 1
-  fi
-
-  main_count="$(printf '%s\n' "$folders" | grep -c '^')"
-
-  if [ "$main_count" -gt 1 ]; then
-    # `app` describes ONE binary's reachable dependencies; with several binaries in the module no
-    # single one represents the repository, and picking one arbitrarily would silently drop the
-    # dependencies only the others pull in. `mod` describes the module -- a superset of every
-    # binary's dependencies -- which is the safe direction for vulnerability tracking: it can
-    # over-report a component, never miss one.
-    echo "Found $main_count main packages, using 'cyclonedx-gomod mod' command..."
-    "$(go env GOPATH)/bin/cyclonedx-gomod" mod -json -output "$BOM_PATH/bom.json" -licenses
-  else
-    echo "Using 'cyclonedx-gomod app' command..."
-    "$(go env GOPATH)/bin/cyclonedx-gomod" app -json -output "$BOM_PATH/bom.json" -packages -files -licenses -main "$folders"
-  fi
-fi
+CYCLONEDX_GOMOD="$(go env GOPATH)/bin/cyclonedx-gomod"
 
 # cyclonedx-gomod writes the license its detector matched into `license.id` VERBATIM, and the
 # detector (go-license-detector, whose licenses are SPDX's license-list-data files) names a
@@ -122,4 +74,111 @@ fi
 # has the Go it just installed cyclonedx-gomod with; see `licenses/internal/cli`.
 # shellcheck source=/dev/null
 . "$SCRIPTS_DIR/global/scripts/shared/go-helper.sh"
-go_helper_run global/scripts/languages/golang/cyclonedx/licenses "$BOM_PATH/bom.json"
+
+# Writes the BOM of the Go module in the current directory to $1, then rewrites its license ids.
+# $2 says what a module with no `main` package gets: `fail` stops the run, `mod` describes the
+# module as a library.
+generate_bom() {
+  gb_output="$1"
+  gb_without_main="$2"
+
+  if [ -d "pkg" ]; then
+    echo "Found 'pkg' directory, using 'cyclonedx-gomod mod' command..."
+    "$CYCLONEDX_GOMOD" mod -json -output "$gb_output" -licenses
+    go_helper_run global/scripts/languages/golang/cyclonedx/licenses "$gb_output"
+    return
+  fi
+
+  # One line per `main` package of the module, as `go list` resolves them, relative to the module
+  # root (`.` for the root itself). A module may legitimately hold SEVERAL -- a server plus a
+  # scheduled worker, a CLI plus its daemon -- and `-main` accepts exactly one path, so handing it
+  # a multi-line list made cyclonedx-gomod refuse the whole run with
+  # `invalid options: - main: "..." does not exist`. No BOM was written, the SBOM upload that
+  # consumes it had nothing to send, and the job failed on every single build.
+  #
+  # `go list` rather than `find -name main.go`: what makes a directory an entry point is its
+  # `package main`, not the name of a file in it. An AWS SAM function keeps `func main` in
+  # `main/bootstrap.go`, and searching for `main.go` stopped every such repository with "no
+  # directory containing Go files" before a BOM was written (KI-07). `go list` also skips what the
+  # build skips: a nested module's own `main.go`, `vendor/`, `testdata/`, a `.go/` GOPATH, and a
+  # `//go:build ignore` generator.
+  if ! gb_main_dirs="$(go list -e -f '{{if eq .Name "main"}}{{.Dir}}{{end}}' ./...)"; then
+    echo "Could not list the packages of the Go module in $(pwd) (see the error above)."
+    exit 1
+  fi
+  gb_folders="$(printf '%s\n' "$gb_main_dirs" | while IFS= read -r dir; do
+    case "$dir" in
+      '') ;;
+      "$PWD") echo '.' ;;
+      "$PWD"/*) echo "./${dir#"$PWD"/}" ;;
+      *) echo "$dir" ;;
+    esac
+  done)"
+  if [ -z "$gb_folders" ]; then
+    if [ "$gb_without_main" != 'mod' ]; then
+      echo "Could not find a main package in the Go module in $(pwd)."
+      exit 1
+    fi
+    # One module of several, and a library: its BOM is the module's own requirements.
+    echo "Found no main package in $(pwd), using 'cyclonedx-gomod mod' command..."
+    "$CYCLONEDX_GOMOD" mod -json -output "$gb_output" -licenses
+    go_helper_run global/scripts/languages/golang/cyclonedx/licenses "$gb_output"
+    return
+  fi
+
+  gb_main_count="$(printf '%s\n' "$gb_folders" | grep -c '^')"
+
+  if [ "$gb_main_count" -gt 1 ]; then
+    # `app` describes ONE binary's reachable dependencies; with several binaries in the module no
+    # single one represents the repository, and picking one arbitrarily would silently drop the
+    # dependencies only the others pull in. `mod` describes the module -- a superset of every
+    # binary's dependencies -- which is the safe direction for vulnerability tracking: it can
+    # over-report a component, never miss one.
+    echo "Found $gb_main_count main packages, using 'cyclonedx-gomod mod' command..."
+    "$CYCLONEDX_GOMOD" mod -json -output "$gb_output" -licenses
+  else
+    echo "Using 'cyclonedx-gomod app' command..."
+    "$CYCLONEDX_GOMOD" app -json -output "$gb_output" -packages -files -licenses -main "$gb_folders"
+  fi
+  go_helper_run global/scripts/languages/golang/cyclonedx/licenses "$gb_output"
+}
+
+# One module at the root: one BOM, `$BOM_PATH/bom.json`, uploaded as one project.
+#
+# No `go.mod` at the root, but modules below it (KI-08): one BOM per module, at
+# `$BOM_PATH/modules/<module directory>/bom.json`. The uploader sends each as a project of its own,
+# named after its module path as a single-module BOM is, under a project for the repository, so a
+# repository of several services or Lambda functions keeps one inventory per deployable module
+# instead of none. A module directory is any holding a `go.mod`, below a directory the build would
+# skip -- hidden ones (a `.go/` GOPATH or `.git/`), `vendor/`, `testdata/`, `node_modules/` --
+# never. A module nested in another is a module of its own, as `go` treats it. Each is described
+# alone, by the same rules as a root module, except that a module without a `main` package is a
+# library and takes `mod` instead of failing the run.
+#
+# Each layout removes what the other one left in `$BOM_PATH`, so a local run in a repository that
+# changed layout never uploads a stale inventory beside the current one.
+if [ -f go.mod ]; then
+  rm -rf "$BOM_PATH/modules"
+  generate_bom "$BOM_PATH/bom.json" fail
+else
+  modules="$(find . \( -type d \( -name '.?*' -o -name vendor -o -name testdata -o -name node_modules \) \) -prune \
+    -o -type f -name go.mod -print | sed 's|/go\.mod$||' | sort)"
+  if [ -z "$modules" ]; then
+    echo "Could not find a go.mod in $(pwd) or below it."
+    exit 1
+  fi
+  rm -f "$BOM_PATH/bom.json"
+  rm -rf "$BOM_PATH/modules"
+  BOM_ROOT="$(cd "$BOM_PATH" && pwd)"
+  echo "No go.mod at the root; writing one BOM per module, under $BOM_PATH/modules:"
+  printf '%s\n' "$modules" | sed 's|^\./||; s|^|  |'
+  printf '%s\n' "$modules" | while IFS= read -r module; do
+    module_output="$BOM_ROOT/modules/${module#./}/bom.json"
+    mkdir -p "$(dirname "$module_output")"
+    echo "Module ${module#./}:"
+    (
+      cd "$module" || exit 1
+      generate_bom "$module_output" mod
+    ) || exit 1
+  done
+fi

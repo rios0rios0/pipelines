@@ -2272,14 +2272,14 @@ The uploader is driven entirely by environment variables. Only the first two are
 | `DEPENDENCY_TRACK_TOKEN` | — | API key. Sent through a `curl` config file on **stdin**, never on argv |
 | `DEPENDENCY_TRACK_DEFAULT_BRANCH` | — | The repository's default branch, as `main` or `refs/heads/main`. Needed **only on Azure DevOps and GitHub Actions**, neither of which publishes it (see below) |
 | `DEPENDENCY_TRACK_PARENT_NAME` / `_PARENT_VERSION` | — | Collection parent for **newly created** projects |
-| `DEPENDENCY_TRACK_PROJECT_NAME` / `_PROJECT_VERSION` | from the BOM | Override the identity taken from `metadata.component` |
+| `DEPENDENCY_TRACK_PROJECT_NAME` / `_PROJECT_VERSION` | from the BOM | Override the identity taken from `metadata.component`. With one BOM per Go module, the name is the repository's project and the version is every module's |
 | `DEPENDENCY_TRACK_IS_LATEST` | auto-detected | Force the `isLatest` flag on or off |
 | `DEPENDENCY_TRACK_UPLOAD_ON_PULL_REQUEST` | `false` | Upload from merge/pull-request builds too |
 | `DEPENDENCY_TRACK_INSECURE` | unset | Skip TLS verification (prefer trusting the CA on the agent) |
 | `DEPENDENCY_TRACK_ATTEMPTS` | `5` | Upload attempts while the server is briefly away: no response, `408`, `429` or `5xx` (Cloudflare's `521` included). Any other answer fails at once |
 | `DEPENDENCY_TRACK_RETRY_DELAY` | `30` | Seconds before the first retry, multiplied by the attempt number: 30s, 60s, 90s and 120s, five minutes in all |
 
-Three behaviours are worth knowing before adopting it, because each one is silent:
+Four behaviours are worth knowing before adopting it, because each one is silent:
 
 - **Merge/pull-request builds do not upload.** A project's identity in Dependency-Track is the pair
   `(name, version)`, so a pull request whose version file is already bumped would create that version's
@@ -2290,10 +2290,44 @@ Three behaviours are worth knowing before adopting it, because each one is silen
   (`Build.Repository.DefaultBranch` does not exist), and GitHub Actions exposes it only through the
   `github.event.repository` context — on those two, set `DEPENDENCY_TRACK_DEFAULT_BRANCH` or a
   default-branch build will upload without claiming the flag.
+- **A tag build uploads too.** A tag is the release, so its BOM carries the released version, and the
+  uploader claims `isLatest` for it. GitLab CI uploads from the default branch and from tags. On Azure
+  DevOps the `management` stage runs on a tag build for its `report:dependency-track` job alone:
+  `report:sonarqube` stays off tags, because a tag build runs no tests stage to give it coverage. A
+  pull request still uploads nothing. GitHub Actions has no Dependency-Track upload.
 - **A collection parent applies only to projects being created.** Dependency-Track resolves `parentName`
   solely when it auto-creates the project; for one that already exists the field is read and ignored, with
   no error. Re-parenting an existing portfolio needs `PATCH /api/v1/project/{uuid}` from an administrative
   job.
+
+**One project per Go module.** A Go repository with a `go.mod` at its root gets one BOM and one project,
+as before. A repository with no `go.mod` at its root but modules below it, such as several services or
+Lambda functions side by side, gets one BOM per module instead. They are written to
+`modules/<module directory>/bom.json` under the report directory and uploaded as follows:
+
+- Each module is uploaded as its own project. It is named after its module path, normalised like any
+  name (`github.com/org/repo/api` becomes `github.com-org-repo-api`). Its version comes from its BOM, and
+  `isLatest` follows the rules above.
+- Every module project is created under one project for the repository, which keeps them together.
+  The repository project is named after the repository: Azure DevOps' `Build.Repository.Name`, GitLab's
+  `CI_PROJECT_NAME`, or the repository part of GitHub's `GITHUB_REPOSITORY`, else the directory.
+  `DEPENDENCY_TRACK_PROJECT_NAME` overrides that name.
+- The repository project is versionless and holds no component of its own. The uploader creates it, or
+  keeps it, with a component-free BOM before the first module, because a child naming a parent that
+  does not exist is refused. `DEPENDENCY_TRACK_PARENT_NAME` is where it is created, as for any project.
+- An administrator may turn the repository project into a collection project, for example one that
+  aggregates its latest children. The server then refuses BOMs for it, and the uploader takes that
+  refusal to mean the project exists.
+- A module directory is any directory holding a `go.mod`, nested modules included. Hidden directories
+  (a `.go/` GOPATH, `.git/`), `vendor/`, `testdata/` and `node_modules/` are skipped. Each module is
+  described by the same rules as a root module, except that a module with no `main` package is a
+  library and takes `cyclonedx-gomod mod`.
+- Two modules that declare the same module path, or a module BOM with no name, fail the job before
+  anything is uploaded. A module the server refuses does not stop the others, and the job fails at the
+  end, naming it. `DEPENDENCY_TRACK_PROJECT_VERSION`, when set, is every module's version.
+
+`make test ONLY=cyclonedx-main-detection` holds the generator's side, and `make test ONLY=dependency-track`
+the uploader's.
 
 Verified against Dependency-Track `4.14.x` and `5.0.5`: the upload endpoint, its multipart parameters and
 its authentication header are identical across both, so one code path serves them.
@@ -2482,6 +2516,25 @@ Optional environment variables:
 - golangci-lint gives up after `30m` by default. On a busy self-hosted runner, raise it with
   `GOLANGCI_LINT_TIMEOUT` (for example `45m`).
 - Exit code 4 means the time ran out, not that anything was found.
+
+**A project's own `.golangci.yml`** is merged onto the shared configuration, and the result is
+checked with `golangci-lint config verify` before the lint runs, so an invalid key fails with its
+name. From a version 2 file, every section arrives:
+
+- `linters.enable` and `formatters.enable` add to the shared lists.
+- `linters.disable` is written, and its linters leave `enable`. That is what turns off a linter of
+  v2's default set, such as `errcheck`.
+- `linters.default` is the project's.
+- `linters.settings`, `formatters.settings` (its goimports `local-prefixes`, say), `run`, `issues`,
+  `output` and `severity` are deep-merged. The project's keys win, and a list replaces the shared
+  one.
+- In `linters.exclusions` and `formatters.exclusions`, the project's `rules`, `paths`,
+  `paths-except` and `presets` are added to the shared ones, never replacing them.
+- The lint's own flags still win: `--timeout`, `--max-issues-per-linter` and `--max-same-issues`.
+
+A version 1 file contributes `linters.enable`, `linters.disable` and `linters-settings` only, because
+its other sections mean something else in version 2. `golangci-lint migrate` converts it.
+`make test ONLY=yaml-merge` holds the merge.
 
 ##### Goose Migration Order (`quality:migration-order`)
 

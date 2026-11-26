@@ -23,7 +23,7 @@ privately and fix them.
 | [KI-05](#ki-05--gitlab-cis-javascript-images-run-a-nodejs-past-its-end-of-life) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml` | GitLab CI's JavaScript images run a Node.js past its end of life | Fixed in #775 |
 | [KI-06](#ki-06--terra-install-stops-when-github-rate-limits-its-lookup) | `.github/workflows/terra.yaml`, `code-check > style:terra-format` and `tests > test:all`; `gitlab/terra/abstracts/terra.yaml`; `azure-devops/terra/abstracts/terra.yaml` | `terra install` stops when GitHub rate-limits its lookup | Fixed in #801 |
 | [KI-07](#ki-07--the-go-sbom-generator-finds-no-main-package-outside-a-maingo) | `global/scripts/languages/golang/cyclonedx/run.sh`, `report:dependency-track` | The Go SBOM generator finds no `main` package outside a `main.go` | Fixed in #829 |
-| [KI-08](#ki-08--the-go-sbom-generator-needs-a-module-at-the-repository-root) | `global/scripts/languages/golang/cyclonedx/run.sh`, `report:dependency-track` | The Go SBOM generator needs a module at the repository root | Open |
+| [KI-08](#ki-08--the-go-sbom-generator-needs-a-module-at-the-repository-root) | `global/scripts/languages/golang/cyclonedx/run.sh`, `report:dependency-track` | The Go SBOM generator needs a module at the repository root | Fixed in #831 |
 
 ## KI-01 — The Dart test job has no timeout
 
@@ -340,9 +340,14 @@ privately and fix them.
     repository that holds three modules in subdirectories and no `go.mod` at its root. Its pipeline
     uses `azure-devops/golang/stages/35-management/go.yaml`, but an earlier stage has failed on
     every default-branch run since 2026-10-28, so CI has not reached the job there yet.
-- **The fix:** generate one BOM per module, with `-output` per module, or let the consumer name the
-  module directory the way `working_directory` does for the JavaScript templates. The uploader then
-  has to send each BOM to its own project.
-- **How to prove it:** a case in `.github/tests/test-cyclonedx-main-detection.sh` with two modules
-  in subdirectories and none at the root.
-- **Status:** Open.
+- **The fix:** with no `go.mod` at the root, the generator writes one BOM per module, at
+  `modules/<module directory>/bom.json`. The uploader sends each as the project its module path
+  names, under a versionless, component-free project for the repository, which it creates first.
+  The convention and its edge cases are in README.md, "One project per Go module".
+- **How it is proven:** `.github/tests/test-cyclonedx-main-detection.sh`, Tests 12 to 14 (the
+  layout, the skipped directories, the modes, a repository with no module, a layout change), and
+  `.github/tests/test-dependency-track.sh`, Test 12 (order, names, parents, versions, `isLatest`,
+  overrides, a collection parent, refusals, duplicate and unnamed modules). On the consumer
+  repository it was reproduced on, the four module BOMs and the repository project's BOM validate
+  with Dependency-Track 5.0.5's own validator.
+- **Status:** Fixed in #831.

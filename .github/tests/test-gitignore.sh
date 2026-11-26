@@ -105,6 +105,14 @@ for lang in $(grep -rl 'REPORT_PATH *?*= *\./reports' "$SCRIPTS_DIR/makefiles/" 
   mkdir -p "$OVERRIDER/reports" && : > "$OVERRIDER/reports/tool.json"
   assert_true "$lang overrides REPORT_PATH to ./reports, and ./reports/ is ignored" \
     "git -C '$OVERRIDER' check-ignore -q reports/tool.json"
+  # The scripts write to `$PREFIX$REPORT_PATH`. A PREFIX of `.` joined `./reports` into
+  # `../reports`, so a local run wrote outside the project and this entry ignored nothing.
+  printf 'include %s\nprint-report-root: ; @printf %%s "$(PREFIX)$(REPORT_PATH)"\n' \
+    "$SCRIPTS_DIR/makefiles/$lang.mk" > "$TEST_DIR/report-root-$lang.mk"
+  report_root="$(cd "$OVERRIDER" && env -u PREFIX -u REPORT_PATH \
+    make -s -f "$TEST_DIR/report-root-$lang.mk" print-report-root SCRIPTS_DIR="$SCRIPTS_DIR")"
+  assert_true "$lang writes its reports where that entry points: \$PREFIX\$REPORT_PATH is ./reports" \
+    "[ '$report_root' = './reports' ]"
 done
 
 echo ""

@@ -311,7 +311,14 @@ if [ "\$1" = "version" ]; then
   echo "golangci-lint has version ${GOLANGCI_LINT_VERSION} built with go1.99.0 from stub"
   exit 0
 fi
+# run.sh checks the merged configuration with \`config verify\` before the lint; that call
+# answers on its own, so STUB_ARGS and STUB_EXIT keep describing the lint run.
+if [ "\$1" = "config" ] && [ "\$2" = "verify" ]; then
+  echo "\$*" >> "\${STUB_SEQUENCE:-/dev/null}"
+  exit "\${STUB_VERIFY_EXIT:-0}"
+fi
 echo "\$*" > "\$STUB_ARGS"
+echo "\$*" >> "\${STUB_SEQUENCE:-/dev/null}"
 exit "\${STUB_EXIT:-0}"
 STUB
 chmod +x "$TEST_DIR/stubbin/golangci-lint"
@@ -416,6 +423,10 @@ make_golangci_stub() {
 #!/usr/bin/env sh
 if [ "\$1" = 'version' ]; then
   echo 'golangci-lint has version $release built with go$built_with from 0000000 on 2026-01-01T00:00:00Z'
+  exit 0
+fi
+if [ "\$1" = 'config' ] && [ "\$2" = 'verify' ]; then
+  echo '$label' >> "\$STUB_LOG/verified"
   exit 0
 fi
 echo '$label' >> "\$STUB_LOG/ran"
@@ -613,6 +624,116 @@ make_golangci_stub "$work/bin/golangci-lint" bin "$STUB_VERSION" 1.27.0 exit:3
 run_lint "$work" go1.27.2
 assert_true "the linter's exit status is kept (3)" "[ $LAST_STATUS -eq 3 ]"
 assert_true "the merged config is removed after the run" "[ ! -e '$work/merged.yml' ]"
+
+# =============================================================================
+# Test 19: every section of a v2 configuration reaches the merged one
+#
+# The merge used to carry `linters.enable`, the removal of `linters.disable` from it, and the v1
+# `linters-settings` key, and drop everything else. A repository's goimports `local-prefixes`
+# (`formatters.settings`) never arrived, a linter of v2's default set stayed on because
+# `linters.disable` was never written, and a repository that needed either kept a lint script of
+# its own.
+# =============================================================================
+echo "TEST 19: A v2 configuration's sections all reach the merged configuration"
+cat > "$TEST_DIR/repo.yml" << 'YAML'
+version: "2"
+run:
+  build-tags:
+    - integration
+issues:
+  max-same-issues: 7
+linters:
+  default: standard
+  enable:
+    - exhaustruct
+  disable:
+    - errcheck
+    - mnd
+  settings:
+    cyclop:
+      max-complexity: 12
+  exclusions:
+    warn-unused: false
+    presets:
+      - std-error-handling
+      - comments
+    rules:
+      - path: 'internal/legacy/'
+        linters: [ gocognit ]
+formatters:
+  enable:
+    - gofumpt
+  settings:
+    goimports:
+      local-prefixes:
+        - example.test/service
+  exclusions:
+    paths:
+      - 'third_party/'
+YAML
+merge_yaml "$TEST_DIR/repo.yml" "$TEST_DIR/merged.yml"
+M="$TEST_DIR/merged.yml"
+assert_true "linters.disable is written, so a default-set linter is really off" \
+  "\"\$YQ\" eval '.linters.disable | contains([\"errcheck\", \"mnd\"])' '$M' | grep -q true"
+assert_true "and the disabled linters left the enable list" \
+  "! \"\$YQ\" eval '.linters.enable[]' '$M' | grep -qx -e errcheck -e mnd"
+assert_true "linters.default is the repository's" "[ \"\$(\"\$YQ\" eval '.linters.default' '$M')\" = standard ]"
+assert_true "v2 linters.settings are deep-merged: the repository's key wins" \
+  "[ \"\$(\"\$YQ\" eval '.linters.settings.cyclop.max-complexity' '$M')\" = 12 ]"
+assert_true "and the shared settings it does not name stay" \
+  "[ \"\$(\"\$YQ\" eval '.linters.settings.cyclop.package-average' '$M')\" = 10.0 ]"
+assert_true "formatters.settings arrive: the repository's local-prefixes replace the placeholder" \
+  "[ \"\$(\"\$YQ\" eval '.formatters.settings.goimports.local-prefixes | join(\",\")' '$M')\" = example.test/service ]"
+assert_true "and the shared formatter settings it does not name stay" \
+  "[ \"\$(\"\$YQ\" eval '.formatters.settings.golines.max-len' '$M')\" = 120 ]"
+assert_true "formatters.enable adds to the shared formatters" \
+  "\"\$YQ\" eval '.formatters.enable | contains([\"gofumpt\", \"goimports\", \"golines\"])' '$M' | grep -q true"
+assert_true "run arrives (build tags)" "[ \"\$(\"\$YQ\" eval '.run.build-tags | join(\",\")' '$M')\" = integration ]"
+assert_true "issues are deep-merged" "[ \"\$(\"\$YQ\" eval '.issues.max-same-issues' '$M')\" = 7 ]"
+shared_rules="$("$YQ" eval '.linters.exclusions.rules | length' "$DEFAULT_CONFIG")"
+assert_true "exclusion rules are ADDED to the shared ones, never replace them" \
+  "[ \"\$(\"\$YQ\" eval '.linters.exclusions.rules | length' '$M')\" = $((shared_rules + 1)) ] && \"\$YQ\" eval '.linters.exclusions.rules[-1].path' '$M' | grep -qx 'internal/legacy/'"
+assert_true "exclusion presets are a union, without duplicates" \
+  "[ \"\$(\"\$YQ\" eval '.linters.exclusions.presets | join(\",\")' '$M')\" = std-error-handling,common-false-positives,comments ]"
+assert_true "an exclusion scalar is the repository's" "[ \"\$(\"\$YQ\" eval '.linters.exclusions.warn-unused' '$M')\" = false ]"
+assert_true "formatter exclusion paths arrive" \
+  "\"\$YQ\" eval '.formatters.exclusions.paths[]' '$M' | grep -qx 'third_party/'"
+assert_true "the merged configuration stays version 2" "[ \"\$(\"\$YQ\" eval '.version' '$M')\" = 2 ]"
+
+echo "TEST 19b: A v1 configuration keeps its v1 sections out of the v2 merge"
+cat > "$TEST_DIR/repo.yml" << 'YAML'
+run:
+  skip-dirs:
+    - generated
+linters:
+  disable:
+    - mnd
+YAML
+merge_yaml "$TEST_DIR/repo.yml" "$TEST_DIR/merged.yml"
+assert_true "a v1 run section is not carried into the v2 configuration" \
+  "[ \"\$(\"\$YQ\" eval '.run.skip-dirs' '$TEST_DIR/merged.yml')\" = null ]"
+assert_true "its linters.disable still is" \
+  "\"\$YQ\" eval '.linters.disable[]' '$TEST_DIR/merged.yml' | grep -qx mnd"
+
+# =============================================================================
+# Test 20: the merged configuration is verified before the lint runs
+# =============================================================================
+echo "TEST 20: The merged configuration is verified before the lint runs"
+STUB_SEQUENCE="$TEST_DIR/sequence.log"
+export STUB_SEQUENCE
+: > "$STUB_SEQUENCE"
+rc=0
+lint_with_stub 0 || rc=$?
+assert_true "a valid configuration lints as before" "[ '$rc' = 0 ]"
+assert_true "config verify reads the merged file, before the run" \
+  "[ \"\$(sed -n 1p '$STUB_SEQUENCE')\" = 'config verify --config merged.yml' ] && sed -n 2p '$STUB_SEQUENCE' | grep -q '^run '"
+: > "$STUB_SEQUENCE"
+rc=0
+STUB_VERIFY_EXIT=3 lint_with_stub 0 || rc=$?
+assert_true "a configuration that does not validate fails the run" "[ '$rc' = 1 ]"
+assert_true "and stops it before the lint" "[ \"\$(grep -c '^run ' '$STUB_SEQUENCE')\" = 0 ]"
+assert_true "naming the merged configuration as the cause" "grep -q 'merged golangci-lint configuration does not validate' '$LINT_OUT'"
+unset STUB_SEQUENCE
 
 # =============================================================================
 # Summary

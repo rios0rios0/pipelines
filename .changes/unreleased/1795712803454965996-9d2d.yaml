@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed a local `make cyclonedx`, and every Dart report a `make` target writes, landing outside the project: `golang.mk`, `python.mk` and `dart.mk` set `PREFIX ?= .`, and the scripts write to `$PREFIX$REPORT_PATH`, so `.` and `./reports` joined into `../reports`. `PREFIX` is a directory prefix that is empty or ends in `/` (the GitLab Java templates set `lib/`), so the three fragments now leave it empty and a local run writes to `./reports`, where their `.gitignore` entry points; `make test ONLY=gitignore` holds it'
+time: '2026-11-26T17:06:43.454874591Z'

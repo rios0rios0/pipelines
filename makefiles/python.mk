@@ -14,7 +14,10 @@ CODEQL_LANGUAGE ?= python
 SEMGREP_LANGUAGE ?= python
 # The suite `make test-pyramid` (common.mk) judges.
 export TEST_PYRAMID_LANGUAGE ?= python
-export PREFIX ?= .
+# PREFIX is a directory the scripts put in front of REPORT_PATH (`$PREFIX$REPORT_PATH`), so it is
+# empty or ends in `/`, as `lib/` does in the GitLab Java templates. It was `.`, which joined
+# `./reports` into `../reports` and wrote a local run's reports outside the project.
+export PREFIX ?=
 export REPORT_PATH ?= ./reports
 
 .PHONY: lint safety test cyclonedx

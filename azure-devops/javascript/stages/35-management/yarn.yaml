@@ -15,12 +15,20 @@ parameters:
 stages:
   - stage: 'management'
     displayName: 'management'
-    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
+    # A tag build runs this stage for its SBOM upload alone (`report:sonarqube` stays off tags).
+    # Every stage before it skips a tag, and a skipped stage fails `succeeded()`, so a tag build
+    # asks only that nothing before it failed or was cancelled, as the delivery stage does. The
+    # uploader claims `isLatest` for a tag, and the job still skips a pull request.
+    condition: or(succeeded(), and(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), not(failed()), not(canceled())))
     ${{ if ne(parameters.DEPENDS_ON, '') }}:
       dependsOn: ${{ parameters.DEPENDS_ON }}
     jobs:
       - job: 'report_sonarqube'
         displayName: 'report:sonarqube'
+        # Kept off tags, as it was while the whole stage skipped them: a tag build runs no tests stage, so
+        # its analysis would carry no coverage, and a server without branch analysis would publish it over
+        # the default branch's.
+        condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
         variables:
           SONAR_USER_HOME: "$(Build.SourcesDirectory)/.sonar"
         steps:

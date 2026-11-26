@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the Dependency-Track upload of every JavaScript project whose package is scoped: the uploader sent each field with `curl -F`, which reads a value starting with `@` as a file to attach, so the project name `@org-app` (from `@org/app`) made curl look for a file called `org-app` and exit 26 before sending anything, and the job then retried it as an unreachable server for five minutes before failing. Every text field now goes as `--form-string`, and only the BOM as a file; `make test ONLY=dependency-track` holds it'
+time: '2026-11-26T16:44:54.97109673Z'

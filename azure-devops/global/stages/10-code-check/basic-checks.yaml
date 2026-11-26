@@ -27,18 +27,50 @@ jobs:
           echo "=== Rebase Check ==="
           echo "Checking if branch is rebased on top of '$TARGET_BRANCH'..."
 
-          git fetch origin "$TARGET_BRANCH" --no-tags
+          # A pull request build checks out the merge commit Azure DevOps prepares,
+          # refs/pull/<id>/merge, and that commit always contains the target branch:
+          # judged by HEAD, every branch passed, rebased or not. The branch is judged
+          # by its own commit instead: the one the agent names, or else the merge
+          # commit's second parent (its first parent is the target branch).
+          SOURCE_COMMIT="${SYSTEM_PULLREQUEST_SOURCECOMMITID:-}"
+          if [ -z "$SOURCE_COMMIT" ] && git rev-parse --verify --quiet 'HEAD^2' > /dev/null \
+            && ! git rev-parse --verify --quiet 'HEAD^3' > /dev/null; then
+            SOURCE_COMMIT=$(git rev-parse 'HEAD^2')
+          fi
+          if [ -z "$SOURCE_COMMIT" ] || ! git rev-parse --verify --quiet "$SOURCE_COMMIT^{commit}" > /dev/null; then
+            echo "ERROR: could not resolve the pull request's source commit ('${SOURCE_COMMIT:-none}'), so the rebase check cannot run."
+            exit 1
+          fi
 
-          # Guard: if HEAD is already merged into the target branch, skip all checks
-          if git merge-base --is-ancestor HEAD "origin/$TARGET_BRANCH"; then
-            echo "Branch HEAD is already part of '$TARGET_BRANCH' (likely merged). Skipping all basic checks."
+          # The checkout keeps no credentials, so a bare fetch failed and the check ran
+          # on whatever the checkout had fetched. The job's token is passed the way the
+          # checkout passes it to its own fetch: through the environment, never on a
+          # command line or in .git/config, and only to an Azure Repos remote.
+          AUTH_HEADER=''
+          if [ "${BUILD_REPOSITORY_PROVIDER:-}" = 'TfsGit' ]; then
+            AUTH_HEADER="AUTHORIZATION: bearer ${SYSTEM_ACCESSTOKEN:-}"
+          fi
+          if ! REBASE_CHECK_AUTH_HEADER="$AUTH_HEADER" git ${AUTH_HEADER:+--config-env=http.extraheader=REBASE_CHECK_AUTH_HEADER} \
+            fetch --no-tags origin "+refs/heads/$TARGET_BRANCH:refs/remotes/origin/$TARGET_BRANCH"; then
+            echo "ERROR: could not fetch '$TARGET_BRANCH' from origin, so the rebase check cannot run."
+            exit 1
+          fi
+          TARGET_COMMIT=$(git rev-parse --verify --quiet "refs/remotes/origin/$TARGET_BRANCH^{commit}" || true)
+          if [ -z "$TARGET_COMMIT" ]; then
+            echo "ERROR: could not resolve 'origin/$TARGET_BRANCH' after fetching it, so the rebase check cannot run."
+            exit 1
+          fi
+
+          # Guard: if the source commit is already merged into the target branch, skip all checks
+          if git merge-base --is-ancestor "$SOURCE_COMMIT" "$TARGET_COMMIT"; then
+            echo "Branch head ${SOURCE_COMMIT} is already part of '$TARGET_BRANCH' (likely merged). Skipping all basic checks."
             exit 0
           fi
 
-          if git merge-base --is-ancestor "origin/$TARGET_BRANCH" HEAD; then
+          if git merge-base --is-ancestor "$TARGET_COMMIT" "$SOURCE_COMMIT"; then
             echo "Branch is up-to-date with '$TARGET_BRANCH'. No rebase needed."
           else
-            BEHIND_COUNT=$(git rev-list HEAD.."origin/$TARGET_BRANCH" --count 2>/dev/null || echo "unknown")
+            BEHIND_COUNT=$(git rev-list "$SOURCE_COMMIT".."$TARGET_COMMIT" --count 2>/dev/null || echo "unknown")
             echo ""
             echo "============================================================"
             echo "  ERROR: Branch is NOT rebased on top of '$TARGET_BRANCH'."
@@ -279,6 +311,9 @@ jobs:
             echo "CHANGELOG.md entries are correctly placed under [Unreleased]."
           fi
         displayName: 'Run basic checks'
+        env:
+          # For the rebase check's fetch of the target branch: the checkout keeps no credentials.
+          SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
   # The shared `.gitignore` block (`make gitignore`), in a job of its own. `quality:basic-checks`
   # above runs with only the project's repository on disk, and this check needs the shared ignore

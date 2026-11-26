@@ -2279,7 +2279,7 @@ The uploader is driven entirely by environment variables. Only the first two are
 | `DEPENDENCY_TRACK_ATTEMPTS` | `5` | Upload attempts while the server is briefly away: no response, `408`, `429` or `5xx` (Cloudflare's `521` included). Any other answer fails at once |
 | `DEPENDENCY_TRACK_RETRY_DELAY` | `30` | Seconds before the first retry, multiplied by the attempt number: 30s, 60s, 90s and 120s, five minutes in all |
 
-Three behaviours are worth knowing before adopting it, because each one is silent:
+Four behaviours are worth knowing before adopting it, because each one is silent:
 
 - **Merge/pull-request builds do not upload.** A project's identity in Dependency-Track is the pair
   `(name, version)`, so a pull request whose version file is already bumped would create that version's
@@ -2290,6 +2290,11 @@ Three behaviours are worth knowing before adopting it, because each one is silen
   (`Build.Repository.DefaultBranch` does not exist), and GitHub Actions exposes it only through the
   `github.event.repository` context — on those two, set `DEPENDENCY_TRACK_DEFAULT_BRANCH` or a
   default-branch build will upload without claiming the flag.
+- **A tag build uploads too.** A tag is the release, so its BOM carries the released version, and the
+  uploader claims `isLatest` for it. GitLab CI uploads from the default branch and from tags. On Azure
+  DevOps the `management` stage runs on a tag build for its `report:dependency-track` job alone:
+  `report:sonarqube` stays off tags, because a tag build runs no tests stage to give it coverage. A
+  pull request still uploads nothing. GitHub Actions has no Dependency-Track upload.
 - **A collection parent applies only to projects being created.** Dependency-Track resolves `parentName`
   solely when it auto-creates the project; for one that already exists the field is read and ignored, with
   no error. Re-parenting an existing portfolio needs `PATCH /api/v1/project/{uuid}` from an administrative

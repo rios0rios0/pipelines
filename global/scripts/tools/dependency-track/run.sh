@@ -197,11 +197,18 @@ fi
 # the very first run, which is why the job was "always breaking"). Sending
 # only `projectName` + `projectVersion` with `autoCreate=true` creates the
 # project on the first upload and updates it on every subsequent one.
+#
+# Every text field goes as `--form-string`, never `-F`: curl reads a `-F` value
+# that starts with `@` or `<` as a FILE to attach, so the project name of a
+# scoped npm package (`@org/app`, normalised to `@org-app`) made curl look for a
+# file called `org-app`, exit 26 before sending anything, and the upload retry
+# as an unreachable server for five minutes before failing. `--form-string`
+# sends the value as it is; only the BOM itself is a file.
 set -- "$@" \
-  -F "projectName=$projectName" \
-  -F "projectVersion=$projectVersion" \
-  -F 'autoCreate=true' \
-  -F "isLatest=$isLatest"
+  --form-string "projectName=$projectName" \
+  --form-string "projectVersion=$projectVersion" \
+  --form-string 'autoCreate=true' \
+  --form-string "isLatest=$isLatest"
 
 # Optional collection parent.
 #
@@ -218,9 +225,9 @@ set -- "$@" \
 # answered with HTTP 404 `The parent project could not be found.` even with
 # `autoCreate=true`.
 if [ -n "${DEPENDENCY_TRACK_PARENT_NAME:-}" ]; then
-  set -- "$@" -F "parentName=$DEPENDENCY_TRACK_PARENT_NAME"
+  set -- "$@" --form-string "parentName=$DEPENDENCY_TRACK_PARENT_NAME"
   if [ -n "${DEPENDENCY_TRACK_PARENT_VERSION:-}" ]; then
-    set -- "$@" -F "parentVersion=$DEPENDENCY_TRACK_PARENT_VERSION"
+    set -- "$@" --form-string "parentVersion=$DEPENDENCY_TRACK_PARENT_VERSION"
   fi
 fi
 

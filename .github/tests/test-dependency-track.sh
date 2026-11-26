@@ -206,6 +206,16 @@ run_against_stub "$BOM_SCOPED" CI_COMMIT_BRANCH=main CI_DEFAULT_BRANCH=main
 assert_true 'slash becomes a dash' '[[ "$ARGV" == *"projectName=@org-app"* ]]'
 assert_true 'no raw slash in the name' '[[ "$ARGV" != *"projectName=@org/app"* ]]'
 
+# curl reads a `-F` value that starts with `@` or `<` as a FILE to attach, so `-F
+# projectName=@org-app` made curl look for a file called `org-app` and exit 26 before
+# sending anything. Every text field goes as `--form-string`; only the BOM is a file.
+SCOPED_FLAG="$(printf '%s\n' "$ARGV" | grep -B1 -x 'projectName=@org-app' | head -n 1)"
+FILE_FIELDS="$(printf '%s\n' "$ARGV" | awk 'previous == "-F" { print } { previous = $0 }')"
+assert_true 'a scoped name goes as --form-string, so its @ is never read as a file' \
+  '[[ "$SCOPED_FLAG" == "--form-string" ]]'
+assert_true 'the BOM is the only field sent as -F' \
+  '[[ "$FILE_FIELDS" == bom=@* && "$(printf "%s\n" "$FILE_FIELDS" | grep -c .)" -eq 1 ]]'
+
 # ...and it is applied to the OVERRIDE as well, not only to the BOM-derived
 # name. An override names the same project the BOM path would produce, so a
 # variable that skipped normalisation would let one platform file `@org/app`
@@ -379,6 +389,36 @@ for f in $azure_dt_files; do
 done
 assert_true "every Azure dependency-track job is PR-gated ($azure_gated/$azure_total)" \
   '[[ $azure_total -gt 0 && $azure_gated -eq $azure_total ]]'
+
+# A tag is the release, and the uploader claims `isLatest` for it, but every Azure management
+# stage used to skip tags outright, so a released version never reached the portfolio. Each stage
+# that uploads now runs on a tag for that job, asking only that nothing before it failed: every
+# stage before it skips a tag, and a skipped stage fails `succeeded()`.
+TAG_STAGE_CONDITION="condition: or(succeeded(), and(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), not(failed()), not(canceled())))"
+azure_tagged=0
+for f in $azure_dt_files; do
+  if grep -qF "$TAG_STAGE_CONDITION" "$f" \
+    && ! grep -qE "^    condition: and\(succeeded\(\), not\(startsWith\(variables\['Build.SourceBranch'\], 'refs/tags/'\)\)\)" "$f"; then
+    azure_tagged=$((azure_tagged + 1))
+  fi
+done
+assert_true "every Azure stage that uploads runs on a tag build ($azure_tagged/$azure_total)" \
+  '[[ $azure_total -gt 0 && $azure_tagged -eq $azure_total ]]'
+
+# SonarQube stays off tags, as it was while the whole stage skipped them: a tag build runs no tests
+# stage, so its analysis would carry no coverage.
+SONAR_TAG_CONDITION="condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))"
+azure_sonar_files=$(grep -rl "job: 'report_sonarqube'" "$SCRIPTS_DIR/azure-devops" --include='*.yaml')
+sonar_total=0
+sonar_off_tags=0
+for f in $azure_sonar_files; do
+  sonar_total=$((sonar_total + 1))
+  if grep -A8 "job: 'report_sonarqube'" "$f" | grep -qF "$SONAR_TAG_CONDITION"; then
+    sonar_off_tags=$((sonar_off_tags + 1))
+  fi
+done
+assert_true "every Azure SonarQube job stays off tag builds ($sonar_off_tags/$sonar_total)" \
+  '[[ $sonar_total -gt 0 && $sonar_off_tags -eq $sonar_total ]]'
 
 # Azure DevOps publishes no default-branch variable. A comparison against
 # `Build.Repository.DefaultBranch` reads correct and is always an empty string,

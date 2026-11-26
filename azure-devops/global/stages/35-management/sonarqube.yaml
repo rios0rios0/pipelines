@@ -23,6 +23,10 @@ parameters:
 jobs:
   - job: 'report_sonarqube'
     displayName: 'report:sonarqube'
+    # Kept off tags, as it was while the whole stage skipped them: a tag build runs no tests stage, so
+    # its analysis would carry no coverage, and a server without branch analysis would publish it over
+    # the default branch's.
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
     container:
       image: 'sonarsource/sonar-scanner-cli:12.4.0.4321_8.4.0@sha256:6e6eca4d552695a98fb7dab84f0c1bd0885ebbfe272654d1552e24bd7f452d51'
       options: '--user root' # TODO: workaround for Azure DevOps error

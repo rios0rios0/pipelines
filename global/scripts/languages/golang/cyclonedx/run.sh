@@ -58,14 +58,33 @@ if [ -d "pkg" ]; then
   echo "Found 'pkg' directory, using 'cyclonedx-gomod mod' command..."
   "$(go env GOPATH)/bin/cyclonedx-gomod" mod -json -output "$BOM_PATH/bom.json" -licenses
 else
-  # One line per directory holding a `main.go`. A module may legitimately hold SEVERAL -- a
-  # server plus a scheduled worker, a CLI plus its daemon -- and `-main` accepts exactly one
-  # path, so handing it the raw multi-line result made cyclonedx-gomod refuse the whole run with
+  # One line per `main` package of the module, as `go list` resolves them, relative to the module
+  # root (`.` for the root itself). A module may legitimately hold SEVERAL -- a server plus a
+  # scheduled worker, a CLI plus its daemon -- and `-main` accepts exactly one path, so handing it
+  # a multi-line list made cyclonedx-gomod refuse the whole run with
   # `invalid options: - main: "..." does not exist`. No BOM was written, the SBOM upload that
   # consumes it had nothing to send, and the job failed on every single build.
-  folders="$(find . -type f -name main.go -not -path '*/.go/*' -exec dirname {} \;)"
+  #
+  # `go list` rather than `find -name main.go`: what makes a directory an entry point is its
+  # `package main`, not the name of a file in it. An AWS SAM function keeps `func main` in
+  # `main/bootstrap.go`, and searching for `main.go` stopped every such repository with "no
+  # directory containing Go files" before a BOM was written (KI-07). `go list` also skips what the
+  # build skips: a nested module's own `main.go`, `vendor/`, `testdata/`, a `.go/` GOPATH, and a
+  # `//go:build ignore` generator.
+  if ! main_dirs="$(go list -e -f '{{if eq .Name "main"}}{{.Dir}}{{end}}' ./...)"; then
+    echo "Could not list the packages of the Go module in $(pwd) (see the error above)."
+    exit 1
+  fi
+  folders="$(printf '%s\n' "$main_dirs" | while IFS= read -r dir; do
+    case "$dir" in
+      '') ;;
+      "$PWD") echo '.' ;;
+      "$PWD"/*) echo "./${dir#"$PWD"/}" ;;
+      *) echo "$dir" ;;
+    esac
+  done)"
   if [ -z "$folders" ]; then
-    echo "Could not find a directory containing Go files"
+    echo "Could not find a main package in the Go module in $(pwd)."
     exit 1
   fi
 
@@ -84,3 +103,23 @@ else
     "$(go env GOPATH)/bin/cyclonedx-gomod" app -json -output "$BOM_PATH/bom.json" -packages -files -licenses -main "$folders"
   fi
 fi
+
+# cyclonedx-gomod writes the license its detector matched into `license.id` VERBATIM, and the
+# detector (go-license-detector, whose licenses are SPDX's license-list-data files) names a
+# DEPRECATED SPDX license after its file: `deprecated_GPL-2.0+`, not `GPL-2.0+`. No SPDX list holds
+# such an id. Dependency-Track validates a BOM against the CycloneDX schema, whose `license.id` is
+# an enumeration of the SPDX list, before it accepts it -- so ONE such module made it refuse the
+# whole upload with HTTP 400 ("The uploaded BOM is invalid", `license.id: does not have a value in
+# the enumeration`) and the project kept no inventory at all. A consumer's service failed that
+# way on 2026-11-26 over github.com/golang/freetype, and no newer cyclonedx-gomod or
+# go-license-detector release writes the id differently.
+#
+# The helper checks every license id against the SPDX list Dependency-Track validates with and
+# rewrites only the ones that list does not hold: `deprecated_<id>` becomes `<id>`, and any other
+# id becomes the license's `name`, which every schema version accepts. No license is dropped and
+# `-licenses` stays, because the detected licenses are what the inventory is for; a BOM with
+# nothing to rewrite is left byte for byte. It is Go, built from this checkout -- the job already
+# has the Go it just installed cyclonedx-gomod with; see `licenses/internal/cli`.
+# shellcheck source=/dev/null
+. "$SCRIPTS_DIR/global/scripts/shared/go-helper.sh"
+go_helper_run global/scripts/languages/golang/cyclonedx/licenses "$BOM_PATH/bom.json"

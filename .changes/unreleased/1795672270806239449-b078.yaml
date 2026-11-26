@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed `make lint` and `make test` leaving files in a Go project that its generated `.gitignore` block did not cover: `golangci-lint/run.sh` installs the pinned golangci-lint at `./bin/golangci-lint` (staged as `./bin/.golangci-lint.*` first), and `go-modcache.sh` falls back to `GOPATH=$(pwd)/.go` when none is exported, Go''s own default on a developer''s machine, so `make test` and `make cyclonedx` kept a whole module cache in `./.go/`. The golang fragment now ignores those names, and only those: the rest of `bin/` stays the project''s. A consumer picks them up with `make gitignore`; `make test ONLY=gitignore` holds them'
+time: '2026-11-26T05:51:10.806138377Z'

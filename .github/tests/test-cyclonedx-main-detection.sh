@@ -19,7 +19,16 @@ echo "=== Testing Go CycloneDX entry-point detection ==="
 echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CYCLONEDX_SCRIPT="$SCRIPT_DIR/../../global/scripts/languages/golang/cyclonedx/run.sh"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+CYCLONEDX_SCRIPT="$REPO_ROOT/global/scripts/languages/golang/cyclonedx/run.sh"
+
+# The script builds one Go helper from this checkout (the license-id rewrite it runs on the BOM,
+# `make test ONLY=cyclonedx-licenses`), so the `go` shim below hands every command it does not fake
+# to the real toolchain.
+REAL_GO="$(command -v go)" || {
+  echo "Go is required: the generator builds its license helper from this checkout" >&2
+  exit 1
+}
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -45,7 +54,8 @@ cleanup() { rm -rf "$TEST_DIR"; }
 trap cleanup EXIT
 
 # A fake GOPATH whose bin/ holds a cyclonedx-gomod that only records its arguments, plus a `go`
-# that answers `go env GOPATH` and swallows `go install` so nothing is downloaded.
+# that answers `go env GOPATH`, swallows `go install` so nothing is downloaded, and passes the
+# helper's build to the real Go.
 FAKE_GOPATH="$TEST_DIR/gopath"
 mkdir -p "$FAKE_GOPATH/bin" "$TEST_DIR/shim"
 
@@ -69,7 +79,7 @@ cat > "$TEST_DIR/shim/go" <<STUB
 case "\$1 \${2:-}" in
   "env GOPATH") echo "$FAKE_GOPATH" ;;
   "install "*) exit 0 ;;
-  *) exit 0 ;;
+  *) exec "$REAL_GO" "\$@" ;;
 esac
 STUB
 chmod +x "$TEST_DIR/shim/go"
@@ -85,6 +95,7 @@ run_generator() {
     cd "$workdir" || exit 1
     PATH="$TEST_DIR/shim:$PATH" \
     GOPATH="$FAKE_GOPATH" \
+    SCRIPTS_DIR="$REPO_ROOT" \
     REPORT_PATH="build/reports" \
     PREFIX="" \
       sh "$CYCLONEDX_SCRIPT" > "$workdir/stdout.log" 2>&1
@@ -181,7 +192,7 @@ else
   print_result 0 "a module with no main package exits non-zero"
 fi
 
-if grep -q "Could not find a directory containing Go files" "$workdir/stdout.log"; then
+if grep -q "Could not find a main package in the Go module" "$workdir/stdout.log"; then
   print_result 0 "the failure names the missing entry point"
 else
   print_result 1 "the failure message is missing: $(cat "$workdir/stdout.log")"
@@ -250,6 +261,55 @@ if [ -f "$workdir/build/reports/bom.json" ]; then
   print_result 0 "the absence of a git repository is not an error"
 else
   print_result 1 "no bom.json was written: $(cat "$workdir/stdout.log")"
+fi
+
+# =============================================================================
+# Test 9: an entry point whose `func main` is not in a file called main.go (KI-07)
+# =============================================================================
+echo "TEST 9: a main package in main/bootstrap.go is found"
+workdir="$(new_module)"
+mkdir -p "$workdir/main" "$workdir/internal"
+printf 'package main\n\nfunc main() {}\n' > "$workdir/main/bootstrap.go"
+echo 'package internal' > "$workdir/internal/example.go"
+run_generator "$workdir" || true
+invocation="$(cat "$workdir/invocation.log")"
+if [[ "$invocation" == app\ * ]] && [[ "$invocation" == *"-main ./main" ]]; then
+  print_result 0 "the AWS SAM layout resolves to 'app -main ./main'"
+else
+  print_result 1 "expected 'app ... -main ./main', got: $invocation $(cat "$workdir/stdout.log")"
+fi
+
+# =============================================================================
+# Test 10: what the build skips is not an entry point
+# =============================================================================
+echo "TEST 10: a //go:build ignore generator and a nested module's main.go are not entry points"
+workdir="$(new_module)"
+mkdir -p "$workdir/cmd" "$workdir/internal/gen" "$workdir/tools"
+echo 'package main' > "$workdir/cmd/main.go"
+echo 'package gen' > "$workdir/internal/gen/doc.go"
+printf '//go:build ignore\n\npackage main\n' > "$workdir/internal/gen/generate.go"
+printf 'module example.test/tools\n\ngo 1.24\n' > "$workdir/tools/go.mod"
+echo 'package main' > "$workdir/tools/main.go"
+run_generator "$workdir" || true
+invocation="$(cat "$workdir/invocation.log")"
+if [[ "$invocation" == app\ * ]] && [[ "$invocation" == *"-main ./cmd" ]]; then
+  print_result 0 "only the module's own main package counts: 'app -main ./cmd'"
+else
+  print_result 1 "expected 'app ... -main ./cmd', got: $invocation $(cat "$workdir/stdout.log")"
+fi
+
+# =============================================================================
+# Test 11: a main package at the module root
+# =============================================================================
+echo "TEST 11: a main package at the module root resolves to '-main .'"
+workdir="$(new_module)"
+echo 'package main' > "$workdir/main.go"
+run_generator "$workdir" || true
+invocation="$(cat "$workdir/invocation.log")"
+if [[ "$invocation" == app\ * ]] && [[ "$invocation" == *"-main ." ]]; then
+  print_result 0 "the root package resolves to 'app -main .'"
+else
+  print_result 1 "expected 'app ... -main .', got: $invocation $(cat "$workdir/stdout.log")"
 fi
 
 # =============================================================================

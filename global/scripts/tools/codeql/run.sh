@@ -272,8 +272,14 @@ fi
 
 echo "Creating CodeQL database for language: $CODEQL_LANGUAGE${CODEQL_BUILD_MODE:+ (build mode: $CODEQL_BUILD_MODE)}"
 CODEQL_DB_ACTIVE=true
+# The Go autobuilder runs a bare `make` in the source root before it builds the module, and in a
+# project that includes `makefiles/common.mk` first that is `setup`: a clone of this repository
+# into the runner's home on every CI scan, a fast-forward of the developer's own checkout in the
+# middle of `make sast` (KI-03). A scan must not change anything outside what it scans, so the
+# build is told it runs inside one, and `setup` leaves PIPELINES_HOME alone. Only this command
+# sees the variable.
 # shellcheck disable=SC2086
-if ! codeql database create \
+if ! PIPELINES_SETUP_SKIP='the CodeQL build' codeql database create \
   --language="$CODEQL_LANGUAGE" \
   --source-root="$SOURCE_ROOT" \
   $BUILD_MODE_FLAG \

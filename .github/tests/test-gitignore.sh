@@ -219,10 +219,24 @@ echo "Real gitignore semantics"
 # committed in a consumer.
 for artifact in build/reports/x.json reports/x.json .codeql-db/x .semgrepignore .ansible/collections/x coverage.out \
                 coverage.txt coverage.xml cobertura.xml junit.xml junit-unit.xml \
-                junit-integration.xml unit_coverage.txt integration_coverage.txt; do
+                junit-integration.xml unit_coverage.txt integration_coverage.txt go-test-selection.txt \
+                bin/golangci-lint bin/.golangci-lint.Ab12Cd .go/pkg/mod/cache/download/x; do
   assert_true "git ignores $artifact" \
     "git -C '$REPO' check-ignore -q --no-index '$artifact'"
 done
+
+# `make lint` installs golangci-lint into `./bin`, but the rest of `bin/` is the project's own:
+# a Go service builds its binaries there, and whether it tracks them is not the block's call.
+# Asked of a Go project with no entries of its own, since the one above ignores `bin` itself.
+BINREPO="$TEST_DIR/go-bin-project"
+make_repo "$BINREPO" golang
+gi "$BINREPO" > /dev/null
+assert_true "a Go project ignores the golangci-lint that make lint installs" \
+  "git -C '$BINREPO' check-ignore -q --no-index bin/golangci-lint"
+assert_true "and the name it stages the binary under while it installs" \
+  "git -C '$BINREPO' check-ignore -q --no-index bin/.golangci-lint.Ab12Cd"
+assert_true "but not the project's own bin/ output" \
+  "! git -C '$BINREPO' check-ignore -q --no-index bin/service"
 
 # A project that wants to track its OWN `.semgrepignore` must still be able to, since the
 # runner copies its default only when the file is absent.

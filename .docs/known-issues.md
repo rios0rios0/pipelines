@@ -18,10 +18,12 @@ privately and fix them.
 |---|---|---|---|
 | [KI-01](#ki-01--the-dart-test-job-has-no-timeout) | `.github/workflows/dart.yaml`, `tests > test:all` | The Dart test job has no timeout | Open |
 | [KI-02](#ki-02--gitlab-ci-cannot-start-codeql-in-the-default-image) | `gitlab/global/stages/20-security/codeql.yaml`, `sast:codeql` | GitLab CI cannot start CodeQL in the default image | Fixed in #775 |
-| [KI-03](#ki-03--the-go-autobuild-runs-the-default-goal-of-a-consumer-makefile) | `global/scripts/tools/codeql/run.sh` and the `20-security/codeql` action, Go | The Go autobuild runs the default goal of a consumer Makefile | Won't fix |
+| [KI-03](#ki-03--the-go-autobuild-runs-the-default-goal-of-a-consumer-makefile) | `global/scripts/tools/codeql/run.sh` and the `20-security/codeql` action, Go | The Go autobuild runs the default goal of a consumer Makefile | Fixed in #829 (the default goal is unchanged) |
 | [KI-04](#ki-04--gitlab-cis-debian-11-images-can-no-longer-install-packages) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml`, `gitlab/java/abstracts/maven.yaml` | GitLab CI's Debian 11 images can no longer install packages | Fixed in #775 |
 | [KI-05](#ki-05--gitlab-cis-javascript-images-run-a-nodejs-past-its-end-of-life) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml` | GitLab CI's JavaScript images run a Node.js past its end of life | Fixed in #775 |
 | [KI-06](#ki-06--terra-install-stops-when-github-rate-limits-its-lookup) | `.github/workflows/terra.yaml`, `code-check > style:terra-format` and `tests > test:all`; `gitlab/terra/abstracts/terra.yaml`; `azure-devops/terra/abstracts/terra.yaml` | `terra install` stops when GitHub rate-limits its lookup | Fixed in #801 |
+| [KI-07](#ki-07--the-go-sbom-generator-finds-no-main-package-outside-a-maingo) | `global/scripts/languages/golang/cyclonedx/run.sh`, `report:dependency-track` | The Go SBOM generator finds no `main` package outside a `main.go` | Fixed in #829 |
+| [KI-08](#ki-08--the-go-sbom-generator-needs-a-module-at-the-repository-root) | `global/scripts/languages/golang/cyclonedx/run.sh`, `report:dependency-track` | The Go SBOM generator needs a module at the repository root | Open |
 
 ## KI-01 — The Dart test job has no timeout
 
@@ -140,9 +142,13 @@ privately and fix them.
 - **The fix it needs:** end `common.mk` and each language fragment with `.DEFAULT_GOAL :=`. GNU make
   then takes the next target it reads, the consumer's first own target, as the default goal. That
   changes what a bare `make` does in every consumer, so it needs its own change and changelog entry.
-- **Status:** Won't fix. On 2026-10-29 the owner decided not to change the default goal of the shared
-  makefiles: a bare `make` keeps meaning what it means in every consumer today, and the cost above
-  stays. Do not propose `.DEFAULT_GOAL :=` again without a new reason.
+- **Status:** Fixed in #829, with the default goal unchanged. On 2026-10-29 the owner decided not to
+  change the default goal of the shared makefiles: a bare `make` keeps meaning what it means in
+  every consumer today. Do not propose `.DEFAULT_GOAL :=` again without a new reason. The cost above
+  is removed instead where it arises. `codeql/run.sh` runs `codeql database create` with
+  `PIPELINES_SETUP_SKIP` set, so the autobuilder's `make` still runs `setup`, and `setup` then leaves
+  `PIPELINES_HOME` alone: a scan clones nothing and pulls nothing. A bare `make` outside a scan still
+  clones or fast-forwards it. `make test ONLY=codeql-autobuild-setup` holds both halves.
 
 ## KI-04 — GitLab CI's Debian 11 images can no longer install packages
 
@@ -293,3 +299,50 @@ privately and fix them.
     token, 1.18.18 still retries the lookup and keeps an installed Terragrunt, so only a runner
     with no Terragrunt yet can stop, and only when the limit outlasts the retries.
 - **Status:** Fixed in #801. The GitHub Actions steps pass the token, and the pinned terra reads it.
+
+## KI-07 — The Go SBOM generator finds no `main` package outside a `main.go`
+
+- **Where:** `global/scripts/languages/golang/cyclonedx/run.sh`, the entry-point detection before
+  `cyclonedx-gomod app`, run by `report:dependency-track` (`azure-devops/golang/stages/35-management/go.yaml`,
+  `gitlab/golang/stages/35-management/go.yaml`).
+- **What happens:**
+  - Without a `pkg/` directory the script looks for the module's entry points with
+    `find . -type f -name main.go`. A `main` package whose `func main` lives in a file of another
+    name is not found, and the script stops with `Could not find a directory containing Go files`
+    before `cyclonedx-gomod` runs, so no BOM is written and the job fails.
+  - Between 2026-11-13 and 2026-11-18, four consumer services failed `report:dependency-track` on
+    their default branch at exactly that line, and a fifth one has the same layout. Their entry
+    points are `main/bootstrap.go` or `cmd/<name>/bootstrap.go`, the layout of an AWS SAM function.
+- **The fix:** the script lists the module's `main` packages with
+  `go list -e -f '{{if eq .Name "main"}}{{.Dir}}{{end}}' ./...` rather than the files called
+  `main.go`, and keeps the rule that one entry point takes `app` and several take `mod`. `go list`
+  also leaves out what the build leaves out: a nested module's `main.go`, `vendor/`, `testdata/`
+  and a `//go:build ignore` generator.
+- **How it is proven:** `.github/tests/test-cyclonedx-main-detection.sh`, Tests 9 to 11: an entry
+  point in `main/bootstrap.go` resolves to `app -main ./main`, a nested module and an ignored
+  generator are not entry points, and a root package resolves to `-main .`. Run on the five
+  consumer services, the script wrote a BOM for each, and Dependency-Track's own validator accepted
+  all five.
+- **Status:** Fixed in #829.
+
+## KI-08 — The Go SBOM generator needs a module at the repository root
+
+- **Where:** `global/scripts/languages/golang/cyclonedx/run.sh`, run by `report:dependency-track`
+  from the repository root.
+- **What happens:**
+  - The script runs `cyclonedx-gomod` in the working directory, which is the repository root. A
+    repository that holds several Go modules in subdirectories, and none at its root, has two or
+    more `main.go` files, so the script takes `cyclonedx-gomod mod`. That fails with
+    `failed to download modules: command 'go mod why -m -vendor ...' failed: exit status 1`, because
+    `go` answers `go.mod file not found in current directory or any parent directory`. No BOM is
+    written and the job fails.
+  - On 2026-11-26 this was reproduced by running the script on the default branch of a consumer
+    repository that holds three modules in subdirectories and no `go.mod` at its root. Its pipeline
+    uses `azure-devops/golang/stages/35-management/go.yaml`, but an earlier stage has failed on
+    every default-branch run since 2026-10-28, so CI has not reached the job there yet.
+- **The fix:** generate one BOM per module, with `-output` per module, or let the consumer name the
+  module directory the way `working_directory` does for the JavaScript templates. The uploader then
+  has to send each BOM to its own project.
+- **How to prove it:** a case in `.github/tests/test-cyclonedx-main-detection.sh` with two modules
+  in subdirectories and none at the root.
+- **Status:** Open.

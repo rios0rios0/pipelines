@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the GitLab CI Go `report:dependency-track` job failing on every upload with `has no .metadata.component.name`: the uploader reads the BOM''s name and version with `jq`, and the `golang` image the job runs in ships none, unlike the other languages'' upload jobs, which install it. The job now installs `jq` before anything else, as the Go `sast:codeql` job already does in the same image; `make test ONLY=dependency-track` holds it'
+time: '2026-11-26T05:54:46.656838889Z'

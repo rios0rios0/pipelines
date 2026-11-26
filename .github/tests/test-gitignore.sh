@@ -12,6 +12,8 @@ set -e
 #   * the artifacts the pipeline writes are genuinely ignored, per git itself
 #   * every `makefiles/*.mk` is a recorded decision: it ships a fragment, or is named
 #     as writing nothing outside the default `build/reports/`
+#   * the pipeline a project's CI imports selects fragments too, on all three platforms,
+#     and every language directory and reusable workflow is the same recorded decision
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RUN_SH="$SCRIPTS_DIR/global/scripts/tools/gitignore/run.sh"
@@ -40,6 +42,25 @@ cleanup() { rm -rf "$TEST_DIR"; }
 trap cleanup EXIT
 
 gi() { SCRIPTS_DIR="$SCRIPTS_DIR" "$RUN_SH" "$@"; }
+
+# Build a consumer repo at $1 with no Makefile, whose CI file $2 holds $3.
+ci_repo() {
+  local repo="$1" file="$2" content="$3"
+  mkdir -p "$repo/$(dirname "$file")"
+  printf '%s\n' "$content" > "$repo/$file"
+  git -C "$repo" init -q .
+}
+
+# Whether $1 is a word of the list $2.
+is_listed() {
+  case " $2 " in *" $1 "*) return 0 ;; esac
+  return 1
+}
+
+# The fragments a run of the generator on $1 reports it wrote, comma-separated.
+fragments_of() {
+  gi "$1" | sed -n 's/.*fragments: //p; s/^Already up to date: \.gitignore (\(.*\))$/\1/p'
+}
 
 # Build a consumer repo at $1 including the language fragment named in $2.
 make_repo() {
@@ -130,12 +151,151 @@ echo "Every consumable .mk is a recorded decision"
 # So every `.mk` a consumer can include has to be a decision someone wrote down: it either
 # ships a fragment, or is named below as writing nothing outside the default
 # `build/reports/`. A language added later fails here until one of the two is true.
-WRITES_ONLY_REPORTS='dotnet java javascript'
+#
+# `php` and `ruby` have no `.mk`, but a project's CI can still import their pipelines, and
+# then the same question applies: their one script each (`phpmd/run.sh`, `debride/run.sh`)
+# writes under REPORT_PATH, so they need nothing either.
+WRITES_ONLY_REPORTS='dotnet java javascript php ruby'
 for mk in "$SCRIPTS_DIR"/makefiles/*.mk; do
   lang="$(basename "$mk" .mk)"
   case " $WRITES_ONLY_REPORTS " in *" $lang "*) continue ;; esac
   assert_true "$lang ships a fragment, or belongs on the writes-only-reports list" \
     "[ -f '$SCRIPTS_DIR/global/gitignore/$lang' ]"
+done
+
+echo ""
+echo "Fragment selection from the pipeline the CI imports"
+# The Makefile is only one place a project names its language. Many name it only in their
+# CI -- no Makefile at all, or one that includes `common.mk` alone -- and those stages write
+# the same files as `make` does, so the pipeline the CI imports selects fragments too.
+GHA="$TEST_DIR/github-reusable-workflow"
+ci_repo "$GHA" .github/workflows/default.yaml "jobs:
+  default:
+    uses: 'rios0rios0/pipelines/.github/workflows/go-binary.yaml@main'"
+gi "$GHA" > /dev/null
+assert_true "a GitHub reusable workflow names its language, with no Makefile" \
+  "grep -qxF '/junit-unit.xml' '$GHA/.gitignore'"
+
+GHC="$TEST_DIR/github-composite-action"
+ci_repo "$GHC" .github/workflows/ci.yml "steps:
+  - uses: rios0rios0/pipelines/github/python/stages/10-code-check/pdm-lint@main"
+gi "$GHC" > /dev/null
+assert_true "a GitHub composite action names its language by its directory" \
+  "grep -qxF '__pycache__/' '$GHC/.gitignore'"
+
+ADO="$TEST_DIR/azure-devops-template"
+ci_repo "$ADO" azure-pipelines.yml "stages:
+  - template: 'azure-devops/terra/terra.yaml@pipelines'"
+gi "$ADO" > /dev/null
+assert_true "an Azure Pipelines template names its language by its directory" \
+  "grep -qxF '/build/.terraform-plugin-cache/' '$ADO/.gitignore'"
+
+ADOALIAS="$TEST_DIR/azure-devops-other-alias"
+ci_repo "$ADOALIAS" azure-pipelines.yaml "stages:
+  - template: azure-devops/golang/go-docker.yml@shared"
+assert_true "whatever alias the repository resource has, and with no quotes" \
+  "[ \"\$(fragments_of '$ADOALIAS')\" = 'common,golang' ]"
+
+GLR="$TEST_DIR/gitlab-remote-include"
+ci_repo "$GLR" .gitlab-ci.yml "include:
+  - remote: 'https://raw.githubusercontent.com/rios0rios0/pipelines/main/gitlab/dart/dart-library.yaml'"
+gi "$GLR" > /dev/null
+assert_true "a GitLab remote include names its language by its directory" \
+  "grep -qxF '/coverage/' '$GLR/.gitignore'"
+
+GLP="$TEST_DIR/gitlab-project-include"
+ci_repo "$GLP" .gitlab-ci.yml "include:
+  - project: 'rios0rios0/pipelines'
+    file: '/gitlab/terraform/terra.yaml'"
+assert_true "and so does a GitLab project include, by its file path" \
+  "[ \"\$(fragments_of '$GLP')\" = 'common,terraform' ]"
+
+NEUTRAL="$TEST_DIR/language-neutral-ci"
+ci_repo "$NEUTRAL" .github/workflows/default.yaml "jobs:
+  checks:
+    uses: 'rios0rios0/pipelines/.github/workflows/checks.yaml@main'
+  review:
+    uses: 'rios0rios0/pipelines/.github/workflows/reusable-claude-review.yaml@main'
+  release:
+    steps:
+      - uses: 'rios0rios0/pipelines/github/global/stages/40-delivery/release@main'"
+assert_true "a CI that imports no language pipeline gets common alone" \
+  "[ \"\$(fragments_of '$NEUTRAL')\" = 'common' ]"
+
+DEFINES="$TEST_DIR/defines-a-pipeline"
+ci_repo "$DEFINES" .github/workflows/go.yaml "on:
+  workflow_call:
+jobs:
+  lint:
+    steps:
+      - uses: 'rios0rios0/pipelines/github/golang/stages/10-code-check/golangci-lint@main'"
+assert_true "a reusable workflow defines a pipeline rather than importing one, so it names nothing" \
+  "[ \"\$(fragments_of '$DEFINES')\" = 'common' ]"
+
+BOTH="$TEST_DIR/makefile-and-ci"
+make_repo "$BOTH" python
+mkdir -p "$BOTH/.github/workflows"
+printf '%s\n' "jobs:" "  default:" "    uses: 'rios0rios0/pipelines/.github/workflows/go-docker.yaml@main'" \
+  > "$BOTH/.github/workflows/default.yaml"
+assert_true "the Makefile and the CI add up, in name order after common" \
+  "[ \"\$(fragments_of '$BOTH')\" = 'common,golang,python' ]"
+assert_true "and the result is stable" \
+  "gi '$BOTH' | grep -q '^Already up to date'"
+
+SAME="$TEST_DIR/ci-adds-nothing"
+make_repo "$SAME" golang
+ci_repo "$SAME" .github/workflows/default.yaml "jobs:
+  default:
+    uses: 'rios0rios0/pipelines/.github/workflows/go-binary.yaml@main'"
+cp "$REPO/.gitignore" "$TEST_DIR/makefile-only"
+sed -i '/^# <<< pipelines:end$/q' "$TEST_DIR/makefile-only"
+gi "$SAME" > /dev/null
+assert_true "a CI naming the Makefile's language leaves the block exactly as the Makefile alone made it" \
+  "cmp -s '$SAME/.gitignore' '$TEST_DIR/makefile-only'"
+
+echo ""
+echo "Every CI language directory and reusable workflow is a recorded decision"
+# A language directory names its language directly, and a fragment-less language is skipped as
+# silently as a fragment-less `.mk`, so each directory has to be the same decision written
+# down: a fragment, the writes-only-reports list above, or this one. `global` holds the shared
+# stages, and Argo CD, Helm and Logstash are deployment pipelines rather than languages, which
+# write nothing outside `build/reports/` either.
+NOT_A_LANGUAGE='global argocd helm logstash'
+for directory in "$SCRIPTS_DIR"/github/*/ "$SCRIPTS_DIR"/azure-devops/*/ "$SCRIPTS_DIR"/gitlab/*/; do
+  lang="$(basename "$directory")"
+  platform="$(basename "$(dirname "$directory")")"
+  is_listed "$lang" "$NOT_A_LANGUAGE $WRITES_ONLY_REPORTS" && continue
+  assert_true "$platform/$lang ships a fragment, or belongs on the not-a-language or writes-only-reports list" \
+    "[ -f '$SCRIPTS_DIR/global/gitignore/$lang' ]"
+done
+
+# A reusable workflow is named by toolchain instead, so its language comes from the
+# generator's TOOLCHAIN_LANGUAGES, which a new workflow can be missing from. Each one must
+# name a language there, or be on this list of the reusable workflows that are not a
+# language pipeline: the language-neutral checks, the release, the dependency-update and
+# major-version-tag maintenance, and the Claude reviews, whose `reusable-` is a marker
+# rather than a toolchain (`STANDALONE` in `test-workflow-composition.sh`).
+NOT_A_TOOLCHAIN='checks dependency release reusable update'
+TOOLCHAINS="$(sed -n "s/^TOOLCHAIN_LANGUAGES='\(.*\)'\$/\1/p" "$RUN_SH")"
+assert_true "the generator's toolchain list can be read" "[ -n '$TOOLCHAINS' ]"
+for workflow in "$SCRIPTS_DIR"/.github/workflows/*.yaml; do
+  grep -Eq '^[[:space:]]*workflow_call:' "$workflow" || continue
+  name="$(basename "$workflow" .yaml)"
+  toolchain="${name%%-*}"
+  is_listed "$toolchain" "$NOT_A_TOOLCHAIN" && continue
+  lang=''
+  for pair in $TOOLCHAINS; do
+    [ "${pair%%:*}" = "$toolchain" ] && lang="${pair#*:}"
+  done
+  assert_true "$name.yaml names a language through its toolchain ($toolchain), or belongs on the not-a-toolchain list" \
+    "[ -n '$lang' ]"
+  [ -f "$SCRIPTS_DIR/global/gitignore/$lang" ] || continue
+  CALLER="$TEST_DIR/calls-$name"
+  ci_repo "$CALLER" .github/workflows/ci.yaml "jobs:
+  default:
+    uses: 'rios0rios0/pipelines/.github/workflows/$name.yaml@main'"
+  assert_true "a project calling $name.yaml gets the $lang fragment" \
+    "[ \"\$(fragments_of '$CALLER')\" = 'common,$lang' ]"
 done
 
 echo ""

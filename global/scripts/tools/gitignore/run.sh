@@ -42,28 +42,83 @@ cd "$PROJECT_DIR" || { echo "no such directory: $PROJECT_DIR" >&2; exit 2; }
 FRAGMENT_DIR="$SCRIPTS_DIR/global/gitignore"
 [ -d "$FRAGMENT_DIR" ] || { echo "missing fragment directory: $FRAGMENT_DIR" >&2; exit 2; }
 
-# Which language fragments apply is not new configuration to keep in step: the
-# project's Makefile already declares the pipeline it consumes, so the `.mk` files it
-# includes are the answer. A fragment exists for a language that either overrides
-# REPORT_PATH (golang, dart, python -> `./reports`) or writes outside it whatever REPORT_PATH
-# says (golang's root-level JUnit, dart's `/coverage/`, terra and terraform's `.terraform/`).
-# Everything else leaves REPORT_PATH at its default `build/reports/`, which `common` covers.
+# Which language fragments apply is not new configuration to keep in step: the project
+# already declares the pipeline it consumes, in two places. Its Makefile includes the `.mk`
+# files of its language, and its CI imports the pipeline itself. Either one names the
+# language, and both are read, because a project often declares only the second: a
+# repository with no Makefile, or one that includes `common.mk` alone, still runs the
+# stages of the language its CI imports, and those write the same files as `make` does.
+# A fragment exists for a language that either overrides REPORT_PATH (golang, dart, python
+# -> `./reports`) or writes outside it whatever REPORT_PATH says (golang's root-level JUnit,
+# dart's `/coverage/`, terra and terraform's `.terraform/`). Everything else leaves
+# REPORT_PATH at its default `build/reports/`, which `common` covers.
 #
-# The `[ -f ... ]` below skips an include with no fragment SILENTLY, which is how terra and
+# The `[ -f ... ]` below skips a language with no fragment SILENTLY, which is how terra and
 # terraform once shipped with none. `.github/tests/test-gitignore.sh` is what stops that
-# recurring: it requires every `makefiles/*.mk` to ship a fragment or be named as needing none.
-fragments='common'
-if [ -f Makefile ]; then
-  # Word-splitting is deliberate and safe: the pattern captures [a-z0-9-] only, so no
-  # name can carry a space or a glob. Piping into `while read` instead would put the
-  # loop in a subshell, and the `fragments` accumulation below would be discarded.
-  # shellcheck disable=SC2013
-  for name in $(sed -n 's|.*makefiles/\([a-z0-9-]*\)\.mk.*|\1|p' Makefile | sort -u); do
-    [ "$name" = 'common' ] && continue
-    [ -f "$FRAGMENT_DIR/$name" ] || continue
-    fragments="$fragments $name"
+# recurring: it requires every `makefiles/*.mk`, every language directory of the three CI
+# platforms, and every reusable workflow to ship a fragment or be named as needing none.
+makefile_languages() {
+  [ -f Makefile ] || return 0
+  sed -n 's|.*makefiles/\([a-z0-9-]*\)\.mk.*|\1|p' Makefile
+}
+
+# A reusable workflow is named after its toolchain, `<toolchain>[-<target>].yaml` (the
+# Workflow Naming Convention in AGENTS.md), so its language comes from this list. A
+# toolchain missing from it names no language, which is right for the workflows that are
+# not a language pipeline (`checks`, `release`, `reusable-claude-review`, ...).
+TOOLCHAIN_LANGUAGES='bundler:ruby composer:php dart:dart dotnet:dotnet flutter:dart go:golang gradle:java maven:java npm:javascript pdm:python terra:terra yarn:javascript'
+
+toolchain_language() {
+  for pair in $TOOLCHAIN_LANGUAGES; do
+    if [ "${pair%%:*}" = "$1" ]; then
+      echo "${pair#*:}"
+      return 0
+    fi
   done
-fi
+}
+
+# The languages of the pipeline the project's CI imports. Every platform keeps a language's
+# pipeline under a directory named after it (`github/golang/`, `azure-devops/terra/`,
+# `gitlab/python/`), and only GitHub's reusable workflows, which must live in
+# `.github/workflows/`, are named by toolchain instead. `global/` and the deployment
+# directories (`helm/`, `argocd/`, ...) have no fragment, so they fall out below.
+ci_languages() {
+  for workflow in .github/workflows/*.yml .github/workflows/*.yaml; do
+    [ -f "$workflow" ] || continue
+    # A reusable workflow defines a pipeline rather than importing one. This repository's
+    # own `.github/workflows/` is made of them, and would otherwise claim every language.
+    grep -Eq '^[[:space:]]*workflow_call:|^on:.*workflow_call' "$workflow" && continue
+    # The capture is [a-z0-9] only, so word-splitting it is safe, as below.
+    # shellcheck disable=SC2013
+    for toolchain in $(sed -n 's|.*rios0rios0/pipelines/\.github/workflows/\([a-z0-9]*\)[-.].*|\1|p' "$workflow"); do
+      toolchain_language "$toolchain"
+    done
+    sed -n 's|.*rios0rios0/pipelines/github/\([a-z0-9-]*\)/.*|\1|p' "$workflow"
+  done
+  # A template comes from the repository resource its `@<alias>` names, which is
+  # `pipelines` by convention but need not be.
+  for pipeline in azure-pipelines*.yml azure-pipelines*.yaml; do
+    [ -f "$pipeline" ] || continue
+    sed -n 's|.*azure-devops/\([a-z0-9-]*\)/[^@]*\.ya\{0,1\}ml@.*|\1|p' "$pipeline"
+  done
+  # A `remote:` include carries the whole URL, a `project:` include only its `file:` path.
+  for pipeline in .gitlab-ci.yml .gitlab-ci.yaml; do
+    [ -f "$pipeline" ] || continue
+    sed -n 's|.*gitlab/\([a-z0-9-]*\)/[^[:space:]]*\.ya\{0,1\}ml.*|\1|p' "$pipeline"
+  done
+}
+
+fragments='common'
+# Word-splitting is deliberate and safe: every pattern above captures [a-z0-9-] only, so no
+# name can carry a space or a glob. Piping into `while read` instead would put the loop in
+# a subshell, and the `fragments` accumulation below would be discarded. `sort -u` keeps
+# the order the block had when only the Makefile was read, so a project whose CI adds no
+# language sees no change.
+for name in $({ makefile_languages; ci_languages; } | sort -u); do
+  [ "$name" = 'common' ] && continue
+  [ -f "$FRAGMENT_DIR/$name" ] || continue
+  fragments="$fragments $name"
+done
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT

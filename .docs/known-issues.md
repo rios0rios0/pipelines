@@ -22,6 +22,8 @@ privately and fix them.
 | [KI-04](#ki-04--gitlab-cis-debian-11-images-can-no-longer-install-packages) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml`, `gitlab/java/abstracts/maven.yaml` | GitLab CI's Debian 11 images can no longer install packages | Fixed in #775 |
 | [KI-05](#ki-05--gitlab-cis-javascript-images-run-a-nodejs-past-its-end-of-life) | `gitlab/javascript/abstracts/npm.yaml`, `gitlab/javascript/abstracts/yarn.yaml` | GitLab CI's JavaScript images run a Node.js past its end of life | Fixed in #775 |
 | [KI-06](#ki-06--terra-install-stops-when-github-rate-limits-its-lookup) | `.github/workflows/terra.yaml`, `code-check > style:terra-format` and `tests > test:all`; `gitlab/terra/abstracts/terra.yaml`; `azure-devops/terra/abstracts/terra.yaml` | `terra install` stops when GitHub rate-limits its lookup | Fixed in #801 |
+| [KI-07](#ki-07--the-go-sbom-generator-finds-no-main-package-outside-a-maingo) | `global/scripts/languages/golang/cyclonedx/run.sh`, `report:dependency-track` | The Go SBOM generator finds no `main` package outside a `main.go` | Open |
+| [KI-08](#ki-08--the-go-sbom-generator-needs-a-module-at-the-repository-root) | `global/scripts/languages/golang/cyclonedx/run.sh`, `report:dependency-track` | The Go SBOM generator needs a module at the repository root | Open |
 
 ## KI-01 — The Dart test job has no timeout
 
@@ -293,3 +295,45 @@ privately and fix them.
     token, 1.18.18 still retries the lookup and keeps an installed Terragrunt, so only a runner
     with no Terragrunt yet can stop, and only when the limit outlasts the retries.
 - **Status:** Fixed in #801. The GitHub Actions steps pass the token, and the pinned terra reads it.
+
+## KI-07 — The Go SBOM generator finds no `main` package outside a `main.go`
+
+- **Where:** `global/scripts/languages/golang/cyclonedx/run.sh`, the entry-point detection before
+  `cyclonedx-gomod app`, run by `report:dependency-track` (`azure-devops/golang/stages/35-management/go.yaml`,
+  `gitlab/golang/stages/35-management/go.yaml`).
+- **What happens:**
+  - Without a `pkg/` directory the script looks for the module's entry points with
+    `find . -type f -name main.go`. A `main` package whose `func main` lives in a file of another
+    name is not found, and the script stops with `Could not find a directory containing Go files`
+    before `cyclonedx-gomod` runs, so no BOM is written and the job fails.
+  - Between 2026-11-13 and 2026-11-18, four consumer services failed `report:dependency-track` on
+    their default branch at exactly that line, and a fifth one has the same layout. Their entry
+    points are `main/bootstrap.go` or `cmd/<name>/bootstrap.go`, the layout of an AWS SAM function.
+- **The fix:** find the `main` packages rather than the files called `main.go`, for example the
+  directories `go list -f '{{if eq .Name "main"}}{{.Dir}}{{end}}' ./...` prints, and keep the rule
+  that one entry point takes `app` and several take `mod`.
+- **How to prove it:** a case in `.github/tests/test-cyclonedx-main-detection.sh` whose only
+  entry point is `main/bootstrap.go`, which resolves to `app -main ./main`.
+- **Status:** Open.
+
+## KI-08 — The Go SBOM generator needs a module at the repository root
+
+- **Where:** `global/scripts/languages/golang/cyclonedx/run.sh`, run by `report:dependency-track`
+  from the repository root.
+- **What happens:**
+  - The script runs `cyclonedx-gomod` in the working directory, which is the repository root. A
+    repository that holds several Go modules in subdirectories, and none at its root, has two or
+    more `main.go` files, so the script takes `cyclonedx-gomod mod`. That fails with
+    `failed to download modules: command 'go mod why -m -vendor ...' failed: exit status 1`, because
+    `go` answers `go.mod file not found in current directory or any parent directory`. No BOM is
+    written and the job fails.
+  - On 2026-11-26 this was reproduced by running the script on the default branch of a consumer
+    repository that holds three modules in subdirectories and no `go.mod` at its root. Its pipeline
+    uses `azure-devops/golang/stages/35-management/go.yaml`, but an earlier stage has failed on
+    every default-branch run since 2026-10-28, so CI has not reached the job there yet.
+- **The fix:** generate one BOM per module, with `-output` per module, or let the consumer name the
+  module directory the way `working_directory` does for the JavaScript templates. The uploader then
+  has to send each BOM to its own project.
+- **How to prove it:** a case in `.github/tests/test-cyclonedx-main-detection.sh` with two modules
+  in subdirectories and none at the root.
+- **Status:** Open.

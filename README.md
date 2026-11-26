@@ -2245,6 +2245,18 @@ When CycloneDX has no root version, it resolves a dynamic version with
 an explicit error; PDM's original diagnostic remains visible. Validate this
 contract locally with `make test ONLY=python-cyclonedx`.
 
+The Go CycloneDX generator keeps every license `cyclonedx-gomod -licenses`
+detects, and makes each `license.id` one the SPDX list Dependency-Track
+validates against holds. Dependency-Track refuses a whole BOM (HTTP 400, "The
+uploaded BOM is invalid") over one id outside that list. Its license detector
+names a deprecated SPDX license after its license-list file
+(`deprecated_GPL-2.0+`), and such an id is written as the SPDX id it stands
+for (`GPL-2.0+`). Any other id the list does not hold becomes the license's
+`name`, and a BOM with nothing to rewrite is left byte for byte. The list is
+CycloneDX's `spdx.schema.json` for SPDX 3.27.0, which Dependency-Track 4.13.6
+to 4.14.3 and 5.0.x validate with; later releases accept every id it holds.
+Validate this contract locally with `make test ONLY=cyclonedx-licenses`.
+
 The uploader is driven entirely by environment variables. Only the first two are required.
 
 | Variable | Default | Purpose |

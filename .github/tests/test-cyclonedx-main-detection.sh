@@ -19,7 +19,16 @@ echo "=== Testing Go CycloneDX entry-point detection ==="
 echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CYCLONEDX_SCRIPT="$SCRIPT_DIR/../../global/scripts/languages/golang/cyclonedx/run.sh"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+CYCLONEDX_SCRIPT="$REPO_ROOT/global/scripts/languages/golang/cyclonedx/run.sh"
+
+# The script builds one Go helper from this checkout (the license-id rewrite it runs on the BOM,
+# `make test ONLY=cyclonedx-licenses`), so the `go` shim below hands every command it does not fake
+# to the real toolchain.
+REAL_GO="$(command -v go)" || {
+  echo "Go is required: the generator builds its license helper from this checkout" >&2
+  exit 1
+}
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -45,7 +54,8 @@ cleanup() { rm -rf "$TEST_DIR"; }
 trap cleanup EXIT
 
 # A fake GOPATH whose bin/ holds a cyclonedx-gomod that only records its arguments, plus a `go`
-# that answers `go env GOPATH` and swallows `go install` so nothing is downloaded.
+# that answers `go env GOPATH`, swallows `go install` so nothing is downloaded, and passes the
+# helper's build to the real Go.
 FAKE_GOPATH="$TEST_DIR/gopath"
 mkdir -p "$FAKE_GOPATH/bin" "$TEST_DIR/shim"
 
@@ -69,7 +79,7 @@ cat > "$TEST_DIR/shim/go" <<STUB
 case "\$1 \${2:-}" in
   "env GOPATH") echo "$FAKE_GOPATH" ;;
   "install "*) exit 0 ;;
-  *) exit 0 ;;
+  *) exec "$REAL_GO" "\$@" ;;
 esac
 STUB
 chmod +x "$TEST_DIR/shim/go"
@@ -85,6 +95,7 @@ run_generator() {
     cd "$workdir" || exit 1
     PATH="$TEST_DIR/shim:$PATH" \
     GOPATH="$FAKE_GOPATH" \
+    SCRIPTS_DIR="$REPO_ROOT" \
     REPORT_PATH="build/reports" \
     PREFIX="" \
       sh "$CYCLONEDX_SCRIPT" > "$workdir/stdout.log" 2>&1

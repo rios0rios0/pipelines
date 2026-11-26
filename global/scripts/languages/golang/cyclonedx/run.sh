@@ -84,3 +84,23 @@ else
     "$(go env GOPATH)/bin/cyclonedx-gomod" app -json -output "$BOM_PATH/bom.json" -packages -files -licenses -main "$folders"
   fi
 fi
+
+# cyclonedx-gomod writes the license its detector matched into `license.id` VERBATIM, and the
+# detector (go-license-detector, whose licenses are SPDX's license-list-data files) names a
+# DEPRECATED SPDX license after its file: `deprecated_GPL-2.0+`, not `GPL-2.0+`. No SPDX list holds
+# such an id. Dependency-Track validates a BOM against the CycloneDX schema, whose `license.id` is
+# an enumeration of the SPDX list, before it accepts it -- so ONE such module made it refuse the
+# whole upload with HTTP 400 ("The uploaded BOM is invalid", `license.id: does not have a value in
+# the enumeration`) and the project kept no inventory at all. A consumer's service failed that
+# way on 2026-11-26 over github.com/golang/freetype, and no newer cyclonedx-gomod or
+# go-license-detector release writes the id differently.
+#
+# The helper checks every license id against the SPDX list Dependency-Track validates with and
+# rewrites only the ones that list does not hold: `deprecated_<id>` becomes `<id>`, and any other
+# id becomes the license's `name`, which every schema version accepts. No license is dropped and
+# `-licenses` stays, because the detected licenses are what the inventory is for; a BOM with
+# nothing to rewrite is left byte for byte. It is Go, built from this checkout -- the job already
+# has the Go it just installed cyclonedx-gomod with; see `licenses/internal/cli`.
+# shellcheck source=/dev/null
+. "$SCRIPTS_DIR/global/scripts/shared/go-helper.sh"
+go_helper_run global/scripts/languages/golang/cyclonedx/licenses "$BOM_PATH/bom.json"

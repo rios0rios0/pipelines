@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added `GOLANGCI_LINT_BUILD_TAGS` to the Go lint: its tags (for example `integration`) reach golangci-lint as `--build-tags`, so the tests under `//go:build integration`, which no lint run ever read, can be linted. It is staged: empty by default, so no project''s lint changes until it opts in through a pipeline or variable-group variable, or through `run.build-tags` in its own `.golangci.yml`; the default becomes `integration` once every project lints clean with it'
+time: '2026-11-26T17:15:58.254977141Z'

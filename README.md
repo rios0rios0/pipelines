@@ -2546,6 +2546,11 @@ Optional environment variables:
 - golangci-lint gives up after `30m` by default. On a busy self-hosted runner, raise it with
   `GOLANGCI_LINT_TIMEOUT` (for example `45m`).
 - Exit code 4 means the time ran out, not that anything was found.
+- A test under `//go:build integration` is linted only with the `integration` build tag, which
+  `GOLANGCI_LINT_BUILD_TAGS=integration` passes to the lint. A project can set `run.build-tags` in
+  its own `.golangci.yml` instead, which works on every platform. The variable is empty by default
+  for now, so no project's lint changes until it opts in. It becomes `integration` once every
+  project lints clean with it.
 
 **A project's own `.golangci.yml`** is merged onto the shared configuration, and the result is
 checked with `golangci-lint config verify` before the lint runs, so an invalid key fails with its

@@ -26,6 +26,7 @@ there is no target to add and no list to keep in step.
 |---|---|
 | `ansible-lint` | The ansible-lint runner (verified install, the virtualenv's own launcher and ansible-core first on PATH, no schema refresh or release lookup, not offline, the project's configuration, the verdict, the skip without Ansible content, and `make ansible-lint` outside `make sast`) |
 | `argocd-pipeline` | The Argo CD pipeline (template wiring, pins, installers, and the lint, render and schema runners, proven with real helm and kubeconform on neutral fixture charts; SKIPs what it cannot run on a developer's machine with no network, and fails on it under CI) |
+| `azure-devops-rebase-check` | The Azure DevOps rebase check in `quality:basic-checks`: the pull request's source commit judged, not the merge commit the build checks out; the target fetched with the job's token through the environment, never a command line; every path that cannot reach a verdict failing |
 | `azure-secret-env` | That every Azure step consuming a credential maps it through `env:` |
 | `azure-step-names` | Azure DevOps step-name uniqueness across expanded templates |
 | `basic-checks` | Basic-checks changelog validation (chlog fragments + legacy CHANGELOG.md) |
@@ -48,6 +49,7 @@ there is no target to add and no list to keep in step.
 | `docker-multi-arch` | 40-delivery/docker multi-arch contract |
 | `fixture-isolation` | That every suite builds its fixtures in mktemp space and guards every cd |
 | `gitignore` | The shared .gitignore block generator, and the CI check (`ci.sh`: `GITIGNORE_CHECK` `warn` by default, `enforce`, `off`, each platform's annotation, the `quality:gitignore` wiring on all three platforms) |
+| `gitlab-rebase-check` | The GitLab rebase check in `quality:basic-checks`: `HEAD` judged in a merge request pipeline, `CI_MERGE_REQUEST_SOURCE_BRANCH_SHA` in a merged results pipeline or merge train; every path that cannot reach a verdict failing |
 | `gitleaks-safe-directory` | How a script makes git trust a directory another user owns (`git_trust_directory`: the global configuration, once, on a CI runner; the run's own environment, never `~/.gitconfig`, on a developer's machine), end to end through the Gitleaks runner |
 | `go-cache-trim` | The Go build-cache disk guard (threshold parsing, trim decision) |
 | `go-coverage-report` | The Go runner's `cobertura.xml`: generated files stay in by default and leave it on `GO_COVERAGE_IGNORE_GENERATED`, while `coverage.txt` stays whole, and the GitHub input that carries it |

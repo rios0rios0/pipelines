@@ -25,7 +25,7 @@ jobs:
           SOURCE_BRANCH="${SOURCE_FULL_REF#refs/heads/}"
 
           echo "=== Rebase Check ==="
-          echo "Checking if branch is rebased on top of '$TARGET_BRANCH'..."
+          echo "Checking if branch can merge cleanly with '$TARGET_BRANCH'..."
 
           # A pull request build checks out the merge commit Azure DevOps prepares,
           # refs/pull/<id>/merge, and that commit always contains the target branch:
@@ -70,19 +70,86 @@ jobs:
           if git merge-base --is-ancestor "$TARGET_COMMIT" "$SOURCE_COMMIT"; then
             echo "Branch is up-to-date with '$TARGET_BRANCH'. No rebase needed."
           else
-            BEHIND_COUNT=$(git rev-list "$SOURCE_COMMIT".."$TARGET_COMMIT" --count 2>/dev/null || echo "unknown")
-            echo ""
-            echo "============================================================"
-            echo "  ERROR: Branch is NOT rebased on top of '$TARGET_BRANCH'."
-            echo "  The branch is $BEHIND_COUNT commit(s) behind."
-            echo ""
-            echo "  Please rebase your branch:"
-            echo "    git fetch origin $TARGET_BRANCH"
-            echo "    git rebase origin/$TARGET_BRANCH"
-            echo "    git push --force-with-lease"
-            echo "============================================================"
-            echo ""
-            exit 1
+            cannot_check_merge() {
+              echo "ERROR: $1, so the rebase check cannot run."
+              exit 1
+            }
+
+            BEHIND_COUNT=$(git rev-list --count "$SOURCE_COMMIT..$TARGET_COMMIT") ||
+              cannot_check_merge "could not count commits behind '$TARGET_BRANCH'"
+            GIT_VERSION=$(git --version) || cannot_check_merge "could not determine the Git version"
+            GIT_VERSION=${GIT_VERSION#git version }
+            GIT_MAJOR=${GIT_VERSION%%.*}
+            GIT_MINOR=${GIT_VERSION#*.}
+            GIT_MINOR=${GIT_MINOR%%.*}
+            case "$GIT_MAJOR:$GIT_MINOR" in
+              :*|*:|*[!0-9:]*) cannot_check_merge "could not parse Git version '$GIT_VERSION'" ;;
+            esac
+
+            merge_in_worktree() (
+              # Older Git needs a real merge. Keep its index and files in a disposable worktree.
+              SCRATCH=$(mktemp -d) || exit 2
+              if ! git -c core.hooksPath=/dev/null worktree add --quiet --detach "$SCRATCH" "$TARGET_COMMIT"; then
+                rmdir "$SCRATCH"
+                exit 2
+              fi
+
+              MERGE_STATUS=0
+              git -C "$SCRATCH" -c core.hooksPath=/dev/null -c rerere.enabled=false \
+                -c user.name=CI -c user.email=ci@example.invalid \
+                merge --no-commit --no-ff "$SOURCE_COMMIT" >&2 || MERGE_STATUS=$?
+              if [ "$MERGE_STATUS" -eq 1 ]; then
+                # A failed merge can also return 1 without leaving any unmerged paths.
+                CONFLICTED_FILES=$(git -C "$SCRATCH" diff --name-only --diff-filter=U) || MERGE_STATUS=2
+                if [ -z "$CONFLICTED_FILES" ]; then
+                  MERGE_STATUS=2
+                fi
+              fi
+              git worktree remove --force "$SCRATCH" || exit 2
+              if [ "$MERGE_STATUS" -eq 1 ]; then
+                printf '%s\n' "$CONFLICTED_FILES"
+              fi
+              exit "$MERGE_STATUS"
+            )
+
+            MERGE_STATUS=0
+            if [ "$GIT_MAJOR" -gt 2 ] || { [ "$GIT_MAJOR" -eq 2 ] && [ "$GIT_MINOR" -ge 38 ]; }; then
+              MERGE_OUTPUT=$(git merge-tree --write-tree --name-only --no-messages "$TARGET_COMMIT" "$SOURCE_COMMIT") ||
+                MERGE_STATUS=$?
+              if [ "$MERGE_STATUS" -eq 1 ]; then
+                # The first line is the resulting tree ID.
+                CONFLICTED_FILES=$(printf '%s\n' "$MERGE_OUTPUT" | sed '1d')
+              fi
+            else
+              CONFLICTED_FILES=$(merge_in_worktree) || MERGE_STATUS=$?
+            fi
+
+            case "$MERGE_STATUS" in
+              0)
+                echo "Branch is $BEHIND_COUNT commit(s) behind '$TARGET_BRANCH' but merges cleanly. No rebase needed."
+                ;;
+              1)
+                echo ""
+                echo "============================================================"
+                echo "  ERROR: Branch conflicts with '$TARGET_BRANCH'."
+                echo "  The branch is $BEHIND_COUNT commit(s) behind."
+                if [ -n "$CONFLICTED_FILES" ]; then
+                  echo "  Conflicted files:"
+                  printf '%s\n' "$CONFLICTED_FILES"
+                fi
+                echo ""
+                echo "  Please rebase your branch:"
+                echo "    git fetch origin $TARGET_BRANCH"
+                echo "    git rebase origin/$TARGET_BRANCH"
+                echo "    git push --force-with-lease"
+                echo "============================================================"
+                echo ""
+                exit 1
+                ;;
+              *)
+                cannot_check_merge "could not test the merge with '$TARGET_BRANCH' (exit $MERGE_STATUS)"
+                ;;
+            esac
           fi
 
           echo ""

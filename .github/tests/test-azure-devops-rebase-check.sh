@@ -11,9 +11,8 @@
 #
 # The step's real script is extracted from the template and run the way the agent runs it
 # (`bash --noprofile --norc <file>`), in a clone that reproduces the agent's checkout of a merge
-# ref: a source branch that is behind the target must fail, a rebased one must pass, and every
-# path where the check cannot reach a verdict must fail rather than pass. A `git` wrapper records
-# each call, so the cases can also pin how the job's token reaches the fetch.
+# ref: up-to-date and cleanly mergeable branches pass, and conflicts and errors fail.
+# A `git` wrapper records each call so the cases can pin how the job's token reaches the fetch.
 set -u
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)" || exit 1
@@ -75,6 +74,12 @@ for arg in "$@"; do
     --config-env=*=*) name="${arg##*=}"; printf '%s=%s\n' "${arg#--config-env=}" "${!name-}" >> "$REBASE_TEST_HEADERS" ;;
   esac
 done
+if [[ "${REBASE_TEST_FAIL_MERGE:-}" == '1' ]]; then
+  case "$*" in
+    'merge-tree --write-tree '*) exit 128 ;;
+    *' merge --no-commit --no-ff '*) exit 1 ;;
+  esac
+fi
 exec "$REBASE_TEST_REAL_GIT" "$@"
 EOF
 chmod +x "$SANDBOX/bin/git" || exit 1
@@ -91,14 +96,17 @@ SEED="$SANDBOX/seed"
 "$REAL_GIT" init -q -b main "$SEED" || exit 1
 mkdir -p "$SEED/.changes/unreleased" || exit 1
 : > "$SEED/.changes/unreleased/.gitkeep"
-echo 'one' > "$SEED/file.txt"
+printf 'line %s\n' {1..12} > "$SEED/file.txt"
 fixture_git -C "$SEED" add -A && fixture_git -C "$SEED" commit -q -m 'c1' || exit 1
 fixture_git -C "$SEED" branch 'feat/behind' || exit 1
-echo 'two' >> "$SEED/file.txt"
+sed -i '1s/^/main: /' "$SEED/file.txt" || exit 1
 fixture_git -C "$SEED" commit -q -am 'c2' || exit 1
 fixture_git -C "$SEED" branch 'feat/rebased' || exit 1
 for branch in 'feat/rebased' 'feat/behind'; do
   fixture_git -C "$SEED" checkout -q "$branch" || exit 1
+  if [[ "$branch" == 'feat/behind' ]]; then
+    sed -i '$s/^/source: /' "$SEED/file.txt" || exit 1
+  fi
   echo 'kind: Fixed' > "$SEED/.changes/unreleased/${branch#feat/}.yaml"
   fixture_git -C "$SEED" add -A && fixture_git -C "$SEED" commit -q -m "change on $branch" || exit 1
 done
@@ -118,6 +126,13 @@ checkout() {
   "$REAL_GIT" -C "$1" remote add origin "$ORIGIN" || return 1
   "$REAL_GIT" -C "$1" fetch -q --force --no-tags --prune origin '+refs/heads/*:refs/remotes/origin/*' "+$2:refs/remotes/${2#refs/}" || return 1
   "$REAL_GIT" -C "$1" checkout -q --force "refs/remotes/${2#refs/}"
+}
+
+checkout_state() {
+  "$REAL_GIT" -C "$1" rev-parse HEAD &&
+    "$REAL_GIT" -C "$1" diff --binary HEAD &&
+    "$REAL_GIT" -C "$1" diff --cached --binary &&
+    "$REAL_GIT" -C "$1" worktree list --porcelain
 }
 
 # run_step <dir> [NAME=value ...]: runs the step in <dir> with the variables of a pull request build
@@ -142,15 +157,17 @@ run_step() {
 echo "=== Azure DevOps rebase check ==="
 
 echo ""
-echo "Test 1: a source branch behind the target fails, though the merge commit contains the target"
+echo "Test 1: a source branch behind the target passes when edits to the same file do not overlap"
 # given
 checkout "$SANDBOX/pr1" 'refs/pull/1/merge' || exit 1
+PR1_STATE="$(checkout_state "$SANDBOX/pr1")" || exit 1
 # when
 run_step "$SANDBOX/pr1" SYSTEM_PULLREQUEST_SOURCEBRANCH='refs/heads/feat/behind' SYSTEM_PULLREQUEST_SOURCECOMMITID="$BEHIND_SHA"
 # then
-check "the step fails" exited 1
-check "naming the branch as not rebased" has "$OUT" "ERROR: Branch is NOT rebased on top of 'main'."
-check "one commit behind" has "$OUT" "The branch is 1 commit(s) behind."
+check "the step passes" exited 0
+check "one commit behind and merges cleanly" has "$OUT" "Branch is 1 commit(s) behind 'main' but merges cleanly. No rebase needed."
+check "on to the changelog check" has "$OUT" "Found changelog fragment(s):"
+check "checkout unchanged and no worktree left behind" test "$(checkout_state "$SANDBOX/pr1")" = "$PR1_STATE"
 
 echo ""
 echo "Test 2: a rebased source branch passes"
@@ -169,8 +186,8 @@ echo "Test 3: without the agent's source commit, the merge commit's second paren
 # when
 run_step "$SANDBOX/pr1" SYSTEM_PULLREQUEST_SOURCEBRANCH='refs/heads/feat/behind'
 # then
-check "the branch behind the target still fails" exited 1
-check "as one commit behind" has "$OUT" "The branch is 1 commit(s) behind."
+check "the branch behind the target still passes" exited 0
+check "as one commit behind and merges cleanly" has "$OUT" "Branch is 1 commit(s) behind 'main' but merges cleanly. No rebase needed."
 # when
 run_step "$SANDBOX/pr2" SYSTEM_PULLREQUEST_SOURCEBRANCH='refs/heads/feat/rebased'
 # then
@@ -241,6 +258,28 @@ run_step "$SANDBOX/pr2" SYSTEM_PULLREQUEST_SOURCECOMMITID="$REBASED_SHA"
 check "the step passes" exited 0
 check "saying the branch is merged" has "$OUT" "is already part of 'main' (likely merged). Skipping all basic checks."
 check "without judging it" lacks "$OUT" "=== Changelog Check ==="
+
+echo ""
+echo "Test 8: a textual conflict with the fetched target names the file and fails"
+# The target advanced after Azure DevOps prepared a clean merge ref for PR 1.
+fixture_git -C "$SEED" checkout -q 'feat/rebased' || exit 1
+sed -i '$s/^/target: /' "$SEED/file.txt" || exit 1
+fixture_git -C "$SEED" commit -q -am 'conflicting edit on main' || exit 1
+fixture_git -C "$SEED" push -q "$ORIGIN" 'HEAD:main' || exit 1
+run_step "$SANDBOX/pr1" SYSTEM_PULLREQUEST_SOURCECOMMITID="$BEHIND_SHA"
+check "the step fails" exited 1
+check "the branch conflicts with main" has "$OUT" "ERROR: Branch conflicts with 'main'."
+check "the conflict report names file.txt" has "$OUT" $'Conflicted files:\nfile.txt'
+check "the instructions say how to rebase" has "$OUT" "git rebase origin/main"
+check "checkout unchanged and no worktree left behind" test "$(checkout_state "$SANDBOX/pr1")" = "$PR1_STATE"
+
+echo ""
+echo "Test 9: an error running the merge test fails the check"
+run_step "$SANDBOX/pr1" SYSTEM_PULLREQUEST_SOURCECOMMITID="$BEHIND_SHA" REBASE_TEST_FAIL_MERGE=1
+check "the step fails" exited 1
+check "the check could not run the test" has "$OUT" "so the rebase check cannot run."
+check "without reporting a conflict" lacks "$OUT" "ERROR: Branch conflicts with"
+check "checkout unchanged and no worktree left behind" test "$(checkout_state "$SANDBOX/pr1")" = "$PR1_STATE"
 
 echo ""
 echo "=== Results ==="

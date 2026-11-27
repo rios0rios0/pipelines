@@ -10,10 +10,10 @@
 # only, and HEAD otherwise -- the flaw `test-azure-devops-rebase-check.sh` pins on Azure DevOps.
 #
 # The job's real script is extracted from the template and run under `sh -e`, as the runner runs
-# it, in clones that reproduce both checkouts: a merge request behind its target must fail and a
-# rebased one must pass in either kind of pipeline, and every path where the check cannot reach a
-# verdict must fail rather than pass. No consumer runs these templates on GitLab yet, so this suite
-# is the check's only verification.
+# it, in clones that reproduce both checkouts: a branch behind its target passes if it merges
+# cleanly, but a textual conflict fails, in either kind of pipeline. Every path where the check
+# cannot reach a verdict must fail rather than pass. No consumer runs these templates on GitLab
+# yet, so this suite is the check's only verification.
 set -u
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)" || exit 1
@@ -64,35 +64,46 @@ mkdir -p "$SANDBOX/home" || exit 1
 REAL_GIT="$(command -v git)" || exit 1
 fixture_git() { "$REAL_GIT" -c user.name=fixture -c user.email=fixture@example.test -c commit.gpgsign=false "$@"; }
 
-# An origin whose `main` holds c1 and c2, with two merge requests: `feat/behind` forked from c1, so
-# it is one commit behind, and `feat/rebased` forked from c2. Each carries a changelog fragment, so
-# the check reaches a verdict on the rebase alone. Their merged results refs are built the way GitLab
-# builds them: the target branch as the first parent, the merge request's commit as the second.
+# An origin whose `main` holds c1 and c2. `feat/behind` forks from c1 and changes a distant
+# hunk in file.txt, so it is behind but merges cleanly with c2. `feat/conflict` forks from c1
+# and edits the same line as c2, so it conflicts. `feat/rebased` forks from c2. Each branch
+# adds a changelog fragment. For the conflict case, GitLab's prepared merge ref represents
+# the earlier clean merge against c1, before main advanced to c2. The check must use the
+# source SHA to notice the conflict with the newly fetched target.
 ORIGIN="$SANDBOX/origin.git"
 SEED="$SANDBOX/seed"
 "$REAL_GIT" init -q --bare "$ORIGIN" || exit 1
 "$REAL_GIT" init -q -b main "$SEED" || exit 1
 mkdir -p "$SEED/.changes/unreleased" || exit 1
 : > "$SEED/.changes/unreleased/.gitkeep"
-echo 'one' > "$SEED/file.txt"
+printf 'line %s\n' {1..12} > "$SEED/file.txt"
 fixture_git -C "$SEED" add -A && fixture_git -C "$SEED" commit -q -m 'c1' || exit 1
 fixture_git -C "$SEED" branch 'feat/behind' || exit 1
-echo 'two' >> "$SEED/file.txt"
+fixture_git -C "$SEED" branch 'feat/conflict' || exit 1
+sed -i 's/^line 2$/target changed line 2/' "$SEED/file.txt" || exit 1
 fixture_git -C "$SEED" commit -q -am 'c2' || exit 1
 fixture_git -C "$SEED" branch 'feat/rebased' || exit 1
-for branch in 'feat/rebased' 'feat/behind'; do
+for branch in 'feat/rebased' 'feat/behind' 'feat/conflict'; do
   fixture_git -C "$SEED" checkout -q "$branch" || exit 1
+  case "$branch" in
+    feat/behind) sed -i 's/^line 11$/source changed line 11/' "$SEED/file.txt" ;;
+    feat/conflict) sed -i 's/^line 2$/source changed line 2/' "$SEED/file.txt" ;;
+  esac || exit 1
   echo 'kind: Fixed' > "$SEED/.changes/unreleased/${branch#feat/}.yaml"
   fixture_git -C "$SEED" add -A && fixture_git -C "$SEED" commit -q -m "change on $branch" || exit 1
 done
+fixture_git -C "$SEED" checkout -q --detach 'feat/conflict^' || exit 1
+fixture_git -C "$SEED" merge -q --no-ff -m "Merge branch 'feat/conflict' into 'main' before main advances" 'feat/conflict' || exit 1
+fixture_git -C "$SEED" update-ref 'refs/merge-requests/3/merge' HEAD || exit 1
 for mr in '1:feat/behind' '2:feat/rebased'; do
   fixture_git -C "$SEED" checkout -q --detach main || exit 1
   fixture_git -C "$SEED" merge -q --no-ff -m "Merge branch '${mr#*:}' into 'main'" "${mr#*:}" || exit 1
   fixture_git -C "$SEED" update-ref "refs/merge-requests/${mr%%:*}/merge" HEAD || exit 1
 done
-fixture_git -C "$SEED" push -q "$ORIGIN" main 'feat/behind' 'feat/rebased' 'refs/merge-requests/*:refs/merge-requests/*' || exit 1
+fixture_git -C "$SEED" push -q "$ORIGIN" main 'feat/behind' 'feat/rebased' 'feat/conflict' 'refs/merge-requests/*:refs/merge-requests/*' || exit 1
 BEHIND_SHA="$("$REAL_GIT" -C "$SEED" rev-parse 'feat/behind')"
 REBASED_SHA="$("$REAL_GIT" -C "$SEED" rev-parse 'feat/rebased')"
+CONFLICT_SHA="$("$REAL_GIT" -C "$SEED" rev-parse 'feat/conflict')"
 MAIN_SHA="$("$REAL_GIT" -C "$SEED" rev-parse 'main')"
 
 # checkout <dir> <ref>: what the runner does with `GIT_DEPTH: 0` -- every branch fetched, plus the
@@ -119,16 +130,24 @@ run_job() {
 echo "=== GitLab rebase check ==="
 
 echo ""
-echo "Test 1: a merge request pipeline judges HEAD, the merge request's own commit"
+echo "Test 1: an ordinary merge request pipeline judges its source commit"
 # given
 checkout "$SANDBOX/mr1" 'refs/heads/feat/behind' || exit 1
 checkout "$SANDBOX/mr2" 'refs/heads/feat/rebased' || exit 1
+checkout "$SANDBOX/mr3" 'refs/heads/feat/conflict' || exit 1
 # when
 run_job "$SANDBOX/mr1" CI_MERGE_REQUEST_SOURCE_BRANCH_NAME='feat/behind'
 # then
-check "a branch behind the target fails" exited 1
-check "naming it as not rebased" has "$OUT" "ERROR: Branch is NOT rebased on top of 'main'."
-check "one commit behind" has "$OUT" "The branch is 1 commit(s) behind."
+check "a branch behind with non-overlapping same-file hunks passes" exited 0
+check "one commit behind merges cleanly" has "$OUT" "Branch is 1 commit(s) behind 'main' but merges cleanly. No rebase needed."
+check "on to the changelog check" has "$OUT" "Found changelog fragment(s):"
+# when
+run_job "$SANDBOX/mr3" CI_MERGE_REQUEST_SOURCE_BRANCH_NAME='feat/conflict'
+# then
+check "a real textual conflict fails" exited 1
+check "the conflict is reported" has "$OUT" "ERROR: Branch conflicts with 'main'."
+check "the conflicting file is named" has "$OUT" $'Conflicted files:\nfile.txt'
+check "no changelog check after a conflict" lacks "$OUT" "=== Changelog Check ==="
 # when
 run_job "$SANDBOX/mr2" CI_MERGE_REQUEST_SOURCE_BRANCH_NAME='feat/rebased'
 # then
@@ -137,15 +156,24 @@ check "as rebased" has "$OUT" "Branch is up-to-date with 'main'. No rebase neede
 check "on to the changelog check" has "$OUT" "Found changelog fragment(s):"
 
 echo ""
-echo "Test 2: a merged results pipeline judges CI_MERGE_REQUEST_SOURCE_BRANCH_SHA, not its merge commit"
-# given the merge commits GitLab prepares, each of which contains main
+echo "Test 2: a merged results pipeline judges the source SHA, including after the target advances"
+# given the merge commits GitLab prepares, with mr3 prepared before main advanced
 checkout "$SANDBOX/mr1-merged" 'refs/merge-requests/1/merge' || exit 1
 checkout "$SANDBOX/mr2-merged" 'refs/merge-requests/2/merge' || exit 1
+checkout "$SANDBOX/mr3-merged" 'refs/merge-requests/3/merge' || exit 1
 # when
 run_job "$SANDBOX/mr1-merged" CI_MERGE_REQUEST_SOURCE_BRANCH_NAME='feat/behind' CI_MERGE_REQUEST_SOURCE_BRANCH_SHA="$BEHIND_SHA"
 # then
-check "a branch behind the target fails" exited 1
-check "one commit behind" has "$OUT" "The branch is 1 commit(s) behind."
+check "a behind branch with a clean merge passes" exited 0
+check "one commit behind merges cleanly" has "$OUT" "Branch is 1 commit(s) behind 'main' but merges cleanly. No rebase needed."
+check "on to the changelog check" has "$OUT" "Found changelog fragment(s):"
+# when
+run_job "$SANDBOX/mr3-merged" CI_MERGE_REQUEST_SOURCE_BRANCH_NAME='feat/conflict' CI_MERGE_REQUEST_SOURCE_BRANCH_SHA="$CONFLICT_SHA"
+# then
+check "an advancing target exposes the source's conflict" exited 1
+check "the conflict is reported" has "$OUT" "ERROR: Branch conflicts with 'main'."
+check "the conflicting file is named" has "$OUT" $'Conflicted files:\nfile.txt'
+check "no changelog check after a conflict" lacks "$OUT" "=== Changelog Check ==="
 # when
 run_job "$SANDBOX/mr2-merged" CI_MERGE_REQUEST_SOURCE_BRANCH_NAME='feat/rebased' CI_MERGE_REQUEST_SOURCE_BRANCH_SHA="$REBASED_SHA"
 # then

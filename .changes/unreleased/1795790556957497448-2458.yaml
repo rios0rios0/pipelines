@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'allowed pull and merge requests that were behind their target to pass the Azure DevOps and GitLab rebase checks when they merged cleanly'
+time: '2026-11-27T14:42:36.95730075Z'
